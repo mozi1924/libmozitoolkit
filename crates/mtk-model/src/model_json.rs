@@ -155,7 +155,25 @@ impl BlockModelJson {
             }
         }
 
-        Ok(curr.to_string())
+        let normalized = Self::normalize_texture(curr);
+        Ok(normalized)
+    }
+
+    /// Normalizes texture identifier into "namespace:block/name" form.
+    pub fn normalize_texture(tex: &str) -> String {
+        if tex.is_empty() || tex.starts_with('#') {
+            return tex.to_string();
+        }
+        let (ns, path) = if let Some((ns, p)) = tex.split_once(':') {
+            (ns, p)
+        } else {
+            ("minecraft", tex)
+        };
+        if !path.contains('/') {
+            format!("{}:block/{}", ns, path)
+        } else {
+            format!("{}:{}", ns, path)
+        }
     }
 }
 

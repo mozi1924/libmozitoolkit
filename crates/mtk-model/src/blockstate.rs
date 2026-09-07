@@ -202,7 +202,13 @@ impl VariantEntry {
         match self {
             VariantEntry::Single(m) => m,
             VariantEntry::List(list) => {
-                list.iter().max_by_key(|m| m.weight).unwrap_or(&list[0])
+                let mut best = &list[0];
+                for item in list.iter().skip(1) {
+                    if item.weight > best.weight {
+                        best = item;
+                    }
+                }
+                best
             }
         }
     }
@@ -340,29 +346,69 @@ impl BlockStateResolver {
             return Some(Self::model_to_match(entry.select_primary(), namespace, props));
         }
 
-        // Scored match: find variant that matches all its defined criteria and has maximum matched properties
+        // Match variants by scoring compatibility against props matching Python blockstate_resolver
         let mut best_entry: Option<&VariantEntry> = None;
-        let mut best_score = -1i32;
+        let mut best_score = -999999i32;
 
         for (v_key, entry) in variants {
             if v_key.is_empty() {
+                if props.is_empty() && best_score < 0 {
+                    best_score = 0;
+                    best_entry = Some(entry);
+                }
                 continue;
             }
-            let mut matches_all = true;
-            let mut count = 0;
+
+            let mut v_props: HashMap<&str, &str> = HashMap::new();
             for pair in v_key.split(',') {
                 if let Some((k, v)) = pair.split_once('=') {
-                    let k = k.trim();
-                    let v = v.trim();
-                    if props.get(k).map(|s| s.as_str()) != Some(v) {
-                        matches_all = false;
-                        break;
-                    }
-                    count += 1;
+                    v_props.insert(k.trim(), v.trim());
                 }
             }
-            if matches_all && count > best_score {
-                best_score = count;
+
+            // Compatibility: every property in props must match v_props if present in v_props
+            let mut compatible = true;
+            let mut matched_keys = 0i32;
+            for (k, v) in props {
+                if let Some(&vv) = v_props.get(k.as_str()) {
+                    if vv != v.as_str() {
+                        compatible = false;
+                        break;
+                    }
+                    matched_keys += 1;
+                }
+            }
+
+            if !compatible {
+                continue;
+            }
+
+            let mut score = matched_keys * 100;
+            if v_props.len() == props.len() {
+                score += 1000;
+            }
+
+            // Score keys in v_props that are not specified in props: prefer standard default states
+            for (vk, vv) in &v_props {
+                if !props.contains_key(*vk) {
+                    if matches!(
+                        *vv,
+                        "false" | "0" | "none" | "straight" | "bottom" | "lower" | "single"
+                            | "foot" | "normal" | "side" | "y" | "north"
+                    ) {
+                        score += 10;
+                    } else if matches!(
+                        *vv,
+                        "true" | "1" | "top" | "upper" | "head" | "inner" | "outer" | "double"
+                            | "x" | "z" | "south" | "east" | "west"
+                    ) {
+                        score -= 10;
+                    }
+                }
+            }
+
+            if score > best_score {
+                best_score = score;
                 best_entry = Some(entry);
             }
         }

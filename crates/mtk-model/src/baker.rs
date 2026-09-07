@@ -12,45 +12,49 @@ use crate::obj::{ModObjLoader, WavefrontObjParser};
 
 /// White-list of natively light-emitting blocks in Minecraft.
 const EMISSIVE_BLOCKS: &[&str] = &[
-    "sea_lantern",
     "glowstone",
+    "sea_lantern",
     "shroomlight",
-    "ochre_froglight",
-    "verdant_froglight",
-    "pearlescent_froglight",
-    "beacon",
-    "conduit",
-    "end_rod",
-    "crying_obsidian",
-    "amethyst_cluster",
-    "small_amethyst_bud",
-    "medium_amethyst_bud",
-    "large_amethyst_bud",
-    "glow_lichen",
-    "sculk_catalyst",
-    "sculk_sensor",
-    "calibrated_sculk_sensor",
-    "sculk_shrieker",
-    "lava_cauldron",
-    "respawn_anchor",
     "magma_block",
+    "magma",
+    "crying_obsidian",
     "jack_o_lantern",
-    "torch",
-    "wall_torch",
-    "soul_torch",
-    "soul_wall_torch",
+    "beacon",
+    "end_rod",
     "lantern",
     "soul_lantern",
-    "campfire",
-    "soul_campfire",
-    "redstone_torch",
-    "redstone_wall_torch",
-    "redstone_lamp",
-    "furnace",
-    "blast_furnace",
-    "smoker",
-    "redstone_ore",
-    "deepslate_redstone_ore",
+    "torch",
+    "soul_torch",
+    "wall_torch",
+    "soul_wall_torch",
+    "lava",
+    "flowing_lava",
+    "fire",
+    "soul_fire",
+    "conduit",
+    "sculk_catalyst",
+    "ochre_froglight",
+    "pearlescent_froglight",
+    "verdant_froglight",
+];
+
+const KNOWN_NON_CUBES: &[&str] = &[
+    "glass_pane", "pane", "fence", "door", "trapdoor", "bars", "chain", "lantern",
+    "stairs", "slab", "chest", "banner", "bed", "carpet", "pot", "sign", "hanging_sign",
+    "head", "skull", "rod", "hook", "lever", "rail", "torch", "candle", "flower",
+    "plant", "sapling", "vine", "bush", "wire", "repeater", "comparator", "cauldron",
+    "hopper", "bell", "anvil", "stand", "frame", "portal", "conduit", "grindstone",
+    "stonecutter", "scaffolding", "dripstone", "amethyst", "sensor", "shrieker",
+];
+
+const NON_OPAQUE_SUBSTRINGS: &[&str] = &[
+    "glass", "leaves", "ice", "water", "air", "pane", "fence", "door",
+    "trapdoor", "bars", "chain", "lantern", "stairs", "slab", "chest",
+    "banner", "bed", "carpet", "pot", "sign", "hanging_sign", "head",
+    "skull", "rod", "hook", "lever", "rail", "torch", "candle",
+    "flower", "plant", "sapling", "vine", "bush", "wire", "repeater",
+    "comparator", "cauldron", "hopper", "bell", "anvil", "stand",
+    "frame", "portal", "conduit", "grindstone", "cutter", "piston",
 ];
 
 /// Checks if a blockstate is emissive based on identifier and properties.
@@ -280,9 +284,19 @@ impl ModelBaker {
             }
         }
 
-        let is_cube = baked_elements.len() == 1
-            && baked_elements[0].from_pos == [0.0, 0.0, 0.0]
-            && baked_elements[0].to_pos == [16.0, 16.0, 16.0];
+        let short_name = blockstate.name.as_str();
+        let is_double_slab = short_name.ends_with("_slab")
+            && blockstate.properties.get("type").map(|s| s.as_str()) == Some("double");
+
+        let is_known_non_cube = KNOWN_NON_CUBES.iter().any(|&w| short_name.contains(w)) && !is_double_slab;
+
+        let is_cube = !is_known_non_cube
+            && !baked_elements.is_empty()
+            && baked_elements.iter().all(|el| {
+                el.from_pos == [0.0, 0.0, 0.0] && el.to_pos == [16.0, 16.0, 16.0]
+            });
+
+        let is_opaque = !NON_OPAQUE_SUBSTRINGS.iter().any(|&w| short_name.contains(w));
 
         let emissive = is_block_emissive(&blockstate);
 
@@ -292,7 +306,7 @@ impl ModelBaker {
             obj_faces: Vec::new(),
             faces: final_six_faces,
             is_cube,
-            is_opaque: is_cube,
+            is_opaque,
             is_emissive: emissive,
             emissive_level: if emissive { 1.0 } else { 0.0 },
         };
