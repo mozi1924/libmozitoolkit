@@ -1,0 +1,19 @@
+[package]
+name = "mtk-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "Core geometry types, mesh buffers, and Minecraft coordinate primitives for libmtk."
+
+[dependencies]
+glam = { workspace = true }
+serde = { workspace = true, optional = true }
+bitflags = { workspace = true }
+
+[features]
+default = ["std", "serde"]
+std = ["glam/std"]
+serde = ["dep:serde", "glam/serde"]

@@ -1,0 +1,19 @@
+[package]
+name = "mtk-model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "Headless Minecraft BlockState parser and Model JSON data structures for libmtk."
+
+[dependencies]
+mtk-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["mtk-core/std", "serde/std", "serde_json/std"]

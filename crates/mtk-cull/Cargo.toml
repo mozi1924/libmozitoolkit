@@ -1,0 +1,19 @@
+[package]
+name = "mtk-cull"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "Face culling engine and 2D occlusion rectangle operations for libmtk."
+
+[dependencies]
+mtk-core = { workspace = true }
+bitflags = { workspace = true }
+serde = { workspace = true, optional = true }
+
+[features]
+default = ["std", "serde"]
+std = ["mtk-core/std"]
+serde = ["dep:serde", "mtk-core/serde"]

@@ -1,0 +1,18 @@
+[package]
+name = "libmtk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "Unified facade library for MoziToolKit core functionality."
+
+[dependencies]
+mtk-core = { workspace = true }
+mtk-cull = { workspace = true }
+mtk-model = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["mtk-core/std", "mtk-cull/std", "mtk-model/std"]
