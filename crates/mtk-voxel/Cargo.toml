@@ -23,3 +23,7 @@ default = ["std"]
 std = ["mtk-core/std", "mtk-cull/std", "mtk-model/std", "parallel"]
 parallel = ["dep:rayon"]
 serde = ["dep:serde", "dep:serde_json", "mtk-core/serde", "mtk-cull/serde"]
+
+[dev-dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

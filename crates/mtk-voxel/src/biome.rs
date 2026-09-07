@@ -42,7 +42,7 @@ pub fn get_biome_meta(biome_id: &str) -> BiomeMeta {
             water_color_linear: [0.05, 0.17, 0.77, 0.8],
         },
         "taiga" | "snowy_plains" => BiomeMeta {
-            temperature: 0.05,
+            temperature: 0.25,
             humidity: 0.8,
             water_color_linear: [0.05, 0.22, 0.80, 0.8],
         },
@@ -77,7 +77,7 @@ pub fn get_biome_meta(biome_id: &str) -> BiomeMeta {
 pub fn get_colormap_uv(temperature: f32, humidity: f32) -> [f32; 2] {
     let t = temperature.clamp(0.0, 1.0);
     let h = (humidity.clamp(0.0, 1.0)) * t;
-    [1.0 - t, 1.0 - h]
+    [1.0 - t, h]
 }
 
 /// Computes smooth biome blending over `(x ± 2, z ± 2)` horizontal neighborhood.

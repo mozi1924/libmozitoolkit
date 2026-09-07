@@ -20,7 +20,8 @@ pub enum FluidType {
 
 impl FluidType {
     pub fn from_name(name: &str) -> Option<Self> {
-        let clean = name.strip_prefix("minecraft:").unwrap_or(name);
+        let (raw_name, _) = parse_block_name_and_props(name);
+        let clean = raw_name.strip_prefix("minecraft:").unwrap_or(&raw_name);
         let clean = clean.strip_prefix("flowing_").unwrap_or(clean);
         if clean == "water" {
             Some(Self::Water)
