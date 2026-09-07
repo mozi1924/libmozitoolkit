@@ -67,7 +67,9 @@ dependencies = [
 name = "mtk-model"
 version = "0.1.0"
 dependencies = [
+ "glam",
  "mtk-core",
+ "mtk-cull",
  "serde",
  "serde_json",
  "thiserror",

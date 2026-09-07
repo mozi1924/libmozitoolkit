@@ -1,6 +1,10 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
+
+use crate::error::ModelError;
+
+const MAX_PARENT_DEPTH: usize = 32;
 
 /// High-level representation of a Minecraft Block Model JSON.
 ///
@@ -23,6 +27,167 @@ pub struct BlockModelJson {
     /// 3D box elements definition.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub elements: Option<Vec<ElementJson>>,
+}
+
+impl BlockModelJson {
+    /// Fully resolves the inheritance tree using a parent loader callback.
+    ///
+    /// Merges textures (child overrides parent) and inherits elements (first model in the chain providing elements wins).
+    /// Resolves all `#var` texture variables to final canonical texture identifiers.
+    pub fn resolve_hierarchy<F>(
+        &self,
+        current_model_id: &str,
+        mut parent_loader: F,
+    ) -> Result<ResolvedBlockModel, ModelError>
+    where
+        F: FnMut(&str) -> Option<BlockModelJson>,
+    {
+        let mut visited = HashSet::new();
+        visited.insert(current_model_id.to_string());
+
+        let mut raw_textures = self.textures.clone().unwrap_or_default();
+        let mut elements = self.elements.clone();
+        let mut ambientocclusion = self.ambientocclusion;
+
+        let mut curr_parent = self.parent.clone();
+        let mut depth = 0;
+
+        while let Some(parent_id) = curr_parent {
+            depth += 1;
+            if depth > MAX_PARENT_DEPTH || visited.contains(&parent_id) {
+                return Err(ModelError::CircularParentHierarchy(parent_id));
+            }
+            visited.insert(parent_id.clone());
+
+            let parent_model = parent_loader(&parent_id).unwrap_or_default();
+
+            // 1. Merge textures: child textures take priority; add parent's only if not present
+            if let Some(ref p_textures) = parent_model.textures {
+                for (k, v) in p_textures {
+                    raw_textures.entry(k.clone()).or_insert_with(|| v.clone());
+                }
+            }
+
+            // 2. Inherit elements if not defined yet
+            if elements.is_none() && parent_model.elements.is_some() {
+                elements = parent_model.elements.clone();
+            }
+
+            // 3. Inherit ambient occlusion if not defined
+            if ambientocclusion.is_none() && parent_model.ambientocclusion.is_some() {
+                ambientocclusion = parent_model.ambientocclusion;
+            }
+
+            curr_parent = parent_model.parent;
+        }
+
+        // Resolve all `#texture` variable references
+        let mut resolved_textures = HashMap::new();
+        for (k, val) in &raw_textures {
+            let final_tex = Self::resolve_texture_value(val.as_str(), &raw_textures)?;
+            resolved_textures.insert(k.clone(), final_tex);
+        }
+
+        // Bake texture values into elements
+        let resolved_elements = if let Some(elems) = elements {
+            let mut res_elems = Vec::with_capacity(elems.len());
+            for elem in elems {
+                let mut res_faces = HashMap::with_capacity(elem.faces.len());
+                for (dir, face) in elem.faces {
+                    let final_tex =
+                        Self::resolve_texture_value(&face.texture, &raw_textures).unwrap_or_else(
+                            |_| {
+                                face.texture.trim_start_matches('#').to_string()
+                            },
+                        );
+                    res_faces.insert(
+                        dir,
+                        ResolvedFace {
+                            uv: face.uv,
+                            texture: final_tex,
+                            cullface: face.cullface,
+                            rotation: face.rotation.unwrap_or(0),
+                            tintindex: face.tintindex.unwrap_or(-1),
+                        },
+                    );
+                }
+                res_elems.push(ResolvedElement {
+                    from: elem.from,
+                    to: elem.to,
+                    rotation: elem.rotation,
+                    shade: elem.shade.unwrap_or(true),
+                    faces: res_faces,
+                });
+            }
+            res_elems
+        } else {
+            Vec::new()
+        };
+
+        Ok(ResolvedBlockModel {
+            ambientocclusion: ambientocclusion.unwrap_or(true),
+            textures: resolved_textures,
+            elements: resolved_elements,
+        })
+    }
+
+    /// Recursively resolves a `#texture` variable to its terminal path.
+    pub fn resolve_texture_value(
+        target: &str,
+        textures: &HashMap<String, TextureValue>,
+    ) -> Result<String, ModelError> {
+        let mut curr = target;
+        let mut visited = HashSet::new();
+
+        while let Some(var_name) = curr.strip_prefix('#') {
+            if visited.contains(var_name) {
+                return Err(ModelError::CircularParentHierarchy(format!(
+                    "Cyclic texture variable '#{}'",
+                    var_name
+                )));
+            }
+            visited.insert(var_name.to_string());
+
+            if let Some(next_val) = textures.get(var_name) {
+                curr = next_val.as_str();
+            } else {
+                return Err(ModelError::UnresolvedTextureVariable(var_name.to_string()));
+            }
+        }
+
+        Ok(curr.to_string())
+    }
+}
+
+/// Fully canonical resolved Block Model with parent hierarchy and texture variables flattened.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ResolvedBlockModel {
+    /// Ambient occlusion.
+    pub ambientocclusion: bool,
+    /// Resolved texture dictionary mapping variable names to canonical texture IDs.
+    pub textures: HashMap<String, String>,
+    /// Fully resolved elements.
+    pub elements: Vec<ResolvedElement>,
+}
+
+/// Resolved element with concrete textures.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ResolvedElement {
+    pub from: [f32; 3],
+    pub to: [f32; 3],
+    pub rotation: Option<RotationJson>,
+    pub shade: bool,
+    pub faces: HashMap<String, ResolvedFace>,
+}
+
+/// Resolved element face with concrete texture identifier.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ResolvedFace {
+    pub uv: Option<[f32; 4]>,
+    pub texture: String,
+    pub cullface: Option<String>,
+    pub rotation: u32,
+    pub tintindex: i16,
 }
 
 /// Represents texture entries in Minecraft model JSON, which can be either a simple path
@@ -141,8 +306,64 @@ mod tests {
 
         let model: BlockModelJson = serde_json::from_str(json_data).unwrap();
         assert_eq!(model.parent, Some("minecraft:block/block".to_string()));
-        let textures = model.textures.unwrap();
+        let textures = model.textures.as_ref().unwrap();
         assert_eq!(textures.get("all").unwrap().as_str(), "minecraft:block/stone");
-        assert_eq!(model.elements.unwrap().len(), 1);
+        assert_eq!(model.elements.as_ref().unwrap().len(), 1);
+
+        // Test hierarchy and texture resolution
+        let resolved = model.resolve_hierarchy("test:model", |_| None).unwrap();
+        assert_eq!(resolved.textures.get("all").unwrap(), "minecraft:block/stone");
+        assert_eq!(resolved.textures.get("particle").unwrap(), "minecraft:block/stone");
+        assert_eq!(resolved.elements.len(), 1);
+        assert_eq!(
+            resolved.elements[0].faces.get("up").unwrap().texture,
+            "minecraft:block/stone"
+        );
+    }
+
+    #[test]
+    fn test_parent_inheritance() {
+        let parent_json = r##"{
+            "textures": {
+                "base": "minecraft:block/dirt"
+            },
+            "elements": [
+                {
+                    "from": [0, 0, 0],
+                    "to": [16, 8, 16],
+                    "faces": {
+                        "up": { "texture": "#base" }
+                    }
+                }
+            ]
+        }"##;
+
+        let child_json = r##"{
+            "parent": "minecraft:block/slab_base",
+            "textures": {
+                "base": "minecraft:block/oak_planks"
+            }
+        }"##;
+
+        let child: BlockModelJson = serde_json::from_str(child_json).unwrap();
+        let parent: BlockModelJson = serde_json::from_str(parent_json).unwrap();
+
+        let resolved = child
+            .resolve_hierarchy("minecraft:block/oak_slab", |id| {
+                if id == "minecraft:block/slab_base" {
+                    Some(parent.clone())
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+
+        assert_eq!(resolved.elements.len(), 1);
+        assert_eq!(resolved.elements[0].to, [16.0, 8.0, 16.0]);
+        // Child's texture should override parent's
+        assert_eq!(
+            resolved.elements[0].faces.get("up").unwrap().texture,
+            "minecraft:block/oak_planks"
+        );
     }
 }

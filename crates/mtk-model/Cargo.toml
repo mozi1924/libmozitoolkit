@@ -10,10 +10,12 @@ description = "Headless Minecraft BlockState parser and Model JSON data structur
 
 [dependencies]
 mtk-core = { workspace = true }
+mtk-cull = { workspace = true }
+glam = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [features]
 default = ["std"]
-std = ["mtk-core/std", "serde/std", "serde_json/std"]
+std = ["mtk-core/std", "mtk-cull/std", "serde/std", "serde_json/std"]
