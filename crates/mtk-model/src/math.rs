@@ -129,9 +129,6 @@ pub fn rotate_element_point(p: Vec3, rot: &RotationJson) -> Vec3 {
         _ => {}
     }
 
-    if rot.rescale.unwrap_or(false) && (rot.angle.abs() - 22.5).abs() < 0.1
-        || (rot.angle.abs() - 45.0).abs() < 0.1
-        || (rot.angle.abs() - 67.5).abs() < 0.1
     if rot.rescale.unwrap_or(false)
         && ((rot.angle.abs() - 22.5).abs() < 0.1
             || (rot.angle.abs() - 45.0).abs() < 0.1

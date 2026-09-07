@@ -106,10 +106,8 @@ impl BakedModel {
                 .collect();
 
             for face in el.faces.values() {
-                let next_id = texture_to_slot.len() as u16;
                 let slot = *texture_to_slot
                     .entry(face.texture.clone())
-                    .or_insert(next_id);
                     .or_insert_with(|| {
                         let id = texture_list.len() as u16;
                         texture_list.push(face.texture.clone());
@@ -139,7 +137,6 @@ impl BakedModel {
                         let uv = piece.uvs[i];
                         mesh.positions.push([v.x, v.y, v.z]);
                         mesh.normals.push(norm);
-                        mesh.uvs.push([uv.x, uv.y]);
                         mesh.uvs.push([uv.x, 1.0 - uv.y]);
                     }
 
@@ -160,10 +157,8 @@ impl BakedModel {
 
         // 2. Process OBJ faces
         for obj_f in &self.obj_faces {
-            let next_id = texture_to_slot.len() as u16;
             let slot = *texture_to_slot
                 .entry(obj_f.texture.clone())
-                .or_insert(next_id);
                 .or_insert_with(|| {
                     let id = texture_list.len() as u16;
                     texture_list.push(obj_f.texture.clone());
@@ -176,7 +171,6 @@ impl BakedModel {
             for (&v, &uv) in obj_f.vertices.iter().zip(obj_f.uvs.iter()) {
                 mesh.positions.push([v.x, v.y, v.z]);
                 mesh.normals.push(norm);
-                mesh.uvs.push([uv.x, uv.y]);
                 mesh.uvs.push([uv.x, 1.0 - uv.y]);
             }
 
@@ -208,7 +202,6 @@ impl BakedModel {
             }
         }
 
-        mesh
         (mesh, texture_list)
     }
 
