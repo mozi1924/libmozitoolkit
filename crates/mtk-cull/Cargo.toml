@@ -10,10 +10,14 @@ description = "Face culling engine and 2D occlusion rectangle operations for lib
 
 [dependencies]
 mtk-core = { workspace = true }
+glam = { workspace = true }
 bitflags = { workspace = true }
 serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 
 [features]
 default = ["std", "serde"]
 std = ["mtk-core/std"]
-serde = ["dep:serde", "mtk-core/serde"]
+serde = ["dep:serde", "dep:serde_json", "mtk-core/serde"]
+
+

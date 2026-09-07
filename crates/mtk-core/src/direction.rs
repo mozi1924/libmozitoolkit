@@ -146,7 +146,9 @@ impl Direction {
 bitflags! {
     /// 6-bit direction mask set.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
     pub struct DirMask: u8 {
+
         const EAST  = 1 << 0;
         const WEST  = 1 << 1;
         const UP    = 1 << 2;
