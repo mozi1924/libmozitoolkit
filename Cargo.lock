@@ -136,6 +136,7 @@ dependencies = [
  "mtk-core",
  "mtk-cull",
  "mtk-model",
+ "serde",
  "serde_json",
  "zip",
 ]

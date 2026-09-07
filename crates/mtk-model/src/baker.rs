@@ -167,7 +167,12 @@ impl ModelBaker {
 
                 let mut elem_faces = HashMap::new();
 
-                for (orig_dir_str, face_data) in &elem.faces {
+                const CANONICAL_DIRS: [&str; 6] = ["down", "up", "north", "south", "west", "east"];
+                for orig_dir_str in CANONICAL_DIRS {
+                    let face_data = match elem.faces.get(orig_dir_str) {
+                        Some(f) => f,
+                        None => continue,
+                    };
                     let orig_dir = match Direction::parse_loose(orig_dir_str) {
                         Some(d) => d,
                         None => continue,
@@ -249,12 +254,25 @@ impl ModelBaker {
         }
 
         // Fill missing 6-face summary entries
-        let fallback_tex = baked_elements
-            .iter()
-            .flat_map(|el| el.faces.values())
-            .map(|f| f.texture.as_str())
-            .next()
-            .unwrap_or("minecraft:block/dirt");
+        let mut fallback_tex = "minecraft:block/dirt";
+        'find_fallback: for el in &baked_elements {
+            const CANONICAL_DIRS: [Direction; 6] = [
+                Direction::Down,
+                Direction::Up,
+                Direction::North,
+                Direction::South,
+                Direction::West,
+                Direction::East,
+            ];
+            for dir in CANONICAL_DIRS {
+                if let Some(f) = el.faces.get(&dir) {
+                    if !f.texture.is_empty() {
+                        fallback_tex = f.texture.as_str();
+                        break 'find_fallback;
+                    }
+                }
+            }
+        }
 
         let mut final_six_faces = [
             BakedFace::default(),
