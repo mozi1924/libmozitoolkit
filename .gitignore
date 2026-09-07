@@ -3,3 +3,5 @@
 *.swp
 *~
 .DS_Store
+/manual_test
+/test_output

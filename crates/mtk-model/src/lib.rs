@@ -25,3 +25,4 @@ pub use model_json::{
     RotationJson, TextureValue,
 };
 pub use obj::{BakedObjFace, ModObjLoader, ObjRawFace, WavefrontObjParser};
+pub use obj::{mesh_to_obj_string, BakedObjFace, ModObjLoader, ObjRawFace, WavefrontObjParser};

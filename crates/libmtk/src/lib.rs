@@ -22,3 +22,4 @@ pub use mtk_model::baker::ModelBaker;
 pub use mtk_model::blockstate::BlockState;
 pub use mtk_model::model_json::BlockModelJson;
 pub use mtk_model::obj::{ModObjLoader, WavefrontObjParser};
+pub use mtk_model::obj::{mesh_to_obj_string, ModObjLoader, WavefrontObjParser};

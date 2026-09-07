@@ -71,8 +71,14 @@ impl BakedModel {
     /// If `exclude_hidden_volume` is true, internal overlapping faces between adjacent elements
     /// (such as within stairs or multi-element blocks) are clipped out via 2D boolean difference.
     pub fn to_mesh(&self, exclude_hidden_volume: bool) -> MeshData {
+        self.to_mesh_with_textures(exclude_hidden_volume).0
+    }
+
+    /// Converts geometry into a `MeshData` buffer along with the ordered list of unique texture names.
+    pub fn to_mesh_with_textures(&self, exclude_hidden_volume: bool) -> (MeshData, Vec<String>) {
         let mut mesh = MeshData::new();
         let mut texture_to_slot: HashMap<String, u16> = HashMap::new();
+        let mut texture_list: Vec<String> = Vec::new();
 
         // Prepare bounding boxes for hidden volume clipping from actual transformed vertices
         let mut element_bounds = Vec::new();
@@ -104,6 +110,11 @@ impl BakedModel {
                 let slot = *texture_to_slot
                     .entry(face.texture.clone())
                     .or_insert(next_id);
+                    .or_insert_with(|| {
+                        let id = texture_list.len() as u16;
+                        texture_list.push(face.texture.clone());
+                        id
+                    });
 
                 let pieces = if exclude_hidden_volume && !other_bounds.is_empty() {
                     clip_face_excluding_hidden_volume(
@@ -129,6 +140,7 @@ impl BakedModel {
                         mesh.positions.push([v.x, v.y, v.z]);
                         mesh.normals.push(norm);
                         mesh.uvs.push([uv.x, uv.y]);
+                        mesh.uvs.push([uv.x, 1.0 - uv.y]);
                     }
 
                     // Triangulate CCW quad: 0-1-2 and 0-2-3
@@ -152,6 +164,11 @@ impl BakedModel {
             let slot = *texture_to_slot
                 .entry(obj_f.texture.clone())
                 .or_insert(next_id);
+                .or_insert_with(|| {
+                    let id = texture_list.len() as u16;
+                    texture_list.push(obj_f.texture.clone());
+                    id
+                });
 
             let base_idx = mesh.positions.len() as u32;
             let norm = [obj_f.normal.x, obj_f.normal.y, obj_f.normal.z];
@@ -160,6 +177,7 @@ impl BakedModel {
                 mesh.positions.push([v.x, v.y, v.z]);
                 mesh.normals.push(norm);
                 mesh.uvs.push([uv.x, uv.y]);
+                mesh.uvs.push([uv.x, 1.0 - uv.y]);
             }
 
             let n_verts = obj_f.vertices.len();
@@ -191,6 +209,13 @@ impl BakedModel {
         }
 
         mesh
+        (mesh, texture_list)
+    }
+
+    /// Converts the baked model into standard Wavefront OBJ text.
+    pub fn to_obj_string(&self, object_name: &str, exclude_hidden_volume: bool) -> String {
+        let (mesh, textures) = self.to_mesh_with_textures(exclude_hidden_volume);
+        crate::obj::mesh_to_obj_string(&mesh, object_name, &textures)
     }
 }
 

@@ -132,6 +132,10 @@ pub fn rotate_element_point(p: Vec3, rot: &RotationJson) -> Vec3 {
     if rot.rescale.unwrap_or(false) && (rot.angle.abs() - 22.5).abs() < 0.1
         || (rot.angle.abs() - 45.0).abs() < 0.1
         || (rot.angle.abs() - 67.5).abs() < 0.1
+    if rot.rescale.unwrap_or(false)
+        && ((rot.angle.abs() - 22.5).abs() < 0.1
+            || (rot.angle.abs() - 45.0).abs() < 0.1
+            || (rot.angle.abs() - 67.5).abs() < 0.1)
     {
         let scale = 1.0 / rad.cos();
         match rot.axis.to_ascii_lowercase().as_str() {

@@ -16,3 +16,7 @@ mtk-model = { workspace = true }
 [features]
 default = ["std"]
 std = ["mtk-core/std", "mtk-cull/std", "mtk-model/std"]
+
+[dev-dependencies]
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+serde_json = { workspace = true }
