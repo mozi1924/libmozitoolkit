@@ -4,11 +4,14 @@ pub mod blockstate;
 pub mod cull_volume;
 pub mod error;
 pub mod math;
+pub mod mesher;
 pub mod model_json;
 pub mod obj;
 
 pub use baked::{BakedElement, BakedFace, BakedModel};
 pub use baker::{is_block_emissive, ModelBaker};
+pub use mesher::{SectionMesher, VoxelSection};
+
 pub use blockstate::{
     BlockState, BlockStateDefinition, BlockStateResolver, MultipartCondition, MultipartRule,
     VariantEntry, VariantMatch, VariantModel,

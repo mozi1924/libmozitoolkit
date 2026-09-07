@@ -30,6 +30,9 @@ pub use mtk_cull::types::{
 pub use mtk_model::baked::BakedModel;
 pub use mtk_model::baker::ModelBaker;
 pub use mtk_model::blockstate::BlockState;
+pub use mtk_model::mesher::{SectionMesher, VoxelSection};
+
 pub use mtk_model::model_json::BlockModelJson;
 pub use mtk_model::obj::{mesh_to_obj_string, ModObjLoader, WavefrontObjParser};
+
 

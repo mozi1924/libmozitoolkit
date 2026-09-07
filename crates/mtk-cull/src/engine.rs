@@ -2,8 +2,8 @@ use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
 use std::collections::HashMap;
+
 
 use glam::{IVec3, Vec3};
 use mtk_core::direction::{DirMask, Direction};
@@ -693,12 +693,36 @@ pub fn compute_block_cull_meta(
 }
 
 /// High-Performance Unified Face Culling Engine.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct FaceCuller {
     pub leaves_cull_mode: LeavesCullMode,
     pub glass_cull_mode: GlassCullMode,
+    #[cfg(feature = "std")]
+    meta_cache: std::sync::RwLock<HashMap<String, Arc<BlockCullMeta>>>,
+    #[cfg(not(feature = "std"))]
     meta_cache: RefCell<HashMap<String, Arc<BlockCullMeta>>>,
-    cache_order: RefCell<Vec<String>>,
+}
+
+impl Clone for FaceCuller {
+    fn clone(&self) -> Self {
+        #[cfg(feature = "std")]
+        {
+            let cache_clone = self.meta_cache.read().map(|g| g.clone()).unwrap_or_default();
+            Self {
+                leaves_cull_mode: self.leaves_cull_mode,
+                glass_cull_mode: self.glass_cull_mode,
+                meta_cache: std::sync::RwLock::new(cache_clone),
+            }
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            Self {
+                leaves_cull_mode: self.leaves_cull_mode,
+                glass_cull_mode: self.glass_cull_mode,
+                meta_cache: RefCell::new(self.meta_cache.borrow().clone()),
+            }
+        }
+    }
 }
 
 impl Default for FaceCuller {
@@ -713,20 +737,37 @@ impl FaceCuller {
         Self {
             leaves_cull_mode,
             glass_cull_mode,
+            #[cfg(feature = "std")]
+            meta_cache: std::sync::RwLock::new(HashMap::new()),
+            #[cfg(not(feature = "std"))]
             meta_cache: RefCell::new(HashMap::new()),
-            cache_order: RefCell::new(Vec::new()),
         }
     }
 
     /// Clears the cached block culling metadata.
     pub fn clear_cache(&self) {
-        self.meta_cache.borrow_mut().clear();
-        self.cache_order.borrow_mut().clear();
+        #[cfg(feature = "std")]
+        {
+            if let Ok(mut cache) = self.meta_cache.write() {
+                cache.clear();
+            }
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            self.meta_cache.borrow_mut().clear();
+        }
     }
 
     /// Number of cached metadata entries.
     pub fn cache_len(&self) -> usize {
-        self.meta_cache.borrow().len()
+        #[cfg(feature = "std")]
+        {
+            self.meta_cache.read().map(|g| g.len()).unwrap_or(0)
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            self.meta_cache.borrow().len()
+        }
     }
 
     /// Retrieves or computes `BlockCullMeta` for a given blockstate string.
@@ -736,33 +777,62 @@ impl FaceCuller {
         element_quads: Option<&[([Vec3; 4], Direction)]>,
         is_opaque_hint: Option<bool>,
     ) -> Arc<BlockCullMeta> {
-        let mut cache = self.meta_cache.borrow_mut();
-        if let Some(meta) = cache.get(state_str) {
-            if element_quads.is_some() && !meta.has_baked_model {
-                // Refresh if we now have detailed element quads
-            } else {
-                return Arc::clone(meta);
+        #[cfg(feature = "std")]
+        {
+            if let Ok(cache) = self.meta_cache.read() {
+                if let Some(meta) = cache.get(state_str) {
+                    if element_quads.is_some() && !meta.has_baked_model {
+                        // Needs re-bake with detailed quads
+                    } else {
+                        return Arc::clone(meta);
+                    }
+                }
             }
-        }
 
-        let meta = Arc::new(compute_block_cull_meta(
-            state_str,
-            element_quads,
-            is_opaque_hint,
-        ));
+            let meta = Arc::new(compute_block_cull_meta(
+                state_str,
+                element_quads,
+                is_opaque_hint,
+            ));
 
-        let mut order = self.cache_order.borrow_mut();
-        if cache.len() >= 8192 && !cache.contains_key(state_str) {
-            if !order.is_empty() {
-                let oldest = order.remove(0);
-                cache.remove(&oldest);
+            if let Ok(mut cache) = self.meta_cache.write() {
+                if cache.len() >= 8192 && !cache.contains_key(state_str) {
+                    if let Some(first_key) = cache.keys().next().cloned() {
+                        cache.remove(&first_key);
+                    }
+                }
+                cache.insert(state_str.to_string(), Arc::clone(&meta));
             }
+            meta
         }
+        #[cfg(not(feature = "std"))]
+        {
+            let mut cache = self.meta_cache.borrow_mut();
+            if let Some(meta) = cache.get(state_str) {
+                if element_quads.is_some() && !meta.has_baked_model {
+                    // Refresh
+                } else {
+                    return Arc::clone(meta);
+                }
+            }
 
-        order.push(state_str.to_string());
-        cache.insert(state_str.to_string(), Arc::clone(&meta));
-        meta
+            let meta = Arc::new(compute_block_cull_meta(
+                state_str,
+                element_quads,
+                is_opaque_hint,
+            ));
+
+            if cache.len() >= 8192 && !cache.contains_key(state_str) {
+                if let Some(first_key) = cache.keys().next().cloned() {
+                    cache.remove(&first_key);
+                }
+            }
+
+            cache.insert(state_str.to_string(), Arc::clone(&meta));
+            meta
+        }
     }
+
 
     /// Evaluates Minecraft 1.21+ canonical face visibility test.
     ///
