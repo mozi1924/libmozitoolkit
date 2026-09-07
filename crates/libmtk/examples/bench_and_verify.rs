@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use libmtk::model::{
-    blockstate::{BlockState, BlockStateDefinition},
+    blockstate::{BlockState, BlockStateDefinition, BlockStateResolver},
     model_json::BlockModelJson,
     ModelBaker,
 };
@@ -284,15 +284,78 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     let cold_duration = cold_start.elapsed();
-    println!("\n[Benchmark 1: Full Jar Cold Bake]");
+    println!("\n[Benchmark 1: Full Jar Single-Threaded Cold Bake (1 core)]");
     println!(" Successfully baked: {} / {} states", successful_bakes, all_test_states.len());
     println!(" Total triangles generated: {}", total_tris);
     println!(" Total time: {:?}", cold_duration);
     println!(" Average time per model: {:.3} µs", (cold_duration.as_secs_f64() * 1_000_000.0) / successful_bakes as f64);
     println!(" Throughput: {:.2} models/sec", successful_bakes as f64 / cold_duration.as_secs_f64());
 
+    // 2.1 Multi-Core Parallel Batch Bake Comparison
+    println!("\n[Benchmark 2: Full Jar Multi-Core Parallel Batch Bake]");
+    let available_parallelism = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(2);
+    let conservative_threads = ModelBaker::determine_conservative_threads();
+    println!(" Detected hardware threads: {}", available_parallelism);
+    println!(" Conservative default threads: {}", conservative_threads);
+
+    // Preload all raw asset strings into thread-safe memory map for pure multi-core scaling test
+    let mut in_memory_states_json = HashMap::new();
+    let mut in_memory_models_json = HashMap::new();
+
+    let bs_names = loader.all_blockstate_names.clone();
+    for name in &bs_names {
+        if let Some(def) = loader.load_blockstate(name) {
+            in_memory_states_json.insert(name.clone(), def);
+        }
+    }
+    // Also preload referenced models
+    for name in &bs_names {
+        if let Ok(bs) = BlockState::parse(name) {
+            if let Some(def) = in_memory_states_json.get(&bs.name) {
+                let matches = BlockStateResolver::resolve(def, &bs);
+                for m in matches {
+                    if let Some(model) = loader.load_model(&m.model_id) {
+                        in_memory_models_json.insert(m.model_id.clone(), model);
+                    }
+                }
+            }
+        }
+    }
+
+    let thread_configs = [
+        ("Single-thread (1 thread)", Some(1)),
+        ("Conservative Default", None), // Uses determine_conservative_threads()
+        ("High Performance (8 threads)", Some(8.min(available_parallelism))),
+        ("Max Cores (All threads)", Some(available_parallelism)),
+    ];
+
+    for (label, threads_opt) in thread_configs {
+        let t_start = Instant::now();
+        let results = ModelBaker::bake_batch_parallel(
+            &all_test_states,
+            threads_opt,
+            |name| in_memory_states_json.get(name).cloned(),
+            |id| in_memory_models_json.get(id).cloned(),
+        )?;
+        let t_duration = t_start.elapsed();
+        let ok_count = results.iter().filter(|(_, r)| r.is_ok()).count();
+        let eff_threads = match threads_opt {
+            Some(t) if t > 0 => t,
+            _ => conservative_threads,
+        };
+        let speedup = cold_duration.as_secs_f64() / t_duration.as_secs_f64();
+        println!(
+            " • {:<32} [{} threads] -> {:>7.2} ms ({:>8.1} models/sec) | Speedup vs 1-thread cold: {:.2}x",
+            label,
+            eff_threads,
+            t_duration.as_secs_f64() * 1000.0,
+            ok_count as f64 / t_duration.as_secs_f64(),
+            speedup
+        );
+    }
+
     // 3. Preloaded In-Memory Model Baking (Raw Computation Speed, 100,000 iterations)
-    println!("\n[Benchmark 2: In-Memory Raw Baker Computation]");
+    println!("\n[Benchmark 3: In-Memory Raw Baker Computation (Single-Threaded, 100k iters)]");
     let sample_states = [
         "minecraft:stone",
         "minecraft:furnace[facing=north,lit=false]",
@@ -313,7 +376,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             preloaded_defs.insert(bs.name.clone(), def);
         }
     }
-    // Load needed models
     let model_names = [
         "minecraft:block/stone", "minecraft:block/cube_all", "minecraft:block/furnace",
         "minecraft:block/orientable_with_bottom", "minecraft:block/oak_stairs",
@@ -335,7 +397,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let state_str = sample_states[i % sample_states.len()];
         let bs = BlockState::parse(state_str).unwrap();
         let def = preloaded_defs.get(&bs.name);
-        // Clear bake cache every 1000 to test raw baking path without memoization lookup
         let _ = mem_baker.bake_blockstate(state_str, def, |id| preloaded_models.get(id).cloned());
         if i % 1000 == 0 {
             mem_baker.clear_cache();
@@ -348,7 +409,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!(" Throughput: {:.2} bakes/sec", iters as f64 / mem_duration.as_secs_f64());
 
     // 4. Mesh Generation with 2D Hidden Volume Clipping
-    println!("\n[Benchmark 3: Mesh Generation & Hidden Volume Culling]");
+    println!("\n[Benchmark 4: Mesh Generation & Hidden Volume Culling (100k iters)]");
     let stairs_state = "minecraft:oak_stairs[facing=east,half=bottom,shape=straight]";
     let bs = BlockState::parse(stairs_state)?;
     let def = loader.load_blockstate(&bs.name);

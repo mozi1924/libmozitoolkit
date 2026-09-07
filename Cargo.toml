@@ -22,6 +22,7 @@ serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 thiserror = { version = "2.0", default-features = false }
 bitflags = { version = "2.6", default-features = false, features = ["serde"] }
 tinyvec = { version = "1.8", default-features = false, features = ["alloc"] }
+rayon = { version = "1.10", default-features = false }
 
 
 

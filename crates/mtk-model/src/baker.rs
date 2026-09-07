@@ -431,6 +431,69 @@ impl ModelBaker {
             emissive_level: if emissive { 1.0 } else { 0.0 },
         })
     }
+
+    /// Calculates a conservative default thread count for parallel operations.
+    ///
+    /// Strategy: min(4, max(1, available_parallelism / 2)).
+    /// This leaves at least half of the CPU cores free for Blender UI, viewport rendering,
+    /// or host system responsiveness.
+    #[cfg(feature = "parallel")]
+    pub fn determine_conservative_threads() -> usize {
+        let available = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(2);
+        (available / 2).clamp(1, 4)
+    }
+
+    /// Bakes a batch of BlockStates in parallel using a dedicated local Rayon thread pool.
+    ///
+    /// - `states`: Slice of BlockState identifiers.
+    /// - `num_threads`: Optional thread count. If `None` or `0`, uses conservative default.
+    /// - `state_loader`: Thread-safe callback retrieving `BlockStateDefinition` for a block name.
+    /// - `model_loader`: Thread-safe callback retrieving `BlockModelJson` given a model ID path.
+    #[cfg(feature = "parallel")]
+    pub fn bake_batch_parallel<S, SF, MF>(
+        states: &[S],
+        num_threads: Option<usize>,
+        state_loader: SF,
+        model_loader: MF,
+    ) -> Result<Vec<(String, Result<BakedModel, ModelError>)>, ModelError>
+    where
+        S: AsRef<str> + Sync,
+        SF: Fn(&str) -> Option<BlockStateDefinition> + Sync + Send,
+        MF: Fn(&str) -> Option<BlockModelJson> + Sync + Send,
+    {
+        use rayon::prelude::*;
+
+        let threads = match num_threads {
+            Some(t) if t > 0 => t,
+            _ => Self::determine_conservative_threads(),
+        };
+
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .thread_name(|i| format!("mtk-baker-{}", i))
+            .build()
+            .map_err(|e| ModelError::ThreadPoolError(e.to_string()))?;
+
+        let results = pool.install(|| {
+            states
+                .par_iter()
+                .map(|state_ref| {
+                    let state_str = state_ref.as_ref();
+                    let mut local_baker = ModelBaker::new();
+                    let res = (|| -> Result<BakedModel, ModelError> {
+                        let bs = BlockState::parse(state_str)?;
+                        let bs_def = state_loader(&bs.name);
+                        local_baker.bake_blockstate(state_str, bs_def.as_ref(), |id| model_loader(id))
+                    })();
+                    (state_str.to_string(), res)
+                })
+                .collect()
+        });
+
+        Ok(results)
+    }
 }
 
 #[cfg(test)]
@@ -510,5 +573,44 @@ f 1/1 2/2 3/3
         let mesh = baked.to_mesh(false);
         assert_eq!(mesh.triangle_count(), 1);
         assert_eq!(mesh.vertex_count(), 3);
+    }
+
+    #[test]
+    #[cfg(feature = "parallel")]
+    fn test_bake_batch_parallel() {
+        let model_json = r##"{
+            "textures": { "all": "minecraft:block/stone" },
+            "elements": [{
+                "from": [0, 0, 0], "to": [16, 16, 16],
+                "faces": {
+                    "down":  { "texture": "#all" }, "up":    { "texture": "#all" },
+                    "north": { "texture": "#all" }, "south": { "texture": "#all" },
+                    "west":  { "texture": "#all" }, "east":  { "texture": "#all" }
+                }
+            }]
+        }"##;
+        let model: BlockModelJson = serde_json::from_str(model_json).unwrap();
+
+        let states = vec![
+            "minecraft:stone".to_string(),
+            "minecraft:stone[variant=smooth]".to_string(),
+            "minecraft:stone[variant=rough]".to_string(),
+        ];
+
+        let results = ModelBaker::bake_batch_parallel(
+            &states,
+            Some(2),
+            |_name| None,
+            |_id| Some(model.clone()),
+        )
+        .unwrap();
+
+        assert_eq!(results.len(), 3);
+        for (st, res) in results {
+            let baked = res.unwrap();
+            assert!(baked.is_cube);
+            assert_eq!(baked.elements.len(), 1);
+            assert!(states.contains(&st));
+        }
     }
 }

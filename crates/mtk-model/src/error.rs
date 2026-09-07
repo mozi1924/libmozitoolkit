@@ -16,4 +16,7 @@ pub enum ModelError {
 
     #[error("Missing expected model element face for direction: '{0}'")]
     MissingFace(String),
+
+    #[error("ThreadPool error: {0}")]
+    ThreadPoolError(String),
 }
