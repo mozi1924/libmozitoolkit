@@ -12,10 +12,11 @@ description = "Unified facade library for MoziToolKit core functionality."
 mtk-core = { workspace = true }
 mtk-cull = { workspace = true }
 mtk-model = { workspace = true }
+mtk-voxel = { workspace = true }
 
 [features]
 default = ["std"]
-std = ["mtk-core/std", "mtk-cull/std", "mtk-model/std"]
+std = ["mtk-core/std", "mtk-cull/std", "mtk-model/std", "mtk-voxel/std"]
 
 [dev-dependencies]
 zip = { version = "2.2", default-features = false, features = ["deflate"] }

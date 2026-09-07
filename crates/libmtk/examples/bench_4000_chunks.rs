@@ -1,7 +1,6 @@
 use std::time::Instant;
 use libmtk::core::IVec3;
-use libmtk::{FaceCuller, SectionMesher, VoxelSection};
-
+use libmtk::{FaceCuller, MesherConfig, PaddedVoxelArray, SectionMesher, SectionStorage};
 
 fn main() {
     println!("============================================================");
@@ -24,7 +23,7 @@ fn main() {
     ];
 
     let gen_start = Instant::now();
-    let mut sections = Vec::with_capacity(num_sections);
+    let mut sections: Vec<PaddedVoxelArray> = Vec::with_capacity(num_sections);
 
     for i in 0..num_sections {
         let cx = (i % 16) as i32;
@@ -32,7 +31,7 @@ fn main() {
         let cz = (i / 256) as i32;
         let coord = IVec3::new(cx, cy, cz);
 
-        // Generate synthetic terrain layer: bottom is solid stone/dirt, middle is stairs/slabs/glass, top is air
+        // Generate synthetic terrain layer
         let mut core_blocks = Vec::with_capacity(4096);
         for lx in 0..16 {
             for ly in 0..16 {
@@ -46,19 +45,19 @@ fn main() {
                     } else {
                         sample_blocks[8] // air
                     };
-                    core_blocks.push(b.to_string());
+                    core_blocks.push(b);
                 }
             }
         }
 
-        let sec = VoxelSection::from_flat_array(coord, &core_blocks, |_x, _y, _z| {
-            "minecraft:air".to_string()
-        });
-        sections.push(sec);
+        let sec = SectionStorage::from_slice(coord, &core_blocks);
+        let padded = sec.build_padded_array(|_x, _y, _z| "minecraft:air".to_string());
+        sections.push(padded);
     }
     println!("Generated {} sections in {:.2} ms", num_sections, gen_start.elapsed().as_secs_f64() * 1000.0);
 
     let culler = FaceCuller::default();
+    let config = MesherConfig::default();
 
     // 1. Single-threaded meshing of 4,000 sections
     println!("\n[Test 1: Single-Threaded 4,096 Sections Meshing (1 core)]");
@@ -67,7 +66,7 @@ fn main() {
     let mut total_verts_single = 0usize;
 
     for sec in &sections {
-        let mesh = SectionMesher::mesh_section(sec, &culler, |_st| None, false);
+        let mesh = SectionMesher::mesh_section(sec, &culler, |_st| None, &config);
         total_tris_single += mesh.triangle_count();
         total_verts_single += mesh.vertex_count();
     }
@@ -90,6 +89,7 @@ fn main() {
             &sections,
             &culler,
             |_st| None,
+            &config,
             Some(threads),
         ).unwrap();
         let t_par = t_par_start.elapsed();

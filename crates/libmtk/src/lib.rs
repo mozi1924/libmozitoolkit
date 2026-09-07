@@ -10,6 +10,7 @@
 pub use mtk_core as core;
 pub use mtk_cull as cull;
 pub use mtk_model as model;
+pub use mtk_voxel as voxel;
 
 // Convenient top-level re-exports
 pub use mtk_core::direction::{DirMask, Direction};
@@ -30,9 +31,16 @@ pub use mtk_cull::types::{
 pub use mtk_model::baked::BakedModel;
 pub use mtk_model::baker::ModelBaker;
 pub use mtk_model::blockstate::BlockState;
-pub use mtk_model::mesher::{SectionMesher, VoxelSection};
-
 pub use mtk_model::model_json::BlockModelJson;
 pub use mtk_model::obj::{mesh_to_obj_string, ModObjLoader, WavefrontObjParser};
+pub use mtk_voxel::ao::{ao_level_to_brightness, calculate_face_ao, should_flip_quad_diagonal};
+pub use mtk_voxel::biome::{get_biome_meta, get_colormap_uv, get_smoothed_biome_data};
+pub use mtk_voxel::crc::{crc32, get_empty_section_crc, EMPTY_SECTION_CRC};
+pub use mtk_voxel::delta_mesher::DeltaMesher;
+pub use mtk_voxel::fluid::{calculate_fluid_corner_heights, calculate_fluid_flow_vector, FluidType};
+pub use mtk_voxel::mesher::SectionMesher;
+pub use mtk_voxel::storage::{PaddedVoxelArray, SectionStorage};
+pub use mtk_voxel::types::{CoordinateSystem, MesherConfig, WorldMeshBuildResult};
+pub use mtk_voxel::world::VoxelStorage;
 
 
