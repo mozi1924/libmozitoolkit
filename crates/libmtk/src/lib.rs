@@ -35,9 +35,9 @@ pub enum MtkError {
 
 // Convenient top-level re-exports
 pub use mtk_resource::{
-    AnimationFrame, AnimationMetadata, AtlasDefinition, AtlasSource, DirectoryPack,
-    DiscoveredSprite, MemoryPack, PbrCompanions, ResourceLocation, ResourcePack, ResourcePackStack,
-    TextureMetadata,
+    AnimationFrame, AnimationMetadata, AtlasDefinition, AtlasSource, BlockMatch, ConnectLogic,
+    CtmMethod, CtmRule, CtmSymmetry, DirectoryPack, DiscoveredSprite, MemoryPack, PbrCompanions,
+    ResourceLocation, ResourcePack, ResourcePackStack, TextureMetadata,
 };
 pub use mtk_texture::{
     AtlasAddressMap, AtlasBuilder, AtlasBuilderConfig, AtlasChunkMeta, AtlasSpriteLocation,

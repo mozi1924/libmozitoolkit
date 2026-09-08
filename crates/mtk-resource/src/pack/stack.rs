@@ -95,33 +95,100 @@ impl ResourcePackStack {
     pub fn resolve_pbr_companions(&self, location: &ResourceLocation) -> PbrCompanions {
         let mut companions = PbrCompanions::default();
 
+        // Try standard textures/ prefix as well as raw path (for optifine/ctm/ assets)
+        let candidates = [
+            location.to_asset_path("textures", "png"),
+            format!("assets/{}/{}.png", location.namespace, location.path),
+        ];
+
         // 1. Albedo
-        let albedo_path = location.to_asset_path("textures", "png");
-        companions.albedo = self.open_asset_raw(&albedo_path);
+        for path in &candidates {
+            if let Some(bytes) = self.open_asset_raw(path) {
+                companions.albedo = Some(bytes);
+                break;
+            }
+        }
 
         // 2. Normal (try _n.png then _N.png)
-        let normal_path_lower = location.with_suffix("_n").to_asset_path("textures", "png");
-        let normal_path_upper = location.with_suffix("_N").to_asset_path("textures", "png");
-        companions.normal = self.open_asset_raw(&normal_path_lower)
-            .or_else(|| self.open_asset_raw(&normal_path_upper));
+        let normal_candidates = [
+            location.with_suffix("_n").to_asset_path("textures", "png"),
+            location.with_suffix("_N").to_asset_path("textures", "png"),
+            format!("assets/{}/{}_n.png", location.namespace, location.path),
+            format!("assets/{}/{}_N.png", location.namespace, location.path),
+        ];
+        for path in &normal_candidates {
+            if let Some(bytes) = self.open_asset_raw(path) {
+                companions.normal = Some(bytes);
+                break;
+            }
+        }
 
         // 3. Specular (try _s.png then _S.png)
-        let spec_path_lower = location.with_suffix("_s").to_asset_path("textures", "png");
-        let spec_path_upper = location.with_suffix("_S").to_asset_path("textures", "png");
-        companions.specular = self.open_asset_raw(&spec_path_lower)
-            .or_else(|| self.open_asset_raw(&spec_path_upper));
+        let spec_candidates = [
+            location.with_suffix("_s").to_asset_path("textures", "png"),
+            location.with_suffix("_S").to_asset_path("textures", "png"),
+            format!("assets/{}/{}_s.png", location.namespace, location.path),
+            format!("assets/{}/{}_S.png", location.namespace, location.path),
+        ];
+        for path in &spec_candidates {
+            if let Some(bytes) = self.open_asset_raw(path) {
+                companions.specular = Some(bytes);
+                break;
+            }
+        }
 
         // 4. MCMETA animation
-        let meta_path = location.to_mcmeta_asset_path("textures", "png");
-        if let Some(meta_bytes) = self.open_asset_raw(&meta_path) {
-            if let Ok(meta_str) = std::str::from_utf8(&meta_bytes) {
-                if let Ok(tex_meta) = TextureMetadata::parse_json(meta_str) {
-                    companions.mcmeta = tex_meta.animation;
+        let meta_candidates = [
+            location.to_mcmeta_asset_path("textures", "png"),
+            format!("assets/{}/{}.png.mcmeta", location.namespace, location.path),
+        ];
+        for path in &meta_candidates {
+            if let Some(meta_bytes) = self.open_asset_raw(path) {
+                if let Ok(meta_str) = std::str::from_utf8(&meta_bytes) {
+                    if let Ok(tex_meta) = TextureMetadata::parse_json(meta_str) {
+                        companions.mcmeta = tex_meta.animation;
+                        break;
+                    }
                 }
             }
         }
 
         companions
+    }
+
+    /// Scan all active resource packs and load all OptiFine / Continuity CTM rules.
+    pub fn load_ctm_rules(&self) -> Vec<crate::ctm::CtmRule> {
+        let mut rules = Vec::new();
+        let mut seen_paths = HashSet::new();
+
+        for pack in &self.packs {
+            for file in pack.list_files("assets/") {
+                if !file.ends_with(".properties") {
+                    continue;
+                }
+                if !file.contains("/optifine/ctm/") && !file.contains("/textures/") {
+                    continue;
+                }
+                if seen_paths.contains(&file) {
+                    continue;
+                }
+                seen_paths.insert(file.clone());
+
+                if let Some(bytes) = pack.open(&file) {
+                    if let Ok(content) = std::str::from_utf8(&bytes) {
+                        let parts: Vec<&str> = file.split('/').collect();
+                        let namespace = if parts.len() > 1 { parts[1] } else { crate::DEFAULT_NAMESPACE };
+                        let rel_path = parts[2..].join("/");
+                        if let Some(rule) = crate::ctm::CtmRule::parse_properties(&rel_path, namespace, content) {
+                            rules.push(rule);
+                        }
+                    }
+                }
+            }
+        }
+
+        rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+        rules
     }
 
     /// Collect and expand all Sprite references declared in an AtlasDefinition into discrete `DiscoveredSprite`s.
@@ -242,6 +309,39 @@ impl ResourcePackStack {
                         let path_match = pattern.path.as_ref().map_or(true, |p_pat| s.sprite_id.path.contains(p_pat));
                         !(ns_match && path_match)
                     });
+                }
+            }
+        }
+
+        Ok(results)
+    }
+
+    /// Collect atlas sprites including all sub-tiles referenced by active CTM rules.
+    pub fn collect_sprites_including_ctm(
+        &self,
+        definition: &AtlasDefinition,
+        ctm_rules: &[crate::ctm::CtmRule],
+    ) -> Result<Vec<DiscoveredSprite>, ResourceError> {
+        let mut results = self.collect_sprites_for_atlas(definition)?;
+        let mut registered_sprites: HashSet<ResourceLocation> = results.iter().map(|s| s.sprite_id.clone()).collect();
+
+        for rule in ctm_rules {
+            for tile_opt in &rule.tiles {
+                if let Some(ref tile_loc) = tile_opt {
+                    if !registered_sprites.contains(tile_loc) {
+                        let companions = self.resolve_pbr_companions(tile_loc);
+                        if companions.albedo.is_some() {
+                            registered_sprites.insert(tile_loc.clone());
+                            results.push(DiscoveredSprite {
+                                sprite_id: tile_loc.clone(),
+                                texture_location: tile_loc.clone(),
+                                raw_albedo: companions.albedo,
+                                raw_normal: companions.normal,
+                                raw_specular: companions.specular,
+                                metadata: companions.mcmeta,
+                            });
+                        }
+                    }
                 }
             }
         }

@@ -95,3 +95,36 @@ fn test_pack_stack_granular_fallback() {
     assert_eq!(companions.normal, Some(vec![30, 40]));
     assert_eq!(companions.specular, Some(vec![1, 2, 3]));
 }
+
+#[test]
+fn test_ctm_properties_parsing() {
+    let prop_content = r#"
+matchTiles=stone dirt
+method=ctm
+tiles=0-46
+connect=block
+faces=sides
+weight=10
+"#;
+    let rule = mtk_resource::CtmRule::parse_properties(
+        "optifine/ctm/stone_ctm.properties",
+        "minecraft",
+        prop_content,
+    )
+    .unwrap();
+
+    assert_eq!(rule.name, "stone_ctm");
+    assert_eq!(rule.priority, 10);
+    assert_eq!(rule.method, mtk_resource::CtmMethod::Full { inner_seams: false });
+    assert_eq!(rule.tiles.len(), 47);
+    assert_eq!(
+        rule.tiles[0],
+        Some(ResourceLocation::parse("minecraft:optifine/ctm/0").unwrap())
+    );
+    assert_eq!(
+        rule.tiles[46],
+        Some(ResourceLocation::parse("minecraft:optifine/ctm/46").unwrap())
+    );
+    assert_eq!(rule.match_tiles.len(), 2);
+    assert_eq!(rule.connect_logic, mtk_resource::ConnectLogic::SameBlock);
+}
