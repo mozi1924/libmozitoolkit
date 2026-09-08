@@ -1,11 +1,13 @@
 use alloc::vec::Vec;
-use glam::Vec3;
+use mtk_core::constants::geometry::EPS;
 use mtk_core::direction::Direction;
 use mtk_core::geometry::Aabb2d;
+use mtk_core::Vec3;
+
+
 
 use crate::types::{is_empty_rect, is_full_rect};
 
-const EPS: f32 = 1e-4;
 
 /// Subtracts `occluder` rectangle from `source` rectangle.
 /// Returns a list of disjoint rectangles representing `source \ occluder`.

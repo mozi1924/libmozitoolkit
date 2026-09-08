@@ -5,9 +5,11 @@ use alloc::vec::Vec;
 use std::collections::HashMap;
 
 
-use glam::{IVec3, Vec3};
+use mtk_core::constants::geometry::EPS;
 use mtk_core::direction::{DirMask, Direction};
 use mtk_core::geometry::Aabb2d;
+use mtk_core::{IVec3, Vec3};
+
 
 use crate::rect_ops::{extract_quad_face_occlusion_rect, is_face_completely_occluded};
 use crate::rules::should_skip_rendering;
@@ -15,7 +17,6 @@ use crate::types::{
     is_full_rect, BlockCullMeta, CullCategory, GlassCullMode, LeavesCullMode, FULL_FACE_RECT,
 };
 
-const EPS: f32 = 1e-4;
 
 /// Known block names for air categories.
 pub const AIR_NAMES: &[&str] = &[

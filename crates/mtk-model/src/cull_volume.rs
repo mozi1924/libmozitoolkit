@@ -1,9 +1,10 @@
 use glam::{Vec2, Vec3};
+use mtk_core::constants::geometry::{EPS, STRICT_EPS, TOLERANCE};
 use mtk_core::direction::Direction;
 use mtk_core::geometry::Aabb2d;
+
 use mtk_cull::subtract_rect;
 
-const EPS: f32 = 1e-5;
 
 /// Sub-polygon piece result after excluding hidden volume regions.
 #[derive(Debug, Clone, PartialEq)]
@@ -94,7 +95,7 @@ pub fn clip_face_excluding_hidden_volume(
         b1 = b1.max(vb);
     }
 
-    if a1 - a0 <= EPS || b1 - b0 <= EPS {
+    if a1 - a0 <= STRICT_EPS || b1 - b0 <= STRICT_EPS {
         return vec![ClippedQuadPiece {
             vertices: *vertices,
             uvs: *uvs,
@@ -103,16 +104,15 @@ pub fn clip_face_excluding_hidden_volume(
 
     let norm = direction.normal();
     let norm_fixed = get_axis(norm, fixed);
-    const PROBE: f32 = 1e-4;
-    const TOL: f32 = 1e-6;
-    let outside = plane + norm_fixed * PROBE;
+    let outside = plane + norm_fixed * EPS;
 
     let mut pieces = vec![Aabb2d::from_min_max(a0, b0, a1, b1)];
 
     for (mins, maxs) in neighbour_bounds {
         let min_fixed = mins[fixed];
         let max_fixed = maxs[fixed];
-        if !(min_fixed + TOL <= outside && outside <= max_fixed - TOL) {
+        if !(min_fixed + TOLERANCE <= outside && outside <= max_fixed - TOLERANCE) {
+
             continue;
         }
 

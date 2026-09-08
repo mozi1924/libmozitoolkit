@@ -56,17 +56,8 @@ pub enum GlassCullMode {
     None,
 }
 
-/// Canonical 2D unit square representing a fully occluding face.
-pub const FULL_FACE_RECT: Aabb2d = Aabb2d {
-    min: mtk_core::Vec2::ZERO,
-    max: mtk_core::Vec2::ONE,
-};
+pub use mtk_core::constants::geometry::{EMPTY_FACE_RECT, FULL_FACE_RECT};
 
-/// 2D zero-area rectangle representing no occlusion.
-pub const EMPTY_FACE_RECT: Aabb2d = Aabb2d {
-    min: mtk_core::Vec2::ZERO,
-    max: mtk_core::Vec2::ZERO,
-};
 
 /// Check if a rectangle covers the full 1.0 x 1.0 face within epsilon.
 #[inline]

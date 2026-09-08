@@ -11,14 +11,8 @@ use crate::error::ModelError;
 
 
 
-/// Dimension of standard Minecraft sub-chunk section.
-pub const SECTION_SIZE: usize = 16;
-/// Total number of voxels in a 16x16x16 section.
-pub const SECTION_VOLUME: usize = SECTION_SIZE * SECTION_SIZE * SECTION_SIZE; // 4096
-/// Padded dimension with 1-voxel apron on each side for branchless boundary lookups.
-pub const PADDED_SIZE: usize = 18;
-/// Total number of voxels in a 18x18x18 padded volume.
-pub const PADDED_VOLUME: usize = PADDED_SIZE * PADDED_SIZE * PADDED_SIZE; // 5832
+pub use mtk_core::constants::voxel::{PADDED_SIZE, PADDED_VOLUME, SECTION_SIZE, SECTION_VOLUME};
+
 
 /// Canonical local Minecraft voxel corner vertices in Blender space (origin at block center, or [0..1]).
 pub fn mc_local_to_blender(lx: f32, ly: f32, lz: f32) -> Vec3 {

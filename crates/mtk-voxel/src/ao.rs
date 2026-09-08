@@ -1,15 +1,13 @@
+use mtk_core::constants::lighting::AO_LEVEL_MULTIPLIERS;
 use mtk_core::direction::Direction;
 
 /// Maps ambient occlusion discrete level `0..=3` to a linear brightness multiplier `[0.2..1.0]`.
 #[inline]
 pub fn ao_level_to_brightness(level: u8) -> f32 {
-    match level {
-        0 => 0.2,
-        1 => 0.466,
-        2 => 0.733,
-        _ => 1.0,
-    }
+    let idx = (level as usize).min(AO_LEVEL_MULTIPLIERS.len() - 1);
+    AO_LEVEL_MULTIPLIERS[idx]
 }
+
 
 /// Computes the ambient occlusion level `0..=3` for a single vertex given its 2 adjacent side blocks and diagonal corner block.
 ///

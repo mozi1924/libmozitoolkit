@@ -8,8 +8,8 @@ use mtk_cull::FaceCuller;
 use crate::fluid_uv::{get_fluid_side_uvs, get_fluid_top_uvs};
 use crate::types::MesherConfig;
 
-/// Maximum height of a standard Minecraft source fluid block: 8/9 (~0.8888889).
-pub const MAX_FLUID_HEIGHT: f32 = 8.0 / 9.0;
+pub use mtk_core::constants::fluid::MAX_FLUID_HEIGHT;
+
 
 /// Identifies supported Minecraft fluid types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

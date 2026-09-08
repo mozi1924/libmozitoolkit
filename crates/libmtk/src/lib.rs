@@ -8,9 +8,11 @@
 //! - BlockState string parsing and Block Model JSON data structures (`mtk_model`)
 
 pub use mtk_core as core;
+pub use mtk_core::constants;
 pub use mtk_cull as cull;
 pub use mtk_model as model;
 pub use mtk_voxel as voxel;
+
 
 // Convenient top-level re-exports
 pub use mtk_core::direction::{DirMask, Direction};

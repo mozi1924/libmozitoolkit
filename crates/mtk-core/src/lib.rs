@@ -3,6 +3,7 @@
 extern crate alloc;
 
 pub mod attributes;
+pub mod constants;
 pub mod direction;
 pub mod geometry;
 pub mod mesh;
@@ -14,3 +15,4 @@ pub use mesh::MeshData;
 
 // Re-export glam types for convenience
 pub use glam::{IVec3, Vec2, Vec3, Vec4};
+

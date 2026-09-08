@@ -6,26 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::crc::{crc32_update, extract_canonical_state_str, EMPTY_SECTION_CRC};
 
-/// Dimension of standard Minecraft sub-chunk section.
-pub const SECTION_SIZE: usize = 16;
-/// Total number of voxels in a 16x16x16 section.
-pub const SECTION_VOLUME: usize = SECTION_SIZE * SECTION_SIZE * SECTION_SIZE; // 4096
-/// Padded dimension with 1-voxel apron on each side for branchless boundary lookups.
-pub const PADDED_SIZE: usize = 18;
-/// Total number of voxels in a 18x18x18 padded volume.
-pub const PADDED_VOLUME: usize = PADDED_SIZE * PADDED_SIZE * PADDED_SIZE; // 5832
+pub use mtk_core::constants::voxel::{
+    block_index, padded_index, PADDED_SIZE, PADDED_VOLUME, SECTION_AREA, SECTION_MASK,
+    SECTION_SHIFT, SECTION_SIZE, SECTION_VOLUME,
+};
 
-/// Canonical local block linear index inside a 16x16x16 section: `x * 256 + y * 16 + z`.
-#[inline(always)]
-pub const fn block_index(x: usize, y: usize, z: usize) -> usize {
-    x * 256 + y * 16 + z
-}
-
-/// Canonical padded block linear index inside a 18x18x18 volume: `px * 324 + py * 18 + pz`.
-#[inline(always)]
-pub const fn padded_index(px: usize, py: usize, pz: usize) -> usize {
-    px * 324 + py * 18 + pz
-}
 
 /// 16x16x16 Chunk Section with dense palette-indexed storage and non-air tracking.
 #[derive(Debug, Clone, PartialEq)]
