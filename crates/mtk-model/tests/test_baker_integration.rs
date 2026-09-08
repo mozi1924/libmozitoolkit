@@ -122,3 +122,37 @@ f -5/-5 -4/-4 -3/-3 -2/-2 -1/-1
     );
     assert_eq!(baked.len(), 3);
 }
+
+#[test]
+fn test_builtin_chest_and_bell_fallback() {
+    let mut baker = mtk_model::ModelBaker::new();
+
+    // Chest with no model elements in loader -> should fallback to builtin chest model
+    let empty_loader = |_: &str| None;
+    let chest_model = baker
+        .bake_blockstate("minecraft:chest[facing=north,type=single]", None, empty_loader)
+        .expect("Should bake chest using builtin model");
+
+    assert!(!chest_model.elements.is_empty(), "Chest should have builtin elements");
+    assert!(chest_model.elements.len() >= 3, "Single chest should have base, lid, and latch");
+
+    // Bell with empty elements -> should have bell patches applied
+    let bell_loader = |id: &str| {
+        if id.contains("bell") {
+            Some(mtk_model::BlockModelJson {
+                parent: None,
+                ambientocclusion: Some(true),
+                textures: None,
+                elements: Some(vec![]),
+            })
+        } else {
+            None
+        }
+    };
+    let bell_model = baker
+        .bake_blockstate("minecraft:bell[attachment=floor,facing=north]", None, bell_loader)
+        .expect("Should bake bell with patches");
+
+    assert!(!bell_model.elements.is_empty(), "Bell should have patched elements");
+}
+
