@@ -1,0 +1,37 @@
+[package]
+name = "mtk-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "Diagnostic, verification, data extraction, and baking CLI tools for libmtk."
+
+[dependencies]
+libmtk = { workspace = true }
+mtk-core = { workspace = true }
+mtk-cull = { workspace = true }
+mtk-model = { workspace = true }
+mtk-voxel = { workspace = true }
+glam = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rayon = { workspace = true }
+zip = { workspace = true }
+
+[[bin]]
+name = "bake_jar"
+path = "src/bin/bake_jar.rs"
+
+[[bin]]
+name = "dump_baked"
+path = "src/bin/dump_baked.rs"
+
+[[bin]]
+name = "verify_culling"
+path = "src/bin/verify_culling.rs"
+
+[[bin]]
+name = "bench_and_verify"
+path = "src/bin/bench_and_verify.rs"

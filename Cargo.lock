@@ -164,7 +164,6 @@ dependencies = [
  "mtk-voxel",
  "serde",
  "serde_json",
- "zip",
 ]
 
 [[package]]
@@ -187,6 +186,19 @@ checksum = "b63fbc4a50860e98e7b2aa7804ded1db5cbc3aff9193adaff57a6931bf7c4b4c"
 dependencies = [
  "adler2",
  "simd-adler32",
+]
+
+[[package]]
+name = "mtk-bench"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "libmtk",
+ "mtk-core",
+ "mtk-cull",
+ "mtk-model",
+ "mtk-voxel",
+ "rayon",
 ]
 
 [[package]]
@@ -220,6 +232,22 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+]
+
+[[package]]
+name = "mtk-tools"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "libmtk",
+ "mtk-core",
+ "mtk-cull",
+ "mtk-model",
+ "mtk-voxel",
+ "rayon",
+ "serde",
+ "serde_json",
+ "zip",
 ]
 
 [[package]]

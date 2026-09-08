@@ -6,6 +6,8 @@ members = [
     "crates/mtk-model",
     "crates/mtk-voxel",
     "crates/libmtk",
+    "crates/mtk-bench",
+    "crates/mtk-tools",
 ]
 
 [workspace.package]
@@ -24,6 +26,8 @@ thiserror = { version = "2.0", default-features = false }
 bitflags = { version = "2.6", default-features = false, features = ["serde"] }
 tinyvec = { version = "1.8", default-features = false, features = ["alloc"] }
 rayon = { version = "1.10", default-features = false }
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+
 
 
 

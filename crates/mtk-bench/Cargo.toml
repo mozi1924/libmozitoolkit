@@ -1,24 +1,26 @@
 [package]
-name = "libmtk"
+name = "mtk-bench"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
 readme = "README.md"
-description = "Unified facade library for MoziToolKit core functionality."
+description = "Performance benchmarks and stress-test suite for libmtk."
 
 [dependencies]
+libmtk = { workspace = true }
 mtk-core = { workspace = true }
 mtk-cull = { workspace = true }
 mtk-model = { workspace = true }
 mtk-voxel = { workspace = true }
+glam = { workspace = true }
+rayon = { workspace = true }
 
-[features]
-default = ["std"]
-std = ["mtk-core/std", "mtk-cull/std", "mtk-model/std", "mtk-voxel/std"]
+[[bench]]
+name = "bench_culling"
+harness = false
 
-[dev-dependencies]
-serde = { workspace = true }
-serde_json = { workspace = true }
-
+[[bench]]
+name = "bench_4000_chunks"
+harness = false
