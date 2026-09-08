@@ -189,10 +189,8 @@ impl CtmRule {
                 }
             }
         }
-        if !self.match_blocks.is_empty() {
-            if !self.match_blocks.iter().any(|m| m.matches(state)) {
-                return false;
-            }
+        if !self.match_blocks.is_empty() && !self.match_blocks.iter().any(|m| m.matches(state)) {
+            return false;
         }
         true
     }

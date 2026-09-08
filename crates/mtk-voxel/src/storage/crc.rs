@@ -36,7 +36,7 @@ pub fn crc32(data: &[u8]) -> u32 {
 }
 
 /// Precomputed empty air section lookup table for 0..=4096 consecutive "minecraft:air" voxels.
-const EMPTY_CRC_TABLE: [u32; 4097] = {
+static EMPTY_CRC_TABLE: [u32; 4097] = {
     let mut table = [0u32; 4097];
     let air_bytes = b"minecraft:air";
     let mut crc_val = 0u32;
@@ -84,9 +84,9 @@ pub fn extract_canonical_state_str(raw_state: &str) -> &str {
     }
 
     let mut res = raw_state;
-    if raw_state.starts_with("{\"state\":\"") {
-        if let Some(end_idx) = raw_state[10..].find('"') {
-            res = &raw_state[10..10 + end_idx];
+    if let Some(stripped) = raw_state.strip_prefix("{\"state\":\"") {
+        if let Some(end_idx) = stripped.find('"') {
+            res = &stripped[..end_idx];
         }
     }
 

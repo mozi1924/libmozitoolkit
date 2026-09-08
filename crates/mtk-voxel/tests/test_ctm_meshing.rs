@@ -51,7 +51,7 @@ tiles=0 1 2 3
                 chunk_id: 0,
                 category: "blocks".to_string(),
                 is_animated: false,
-                texture_id: i as u32,
+                texture_id: i,
                 uv_bounds: uv,
                 frame_0_uv_bounds: uv,
                 frame_uv_step: [0.0, 0.0],
@@ -74,7 +74,7 @@ tiles=0 1 2 3
 
     let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
 
-    assert!(mesh.positions.len() > 0);
+    assert!(!mesh.positions.is_empty());
     assert_eq!(mesh.positions.len(), mesh.uvs.len());
     // All face materials should be chunk_id = 0
     assert!(mesh.face_materials.iter().all(|&mat| mat == 0));
@@ -108,5 +108,5 @@ tiles=0-46
     };
 
     let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
-    assert!(mesh.positions.len() > 0);
+    assert!(!mesh.positions.is_empty());
 }

@@ -74,12 +74,12 @@ impl<T: Clone> Stitcher<T> {
     pub fn register_sprite(&mut self, entry: T, width: u32, height: u32, name: impl Into<String>) {
         // Enforce mipmap alignment: width and height must be aligned to 1 << mip_level
         let align = 1 << self.mip_level;
-        let padded_w = if width % align != 0 {
+        let padded_w = if !width.is_multiple_of(align) {
             ((width / align) + 1) * align
         } else {
             width
         };
-        let padded_h = if height % align != 0 {
+        let padded_h = if !height.is_multiple_of(align) {
             ((height / align) + 1) * align
         } else {
             height
@@ -234,11 +234,7 @@ impl<T: Clone> Stitcher<T> {
 
         let expand_horizontal = if is_expand_x_diff ^ is_expand_y_diff {
             is_expand_x_diff
-        } else if can_expand_x && cur_pow_x <= cur_pow_y {
-            true
-        } else {
-            false
-        };
+        } else { can_expand_x && cur_pow_x <= cur_pow_y };
 
         if expand_horizontal {
             if *storage_y == 0 {

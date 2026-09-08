@@ -194,7 +194,7 @@ impl ResourcePackStack {
             }
         }
 
-        rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+        rules.sort_by_key(|r| std::cmp::Reverse(r.priority));
         rules
     }
 
@@ -209,8 +209,7 @@ impl ResourcePackStack {
                     let mut found_paths = HashSet::new();
                     // Scan all packs in stack
                     for pack in &self.packs {
-                        let scan_prefix = format!("assets/");
-                        for file in pack.list_files(&scan_prefix) {
+                        for file in pack.list_files("assets/") {
                             if !file.ends_with(".png") {
                                 continue;
                             }
@@ -316,8 +315,8 @@ impl ResourcePackStack {
                 AtlasSource::Filter { pattern } => {
                     // Filter matching entries
                     results.retain(|s| {
-                        let ns_match = pattern.namespace.as_ref().map_or(true, |ns_pat| s.sprite_id.namespace.contains(ns_pat));
-                        let path_match = pattern.path.as_ref().map_or(true, |p_pat| s.sprite_id.path.contains(p_pat));
+                        let ns_match = pattern.namespace.as_ref().is_none_or(|ns_pat| s.sprite_id.namespace.contains(ns_pat));
+                        let path_match = pattern.path.as_ref().is_none_or(|p_pat| s.sprite_id.path.contains(p_pat));
                         !(ns_match && path_match)
                     });
                 }
@@ -337,21 +336,19 @@ impl ResourcePackStack {
         let mut registered_sprites: HashSet<ResourceLocation> = results.iter().map(|s| s.sprite_id.clone()).collect();
 
         for rule in ctm_rules {
-            for tile_opt in &rule.tiles {
-                if let Some(ref tile_loc) = tile_opt {
-                    if !registered_sprites.contains(tile_loc) {
-                        let companions = self.resolve_pbr_companions(tile_loc);
-                        if companions.albedo.is_some() {
-                            registered_sprites.insert(tile_loc.clone());
-                            results.push(DiscoveredSprite {
-                                sprite_id: tile_loc.clone(),
-                                texture_location: tile_loc.clone(),
-                                raw_albedo: companions.albedo,
-                                raw_normal: companions.normal,
-                                raw_specular: companions.specular,
-                                metadata: companions.mcmeta,
-                            });
-                        }
+            for tile_loc in rule.tiles.iter().flatten() {
+                if !registered_sprites.contains(tile_loc) {
+                    let companions = self.resolve_pbr_companions(tile_loc);
+                    if companions.albedo.is_some() {
+                        registered_sprites.insert(tile_loc.clone());
+                        results.push(DiscoveredSprite {
+                            sprite_id: tile_loc.clone(),
+                            texture_location: tile_loc.clone(),
+                            raw_albedo: companions.albedo,
+                            raw_normal: companions.normal,
+                            raw_specular: companions.specular,
+                            metadata: companions.mcmeta,
+                        });
                     }
                 }
             }

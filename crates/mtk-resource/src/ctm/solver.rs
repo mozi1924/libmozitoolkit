@@ -128,7 +128,7 @@ pub struct CtmSolver {
 impl CtmSolver {
     /// Creates a new `CtmSolver` from an array of loaded `CtmRule`s, sorting by priority.
     pub fn new(mut rules: Vec<CtmRule>) -> Self {
-        rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+        rules.sort_by_key(|r| std::cmp::Reverse(r.priority));
 
         let mut rules_by_block: HashMap<String, Vec<usize>> = HashMap::new();
         let mut rules_by_tile: HashMap<ResourceLocation, Vec<usize>> = HashMap::new();

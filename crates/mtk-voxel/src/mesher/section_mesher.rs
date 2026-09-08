@@ -172,7 +172,7 @@ impl SectionMesher {
                             let rel_x = target_pos.x - block_pos.x + px as i32;
                             let rel_y = target_pos.y - block_pos.y + py as i32;
                             let rel_z = target_pos.z - block_pos.z + pz as i32;
-                            if rel_x >= 0 && rel_x < 18 && rel_y >= 0 && rel_y < 18 && rel_z >= 0 && rel_z < 18 {
+                            if (0..18).contains(&rel_x) && (0..18).contains(&rel_y) && (0..18).contains(&rel_z) {
                                 Some(padded.get_padded_state(rel_x as usize, rel_y as usize, rel_z as usize))
                             } else {
                                 None

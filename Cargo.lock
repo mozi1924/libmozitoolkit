@@ -309,6 +309,7 @@ dependencies = [
  "mtk-voxel",
  "serde",
  "serde_json",
+ "zip",
 ]
 
 [[package]]

@@ -211,13 +211,13 @@ impl MiExModelLoader {
         };
 
         let from = [
-            parse_coord(from_val.get(0)?),
+            parse_coord(from_val.first()?),
             parse_coord(from_val.get(1)?),
             parse_coord(from_val.get(2)?),
         ];
 
         let to = [
-            parse_coord(to_val.get(0)?),
+            parse_coord(to_val.first()?),
             parse_coord(to_val.get(1)?),
             parse_coord(to_val.get(2)?),
         ];
@@ -229,7 +229,7 @@ impl MiExModelLoader {
             .trim_matches('\'');
 
         let faces = if let Some(entity_uvs) = val.get("entityUVs").and_then(|v| v.as_array()) {
-            let u0 = entity_uvs.get(0).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+            let u0 = entity_uvs.first().and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
             let v0 = entity_uvs.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
             let u1 = entity_uvs.get(2).and_then(|v| v.as_f64()).unwrap_or(16.0) as f32;
             let v1 = entity_uvs.get(3).and_then(|v| v.as_f64()).unwrap_or(16.0) as f32;
@@ -247,16 +247,12 @@ impl MiExModelLoader {
         } else if let Some(faces_val) = val.get("faces").and_then(|v| v.as_object()) {
             let mut f_map = HashMap::new();
             for (dir_name, face_obj) in faces_val {
-                let uv = if let Some(uv_arr) = face_obj.get("uv").and_then(|v| v.as_array()) {
-                    Some([
-                        uv_arr.get(0).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,
+                let uv = face_obj.get("uv").and_then(|v| v.as_array()).map(|uv_arr| [
+                        uv_arr.first().and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,
                         uv_arr.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,
                         uv_arr.get(2).and_then(|v| v.as_f64()).unwrap_or(16.0) as f32,
                         uv_arr.get(3).and_then(|v| v.as_f64()).unwrap_or(16.0) as f32,
-                    ])
-                } else {
-                    None
-                };
+                    ]);
                 let rotation = face_obj.get("rotation").and_then(|v| v.as_i64()).map(|n| n as u32);
                 let texture = face_obj
                     .get("texture")

@@ -140,9 +140,9 @@ pub fn parse_ctm_properties(source_path: &str, namespace: &str, content: &str) -
         .strip_suffix(".properties")
         .unwrap_or(source_path);
     if match_blocks.is_empty() && match_tiles.is_empty() {
-        if file_stem.starts_with("block_") {
+        if let Some(stripped) = file_stem.strip_prefix("block_") {
             match_blocks.push(BlockMatch::parse_with_namespace(
-                &file_stem["block_".len()..],
+                stripped,
                 namespace,
             ));
         } else {

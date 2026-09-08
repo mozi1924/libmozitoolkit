@@ -257,8 +257,8 @@ pub const PARTIAL_SHAPE_EXACT_NAMES: &[&str] = &[
 
 /// Check if block identifier is a non-full or partial block.
 pub fn is_non_full_or_partial_block(name_low: &str) -> bool {
-    if PARTIAL_SHAPE_EXACT_NAMES.iter().any(|&n| name_low == n)
-        || NON_OCCLUDING_NAMES.iter().any(|&n| name_low == n)
+    if PARTIAL_SHAPE_EXACT_NAMES.contains(&name_low)
+        || NON_OCCLUDING_NAMES.contains(&name_low)
     {
         return true;
     }
@@ -295,7 +295,7 @@ pub fn parse_block_name_and_props(state_str: &str) -> (String, BTreeMap<String, 
                 if let Some(open) = raw_state.find('[') {
                     if let Some(close) = raw_state.rfind(']') {
                         let base = &raw_state[..open];
-                        let name = base.split(':').last().unwrap_or(base).to_string();
+                        let name = base.split(':').next_back().unwrap_or(base).to_string();
                         let mut props = BTreeMap::new();
                         for item in raw_state[open + 1..close].split(',') {
                             if let Some((k, v)) = item.split_once('=') {
@@ -307,7 +307,7 @@ pub fn parse_block_name_and_props(state_str: &str) -> (String, BTreeMap<String, 
                 }
                 let name = raw_state
                     .split(':')
-                    .last()
+                    .next_back()
                     .unwrap_or(raw_state)
                     .to_string();
                 let mut props = BTreeMap::new();
@@ -330,7 +330,7 @@ pub fn parse_block_name_and_props(state_str: &str) -> (String, BTreeMap<String, 
     if let Some(open) = trimmed.find('[') {
         if let Some(close) = trimmed.rfind(']') {
             let base = &trimmed[..open];
-            let name = base.split(':').last().unwrap_or(base).to_string();
+            let name = base.split(':').next_back().unwrap_or(base).to_string();
             let mut props = BTreeMap::new();
             for item in trimmed[open + 1..close].split(',') {
                 if let Some((k, v)) = item.split_once('=') {
@@ -341,7 +341,7 @@ pub fn parse_block_name_and_props(state_str: &str) -> (String, BTreeMap<String, 
         }
     }
 
-    let name = trimmed.split(':').last().unwrap_or(trimmed).to_string();
+    let name = trimmed.split(':').next_back().unwrap_or(trimmed).to_string();
     (name, BTreeMap::new())
 }
 

@@ -88,8 +88,8 @@ impl SectionStorage {
         palette_map.insert("minecraft:air".to_string(), 0);
 
         let count = states.len().min(SECTION_VOLUME);
-        for idx in 0..count {
-            let state_canon = extract_canonical_state_str(states[idx]);
+        for (idx, state) in states.iter().take(count).enumerate() {
+            let state_canon = extract_canonical_state_str(state);
             let pal_idx = if let Some(&id) = palette_map.get(state_canon) {
                 id
             } else {
@@ -231,7 +231,7 @@ impl SectionStorage {
                     let lz = pz as i32 - 1;
                     let pad_idx = padded_index(px, py, pz);
 
-                    let pal_idx = if lx >= 0 && lx < 16 && ly >= 0 && ly < 16 && lz >= 0 && lz < 16 {
+                    let pal_idx = if (0..16).contains(&lx) && (0..16).contains(&ly) && (0..16).contains(&lz) {
                         let core_idx = block_index(lx as usize, ly as usize, lz as usize);
                         self.voxels[core_idx]
                     } else {

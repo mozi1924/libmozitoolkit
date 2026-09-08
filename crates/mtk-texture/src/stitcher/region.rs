@@ -35,10 +35,9 @@ impl<T> StitcherRegion<T> {
         if let Some(ref mut slots) = self.sub_slots {
             let mut curr = holder;
             for slot in slots.iter_mut() {
-                if let Some(rem) = slot.add(curr, holder_width, holder_height) {
+                {
+                    let rem = slot.add(curr, holder_width, holder_height)?;
                     curr = rem;
-                } else {
-                    return None; // Successfully inserted
                 }
             }
             return Some(curr);

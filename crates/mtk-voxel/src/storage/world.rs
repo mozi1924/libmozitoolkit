@@ -304,19 +304,19 @@ impl VoxelStorage {
             let max_z = self.min_z + self.size_z - 1;
 
             // Check boundary neighbors and mark dirty for cross-section face culling
-            if (x & 15) == 0 && (!has_bounds || x - 1 >= self.min_x) {
+            if (x & 15) == 0 && (!has_bounds || x > self.min_x) {
                 self.dirty_sections.insert(sec_coord + IVec3::new(-1, 0, 0));
-            } else if (x & 15) == 15 && (!has_bounds || x + 1 <= max_x) {
+            } else if (x & 15) == 15 && (!has_bounds || x < max_x) {
                 self.dirty_sections.insert(sec_coord + IVec3::new(1, 0, 0));
             }
-            if (y & 15) == 0 && (!has_bounds || y - 1 >= self.min_y) {
+            if (y & 15) == 0 && (!has_bounds || y > self.min_y) {
                 self.dirty_sections.insert(sec_coord + IVec3::new(0, -1, 0));
-            } else if (y & 15) == 15 && (!has_bounds || y + 1 <= max_y) {
+            } else if (y & 15) == 15 && (!has_bounds || y < max_y) {
                 self.dirty_sections.insert(sec_coord + IVec3::new(0, 1, 0));
             }
-            if (z & 15) == 0 && (!has_bounds || z - 1 >= self.min_z) {
+            if (z & 15) == 0 && (!has_bounds || z > self.min_z) {
                 self.dirty_sections.insert(sec_coord + IVec3::new(0, 0, -1));
-            } else if (z & 15) == 15 && (!has_bounds || z + 1 <= max_z) {
+            } else if (z & 15) == 15 && (!has_bounds || z < max_z) {
                 self.dirty_sections.insert(sec_coord + IVec3::new(0, 0, 1));
             }
 

@@ -99,11 +99,7 @@ impl ResourceLocation {
     /// Convert to a physical file path within standard Minecraft `assets/` structure.
     /// E.g. `location.to_asset_path("textures", "png")` -> `"assets/minecraft/textures/block/stone.png"`
     pub fn to_asset_path(&self, category_dir: &str, extension: &str) -> String {
-        let ext = if extension.starts_with('.') {
-            &extension[1..]
-        } else {
-            extension
-        };
+        let ext = extension.strip_prefix('.').unwrap_or(extension);
         if ext.is_empty() {
             format!("assets/{}/{}/{}", self.namespace, category_dir, self.path)
         } else {
@@ -116,11 +112,7 @@ impl ResourceLocation {
     /// -> `Some(ResourceLocation("minecraft", "block/stone"))`
     pub fn from_asset_path(asset_path: &str, category_dir: &str, extension: &str) -> Option<Self> {
         let path = asset_path.replace('\\', "/");
-        let prefix = format!("assets/");
-        if !path.starts_with(&prefix) {
-            return None;
-        }
-        let remainder = &path[prefix.len()..];
+        let remainder = path.strip_prefix("assets/")?;
         let (ns, rest) = remainder.split_once('/')?;
 
         let cat_prefix = format!("{}/", category_dir);

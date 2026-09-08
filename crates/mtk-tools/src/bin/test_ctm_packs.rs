@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for entry in fs::read_dir(miex_dir)? {
         let entry = entry?;
         let path = entry.path();
-        if path.is_file() && path.extension().map_or(false, |ext| ext == "zip") {
+        if path.is_file() && path.extension().is_some_and(|ext| ext == "zip") {
             ctm_zip_paths.push(path);
         }
     }
