@@ -290,3 +290,19 @@ impl MiExModelLoader {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_load_chest() {
+        let bs = BlockState::parse("minecraft:chest[facing=north,type=single]").unwrap();
+        let model = MiExModelLoader::load_for_blockstate(&bs);
+        assert!(model.is_some(), "Chest model should be loaded");
+        let model = model.unwrap();
+        let elems = model.elements.unwrap_or_default();
+        println!("Chest elements count: {}", elems.len());
+        assert!(!elems.is_empty(), "Chest elements should not be empty");
+    }
+}

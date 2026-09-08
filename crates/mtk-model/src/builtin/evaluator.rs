@@ -169,6 +169,91 @@ pub fn eval_miex_string(
         }
     }
 
+    // Simple ternary check: condition ? val1 : val2
+    // We need to find '?' that is not inside quotes or parentheses
+    let mut qmark_pos = None;
+    let mut depth = 0;
+    let mut in_quote = false;
+    for (i, c) in trimmed.char_indices() {
+        if c == '\'' {
+            in_quote = !in_quote;
+        } else if !in_quote {
+            if c == '(' {
+                depth += 1;
+            } else if c == ')' {
+                depth -= 1;
+            } else if c == '?' && depth == 0 {
+                qmark_pos = Some(i);
+                break;
+            }
+        }
+    }
+
+    if let Some(pos) = qmark_pos {
+        let cond_part = &trimmed[..pos];
+        let rest = &trimmed[pos + 1..];
+
+        // Find ':' that is not inside quotes or parentheses
+        let mut colon_pos = None;
+        let mut colon_depth = 0;
+        let mut c_in_quote = false;
+        for (i, c) in rest.char_indices() {
+            if c == '\'' {
+                c_in_quote = !c_in_quote;
+            } else if !c_in_quote {
+                if c == '(' {
+                    colon_depth += 1;
+                } else if c == ')' {
+                    colon_depth -= 1;
+                } else if c == ':' && colon_depth == 0 {
+                    colon_pos = Some(i);
+                    break;
+                }
+            }
+        }
+
+        if let Some(c_pos) = colon_pos {
+            let true_val = &rest[..c_pos];
+            let false_val = &rest[c_pos + 1..];
+            let cond_res = eval_miex_condition(cond_part.trim(), vars, blockstate);
+            if cond_res {
+                return eval_miex_string(true_val.trim(), vars, blockstate);
+            } else {
+                return eval_miex_string(false_val.trim(), vars, blockstate);
+            }
+        }
+    }
+
+    // String concatenation with '+'
+    // Check if contains '+' outside quotes/parens
+    let mut plus_parts = Vec::new();
+    let mut last_idx = 0;
+    let mut plus_in_quote = false;
+    let mut p_depth = 0;
+    for (i, c) in trimmed.char_indices() {
+        if c == '\'' {
+            plus_in_quote = !plus_in_quote;
+        } else if !plus_in_quote {
+            if c == '(' {
+                p_depth += 1;
+            } else if c == ')' {
+                p_depth -= 1;
+            } else if c == '+' && p_depth == 0 {
+                plus_parts.push(&trimmed[last_idx..i]);
+                last_idx = i + 1;
+            }
+        }
+    }
+
+    if !plus_parts.is_empty() {
+        plus_parts.push(&trimmed[last_idx..]);
+        let mut result = String::new();
+        for p in plus_parts {
+            result.push_str(&eval_miex_string(p.trim(), vars, blockstate));
+        }
+        return result;
+    }
+
     // Direct variable lookup
     if let Some(val) = vars.get(trimmed) {
         return val.clone();
@@ -181,7 +266,7 @@ pub fn eval_miex_string(
 
     // thisBlock.state.<prop>
     if let Some(prop) = trimmed.strip_prefix("thisBlock.state.") {
-        return blockstate.properties.get(prop).cloned().unwrap_or_else(|| "null".to_string());
+        return blockstate.properties.get(prop.trim()).cloned().unwrap_or_else(|| "null".to_string());
     }
 
     // String method: substring, indexOf, length
@@ -226,81 +311,6 @@ pub fn eval_miex_string(
                 }
             }
         }
-    }
-
-    // Simple ternary check: condition ? val1 : val2
-    // We need to find '?' that is not inside parentheses
-    let mut qmark_pos = None;
-    let mut depth = 0;
-    for (i, c) in trimmed.char_indices() {
-        if c == '(' {
-            depth += 1;
-        } else if c == ')' {
-            depth -= 1;
-        } else if c == '?' && depth == 0 {
-            qmark_pos = Some(i);
-            break;
-        }
-    }
-
-    if let Some(pos) = qmark_pos {
-        let cond_part = &trimmed[..pos];
-        let rest = &trimmed[pos + 1..];
-
-        // Find ':' that is not inside parentheses
-        let mut colon_pos = None;
-        let mut colon_depth = 0;
-        for (i, c) in rest.char_indices() {
-            if c == '(' {
-                colon_depth += 1;
-            } else if c == ')' {
-                colon_depth -= 1;
-            } else if c == ':' && colon_depth == 0 {
-                colon_pos = Some(i);
-                break;
-            }
-        }
-
-        if let Some(c_pos) = colon_pos {
-            let true_val = &rest[..c_pos];
-            let false_val = &rest[c_pos + 1..];
-            let cond_res = eval_miex_condition(cond_part.trim(), vars, blockstate);
-            if cond_res {
-                return eval_miex_string(true_val.trim(), vars, blockstate);
-            } else {
-                return eval_miex_string(false_val.trim(), vars, blockstate);
-            }
-        }
-    }
-
-    // String concatenation with '+'
-    // Check if contains '+' outside quotes/parens
-    let mut plus_parts = Vec::new();
-    let mut last_idx = 0;
-    let mut in_quote = false;
-    let mut p_depth = 0;
-    for (i, c) in trimmed.char_indices() {
-        if c == '\'' {
-            in_quote = !in_quote;
-        } else if !in_quote {
-            if c == '(' {
-                p_depth += 1;
-            } else if c == ')' {
-                p_depth -= 1;
-            } else if c == '+' && p_depth == 0 {
-                plus_parts.push(&trimmed[last_idx..i]);
-                last_idx = i + 1;
-            }
-        }
-    }
-
-    if !plus_parts.is_empty() {
-        plus_parts.push(&trimmed[last_idx..]);
-        let mut result = String::new();
-        for p in plus_parts {
-            result.push_str(&eval_miex_string(p.trim(), vars, blockstate));
-        }
-        return result;
     }
 
     trimmed.to_string()

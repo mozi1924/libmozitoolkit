@@ -156,3 +156,45 @@ fn test_builtin_chest_and_bell_fallback() {
     assert!(!bell_model.elements.is_empty(), "Bell should have patched elements");
 }
 
+#[test]
+fn test_builtin_models_coverage() {
+    let mut baker = mtk_model::ModelBaker::new();
+    let empty_loader = |_: &str| None;
+
+    // Bed
+    let bed = baker
+        .bake_blockstate("minecraft:red_bed[facing=north,part=foot]", None, empty_loader)
+        .expect("Should bake red bed");
+    assert!(!bed.elements.is_empty(), "Bed should have elements");
+
+    // Shulker box
+    let shulker = baker
+        .bake_blockstate("minecraft:shulker_box[facing=up]", None, empty_loader)
+        .expect("Should bake shulker box");
+    assert!(!shulker.elements.is_empty(), "Shulker box should have elements");
+
+    // Standing sign
+    let sign = baker
+        .bake_blockstate("minecraft:oak_sign[rotation=4]", None, empty_loader)
+        .expect("Should bake sign");
+    assert!(!sign.elements.is_empty(), "Sign should have elements");
+
+    // Wall sign
+    let wall_sign = baker
+        .bake_blockstate("minecraft:oak_wall_sign[facing=north]", None, empty_loader)
+        .expect("Should bake wall sign");
+    assert!(!wall_sign.elements.is_empty(), "Wall sign should have elements");
+
+    // Skull
+    let skull = baker
+        .bake_blockstate("minecraft:skeleton_skull[rotation=0]", None, empty_loader)
+        .expect("Should bake skull");
+    assert!(!skull.elements.is_empty(), "Skull should have elements");
+
+    // End portal
+    let end_portal = baker
+        .bake_blockstate("minecraft:end_portal", None, empty_loader)
+        .expect("Should bake end portal");
+    assert!(!end_portal.elements.is_empty(), "End portal should have elements");
+}
+
