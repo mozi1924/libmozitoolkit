@@ -14,11 +14,17 @@ mtk-core = { workspace = true }
 mtk-cull = { workspace = true }
 mtk-model = { workspace = true }
 mtk-voxel = { workspace = true }
+mtk-resource = { workspace = true }
+mtk-texture = { workspace = true }
 glam = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 rayon = { workspace = true }
 zip = { workspace = true }
+
+[[bin]]
+name = "bake_vanilla_atlas"
+path = "src/bin/bake_vanilla_atlas.rs"
 
 [[bin]]
 name = "bake_jar"

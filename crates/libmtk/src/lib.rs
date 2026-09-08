@@ -12,9 +12,19 @@ pub use mtk_core::constants;
 pub use mtk_cull as cull;
 pub use mtk_model as model;
 pub use mtk_voxel as voxel;
-
+pub use mtk_resource as resource;
+pub use mtk_texture as texture;
 
 // Convenient top-level re-exports
+pub use mtk_resource::{
+    AnimationFrame, AnimationMetadata, AtlasDefinition, AtlasSource, DirectoryPack,
+    DiscoveredSprite, MemoryPack, PbrCompanions, ResourceLocation, ResourcePack, ResourcePackStack,
+    TextureMetadata,
+};
+pub use mtk_texture::{
+    AtlasAddressMap, AtlasBuilder, AtlasBuilderConfig, AtlasChunkMeta, AtlasSpriteLocation,
+    BakedAtlas, BakedAtlasChunk, DecodedSprite, RgbaBuffer, Stitcher,
+};
 pub use mtk_core::direction::{DirMask, Direction};
 pub use mtk_core::geometry::{Aabb2d, Aabb3d, Quad};
 pub use mtk_core::mesh::MeshData;

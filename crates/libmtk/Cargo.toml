@@ -13,10 +13,19 @@ mtk-core = { workspace = true }
 mtk-cull = { workspace = true }
 mtk-model = { workspace = true }
 mtk-voxel = { workspace = true }
+mtk-resource = { workspace = true }
+mtk-texture = { workspace = true }
 
 [features]
 default = ["std"]
-std = ["mtk-core/std", "mtk-cull/std", "mtk-model/std", "mtk-voxel/std"]
+std = [
+    "mtk-core/std",
+    "mtk-cull/std",
+    "mtk-model/std",
+    "mtk-voxel/std",
+    "mtk-resource/std",
+    "mtk-texture/std",
+]
 
 [dev-dependencies]
 serde = { workspace = true }

@@ -1,0 +1,24 @@
+[package]
+name = "mtk-texture"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "Vanilla-style binary partitioning Stitcher, parallel image processing, PalettedPermutations baking, and PBR synced Atlas generator."
+
+[dependencies]
+mtk-core = { workspace = true }
+mtk-resource = { workspace = true }
+image = { workspace = true }
+glam = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+rayon = { workspace = true, optional = true }
+
+[features]
+default = ["std"]
+std = ["mtk-core/std", "mtk-resource/std", "serde/std", "serde_json/std", "parallel"]
+parallel = ["dep:rayon", "mtk-resource/parallel"]

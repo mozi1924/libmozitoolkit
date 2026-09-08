@@ -1,0 +1,23 @@
+[package]
+name = "mtk-resource"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "Headless Minecraft resource pack virtual file system, .mcmeta, and vanilla atlases/*.json data models."
+
+[dependencies]
+mtk-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+zip = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
+
+[features]
+default = ["std"]
+std = ["mtk-core/std", "serde/std", "serde_json/std", "zip", "parallel"]
+zip = ["dep:zip"]
+parallel = ["dep:rayon"]
