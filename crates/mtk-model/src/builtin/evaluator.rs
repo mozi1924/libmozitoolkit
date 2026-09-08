@@ -254,6 +254,11 @@ pub fn eval_miex_string(
         return result;
     }
 
+    // Textures.getTextureForPlayerProfile(...)
+    if trimmed.starts_with("Textures.getTextureForPlayerProfile(") {
+        return "minecraft:entity/player/wide/steve".to_string();
+    }
+
     // Direct variable lookup
     if let Some(val) = vars.get(trimmed) {
         return val.clone();

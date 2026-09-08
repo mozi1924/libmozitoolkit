@@ -19,8 +19,7 @@ mtk-texture = { workspace = true }
 glam = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-rayon = { workspace = true }
-zip = { workspace = true }
+image = { workspace = true }
 
 [[bin]]
 name = "test_ctm_packs"
@@ -29,6 +28,10 @@ path = "src/bin/test_ctm_packs.rs"
 [[bin]]
 name = "manual_test_bake"
 path = "src/bin/manual_test_bake.rs"
+
+[[bin]]
+name = "export_manual_test_objs"
+path = "src/bin/export_manual_test_objs.rs"
 
 [[bin]]
 name = "bake_vanilla_atlas"
