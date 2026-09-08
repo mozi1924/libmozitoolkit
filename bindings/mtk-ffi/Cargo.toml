@@ -1,0 +1,16 @@
+[package]
+name = "mtk-ffi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Pure C-ABI bindings and headers for libmozitoolkit."
+
+[lib]
+name = "mtk_ffi"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+libmtk = { workspace = true }
+mtk-core = { workspace = true }

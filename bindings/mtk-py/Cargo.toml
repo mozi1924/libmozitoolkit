@@ -1,0 +1,18 @@
+[package]
+name = "mtk-py"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Python bindings for libmozitoolkit using PyO3."
+
+[lib]
+name = "libmtk_py"
+crate-type = ["cdylib", "rlib"]
+test = false
+
+[dependencies]
+libmtk = { workspace = true }
+mtk-core = { workspace = true }
+pyo3 = { workspace = true, features = ["extension-module", "abi3-py310"] }

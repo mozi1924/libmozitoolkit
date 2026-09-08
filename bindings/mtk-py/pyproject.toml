@@ -1,0 +1,20 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "libmtk_py"
+version = "0.1.0"
+description = "Python bindings for libmozitoolkit"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+]
+
+[tool.maturin]
+module-name = "libmtk_py"
+features = ["pyo3/extension-module"]

@@ -81,6 +81,9 @@ graph TD
 | **`crates/mtk-net`** *(规划中)* | 实时流式网络协议解析 (WebSocket/TCP/二进制帧) 与世界增量同步 | `mtk-core` | `NetworkPacketDecoder`, `WorldDeltaEvent` |
 | **`crates/mtk-meshopt`** *(规划中)* | 网格减面、LOD 生成、共面合并、拓扑整理与 MikkTSpace 法线重算 | `mtk-core` | 优化后的 `MeshData`, 多级 LOD 网格 |
 | **`crates/libmtk`** | 顶层统一 Facade 库，提供开箱即用的高阶 Pipeline 与一站式统一错误处理 `MtkError` | 全部 Layer 1 Crates | 高阶 API、统一 Error 与 Pipeline |
+| **`bindings/mtk-py`** | Python 动态扩展模块 (PyO3 + maturin)，提供 `PyMeshData` 与扁平数组传输 | `libmtk`, `mtk-core` | `libmtk_py` CPython 轮子 (.whl) |
+| **`bindings/mtk-ffi`** | 纯 C-ABI 动态/静态库与 C 头文件 (cbindgen)，跨语言无缝调用 | `libmtk`, `mtk-core` | `libmtk_ffi.so` / `.dll` / `.dylib`, `mtk.h` |
+| **`bindings/mtk-wasm`** | WebAssembly 绑定 (wasm-bindgen)，暴露 TypedArray 视图 | `libmtk`, `mtk-core` | `mtk_wasm.wasm` + `mtk_wasm.js` npm 包 |
 
 ---
 

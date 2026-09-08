@@ -1,0 +1,8 @@
+language = "C"
+header = "/* Auto-generated header for libmozitoolkit C-ABI (mtk-ffi) */"
+include_guard = "LIBMTK_FFI_H"
+tab_width = 4
+style = "type"
+
+[enum]
+rename_variants = "Qualified"

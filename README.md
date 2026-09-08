@@ -19,6 +19,9 @@
 | **[`mtk-resource`](crates/mtk-resource)** | 无头资源包虚拟文件系统 (VFS)、.mcmeta 动图元数据与原版 atlases/*.json 解析 |
 | **[`mtk-texture`](crates/mtk-texture)** | 矩形空间分割 Stitcher、调色板排列 Permutation 烘焙与 PBR 材质图集生成 |
 | **[`libmtk`](crates/libmtk)** | 统一顶层门面 Crate，聚合各子模块并提供一站式便利接口与统一错误处理 (`MtkError`) |
+| **[`mtk-py`](bindings/mtk-py)** | 基于 PyO3 的 Python 扩展模块，为 MoziToolKit Blender 插件提供极速无头计算支撑 |
+| **[`mtk-ffi`](bindings/mtk-ffi)** | 纯 C-ABI 动态与静态链接库及 C 头文件，供 C/C++、C# (Unity)、Go、Godot 跨语言调用 |
+| **[`mtk-wasm`](bindings/mtk-wasm)** | 基于 wasm-bindgen 的 WebAssembly 绑定，支持浏览器/Node.js/WebGPU 零拷贝内存视图 |
 
 ---
 

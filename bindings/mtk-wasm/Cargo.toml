@@ -1,0 +1,18 @@
+[package]
+name = "mtk-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "WebAssembly bindings for libmozitoolkit using wasm-bindgen."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+libmtk = { workspace = true }
+mtk-core = { workspace = true }
+wasm-bindgen = { workspace = true }
+js-sys = { workspace = true }
+console_error_panic_hook = { workspace = true }
