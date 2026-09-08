@@ -103,6 +103,35 @@ pub mod lighting {
     pub const AO_LEVEL_MULTIPLIERS: [f32; 4] = [0.2, 0.466, 0.733, 1.0];
 }
 
+/// Concurrency, thread pool, and parallel scheduling constants & helpers.
+pub mod concurrency {
+    /// Safe hardware concurrency detector that works across Native OS and WebAssembly.
+    ///
+    /// - On native targets with `std`, retrieves `std::thread::available_parallelism()`.
+    /// - On `wasm32` or single-threaded targets, returns `1`.
+    #[inline]
+    pub fn get_safe_hardware_concurrency() -> usize {
+        #[cfg(all(feature = "std", not(target_arch = "wasm32")))]
+        {
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+        }
+        #[cfg(any(not(feature = "std"), target_arch = "wasm32"))]
+        {
+            1
+        }
+    }
+
+    /// Conservative thread count calculator: min(max_cap, max(1, available / 2)).
+    /// Leaves headroom for host UI (e.g. Blender) and OS interactivity.
+    #[inline]
+    pub fn determine_conservative_threads(max_cap: usize) -> usize {
+        let available = get_safe_hardware_concurrency();
+        (available / 2).clamp(1, max_cap.max(1))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -134,6 +163,14 @@ mod tests {
         assert!((fluid::MAX_FLUID_HEIGHT - 8.0 / 9.0).abs() < 1e-6);
         assert_eq!(lighting::MAX_LIGHT_LEVEL, 15);
         assert_eq!(lighting::AO_LEVEL_MULTIPLIERS.len(), 4);
+    }
+
+    #[test]
+    fn test_concurrency_helpers() {
+        let conc = concurrency::get_safe_hardware_concurrency();
+        assert!(conc >= 1);
+        let cons = concurrency::determine_conservative_threads(8);
+        assert!((1..=8).contains(&cons));
     }
 }
 

@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Instant;
 use mtk_resource::{ResourceLocation, ResourcePackStack, ZipPack};
 use mtk_texture::{AtlasBuilder, AtlasBuilderConfig};

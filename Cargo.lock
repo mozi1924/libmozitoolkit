@@ -176,6 +176,7 @@ dependencies = [
  "mtk-voxel",
  "serde",
  "serde_json",
+ "thiserror",
 ]
 
 [[package]]

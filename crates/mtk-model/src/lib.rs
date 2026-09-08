@@ -1,7 +1,6 @@
 pub mod baker;
 pub mod culling;
 pub mod error;
-pub mod mesher;
 pub mod parser;
 
 // Top-level re-exports
@@ -13,7 +12,6 @@ pub use baker::{
 };
 pub use culling::{clip_face_excluding_hidden_volume, ClippedQuadPiece};
 pub use error::ModelError;
-pub use mesher::{SectionMesher, VoxelSection};
 pub use parser::{
     mesh_to_obj_string, BakedObjFace, BlockModelJson, BlockState, BlockStateDefinition,
     BlockStateResolver, ElementJson, FaceJson, ModObjLoader, MultipartCondition, MultipartRule,

@@ -15,9 +15,10 @@ mtk-model = { workspace = true }
 mtk-voxel = { workspace = true }
 mtk-resource = { workspace = true }
 mtk-texture = { workspace = true }
+thiserror = { workspace = true }
 
 [features]
-default = ["std"]
+default = ["std", "parallel"]
 std = [
     "mtk-core/std",
     "mtk-cull/std",
@@ -25,6 +26,12 @@ std = [
     "mtk-voxel/std",
     "mtk-resource/std",
     "mtk-texture/std",
+]
+parallel = [
+    "mtk-model/parallel",
+    "mtk-voxel/parallel",
+    "mtk-resource/parallel",
+    "mtk-texture/parallel",
 ]
 
 [dev-dependencies]

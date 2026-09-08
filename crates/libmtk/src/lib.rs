@@ -15,6 +15,24 @@ pub use mtk_voxel as voxel;
 pub use mtk_resource as resource;
 pub use mtk_texture as texture;
 
+use thiserror::Error;
+
+/// Unified top-level error type for all libmtk operations.
+#[derive(Debug, Error)]
+pub enum MtkError {
+    #[error("Model error: {0}")]
+    Model(#[from] mtk_model::ModelError),
+
+    #[error("Voxel error: {0}")]
+    Voxel(#[from] mtk_voxel::VoxelError),
+
+    #[error("Texture error: {0}")]
+    Texture(#[from] mtk_texture::error::TextureError),
+
+    #[error("Resource error: {0}")]
+    Resource(#[from] mtk_resource::error::ResourceError),
+}
+
 // Convenient top-level re-exports
 pub use mtk_resource::{
     AnimationFrame, AnimationMetadata, AtlasDefinition, AtlasSource, DirectoryPack,
@@ -25,8 +43,9 @@ pub use mtk_texture::{
     AtlasAddressMap, AtlasBuilder, AtlasBuilderConfig, AtlasChunkMeta, AtlasSpriteLocation,
     BakedAtlas, BakedAtlasChunk, DecodedSprite, RgbaBuffer, Stitcher,
 };
+pub use mtk_core::constants::concurrency;
 pub use mtk_core::direction::{DirMask, Direction};
-pub use mtk_core::geometry::{Aabb2d, Aabb3d, Quad};
+pub use mtk_core::geometry::{mc_local_to_blender, mc_world_to_blender, Aabb2d, Aabb3d, Quad};
 pub use mtk_core::mesh::MeshData;
 pub use mtk_cull::engine::{
     compute_block_cull_meta, derive_parametric_face_shapes, get_visible_face_directions,

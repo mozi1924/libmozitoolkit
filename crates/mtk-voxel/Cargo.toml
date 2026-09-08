@@ -19,9 +19,9 @@ thiserror = { workspace = true }
 rayon = { workspace = true, optional = true }
 
 [features]
-default = ["std"]
-std = ["mtk-core/std", "mtk-cull/std", "mtk-model/std", "parallel"]
-parallel = ["dep:rayon"]
+default = ["std", "parallel"]
+std = ["mtk-core/std", "mtk-cull/std", "mtk-model/std"]
+parallel = ["dep:rayon", "mtk-model/parallel"]
 serde = ["dep:serde", "dep:serde_json", "mtk-core/serde", "mtk-cull/serde"]
 
 [dev-dependencies]

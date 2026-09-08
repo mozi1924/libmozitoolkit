@@ -1,15 +1,36 @@
+use core::sync::atomic::{AtomicU64, Ordering};
 use std::collections::{HashMap, HashSet};
 
 use glam::IVec3;
 #[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::crc::extract_canonical_state_str;
 use crate::storage::{PaddedVoxelArray, SectionStorage};
 
+#[cfg(feature = "serde")]
+mod serde_atomic_u64 {
+    use super::*;
+
+    pub fn serialize<S>(val: &AtomicU64, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u64(val.load(Ordering::Relaxed))
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<AtomicU64, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let v = u64::deserialize(deserializer)?;
+        Ok(AtomicU64::new(v))
+    }
+}
+
 /// 3D sparse world voxel container managing multiple 16x16x16 chunk sections,
 /// delta synchronization, and boundary dirty tracking.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct VoxelStorage {
     /// Minimum world bounding coordinate (X).
@@ -34,14 +55,71 @@ pub struct VoxelStorage {
     pub dirty_sections: HashSet<IVec3>,
     /// Set of section coordinates known to be completely empty.
     pub known_empty_sections: HashSet<IVec3>,
-    /// Incremental generation counter.
-    pub generation: u64,
+    /// Incremental generation counter (Atomic for lock-free multi-thread sync).
+    #[cfg_attr(feature = "serde", serde(with = "serde_atomic_u64"))]
+    pub generation: AtomicU64,
+}
+
+impl Clone for VoxelStorage {
+    fn clone(&self) -> Self {
+        Self {
+            min_x: self.min_x,
+            min_y: self.min_y,
+            min_z: self.min_z,
+            size_x: self.size_x,
+            size_y: self.size_y,
+            size_z: self.size_z,
+            sections: self.sections.clone(),
+            biome_map: self.biome_map.clone(),
+            primary_biome: self.primary_biome.clone(),
+            dirty_sections: self.dirty_sections.clone(),
+            known_empty_sections: self.known_empty_sections.clone(),
+            generation: AtomicU64::new(self.generation.load(Ordering::Relaxed)),
+        }
+    }
+}
+
+impl Default for VoxelStorage {
+    fn default() -> Self {
+        Self {
+            min_x: 0,
+            min_y: 0,
+            min_z: 0,
+            size_x: 0,
+            size_y: 0,
+            size_z: 0,
+            sections: HashMap::new(),
+            biome_map: HashMap::new(),
+            primary_biome: None,
+            dirty_sections: HashSet::new(),
+            known_empty_sections: HashSet::new(),
+            generation: AtomicU64::new(0),
+        }
+    }
 }
 
 impl VoxelStorage {
     /// Creates a new empty `VoxelStorage`.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Gets current generation counter value atomically.
+    #[inline]
+    pub fn get_generation(&self) -> u64 {
+        self.generation.load(Ordering::Acquire)
+    }
+
+    /// Advances the generation counter atomically and returns new value.
+    #[inline]
+    pub fn advance_generation(&self) -> u64 {
+        self.generation.fetch_add(1, Ordering::AcqRel) + 1
+    }
+
+    /// Sets the generation counter value atomically.
+    #[inline]
+    pub fn set_generation(&self, val: u64) {
+        self.generation.store(val, Ordering::Release);
     }
 
     /// Clears all sections, biomes, and bounds.
@@ -57,7 +135,7 @@ impl VoxelStorage {
         self.size_x = 0;
         self.size_y = 0;
         self.size_z = 0;
-        self.generation = self.generation.wrapping_add(1);
+        self.advance_generation();
     }
 
     /// Checks if world coordinate `(x, y, z)` falls within the active selection bounds.
@@ -104,7 +182,7 @@ impl VoxelStorage {
             self.size_x = size_x;
             self.size_y = size_y;
             self.size_z = size_z;
-            self.generation = self.generation.wrapping_add(1);
+            self.advance_generation();
             return true;
         }
 
@@ -127,7 +205,7 @@ impl VoxelStorage {
             self.size_x = size_x;
             self.size_y = size_y;
             self.size_z = size_z;
-            self.generation = self.generation.wrapping_add(1);
+            self.advance_generation();
             return true;
         }
 
@@ -168,7 +246,7 @@ impl VoxelStorage {
         self.size_x = size_x;
         self.size_y = size_y;
         self.size_z = size_z;
-        self.generation = self.generation.wrapping_add(1);
+        self.advance_generation();
 
         // Mark boundary seam sections dirty
         for coord in self.sections.keys() {
@@ -242,7 +320,7 @@ impl VoxelStorage {
                 self.dirty_sections.insert(sec_coord + IVec3::new(0, 0, 1));
             }
 
-            self.generation = self.generation.wrapping_add(1);
+            self.advance_generation();
         }
 
         changed

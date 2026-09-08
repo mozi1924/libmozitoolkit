@@ -19,6 +19,6 @@ thiserror = { workspace = true }
 rayon = { workspace = true, optional = true }
 
 [features]
-default = ["std"]
-std = ["mtk-core/std", "mtk-resource/std", "serde/std", "serde_json/std", "parallel"]
+default = ["std", "parallel"]
+std = ["mtk-core/std", "mtk-resource/std", "serde/std", "serde_json/std"]
 parallel = ["dep:rayon", "mtk-resource/parallel"]

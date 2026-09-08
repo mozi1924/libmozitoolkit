@@ -17,7 +17,7 @@ zip = { workspace = true, optional = true }
 rayon = { workspace = true, optional = true }
 
 [features]
-default = ["std"]
-std = ["mtk-core/std", "serde/std", "serde_json/std", "zip", "parallel"]
+default = ["std", "parallel"]
+std = ["mtk-core/std", "serde/std", "serde_json/std", "zip"]
 zip = ["dep:zip"]
 parallel = ["dep:rayon"]

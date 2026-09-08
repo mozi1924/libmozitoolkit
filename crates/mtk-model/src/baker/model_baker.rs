@@ -437,24 +437,16 @@ impl ModelBaker {
     /// Strategy: min(4, max(1, available_parallelism / 2)).
     /// This leaves at least half of the CPU cores free for Blender UI, viewport rendering,
     /// or host system responsiveness.
-    #[cfg(feature = "parallel")]
     pub fn determine_conservative_threads() -> usize {
-        let available = std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(2);
-        (available / 2).clamp(1, 4)
+        mtk_core::constants::concurrency::determine_conservative_threads(4)
     }
 
-    /// Bakes a batch of BlockStates in parallel using a dedicated local Rayon thread pool.
+    /// Bakes a batch of BlockStates.
     ///
-    /// - `states`: Slice of BlockState identifiers.
-    /// - `num_threads`: Optional thread count. If `None` or `0`, uses conservative default.
-    /// - `state_loader`: Thread-safe callback retrieving `BlockStateDefinition` for a block name.
-    /// - `model_loader`: Thread-safe callback retrieving `BlockModelJson` given a model ID path.
-    #[cfg(feature = "parallel")]
-    pub fn bake_batch_parallel<S, SF, MF>(
+    /// - When `feature = "parallel"` is enabled: parallelizes across worker threads.
+    /// - When compiled for WASM or single-threaded mode: falls back to sequential iteration.
+    pub fn bake_batch<S, SF, MF>(
         states: &[S],
-        num_threads: Option<usize>,
         state_loader: SF,
         model_loader: MF,
     ) -> Result<Vec<(String, Result<BakedModel, ModelError>)>, ModelError>
@@ -463,21 +455,10 @@ impl ModelBaker {
         SF: Fn(&str) -> Option<BlockStateDefinition> + Sync + Send,
         MF: Fn(&str) -> Option<BlockModelJson> + Sync + Send,
     {
-        use rayon::prelude::*;
-
-        let threads = match num_threads {
-            Some(t) if t > 0 => t,
-            _ => Self::determine_conservative_threads(),
-        };
-
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(threads)
-            .thread_name(|i| format!("mtk-baker-{}", i))
-            .build()
-            .map_err(|e| ModelError::ThreadPoolError(e.to_string()))?;
-
-        let results = pool.install(|| {
-            states
+        #[cfg(feature = "parallel")]
+        {
+            use rayon::prelude::*;
+            let results = states
                 .par_iter()
                 .map(|state_ref| {
                     let state_str = state_ref.as_ref();
@@ -489,10 +470,61 @@ impl ModelBaker {
                     })();
                     (state_str.to_string(), res)
                 })
-                .collect()
-        });
+                .collect();
+            Ok(results)
+        }
 
-        Ok(results)
+        #[cfg(not(feature = "parallel"))]
+        {
+            let results = states
+                .iter()
+                .map(|state_ref| {
+                    let state_str = state_ref.as_ref();
+                    let mut local_baker = ModelBaker::new();
+                    let res = (|| -> Result<BakedModel, ModelError> {
+                        let bs = BlockState::parse(state_str)?;
+                        let bs_def = state_loader(&bs.name);
+                        local_baker.bake_blockstate(state_str, bs_def.as_ref(), |id| model_loader(id))
+                    })();
+                    (state_str.to_string(), res)
+                })
+                .collect();
+            Ok(results)
+        }
+    }
+
+    /// Backwards-compatible batch baker with optional explicit thread pool configuration.
+    pub fn bake_batch_parallel<S, SF, MF>(
+        states: &[S],
+        num_threads: Option<usize>,
+        state_loader: SF,
+        model_loader: MF,
+    ) -> Result<Vec<(String, Result<BakedModel, ModelError>)>, ModelError>
+    where
+        S: AsRef<str> + Sync,
+        SF: Fn(&str) -> Option<BlockStateDefinition> + Sync + Send,
+        MF: Fn(&str) -> Option<BlockModelJson> + Sync + Send,
+    {
+        #[cfg(feature = "parallel")]
+        {
+            if let Some(threads) = num_threads {
+                if threads > 0 {
+                    let pool = rayon::ThreadPoolBuilder::new()
+                        .num_threads(threads)
+                        .thread_name(|i| format!("mtk-baker-{}", i))
+                        .build()
+                        .map_err(|e| ModelError::ThreadPoolError(e.to_string()))?;
+                    return pool.install(|| Self::bake_batch(states, state_loader, model_loader));
+                }
+            }
+            Self::bake_batch(states, state_loader, model_loader)
+        }
+
+        #[cfg(not(feature = "parallel"))]
+        {
+            let _ = num_threads;
+            Self::bake_batch(states, state_loader, model_loader)
+        }
     }
 }
 

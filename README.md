@@ -12,10 +12,13 @@
 
 | Crate | 职责与功能 |
 | :--- | :--- |
-| **[`mtk-core`](crates/mtk-core)** | 基础几何基元、紧凑网格缓冲容器 (`MeshData`)、Minecraft 标准 6 向拓扑与面属性 |
+| **[`mtk-core`](crates/mtk-core)** | 基础几何基元、紧凑网格缓冲容器 (`MeshData`)、Minecraft 标准 6 向拓扑与跨平台并发探测 |
 | **[`mtk-cull`](crates/mtk-cull)** | 6 向邻域遮挡状态机、原版剔除规则与 2D 矩形差集切分（消除内部重叠面） |
-| **[`mtk-model`](crates/mtk-model)** | 无头 BlockState 状态机解析与对齐 1.21+ 规范的 Model JSON 抽象 |
-| **[`libmtk`](crates/libmtk)** | 统一顶层门面 Crate，聚合各子模块并提供一站式便利接口 |
+| **[`mtk-model`](crates/mtk-model)** | 无头 BlockState 状态机解析与对齐 1.21+ 规范的 Model JSON 模型烘焙 |
+| **[`mtk-voxel`](crates/mtk-voxel)** | 16x16x16 Chunk Section 体素存储、流体曲面计算、平滑环境光遮蔽 (AO) 与世界网格组装 |
+| **[`mtk-resource`](crates/mtk-resource)** | 无头资源包虚拟文件系统 (VFS)、.mcmeta 动图元数据与原版 atlases/*.json 解析 |
+| **[`mtk-texture`](crates/mtk-texture)** | 矩形空间分割 Stitcher、调色板排列 Permutation 烘焙与 PBR 材质图集生成 |
+| **[`libmtk`](crates/libmtk)** | 统一顶层门面 Crate，聚合各子模块并提供一站式便利接口与统一错误处理 (`MtkError`) |
 
 ---
 

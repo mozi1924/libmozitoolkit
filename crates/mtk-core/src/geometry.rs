@@ -252,6 +252,20 @@ impl Quad {
     }
 }
 
+/// Canonical local Minecraft voxel corner vertices to Blender space (origin at block center: [-0.5..0.5]).
+/// Minecraft: X-right, Y-up, Z-forward
+/// Blender: X-right, Y-depth (negative Z in MC), Z-up (Y in MC)
+#[inline]
+pub fn mc_local_to_blender(lx: f32, ly: f32, lz: f32) -> Vec3 {
+    Vec3::new(lx - 0.5, -(lz - 0.5), ly - 0.5)
+}
+
+/// Transforms a 3D vertex from Minecraft world coordinate to Blender world coordinate.
+#[inline]
+pub fn mc_world_to_blender(wx: f32, wy: f32, wz: f32) -> Vec3 {
+    Vec3::new(wx, -wz, wy)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -276,5 +290,13 @@ mod tests {
                 dir
             );
         }
+    }
+
+    #[test]
+    fn test_mc_to_blender_transforms() {
+        let b = mc_local_to_blender(0.5, 0.5, 0.5);
+        assert_eq!(b, Vec3::ZERO);
+        let w = mc_world_to_blender(10.0, 64.0, -20.0);
+        assert_eq!(w, Vec3::new(10.0, 20.0, 64.0));
     }
 }

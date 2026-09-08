@@ -202,8 +202,46 @@ impl SectionMesher {
         mesh
     }
 
-    /// Meshes a batch of `PaddedVoxelArray`s in parallel across multiple CPU cores via Rayon.
-    #[cfg(feature = "parallel")]
+    /// Meshes a batch of `PaddedVoxelArray`s.
+    ///
+    /// - When `feature = "parallel"` is enabled: parallelizes across worker threads using Rayon.
+    /// - When compiled for WASM or single-threaded mode: falls back to sequential iteration.
+    pub fn mesh_sections<F>(
+        sections: &[PaddedVoxelArray],
+        culler: &FaceCuller,
+        model_provider: F,
+        config: &MesherConfig,
+    ) -> Result<Vec<(IVec3, MeshData)>, VoxelError>
+    where
+        F: Fn(&str) -> Option<Arc<BakedModel>> + Sync + Send,
+    {
+        #[cfg(feature = "parallel")]
+        {
+            use rayon::prelude::*;
+            let results = sections
+                .par_iter()
+                .map(|sec| {
+                    let mesh = Self::mesh_section(sec, culler, |st| model_provider(st), config);
+                    (sec.coord, mesh)
+                })
+                .collect();
+            Ok(results)
+        }
+
+        #[cfg(not(feature = "parallel"))]
+        {
+            let results = sections
+                .iter()
+                .map(|sec| {
+                    let mesh = Self::mesh_section(sec, culler, |st| model_provider(st), config);
+                    (sec.coord, mesh)
+                })
+                .collect();
+            Ok(results)
+        }
+    }
+
+    /// Meshes a batch of `PaddedVoxelArray`s with optional explicit thread pool count.
     pub fn mesh_sections_parallel<F>(
         sections: &[PaddedVoxelArray],
         culler: &FaceCuller,
@@ -214,31 +252,26 @@ impl SectionMesher {
     where
         F: Fn(&str) -> Option<Arc<BakedModel>> + Sync + Send,
     {
-        use rayon::prelude::*;
+        #[cfg(feature = "parallel")]
+        {
+            if let Some(threads) = num_threads {
+                if threads > 0 {
+                    let pool = rayon::ThreadPoolBuilder::new()
+                        .num_threads(threads)
+                        .thread_name(|i| format!("mtk-mesher-{}", i))
+                        .build()
+                        .map_err(|e| VoxelError::ThreadPoolError(e.to_string()))?;
+                    return pool.install(|| Self::mesh_sections(sections, culler, model_provider, config));
+                }
+            }
+            Self::mesh_sections(sections, culler, model_provider, config)
+        }
 
-        let available = std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(2);
-        let threads = num_threads.unwrap_or_else(|| (available / 2).clamp(1, 8));
-
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(threads)
-            .thread_name(|i| format!("mtk-mesher-{}", i))
-            .build()
-            .map_err(|e| VoxelError::ThreadPoolError(e.to_string()))?;
-
-        let results = pool.install(|| {
-            sections
-                .par_iter()
-                .map(|sec| {
-                    let local_culler = culler.clone();
-                    let mesh = Self::mesh_section(sec, &local_culler, |st| model_provider(st), config);
-                    (sec.coord, mesh)
-                })
-                .collect()
-        });
-
-        Ok(results)
+        #[cfg(not(feature = "parallel"))]
+        {
+            let _ = num_threads;
+            Self::mesh_sections(sections, culler, model_provider, config)
+        }
     }
 }
 
