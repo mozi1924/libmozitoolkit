@@ -23,6 +23,10 @@ rayon = { workspace = true }
 zip = { workspace = true }
 
 [[bin]]
+name = "manual_test_bake"
+path = "src/bin/manual_test_bake.rs"
+
+[[bin]]
 name = "bake_vanilla_atlas"
 path = "src/bin/bake_vanilla_atlas.rs"
 
