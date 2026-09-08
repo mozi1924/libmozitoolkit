@@ -33,6 +33,7 @@ tiles=0 1 2 3
     atlas.chunks.push(AtlasChunkMeta {
         chunk_id: 0,
         category: "blocks".to_string(),
+        is_animated: false,
         category_chunk_index: 1,
         width: 1024,
         height: 1024,
@@ -42,14 +43,20 @@ tiles=0 1 2 3
 
     for i in 0..4 {
         let loc = ResourceLocation::new("minecraft", format!("optifine/ctm/{}", i));
+        let uv = [0.25 * i as f32, 0.0, 0.25 * (i + 1) as f32, 1.0];
+        let rect = [256 * i, 0, 256, 256];
         atlas.sprites.insert(
             loc,
             AtlasSpriteLocation {
                 chunk_id: 0,
                 category: "blocks".to_string(),
+                is_animated: false,
                 texture_id: i as u32,
-                uv_bounds: [0.25 * i as f32, 0.0, 0.25 * (i + 1) as f32, 1.0],
-                pixel_rect: [256 * i, 0, 256, 256],
+                uv_bounds: uv,
+                frame_0_uv_bounds: uv,
+                frame_uv_step: [0.0, 0.0],
+                pixel_rect: rect,
+                strip_pixel_rect: rect,
                 frame_size: [256, 256],
                 frame_count: 1,
                 animation: None,

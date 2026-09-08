@@ -8,11 +8,22 @@ pub struct AtlasSpriteLocation {
     pub chunk_id: u16,
     #[serde(default = "default_category")]
     pub category: String,
+    #[serde(default)]
+    pub is_animated: bool,
     pub texture_id: u32,
-    /// Normalized UV bounds: `[u_min, v_min, u_max, v_max]` in [0.0..1.0] atlas space.
+    /// Normalized UV bounds: `[u_min, v_min, u_max, v_max]` in [0.0..1.0] atlas space (Frame 0 or static frame).
     pub uv_bounds: [f32; 4],
-    /// Physical pixel rectangle on the atlas chunk: `[x, y, width, height]`.
+    /// Normalized UV bounds of Frame 0 specifically: `[u_min, v_min, u_max, v_max]`.
+    #[serde(default)]
+    pub frame_0_uv_bounds: [f32; 4],
+    /// Step size in UV space per animation frame: `[u_step, v_step]`.
+    #[serde(default)]
+    pub frame_uv_step: [f32; 2],
+    /// Physical pixel rectangle on the atlas chunk for Frame 0: `[x, y, width, height]`.
     pub pixel_rect: [u32; 4],
+    /// Physical pixel rectangle on the atlas chunk for the entire animation strip: `[x, y, width, height]`.
+    #[serde(default)]
+    pub strip_pixel_rect: [u32; 4],
     /// Single-frame physical resolution: `[frame_width, frame_height]`.
     pub frame_size: [u32; 2],
     /// Total animation frames.
@@ -35,6 +46,8 @@ pub struct AtlasChunkMeta {
     pub chunk_id: u16,
     #[serde(default = "default_category")]
     pub category: String,
+    #[serde(default)]
+    pub is_animated: bool,
     #[serde(default = "default_chunk_index")]
     pub category_chunk_index: usize,
     pub width: u32,
@@ -48,9 +61,13 @@ fn default_chunk_index() -> usize {
 }
 
 impl AtlasChunkMeta {
-    /// Canonical file stem for this atlas sheet, e.g. `"blocks_chunk_001"`.
+    /// Canonical file stem for this atlas sheet, e.g. `"blocks_chunk_001"` or `"blocks_anim_chunk_001"`.
     pub fn file_stem(&self) -> String {
-        format!("{}_chunk_{:03}", self.category, self.category_chunk_index)
+        if self.is_animated {
+            format!("{}_anim_chunk_{:03}", self.category, self.category_chunk_index)
+        } else {
+            format!("{}_chunk_{:03}", self.category, self.category_chunk_index)
+        }
     }
 }
 

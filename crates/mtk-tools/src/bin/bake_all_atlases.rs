@@ -17,6 +17,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Output Dir:  {}", output_dir.display());
     println!("------------------------------------------------------------");
 
+    if output_dir.exists() {
+        let _ = fs::remove_dir_all(output_dir);
+    }
     fs::create_dir_all(output_dir)?;
 
     let t_start = Instant::now();
@@ -71,10 +74,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let mut global_address_map = AtlasAddressMap::new();
-    let mut total_baked_chunks = 0;
+    let mut total_static_chunks = 0;
+    let mut total_anim_chunks = 0;
     let mut total_baked_sprites = 0;
 
-    println!("Step 2: Baking Isolated Atlases for each category...");
+    println!("Step 2: Baking Isolated Dual-Atlases (Static & Animated) for each category...");
     println!("------------------------------------------------------------");
 
     for category in &categories {
@@ -96,23 +100,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let cat_elapsed = t_cat.elapsed();
         let sprite_count = baked.address_map.sprites.len();
-        let chunk_count = baked.chunks.len();
-        total_baked_chunks += chunk_count;
+        let mut static_chunks = 0;
+        let mut anim_chunks = 0;
+
+        for chunk in &baked.chunks {
+            if chunk.is_animated {
+                anim_chunks += 1;
+            } else {
+                static_chunks += 1;
+            }
+        }
+        total_static_chunks += static_chunks;
+        total_anim_chunks += anim_chunks;
         total_baked_sprites += sprite_count;
 
-        // Count PBR features
+        // Count PBR features and animation
         let mut normal_count = 0;
         let mut specular_count = 0;
         let mut anim_count = 0;
         for loc in baked.address_map.sprites.values() {
             if loc.has_normal { normal_count += 1; }
             if loc.has_specular { specular_count += 1; }
-            if loc.frame_count > 1 { anim_count += 1; }
+            if loc.is_animated { anim_count += 1; }
         }
 
         println!(
-            " [BAKED] Category '{: <15}' -> {:>4} sprites | {:>2} chunks | PBR(N:{:>3}, S:{:>3}) | Anim:{:>3} in {:?}",
-            cat_name, sprite_count, chunk_count, normal_count, specular_count, anim_count, cat_elapsed
+            " [BAKED] Category '{: <15}' -> {:>4} sprites | Static: {} chk, Anim: {} chk | PBR(N:{:>3}, S:{:>3}) | Anim Sprites:{:>3} in {:?}",
+            cat_name, sprite_count, static_chunks, anim_chunks, normal_count, specular_count, anim_count, cat_elapsed
         );
 
         // Save Baked Chunks to output_dir
@@ -150,18 +164,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::write(&global_json_path, global_json)?;
 
     println!("------------------------------------------------------------");
-    println!("All Atlases Baked Successfully!");
+    println!("All Dual-Atlases Baked Successfully!");
     println!(" - Total Categories Processed: {}", categories.len());
-    println!(" - Total Chunks Generated:    {}", total_baked_chunks);
+    println!(" - Total Static Chunks:        {}", total_static_chunks);
+    println!(" - Total Animated Chunks:      {}", total_anim_chunks);
     println!(" - Total Sprites Registered:   {}", total_baked_sprites);
     println!(" - Output Artifacts Saved To:  {}", output_dir.display());
     println!(" - Total Execution Time:       {:?}", t_start.elapsed());
     println!("============================================================\n");
 
     // 3. Automated Isolation Verification & Spot Checks
-    println!("=== Cross-Category Isolation & Data Purity Verification ===");
+    println!("=== Cross-Category & Animation Isolation Verification ===");
 
-    // Verify blocks atlas contains 0 item textures
     let mut block_contamination = 0;
     let mut item_contamination = 0;
 
@@ -184,27 +198,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!(" [FAIL] Detected contamination: blocks={}, items={}", block_contamination, item_contamination);
     }
 
-    // Spot check queries
-    println!("\nSample Canonical Lookups:");
-    let sample_queries = [
+    // Spot check static & animated queries
+    println!("\nSample Static Lookups:");
+    let static_queries = [
         "minecraft:block/diamond_block",
         "block/stone",
         "textures/block/oak_planks.png",
         "minecraft:item/diamond_sword",
         "item/apple",
-        "textures/item/iron_ingot.png",
-        "minecraft:entity/chest/normal",
-        "minecraft:particle/flame",
     ];
 
-    for query in &sample_queries {
+    for query in &static_queries {
         if let Some(loc) = global_address_map.lookup_str(query) {
             println!(
-                " - Lookup '{: <32}' -> Category: {: <10} | Chunk: #{:<2} | UV: [{:.3}, {:.3}, {:.3}, {:.3}] | Normal: {:<5} | Specular: {}",
+                " - Static '{: <30}' -> Cat: {: <8} | Chk: #{:<2} | UV: [{:.3}, {:.3}, {:.3}, {:.3}] | Normal: {:<5} | Specular: {}",
                 query, loc.category, loc.chunk_id, loc.uv_bounds[0], loc.uv_bounds[1], loc.uv_bounds[2], loc.uv_bounds[3], loc.has_normal, loc.has_specular
             );
         } else {
-            println!(" - Lookup '{: <32}' -> NOT FOUND", query);
+            println!(" - Static '{: <30}' -> NOT FOUND", query);
+        }
+    }
+
+    println!("\nSample Animated Lookups (Frame 0 UV & Step Size):");
+    let anim_queries = [
+        "minecraft:block/sea_lantern",
+        "minecraft:block/water_still",
+        "minecraft:block/lava_still",
+        "minecraft:block/fire_0",
+        "minecraft:block/portal",
+        "minecraft:block/magma",
+        "minecraft:item/clock_00",
+    ];
+
+    for query in &anim_queries {
+        if let Some(loc) = global_address_map.lookup_str(query) {
+            println!(
+                " - Anim   '{: <30}' -> Cat: {: <8} | Chk: #{:<2} | Frames: {:<2} | Frame0 UV: [{:.3}, {:.3}, {:.3}, {:.3}] | V Step: {:.5} | Normal: {}",
+                query, loc.category, loc.chunk_id, loc.frame_count, loc.frame_0_uv_bounds[0], loc.frame_0_uv_bounds[1], loc.frame_0_uv_bounds[2], loc.frame_0_uv_bounds[3], loc.frame_uv_step[1], loc.has_normal
+            );
+        } else {
+            println!(" - Anim   '{: <30}' -> NOT FOUND", query);
         }
     }
 

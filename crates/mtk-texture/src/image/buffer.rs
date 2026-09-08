@@ -119,4 +119,22 @@ impl RgbaBuffer {
         sub.blit(self, x, y, 0, 0, width, height);
         sub
     }
+
+    /// Tile this buffer vertically until it reaches `target_height`.
+    /// Used to align 1-frame or fewer-frame PBR companion textures (normal/specular)
+    /// with multi-frame animated albedo textures.
+    pub fn tile_vertical(&self, target_height: u32) -> Self {
+        if self.height == 0 || self.width == 0 || self.height == target_height {
+            return self.clone();
+        }
+
+        let mut tiled = Self::new(self.width, target_height);
+        let mut y = 0u32;
+        while y < target_height {
+            let chunk_h = (target_height - y).min(self.height);
+            tiled.blit(self, 0, 0, 0, y, self.width, chunk_h);
+            y += self.height;
+        }
+        tiled
+    }
 }

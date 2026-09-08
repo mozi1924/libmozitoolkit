@@ -207,10 +207,10 @@ impl SectionMesher {
                                         (&config.atlas_address_map, final_loc)
                                     {
                                         if let Some(atlas_loc) = atlas.lookup(loc) {
-                                            let u_min = atlas_loc.uv_bounds[0];
-                                            let v_min = atlas_loc.uv_bounds[1];
-                                            let u_span = atlas_loc.uv_bounds[2] - u_min;
-                                            let v_span = atlas_loc.uv_bounds[3] - v_min;
+                                            let u_min = atlas_loc.frame_0_uv_bounds[0];
+                                            let v_min = atlas_loc.frame_0_uv_bounds[1];
+                                            let u_span = atlas_loc.frame_0_uv_bounds[2] - u_min;
+                                            let v_span = atlas_loc.frame_0_uv_bounds[3] - v_min;
                                             let remapped = [
                                                 glam::Vec2::new(
                                                     u_min + face.uvs[0].x * u_span,
@@ -276,10 +276,10 @@ impl SectionMesher {
 
                             let (override_uvs, mat_slot) = if let Some(atlas) = &config.atlas_address_map {
                                 if let Some(atlas_loc) = atlas.lookup(final_loc) {
-                                    let u_min = atlas_loc.uv_bounds[0];
-                                    let v_min = atlas_loc.uv_bounds[1];
-                                    let u_max = atlas_loc.uv_bounds[2];
-                                    let v_max = atlas_loc.uv_bounds[3];
+                                    let u_min = atlas_loc.frame_0_uv_bounds[0];
+                                    let v_min = atlas_loc.frame_0_uv_bounds[1];
+                                    let u_max = atlas_loc.frame_0_uv_bounds[2];
+                                    let v_max = atlas_loc.frame_0_uv_bounds[3];
                                     let remapped = [
                                         glam::Vec2::new(u_min, v_min),
                                         glam::Vec2::new(u_min, v_max),

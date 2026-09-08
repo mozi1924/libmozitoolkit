@@ -42,9 +42,9 @@ fn test_atlas_builder_with_pbr_and_animation() {
     let diamond_id = ResourceLocation::parse("minecraft:block/diamond_ore").unwrap();
 
     let stone_albedo = RgbaBuffer::solid(16, 16, 120, 120, 120, 255);
-    let diamond_albedo = RgbaBuffer::solid(16, 16, 0, 200, 255, 255);
-    let diamond_normal = RgbaBuffer::solid(16, 16, 128, 128, 255, 255);
-    let diamond_spec = RgbaBuffer::solid(16, 16, 255, 255, 255, 255);
+    let diamond_albedo = RgbaBuffer::solid(16, 32, 0, 200, 255, 255); // 2 frames of 16x16
+    let diamond_normal = RgbaBuffer::solid(16, 16, 128, 128, 255, 255); // 1 frame static normal
+    let diamond_spec = RgbaBuffer::solid(16, 16, 255, 255, 255, 255);   // 1 frame static specular
 
     let sprites = vec![
         DecodedSprite {
@@ -74,21 +74,82 @@ fn test_atlas_builder_with_pbr_and_animation() {
     ];
 
     let baked = builder.build_from_sprites(sprites).unwrap();
-    assert_eq!(baked.chunks.len(), 1);
+    // Dual chunks: 1 static chunk + 1 animated chunk
+    assert_eq!(baked.chunks.len(), 2);
 
-    let chunk = &baked.chunks[0];
-    assert!(chunk.normal.is_some());
-    assert!(chunk.specular.is_some());
+    let static_chunk = &baked.chunks[0];
+    assert!(!static_chunk.is_animated);
+    assert_eq!(static_chunk.file_stem(), "blocks_chunk_001");
+
+    let anim_chunk = &baked.chunks[1];
+    assert!(anim_chunk.is_animated);
+    assert_eq!(anim_chunk.file_stem(), "blocks_anim_chunk_001");
+    assert!(anim_chunk.normal.is_some());
+    assert!(anim_chunk.specular.is_some());
 
     // Check address map
     let stone_loc = baked.address_map.lookup(&stone_id).unwrap();
+    assert!(!stone_loc.is_animated);
+    assert_eq!(stone_loc.chunk_id, 0);
     assert!(!stone_loc.has_normal);
     assert!(!stone_loc.has_specular);
     assert_eq!(stone_loc.frame_size, [16, 16]);
 
     let diamond_loc = baked.address_map.lookup(&diamond_id).unwrap();
+    assert!(diamond_loc.is_animated);
+    assert_eq!(diamond_loc.chunk_id, 1);
     assert!(diamond_loc.has_normal);
     assert!(diamond_loc.has_specular);
     assert_eq!(diamond_loc.frame_count, 2);
     assert!(diamond_loc.animation.is_some());
+    assert_eq!(diamond_loc.frame_size, [16, 16]);
+    assert!(diamond_loc.frame_uv_step[1] > 0.0);
+}
+
+#[test]
+fn test_pbr_auto_tiling_for_animated_sprite() {
+    let builder = AtlasBuilder::new(AtlasBuilderConfig::default());
+    let water_id = ResourceLocation::parse("minecraft:block/water_still").unwrap();
+
+    // 4 frames of 16x16 = 16x64 albedo
+    let mut water_albedo = RgbaBuffer::new(16, 64);
+    for frame in 0..4 {
+        for y in 0..16 {
+            for x in 0..16 {
+                water_albedo.set_pixel(x, frame * 16 + y, [0, 100, 200 + frame as u8 * 10, 255]);
+            }
+        }
+    }
+
+    // 1 frame 16x16 static normal
+    let water_normal = RgbaBuffer::solid(16, 16, 128, 128, 255, 255);
+
+    let sprites = vec![DecodedSprite {
+        sprite_id: water_id.clone(),
+        albedo: water_albedo,
+        normal: Some(water_normal),
+        specular: None,
+        frame_width: 16,
+        frame_height: 16,
+        frame_count: 4,
+        metadata: Some(AnimationMetadata {
+            frametime: 1,
+            ..Default::default()
+        }),
+    }];
+
+    let baked = builder.build_from_sprites(sprites).unwrap();
+    assert_eq!(baked.chunks.len(), 1);
+    let chunk = &baked.chunks[0];
+    assert!(chunk.is_animated);
+    assert_eq!(chunk.file_stem(), "blocks_anim_chunk_001");
+
+    let norm_buf = chunk.normal.as_ref().unwrap();
+    let loc = baked.address_map.lookup(&water_id).unwrap();
+    // Normal buffer should have 4 tiled frames at the sprite's strip location
+    for frame in 0..4 {
+        let sample_y = loc.pixel_rect[1] + frame * 16 + 8;
+        let px = norm_buf.get_pixel(loc.pixel_rect[0] + 8, sample_y);
+        assert_eq!(px, [128, 128, 255, 255], "Frame {} normal pixel mismatch", frame);
+    }
 }
