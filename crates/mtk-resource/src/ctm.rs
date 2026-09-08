@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use mtk_core::direction::DirMask;
+use glam::IVec3;
+use mtk_core::direction::{Direction, DirMask};
 use crate::identifier::{DEFAULT_NAMESPACE, ResourceLocation};
 
 /// Symmetry modes for random CTM.
@@ -330,4 +331,707 @@ impl CtmRule {
             tint_block,
         })
     }
+
+    /// Checks if this rule applies to the given block state, face, world coordinates, and biome.
+    pub fn matches_block(
+        &self,
+        state: &str,
+        face: Direction,
+        world_pos: IVec3,
+        biome: Option<&str>,
+    ) -> bool {
+        if !self.faces.contains_dir(face) {
+            return false;
+        }
+        if let Some(ref heights) = self.height_ranges {
+            let y = world_pos.y;
+            if !heights.iter().any(|&(min, max)| y >= min && y <= max) {
+                return false;
+            }
+        }
+        if let Some(ref biomes) = self.biomes {
+            if let Some(b) = biome {
+                let canonical_b = if b.contains(':') {
+                    b.to_string()
+                } else {
+                    format!("{}:{}", DEFAULT_NAMESPACE, b)
+                };
+                if !biomes.contains(&canonical_b) {
+                    return false;
+                }
+            }
+        }
+        if !self.match_blocks.is_empty() {
+            if !self.match_blocks.iter().any(|m| m.matches(state)) {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Solves the final CTM sub-tile ResourceLocation for this face.
+    pub fn solve_tile<F, S>(
+        &self,
+        state: &str,
+        face: Direction,
+        world_pos: IVec3,
+        get_block: &F,
+    ) -> Option<ResourceLocation>
+    where
+        F: Fn(IVec3) -> Option<S>,
+        S: AsRef<str>,
+    {
+        let check_connect = |offset: IVec3| -> bool {
+            let n_pos = world_pos + offset;
+            if let Some(neighbor_state) = get_block(n_pos) {
+                let n_str = neighbor_state.as_ref();
+                match &self.connect_logic {
+                    ConnectLogic::SameBlock => {
+                        extract_block_name(state) == extract_block_name(n_str)
+                    }
+                    ConnectLogic::SameState => state == n_str,
+                    ConnectLogic::BlockNames(names) => {
+                        let n_name = extract_block_name(n_str);
+                        let canonical = if n_name.contains(':') {
+                            n_name.to_string()
+                        } else {
+                            format!("{}:{}", DEFAULT_NAMESPACE, n_name)
+                        };
+                        names.contains(&canonical)
+                    }
+                    ConnectLogic::SameTile | ConnectLogic::Textures(_) => {
+                        extract_block_name(state) == extract_block_name(n_str)
+                    }
+                }
+            } else {
+                false
+            }
+        };
+
+        match &self.method {
+            CtmMethod::Full { inner_seams } => {
+                let (up, left) = get_face_tangents(face);
+                let down = up.opposite();
+                let right = left.opposite();
+                let forward = face;
+
+                let mut bits = 0u8;
+                if check_connect(up.offset() + left.offset()) {
+                    bits |= 1 << 7;
+                }
+                if check_connect(up.offset()) {
+                    bits |= 1 << 6;
+                }
+                if check_connect(up.offset() + right.offset()) {
+                    bits |= 1 << 5;
+                }
+                if check_connect(right.offset()) {
+                    bits |= 1 << 4;
+                }
+                if check_connect(down.offset() + right.offset()) {
+                    bits |= 1 << 3;
+                }
+                if check_connect(down.offset()) {
+                    bits |= 1 << 2;
+                }
+                if check_connect(down.offset() + left.offset()) {
+                    bits |= 1 << 1;
+                }
+                if check_connect(left.offset()) {
+                    bits |= 1;
+                }
+
+                if !inner_seams {
+                    if (bits & (1 << 7)) == 0
+                        && check_connect(up.offset() + left.offset() + forward.offset())
+                    {
+                        bits |= 1 << 7;
+                    }
+                    if (bits & (1 << 6)) == 0 && check_connect(up.offset() + forward.offset()) {
+                        bits |= 1 << 6;
+                    }
+                    if (bits & (1 << 5)) == 0
+                        && check_connect(up.offset() + right.offset() + forward.offset())
+                    {
+                        bits |= 1 << 5;
+                    }
+                    if (bits & (1 << 4)) == 0 && check_connect(right.offset() + forward.offset()) {
+                        bits |= 1 << 4;
+                    }
+                    if (bits & (1 << 3)) == 0
+                        && check_connect(down.offset() + right.offset() + forward.offset())
+                    {
+                        bits |= 1 << 3;
+                    }
+                    if (bits & (1 << 2)) == 0 && check_connect(down.offset() + forward.offset()) {
+                        bits |= 1 << 2;
+                    }
+                    if (bits & (1 << 1)) == 0
+                        && check_connect(down.offset() + left.offset() + forward.offset())
+                    {
+                        bits |= 1 << 1;
+                    }
+                    if (bits & 1) == 0 && check_connect(left.offset() + forward.offset()) {
+                        bits |= 1;
+                    }
+                }
+
+                let tile_idx = CTM_47_LOOKUP[bits as usize] as usize;
+                self.tiles.get(tile_idx).and_then(|t| t.clone())
+            }
+            CtmMethod::Compact { .. } => {
+                let (up, left) = get_face_tangents(face);
+                let down = up.opposite();
+                let right = left.opposite();
+
+                let up_c = check_connect(up.offset());
+                let down_c = check_connect(down.offset());
+                let left_c = check_connect(left.offset());
+                let right_c = check_connect(right.offset());
+
+                let tile_idx = match (up_c || down_c, left_c || right_c) {
+                    (true, true) => 4,
+                    (true, false) => 2,
+                    (false, true) => 3,
+                    (false, false) => 0,
+                };
+                self.tiles.get(tile_idx).and_then(|t| t.clone())
+            }
+            CtmMethod::Horizontal => {
+                let (_up, left) = get_face_tangents(face);
+                let right = left.opposite();
+                let left_c = check_connect(left.offset());
+                let right_c = check_connect(right.offset());
+
+                let tile_idx = match (left_c, right_c) {
+                    (true, true) => 1,
+                    (true, false) => 2,
+                    (false, true) => 0,
+                    (false, false) => 3,
+                };
+                self.tiles.get(tile_idx).and_then(|t| t.clone())
+            }
+            CtmMethod::Vertical => {
+                let (up, _left) = get_face_tangents(face);
+                let down = up.opposite();
+                let up_c = check_connect(up.offset());
+                let down_c = check_connect(down.offset());
+
+                let tile_idx = match (up_c, down_c) {
+                    (true, true) => 1,
+                    (true, false) => 0,
+                    (false, true) => 2,
+                    (false, false) => 3,
+                };
+                self.tiles.get(tile_idx).and_then(|t| t.clone())
+            }
+            CtmMethod::HorizontalVertical => {
+                let (up, left) = get_face_tangents(face);
+                let down = up.opposite();
+                let right = left.opposite();
+
+                let left_c = check_connect(left.offset());
+                let right_c = check_connect(right.offset());
+                let mut tile_idx = match (left_c, right_c) {
+                    (true, true) => 1,
+                    (true, false) => 2,
+                    (false, true) => 0,
+                    (false, false) => 3,
+                };
+                if tile_idx == 3 {
+                    let up_c = check_connect(up.offset());
+                    let down_c = check_connect(down.offset());
+                    tile_idx = match (up_c, down_c) {
+                        (true, true) => 5,
+                        (true, false) => 4,
+                        (false, true) => 6,
+                        (false, false) => 3,
+                    };
+                }
+                self.tiles.get(tile_idx).and_then(|t| t.clone())
+            }
+            CtmMethod::VerticalHorizontal => {
+                let (up, left) = get_face_tangents(face);
+                let down = up.opposite();
+                let right = left.opposite();
+
+                let up_c = check_connect(up.offset());
+                let down_c = check_connect(down.offset());
+                let mut tile_idx = match (up_c, down_c) {
+                    (true, true) => 1,
+                    (true, false) => 0,
+                    (false, true) => 2,
+                    (false, false) => 3,
+                };
+                if tile_idx == 3 {
+                    let left_c = check_connect(left.offset());
+                    let right_c = check_connect(right.offset());
+                    tile_idx = match (left_c, right_c) {
+                        (true, true) => 5,
+                        (true, false) => 6,
+                        (false, true) => 4,
+                        (false, false) => 3,
+                    };
+                }
+                self.tiles.get(tile_idx).and_then(|t| t.clone())
+            }
+            CtmMethod::Top => {
+                let (up, _left) = get_face_tangents(face);
+                if check_connect(up.offset()) {
+                    self.tiles.first().and_then(|t| t.clone())
+                } else {
+                    None
+                }
+            }
+            CtmMethod::Repeat { width, height } => {
+                if *width == 0 || *height == 0 || self.tiles.is_empty() {
+                    return None;
+                }
+                let (up, left) = get_face_tangents(face);
+                let u = match left {
+                    Direction::East | Direction::West => world_pos.x,
+                    Direction::Up | Direction::Down => world_pos.y,
+                    Direction::North | Direction::South => world_pos.z,
+                }
+                .rem_euclid(*width as i32) as u32;
+
+                let v = match up {
+                    Direction::East | Direction::West => world_pos.x,
+                    Direction::Up | Direction::Down => world_pos.y,
+                    Direction::North | Direction::South => world_pos.z,
+                }
+                .rem_euclid(*height as i32) as u32;
+
+                let tile_idx = (v * width + u) as usize;
+                self.tiles.get(tile_idx).and_then(|t| t.clone())
+            }
+            CtmMethod::Random {
+                weights,
+                total_weight,
+                symmetry,
+                linked,
+            } => {
+                if self.tiles.is_empty() {
+                    return None;
+                }
+                let (rx, ry, rz) = match symmetry {
+                    CtmSymmetry::None => (
+                        face.offset().x * 26,
+                        face.offset().y * 26,
+                        face.offset().z * 26,
+                    ),
+                    CtmSymmetry::Opposite => {
+                        let rand_dir = match face {
+                            Direction::South => Direction::North,
+                            Direction::West => Direction::East,
+                            Direction::Down => Direction::Up,
+                            other => other,
+                        };
+                        (
+                            rand_dir.offset().x * 26,
+                            rand_dir.offset().y * 26,
+                            rand_dir.offset().z * 26,
+                        )
+                    }
+                    CtmSymmetry::All => (0, 0, 0),
+                };
+                let mut qy = world_pos.y + ry;
+                if *linked {
+                    if let Some(below_state) = get_block(world_pos + IVec3::new(0, -1, 0)) {
+                        if extract_block_name(state) == extract_block_name(below_state.as_ref()) {
+                            qy -= 1;
+                        }
+                    }
+                }
+                let rand_val = coordinate_random(world_pos.x + rx, qy, world_pos.z + rz);
+                if weights.is_empty() || *total_weight <= 0.0 {
+                    let idx = ((rand_val * (self.tiles.len() as f32)) as usize)
+                        .min(self.tiles.len() - 1);
+                    return self.tiles.get(idx).and_then(|t| t.clone());
+                }
+                let target = rand_val * total_weight;
+                let mut accum = 0.0f32;
+                let mut chosen_idx = 0;
+                for (i, &w) in weights.iter().enumerate().take(self.tiles.len()) {
+                    accum += w;
+                    if target < accum {
+                        chosen_idx = i;
+                        break;
+                    }
+                }
+                self.tiles.get(chosen_idx).and_then(|t| t.clone())
+            }
+            CtmMethod::Fixed => self.tiles.first().and_then(|t| t.clone()),
+            CtmMethod::Overlay => {
+                let (up, left) = get_face_tangents(face);
+                let down = up.opposite();
+                let right = left.opposite();
+
+                let mut bits = 0u8;
+                if check_connect(up.offset() + left.offset()) {
+                    bits |= 1 << 7;
+                }
+                if check_connect(up.offset()) {
+                    bits |= 1 << 6;
+                }
+                if check_connect(up.offset() + right.offset()) {
+                    bits |= 1 << 5;
+                }
+                if check_connect(right.offset()) {
+                    bits |= 1 << 4;
+                }
+                if check_connect(down.offset() + right.offset()) {
+                    bits |= 1 << 3;
+                }
+                if check_connect(down.offset()) {
+                    bits |= 1 << 2;
+                }
+                if check_connect(down.offset() + left.offset()) {
+                    bits |= 1 << 1;
+                }
+                if check_connect(left.offset()) {
+                    bits |= 1;
+                }
+
+                let tile_idx = OVERLAY_17_LOOKUP[bits as usize];
+                if tile_idx >= 0 {
+                    self.tiles.get(tile_idx as usize).and_then(|t| t.clone())
+                } else {
+                    None
+                }
+            }
+        }
+    }
 }
+
+impl BlockMatch {
+    /// Tests if a block state string (e.g. `minecraft:grass_block[snowy=false]`) satisfies this match condition.
+    pub fn matches(&self, state: &str) -> bool {
+        let block_name = extract_block_name(state);
+        let canonical_name = if block_name.contains(':') {
+            block_name.to_string()
+        } else {
+            format!("{}:{}", DEFAULT_NAMESPACE, block_name)
+        };
+        if self.block != canonical_name {
+            return false;
+        }
+        if self.properties.is_empty() {
+            return true;
+        }
+        if let Some(prop_start) = state.find('[') {
+            let prop_str = state[prop_start + 1..]
+                .strip_suffix(']')
+                .unwrap_or(&state[prop_start + 1..]);
+            for part in prop_str.split(',') {
+                if let Some((k, v)) = part.split_once('=') {
+                    let k = k.trim();
+                    let v = v.trim();
+                    if let Some(allowed_vals) = self.properties.get(k) {
+                        if !allowed_vals.iter().any(|val| val == v) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        true
+    }
+}
+
+/// Helper to extract the block identifier before any property brackets `[...]`.
+#[inline]
+pub fn extract_block_name(state: &str) -> &str {
+    if let Some(idx) = state.find('[') {
+        &state[..idx]
+    } else {
+        state
+    }
+}
+
+/// Computes the tangent `(up, left)` directions for a standard cardinal cube face.
+#[inline]
+pub const fn get_face_tangents(face: Direction) -> (Direction, Direction) {
+    match face {
+        Direction::North => (Direction::Up, Direction::East),
+        Direction::South => (Direction::Up, Direction::West),
+        Direction::East => (Direction::Up, Direction::South),
+        Direction::West => (Direction::Up, Direction::North),
+        Direction::Up => (Direction::North, Direction::West),
+        Direction::Down => (Direction::South, Direction::West),
+    }
+}
+
+/// Deterministic 3D spatial pseudorandom number generator matching standard Minecraft / OptiFine.
+#[inline]
+pub fn coordinate_random(x: i32, y: i32, z: i32) -> f32 {
+    let mut l = (x as i64)
+        .wrapping_mul(3129871)
+        ^ (z as i64).wrapping_mul(116129781)
+        ^ (y as i64);
+    l = l
+        .wrapping_mul(l)
+        .wrapping_mul(42317861)
+        .wrapping_add(l.wrapping_mul(11));
+    let hash = (l >> 16) as u32;
+    (hash & 0x00ff_ffff) as f32 / 16777216.0
+}
+
+/// 47 Full CTM tile index to connection bit pattern.
+pub const TILE_TO_CONNECTION_DATA: [u8; 47] = [
+    0b00000000, 0b00010000, 0b00010001, 0b00000001, 0b00010100, 0b00000101, 0b01010100, 0b00010101,
+    0b01110101, 0b01011101, 0b11010111, 0b11110101, 0b00000100, 0b00011100, 0b00011111, 0b00000111,
+    0b01010000, 0b01000001, 0b01010001, 0b01000101, 0b11010101, 0b01010111, 0b01011111, 0b01111101,
+    0b01000100, 0b01111100, 0b11111111, 0b11000111, 0b01011100, 0b00010111, 0b01110100, 0b00011101,
+    0b11110111, 0b11111101, 0b01110111, 0b11011101, 0b01000000, 0b01110000, 0b11110001, 0b11000001,
+    0b01110001, 0b11000101, 0b11010001, 0b01000111, 0b11011111, 0b01111111, 0b01010101,
+];
+
+/// Precomputed 256-entry lookup table for Full 47-tile CTM.
+pub const fn build_ctm_47_lookup() -> [u8; 256] {
+    let mut table = [0u8; 256];
+    let mut mapped = [false; 256];
+
+    let mut i = 0;
+    while i < 47 {
+        let pattern = TILE_TO_CONNECTION_DATA[i] as usize;
+        table[pattern] = i as u8;
+        mapped[pattern] = true;
+        i += 1;
+    }
+
+    let mut pattern = 0;
+    while pattern < 256 {
+        if !mapped[pattern] {
+            let mut tile_idx = pattern;
+            let mut corner_bit = 1;
+            while corner_bit < 8 {
+                let left_side_bit = if corner_bit == 0 { 7 } else { corner_bit - 1 };
+                let right_side_bit = if corner_bit + 1 >= 8 { 0 } else { corner_bit + 1 };
+
+                let left_side = tile_idx & (1 << left_side_bit);
+                let right_side = tile_idx & (1 << right_side_bit);
+
+                if left_side == 0 || right_side == 0 {
+                    tile_idx &= !(1 << corner_bit);
+                }
+                corner_bit += 2;
+            }
+
+            table[pattern] = table[tile_idx];
+        }
+        pattern += 1;
+    }
+
+    table
+}
+
+pub const CTM_47_LOOKUP: [u8; 256] = build_ctm_47_lookup();
+
+/// 17 Overlay tile index to connection bit pattern.
+pub const TILE_TO_OVERLAY_DATA: [u8; 17] = [
+    0b00001000, 0b00001110, 0b00000010, 0b00111110, 0b10001111, 0b10111111, 0b11101111,
+    0b00111000, 0b11111111, 0b10000011, 0b11111000, 0b11100011, 0b11111110, 0b11111011,
+    0b00100000, 0b11100000, 0b10000000,
+];
+
+/// Precomputed 256-entry lookup table for Overlay CTM.
+pub const fn build_overlay_17_lookup() -> [i8; 256] {
+    let mut table = [-2i8; 256];
+    table[0b00000000] = -1;
+
+    let mut i = 0;
+    while i < 17 {
+        table[TILE_TO_OVERLAY_DATA[i] as usize] = i as i8;
+        i += 1;
+    }
+
+    table[0b11101110] = 1;
+    table[0b10111011] = 7;
+
+    let mut pattern = 0;
+    while pattern < 256 {
+        if table[pattern] < -1 {
+            let mut tile_idx = pattern;
+            let mut corner_bit = 1;
+            while corner_bit < 8 {
+                let left_side_bit = if corner_bit == 0 { 7 } else { corner_bit - 1 };
+                let right_side_bit = if corner_bit + 1 >= 8 { 0 } else { corner_bit + 1 };
+
+                let left_side = tile_idx & (1 << left_side_bit);
+                let right_side = tile_idx & (1 << right_side_bit);
+
+                if left_side > 0 || right_side > 0 {
+                    tile_idx |= 1 << corner_bit;
+                }
+                if left_side == 0 && right_side == 0 {
+                    tile_idx &= !(1 << corner_bit);
+                }
+                corner_bit += 2;
+            }
+            table[pattern] = table[tile_idx];
+        }
+        pattern += 1;
+    }
+
+    table
+}
+
+pub const OVERLAY_17_LOOKUP: [i8; 256] = build_overlay_17_lookup();
+
+/// High-performance CTM Rule Solver indexed for fast per-face resolution during chunk meshing.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct CtmSolver {
+    pub rules: Vec<CtmRule>,
+    pub rules_by_block: HashMap<String, Vec<usize>>,
+    pub rules_by_tile: HashMap<ResourceLocation, Vec<usize>>,
+}
+
+impl CtmSolver {
+    /// Creates a new `CtmSolver` from an array of loaded `CtmRule`s, sorting by priority.
+    pub fn new(mut rules: Vec<CtmRule>) -> Self {
+        rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+
+        let mut rules_by_block: HashMap<String, Vec<usize>> = HashMap::new();
+        let mut rules_by_tile: HashMap<ResourceLocation, Vec<usize>> = HashMap::new();
+
+        for (idx, rule) in rules.iter().enumerate() {
+            for mb in &rule.match_blocks {
+                rules_by_block
+                    .entry(mb.block.clone())
+                    .or_default()
+                    .push(idx);
+            }
+            for mt in &rule.match_tiles {
+                rules_by_tile.entry(mt.clone()).or_default().push(idx);
+            }
+        }
+
+        Self {
+            rules,
+            rules_by_block,
+            rules_by_tile,
+        }
+    }
+
+    /// Resolves the final CTM tile for a block face given its state, orientation, position, and neighbor query closure.
+    pub fn resolve_face<F, S>(
+        &self,
+        state: &str,
+        face: Direction,
+        world_pos: IVec3,
+        base_tile: Option<&ResourceLocation>,
+        biome: Option<&str>,
+        get_block: F,
+    ) -> Option<ResourceLocation>
+    where
+        F: Fn(IVec3) -> Option<S>,
+        S: AsRef<str>,
+    {
+        if self.rules.is_empty() {
+            return None;
+        }
+
+        let block_name = extract_block_name(state);
+        let canonical_name = if block_name.contains(':') {
+            block_name.to_string()
+        } else {
+            format!("{}:{}", DEFAULT_NAMESPACE, block_name)
+        };
+
+        // 1. Try match by block
+        if let Some(rule_indices) = self.rules_by_block.get(&canonical_name) {
+            for &idx in rule_indices {
+                let rule = &self.rules[idx];
+                if rule.matches_block(state, face, world_pos, biome) {
+                    if let Some(tile) = rule.solve_tile(state, face, world_pos, &get_block) {
+                        return Some(tile);
+                    }
+                }
+            }
+        }
+
+        // 2. Try match by base tile
+        if let Some(tile_loc) = base_tile {
+            if let Some(rule_indices) = self.rules_by_tile.get(tile_loc) {
+                for &idx in rule_indices {
+                    let rule = &self.rules[idx];
+                    if rule.matches_block(state, face, world_pos, biome) {
+                        if let Some(tile) = rule.solve_tile(state, face, world_pos, &get_block) {
+                            return Some(tile);
+                        }
+                    }
+                }
+            }
+        }
+
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ctm_47_lookup_table() {
+        assert_eq!(CTM_47_LOOKUP[0b00000000], 0);
+        assert_eq!(CTM_47_LOOKUP[0b11111111], 26);
+        assert_eq!(CTM_47_LOOKUP[0b01010101], 46);
+        // Corner degeneration: top-left corner isolated without top or left -> should map to 0
+        assert_eq!(CTM_47_LOOKUP[0b10000000], 0);
+    }
+
+    #[test]
+    fn test_ctm_horizontal_and_vertical() {
+        let content_h = r#"
+matchBlocks=minecraft:bookshelf
+method=horizontal
+tiles=0 1 2 3
+"#;
+        let rule_h = CtmRule::parse_properties("optifine/ctm/bookshelf.properties", "minecraft", content_h).unwrap();
+        assert_eq!(rule_h.method, CtmMethod::Horizontal);
+
+        let solver = CtmSolver::new(vec![rule_h]);
+
+        // Left and right are connected -> tile 1
+        let res = solver.resolve_face(
+            "minecraft:bookshelf",
+            Direction::North,
+            IVec3::new(0, 64, 0),
+            None,
+            None,
+            |pos| {
+                if pos.x == 1 || pos.x == -1 {
+                    Some("minecraft:bookshelf")
+                } else {
+                    Some("minecraft:air")
+                }
+            },
+        );
+        assert_eq!(res, Some(ResourceLocation::new("minecraft", "optifine/ctm/1")));
+    }
+
+    #[test]
+    fn test_ctm_repeat_method() {
+        let content_repeat = r#"
+matchBlocks=minecraft:sandstone
+method=repeat
+width=2
+height=2
+tiles=0 1 2 3
+"#;
+        let rule_repeat = CtmRule::parse_properties("optifine/ctm/sandstone.properties", "minecraft", content_repeat).unwrap();
+        let solver = CtmSolver::new(vec![rule_repeat]);
+
+        let res0 = solver.resolve_face("minecraft:sandstone", Direction::North, IVec3::new(0, 0, 0), None, None, |_| None::<&str>);
+        assert_eq!(res0, Some(ResourceLocation::new("minecraft", "optifine/ctm/0")));
+
+        let res1 = solver.resolve_face("minecraft:sandstone", Direction::North, IVec3::new(1, 0, 0), None, None, |_| None::<&str>);
+        assert_eq!(res1, Some(ResourceLocation::new("minecraft", "optifine/ctm/1")));
+
+        let res2 = solver.resolve_face("minecraft:sandstone", Direction::North, IVec3::new(0, 1, 0), None, None, |_| None::<&str>);
+        assert_eq!(res2, Some(ResourceLocation::new("minecraft", "optifine/ctm/2")));
+    }
+}
+

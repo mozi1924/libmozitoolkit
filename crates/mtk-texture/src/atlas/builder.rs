@@ -32,11 +32,20 @@ impl Default for AtlasBuilderConfig {
 #[derive(Debug, Clone)]
 pub struct BakedAtlasChunk {
     pub chunk_id: u16,
+    pub category: String,
+    pub category_chunk_index: usize,
     pub width: u32,
     pub height: u32,
     pub albedo: RgbaBuffer,
     pub normal: Option<RgbaBuffer>,
     pub specular: Option<RgbaBuffer>,
+}
+
+impl BakedAtlasChunk {
+    /// Canonical file stem for this atlas sheet, e.g. `"blocks_chunk_001"`.
+    pub fn file_stem(&self) -> String {
+        format!("{}_chunk_{:03}", self.category, self.category_chunk_index)
+    }
 }
 
 /// Complete output containing all baked atlas sheets and authoritative address table.
@@ -56,11 +65,31 @@ impl AtlasBuilder {
         Self { config }
     }
 
-    /// Bake an atlas given a ResourcePackStack and an AtlasDefinition (e.g. `blocks.json`).
+    /// Bake an atlas given a ResourcePackStack and an AtlasDefinition (defaults to "blocks" category).
     pub fn build(
         &self,
         stack: &ResourcePackStack,
         definition: &AtlasDefinition,
+    ) -> Result<BakedAtlas, TextureError> {
+        self.build_with_category(stack, definition, "blocks")
+    }
+
+    /// Bake an atlas for a specific category (e.g. `AtlasCategory::Blocks`, `AtlasCategory::Items`).
+    pub fn build_category(
+        &self,
+        stack: &ResourcePackStack,
+        category: &mtk_resource::AtlasCategory,
+    ) -> Result<BakedAtlas, TextureError> {
+        let definition = stack.load_atlas_category(category);
+        self.build_with_category(stack, &definition, category.as_str())
+    }
+
+    /// Bake an atlas with an explicit category name string.
+    pub fn build_with_category(
+        &self,
+        stack: &ResourcePackStack,
+        definition: &AtlasDefinition,
+        category_name: &str,
     ) -> Result<BakedAtlas, TextureError> {
         // 1. Discover raw sprites
         let discovered = stack.collect_sprites_for_atlas(definition)?;
@@ -116,11 +145,20 @@ impl AtlasBuilder {
             }
         }
 
-        self.build_from_sprites(decoded)
+        self.build_from_sprites_with_category(decoded, category_name)
     }
 
-    /// Build directly from pre-decoded sprites.
+    /// Build directly from pre-decoded sprites (defaults to "blocks" category).
     pub fn build_from_sprites(&self, sprites: Vec<DecodedSprite>) -> Result<BakedAtlas, TextureError> {
+        self.build_from_sprites_with_category(sprites, "blocks")
+    }
+
+    /// Build directly from pre-decoded sprites with an explicit category name.
+    pub fn build_from_sprites_with_category(
+        &self,
+        sprites: Vec<DecodedSprite>,
+        category_name: &str,
+    ) -> Result<BakedAtlas, TextureError> {
         let mut stitcher = Stitcher::new(self.config.max_width, self.config.max_height, self.config.mip_level);
 
         // Map sprites by canonical ID for fast retrieval during rasterization
@@ -140,7 +178,8 @@ impl AtlasBuilder {
         let mut address_map = AtlasAddressMap::new();
         let mut texture_id_counter = 0u32;
 
-        for chunk in stitched.chunks {
+        for (idx, chunk) in stitched.chunks.into_iter().enumerate() {
+            let category_chunk_index = idx + 1;
             let mut has_normal = false;
             let mut has_specular = false;
 
@@ -210,6 +249,7 @@ impl AtlasBuilder {
                         sp.sprite_id.clone(),
                         AtlasSpriteLocation {
                             chunk_id: chunk.chunk_id,
+                            category: category_name.to_string(),
                             texture_id: texture_id_counter,
                             uv_bounds: [u_min, v_min, u_max, v_max],
                             pixel_rect: [inner_x, inner_y, fw, fh],
@@ -227,6 +267,8 @@ impl AtlasBuilder {
 
             address_map.chunks.push(AtlasChunkMeta {
                 chunk_id: chunk.chunk_id,
+                category: category_name.to_string(),
+                category_chunk_index,
                 width: chunk.width,
                 height: chunk.height,
                 has_normal,
@@ -235,6 +277,8 @@ impl AtlasBuilder {
 
             baked_chunks.push(BakedAtlasChunk {
                 chunk_id: chunk.chunk_id,
+                category: category_name.to_string(),
+                category_chunk_index,
                 width: chunk.width,
                 height: chunk.height,
                 albedo: albedo_buf,

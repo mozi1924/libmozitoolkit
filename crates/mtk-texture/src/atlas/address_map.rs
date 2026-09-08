@@ -6,6 +6,8 @@ use mtk_resource::{AnimationMetadata, ResourceLocation};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AtlasSpriteLocation {
     pub chunk_id: u16,
+    #[serde(default = "default_category")]
+    pub category: String,
     pub texture_id: u32,
     /// Normalized UV bounds: `[u_min, v_min, u_max, v_max]` in [0.0..1.0] atlas space.
     pub uv_bounds: [f32; 4],
@@ -23,14 +25,33 @@ pub struct AtlasSpriteLocation {
     pub has_specular: bool,
 }
 
+fn default_category() -> String {
+    "blocks".to_string()
+}
+
 /// Metadata for an individual Atlas Chunk (sheet).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AtlasChunkMeta {
     pub chunk_id: u16,
+    #[serde(default = "default_category")]
+    pub category: String,
+    #[serde(default = "default_chunk_index")]
+    pub category_chunk_index: usize,
     pub width: u32,
     pub height: u32,
     pub has_normal: bool,
     pub has_specular: bool,
+}
+
+fn default_chunk_index() -> usize {
+    1
+}
+
+impl AtlasChunkMeta {
+    /// Canonical file stem for this atlas sheet, e.g. `"blocks_chunk_001"`.
+    pub fn file_stem(&self) -> String {
+        format!("{}_chunk_{:03}", self.category, self.category_chunk_index)
+    }
 }
 
 /// Authoritative mapping table holding all sprite locations and chunk descriptors.
@@ -53,13 +74,21 @@ impl AtlasAddressMap {
         self.sprites.get(location)
     }
 
-    /// O(1) lookup by string (e.g. `"minecraft:block/stone"` or `"block/stone"`).
+    /// O(1) lookup by string (e.g. `"minecraft:block/stone"`, `"block/stone"`, or `"textures/block/stone.png"`).
     pub fn lookup_str(&self, s: &str) -> Option<&AtlasSpriteLocation> {
-        if let Ok(loc) = ResourceLocation::parse(s) {
+        if let Ok(loc) = ResourceLocation::parse_texture_path(s) {
+            self.lookup(&loc)
+        } else if let Ok(loc) = ResourceLocation::parse(s) {
             self.lookup(&loc)
         } else {
             None
         }
+    }
+
+    /// Merge another address map into this one.
+    pub fn merge(&mut self, other: AtlasAddressMap) {
+        self.chunks.extend(other.chunks);
+        self.sprites.extend(other.sprites);
     }
 
     /// Serialize to formatted JSON.

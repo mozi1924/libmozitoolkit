@@ -91,6 +91,13 @@ impl ResourcePackStack {
         AtlasDefinition::parse_json(json_str).map_err(ResourceError::from)
     }
 
+    /// Read and parse an atlas definition for a category, falling back to standard default if not found.
+    pub fn load_atlas_category(&self, category: &crate::atlas::AtlasCategory) -> AtlasDefinition {
+        let loc = category.atlas_location();
+        self.load_atlas_definition(&loc)
+            .unwrap_or_else(|_| category.default_definition())
+    }
+
     /// Resolve all PBR companions (`_n`, `_s`, `.mcmeta`) using granular per-channel fallback.
     pub fn resolve_pbr_companions(&self, location: &ResourceLocation) -> PbrCompanions {
         let mut companions = PbrCompanions::default();
@@ -214,7 +221,7 @@ impl ResourcePackStack {
                             }
 
                             if let Some(loc) = ResourceLocation::from_asset_path(&file, "textures", "png") {
-                                if loc.path.starts_with(dir_src) {
+                                if loc.path == *dir_src || loc.path.starts_with(&format!("{}/", dir_src)) {
                                     found_paths.insert(loc);
                                 }
                             }
@@ -223,7 +230,11 @@ impl ResourcePackStack {
 
                     // Convert to canonical Sprite locations with prefix
                     for tex_loc in found_paths {
-                        let short = tex_loc.path.strip_prefix(dir_src).unwrap_or(&tex_loc.path).trim_start_matches('/');
+                        let short = if tex_loc.path == *dir_src {
+                            ""
+                        } else {
+                            tex_loc.path.strip_prefix(&format!("{}/", dir_src)).unwrap_or(&tex_loc.path)
+                        };
                         let sprite_path = format!("{}{}", prefix, short);
                         let sprite_id = ResourceLocation::new(&tex_loc.namespace, sprite_path);
 

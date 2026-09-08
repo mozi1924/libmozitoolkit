@@ -271,6 +271,7 @@ dependencies = [
 name = "mtk-resource"
 version = "0.1.0"
 dependencies = [
+ "glam",
  "mtk-core",
  "rayon",
  "serde",
@@ -319,6 +320,8 @@ dependencies = [
  "mtk-core",
  "mtk-cull",
  "mtk-model",
+ "mtk-resource",
+ "mtk-texture",
  "rayon",
  "serde",
  "serde_json",

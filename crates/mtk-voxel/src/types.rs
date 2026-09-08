@@ -1,4 +1,7 @@
+use std::sync::Arc;
 use glam::Vec3;
+use mtk_resource::CtmSolver;
+use mtk_texture::atlas::AtlasAddressMap;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -28,6 +31,12 @@ pub struct MesherConfig {
     pub exclude_hidden_volume: bool,
     /// Whether to calculate fluid top and side surfaces.
     pub mesh_fluids: bool,
+    /// Optional CTM rule solver for connected textures.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub ctm_solver: Option<Arc<CtmSolver>>,
+    /// Optional Atlas address map for UV remapping and material slotting.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub atlas_address_map: Option<Arc<AtlasAddressMap>>,
 }
 
 impl Default for MesherConfig {
@@ -38,6 +47,8 @@ impl Default for MesherConfig {
             enable_ao: true,
             exclude_hidden_volume: true,
             mesh_fluids: true,
+            ctm_solver: None,
+            atlas_address_map: None,
         }
     }
 }

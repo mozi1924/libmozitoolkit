@@ -47,6 +47,50 @@ impl ResourceLocation {
         }
     }
 
+    /// Parse any texture path format (raw asset path, texture relative path, or canonical location)
+    /// into a canonical ResourceLocation.
+    ///
+    /// Examples:
+    /// - `"block/stone"` -> `minecraft:block/stone`
+    /// - `"minecraft:block/stone"` -> `minecraft:block/stone`
+    /// - `"textures/block/dirt.png"` -> `minecraft:block/dirt`
+    /// - `"assets/minecraft/textures/block/stone.png"` -> `minecraft:block/stone`
+    /// - `"create:textures/block/cogwheel.png"` -> `create:block/cogwheel`
+    /// - `"assets/create/textures/block/cogwheel.png"` -> `create:block/cogwheel`
+    pub fn parse_texture_path(input: &str) -> Result<Self, ResourceError> {
+        let input = input.trim().replace('\\', "/");
+        if input.is_empty() {
+            return Err(ResourceError::InvalidLocation("Empty texture path".to_string()));
+        }
+
+        // 1. Check if starts with "assets/<namespace>/textures/<path>"
+        if let Some(loc) = Self::from_asset_path(&input, "textures", "png") {
+            return Ok(loc);
+        }
+        if let Some(loc) = Self::from_asset_path(&input, "textures", "") {
+            return Ok(loc);
+        }
+
+        // 2. Check if has namespace prefix, e.g. "namespace:path"
+        if let Some((ns, path)) = input.split_once(':') {
+            let clean_path = path
+                .strip_prefix("textures/")
+                .unwrap_or(path)
+                .strip_suffix(".png")
+                .unwrap_or(path);
+            return Ok(Self::new(ns, clean_path));
+        }
+
+        // 3. Raw path without namespace, e.g. "textures/block/stone.png" or "block/stone"
+        let clean_path = input
+            .strip_prefix("textures/")
+            .unwrap_or(&input)
+            .strip_suffix(".png")
+            .unwrap_or(&input);
+
+        Ok(Self::new(DEFAULT_NAMESPACE, clean_path))
+    }
+
     /// Canonical string format: `"namespace:path"`.
     pub fn as_string(&self) -> String {
         format!("{}:{}", self.namespace, self.path)

@@ -168,9 +168,75 @@ impl SectionMesher {
                             [3, 3, 3, 3]
                         };
 
+                        let get_padded_neighbor_state = |target_pos: IVec3| -> Option<&str> {
+                            let rel_x = target_pos.x - block_pos.x + px as i32;
+                            let rel_y = target_pos.y - block_pos.y + py as i32;
+                            let rel_z = target_pos.z - block_pos.z + pz as i32;
+                            if rel_x >= 0 && rel_x < 18 && rel_y >= 0 && rel_y < 18 && rel_z >= 0 && rel_z < 18 {
+                                Some(padded.get_padded_state(rel_x as usize, rel_y as usize, rel_z as usize))
+                            } else {
+                                None
+                            }
+                        };
+
                         if let Some(baked) = baked_opt {
                             for el in &baked.elements {
                                 if let Some(face) = el.faces.get(&dir) {
+                                    let base_loc = if !face.texture.is_empty() {
+                                        mtk_resource::ResourceLocation::parse(&face.texture).ok()
+                                    } else {
+                                        None
+                                    };
+
+                                    let resolved_loc = if let Some(solver) = &config.ctm_solver {
+                                        solver.resolve_face(
+                                            state_str,
+                                            dir,
+                                            block_pos,
+                                            base_loc.as_ref(),
+                                            None,
+                                            get_padded_neighbor_state,
+                                        )
+                                    } else {
+                                        None
+                                    };
+
+                                    let final_loc = resolved_loc.as_ref().or(base_loc.as_ref());
+
+                                    let (override_uvs, mat_slot) = if let (Some(atlas), Some(loc)) =
+                                        (&config.atlas_address_map, final_loc)
+                                    {
+                                        if let Some(atlas_loc) = atlas.lookup(loc) {
+                                            let u_min = atlas_loc.uv_bounds[0];
+                                            let v_min = atlas_loc.uv_bounds[1];
+                                            let u_span = atlas_loc.uv_bounds[2] - u_min;
+                                            let v_span = atlas_loc.uv_bounds[3] - v_min;
+                                            let remapped = [
+                                                glam::Vec2::new(
+                                                    u_min + face.uvs[0].x * u_span,
+                                                    v_min + face.uvs[0].y * v_span,
+                                                ),
+                                                glam::Vec2::new(
+                                                    u_min + face.uvs[1].x * u_span,
+                                                    v_min + face.uvs[1].y * v_span,
+                                                ),
+                                                glam::Vec2::new(
+                                                    u_min + face.uvs[2].x * u_span,
+                                                    v_min + face.uvs[2].y * v_span,
+                                                ),
+                                                glam::Vec2::new(
+                                                    u_min + face.uvs[3].x * u_span,
+                                                    v_min + face.uvs[3].y * v_span,
+                                                ),
+                                            ];
+                                            (Some(remapped), atlas_loc.chunk_id)
+                                        } else {
+                                            (None, 0)
+                                        }
+                                    } else {
+                                        (None, 0)
+                                    };
+
                                     emit_baked_face(
                                         &mut mesh,
                                         face,
@@ -179,10 +245,55 @@ impl SectionMesher {
                                         wz,
                                         ao_levels,
                                         config,
+                                        override_uvs,
+                                        mat_slot,
                                     );
                                 }
                             }
                         } else {
+                            let clean_block = mtk_resource::extract_block_name(state_str)
+                                .strip_prefix("minecraft:")
+                                .unwrap_or(mtk_resource::extract_block_name(state_str));
+                            let base_loc = mtk_resource::ResourceLocation::new(
+                                "minecraft",
+                                format!("block/{}", clean_block),
+                            );
+
+                            let resolved_loc = if let Some(solver) = &config.ctm_solver {
+                                solver.resolve_face(
+                                    state_str,
+                                    dir,
+                                    block_pos,
+                                    Some(&base_loc),
+                                    None,
+                                    get_padded_neighbor_state,
+                                )
+                            } else {
+                                None
+                            };
+
+                            let final_loc = resolved_loc.as_ref().unwrap_or(&base_loc);
+
+                            let (override_uvs, mat_slot) = if let Some(atlas) = &config.atlas_address_map {
+                                if let Some(atlas_loc) = atlas.lookup(final_loc) {
+                                    let u_min = atlas_loc.uv_bounds[0];
+                                    let v_min = atlas_loc.uv_bounds[1];
+                                    let u_max = atlas_loc.uv_bounds[2];
+                                    let v_max = atlas_loc.uv_bounds[3];
+                                    let remapped = [
+                                        glam::Vec2::new(u_min, v_min),
+                                        glam::Vec2::new(u_min, v_max),
+                                        glam::Vec2::new(u_max, v_max),
+                                        glam::Vec2::new(u_max, v_min),
+                                    ];
+                                    (Some(remapped), atlas_loc.chunk_id)
+                                } else {
+                                    (None, 0)
+                                }
+                            } else {
+                                (None, 0)
+                            };
+
                             emit_unit_cube_face(
                                 &mut mesh,
                                 dir,
@@ -191,7 +302,8 @@ impl SectionMesher {
                                 wz,
                                 ao_levels,
                                 config,
-                                0,
+                                override_uvs,
+                                mat_slot,
                             );
                         }
                     }
@@ -285,6 +397,8 @@ fn emit_baked_face(
     wz: f32,
     ao_levels: [u8; 4],
     config: &MesherConfig,
+    override_uvs: Option<[glam::Vec2; 4]>,
+    mat_slot: u16,
 ) {
     let base_idx = mesh.positions.len() as u32;
     let n = [face.normal.x, face.normal.y, face.normal.z];
@@ -296,7 +410,11 @@ fn emit_baked_face(
         let p = config.transform_coord(Vec3::new(wx + v.x, wy + v.y, wz + v.z));
         mesh.positions.push([p.x, p.y, p.z]);
         mesh.normals.push(n);
-        mesh.uvs.push([face.uvs[i].x, face.uvs[i].y]);
+        if let Some(ref uvs) = override_uvs {
+            mesh.uvs.push([uvs[i].x, uvs[i].y]);
+        } else {
+            mesh.uvs.push([face.uvs[i].x, face.uvs[i].y]);
+        }
 
         let ao_b = ao_level_to_brightness(ao_levels[i]);
         colors.push([ao_b, ao_b, ao_b, 1.0]);
@@ -321,7 +439,7 @@ fn emit_baked_face(
         mesh.indices.push(base_idx + 3);
     }
 
-    mesh.face_materials.push(0);
+    mesh.face_materials.push(mat_slot);
     mesh.face_tint_indices.push(face.tint_index);
 }
 
@@ -335,6 +453,7 @@ fn emit_unit_cube_face(
     wz: f32,
     ao_levels: [u8; 4],
     config: &MesherConfig,
+    override_uvs: Option<[glam::Vec2; 4]>,
     mat_slot: u16,
 ) {
     let base_idx = mesh.positions.len() as u32;
@@ -391,10 +510,16 @@ fn emit_unit_cube_face(
         colors.push([ao_b, ao_b, ao_b, 1.0]);
     }
 
-    mesh.uvs.push([0.0, 0.0]);
-    mesh.uvs.push([0.0, 1.0]);
-    mesh.uvs.push([1.0, 1.0]);
-    mesh.uvs.push([1.0, 0.0]);
+    if let Some(ref uvs) = override_uvs {
+        for uv in uvs {
+            mesh.uvs.push([uv.x, uv.y]);
+        }
+    } else {
+        mesh.uvs.push([0.0, 0.0]);
+        mesh.uvs.push([0.0, 1.0]);
+        mesh.uvs.push([1.0, 1.0]);
+        mesh.uvs.push([1.0, 0.0]);
+    }
 
     if should_flip_quad_diagonal(ao_levels) {
         mesh.indices.push(base_idx);

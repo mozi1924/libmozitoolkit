@@ -1,0 +1,105 @@
+use std::sync::Arc;
+use glam::IVec3;
+use mtk_cull::FaceCuller;
+use mtk_resource::{CtmRule, CtmSolver, ResourceLocation};
+use mtk_texture::atlas::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation};
+use mtk_voxel::mesher::SectionMesher;
+use mtk_voxel::storage::VoxelStorage;
+use mtk_voxel::types::MesherConfig;
+
+#[test]
+fn test_ctm_horizontal_meshing_with_atlas() {
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+    // Place 3 bookshelves in a horizontal line along X: (1, 1, 1), (2, 1, 1), (3, 1, 1)
+    world.set_block(1, 1, 1, "minecraft:bookshelf", None);
+    world.set_block(2, 1, 1, "minecraft:bookshelf", None);
+    world.set_block(3, 1, 1, "minecraft:bookshelf", None);
+
+    let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
+    let culler = FaceCuller::default();
+
+    // Create CTM rule for horizontal connection
+    let ctm_props = r#"
+matchBlocks=minecraft:bookshelf
+method=horizontal
+tiles=0 1 2 3
+"#;
+    let rule = CtmRule::parse_properties("optifine/ctm/bookshelf.properties", "minecraft", ctm_props).unwrap();
+    let solver = Arc::new(CtmSolver::new(vec![rule]));
+
+    // Create AtlasAddressMap with 4 tiles
+    let mut atlas = AtlasAddressMap::new();
+    atlas.chunks.push(AtlasChunkMeta {
+        chunk_id: 0,
+        category: "blocks".to_string(),
+        category_chunk_index: 1,
+        width: 1024,
+        height: 1024,
+        has_normal: false,
+        has_specular: false,
+    });
+
+    for i in 0..4 {
+        let loc = ResourceLocation::new("minecraft", format!("optifine/ctm/{}", i));
+        atlas.sprites.insert(
+            loc,
+            AtlasSpriteLocation {
+                chunk_id: 0,
+                category: "blocks".to_string(),
+                texture_id: i as u32,
+                uv_bounds: [0.25 * i as f32, 0.0, 0.25 * (i + 1) as f32, 1.0],
+                pixel_rect: [256 * i, 0, 256, 256],
+                frame_size: [256, 256],
+                frame_count: 1,
+                animation: None,
+                has_normal: false,
+                has_specular: false,
+            },
+        );
+    }
+
+    let config = MesherConfig {
+        ctm_solver: Some(solver),
+        atlas_address_map: Some(Arc::new(atlas)),
+        ..Default::default()
+    };
+
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+
+    assert!(mesh.positions.len() > 0);
+    assert_eq!(mesh.positions.len(), mesh.uvs.len());
+    // All face materials should be chunk_id = 0
+    assert!(mesh.face_materials.iter().all(|&mat| mat == 0));
+}
+
+#[test]
+fn test_ctm_full_47_tile_resolution() {
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+    // Place a 3x3 plane of glass in XZ at Y=1
+    for x in 1..=3 {
+        for z in 1..=3 {
+            world.set_block(x, 1, z, "minecraft:glass", None);
+        }
+    }
+
+    let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
+    let culler = FaceCuller::default();
+
+    let ctm_props = r#"
+matchBlocks=minecraft:glass
+method=ctm
+tiles=0-46
+"#;
+    let rule = CtmRule::parse_properties("optifine/ctm/glass.properties", "minecraft", ctm_props).unwrap();
+    let solver = Arc::new(CtmSolver::new(vec![rule]));
+
+    let config = MesherConfig {
+        ctm_solver: Some(solver),
+        ..Default::default()
+    };
+
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+    assert!(mesh.positions.len() > 0);
+}

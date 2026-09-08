@@ -33,11 +33,11 @@ pub enum MtkError {
     Resource(#[from] mtk_resource::error::ResourceError),
 }
 
-// Convenient top-level re-exports
 pub use mtk_resource::{
-    AnimationFrame, AnimationMetadata, AtlasDefinition, AtlasSource, BlockMatch, ConnectLogic,
-    CtmMethod, CtmRule, CtmSymmetry, DirectoryPack, DiscoveredSprite, MemoryPack, PbrCompanions,
-    ResourceLocation, ResourcePack, ResourcePackStack, TextureMetadata,
+    coordinate_random, extract_block_name, get_face_tangents, AnimationFrame, AnimationMetadata,
+    AtlasDefinition, AtlasSource, BlockMatch, ConnectLogic, CtmMethod, CtmRule, CtmSolver,
+    CtmSymmetry, DirectoryPack, DiscoveredSprite, MemoryPack, PbrCompanions, ResourceLocation,
+    ResourcePack, ResourcePackStack, TextureMetadata, CTM_47_LOOKUP, OVERLAY_17_LOOKUP,
 };
 pub use mtk_texture::{
     AtlasAddressMap, AtlasBuilder, AtlasBuilderConfig, AtlasChunkMeta, AtlasSpriteLocation,

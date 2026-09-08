@@ -12,6 +12,8 @@ description = "Section and World-level voxel storage, fluid surface calculation,
 mtk-core = { workspace = true }
 mtk-cull = { workspace = true }
 mtk-model = { workspace = true }
+mtk-resource = { workspace = true }
+mtk-texture = { workspace = true }
 glam = { workspace = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
@@ -20,8 +22,8 @@ rayon = { workspace = true, optional = true }
 
 [features]
 default = ["std", "parallel"]
-std = ["mtk-core/std", "mtk-cull/std", "mtk-model/std"]
-parallel = ["dep:rayon", "mtk-model/parallel"]
+std = ["mtk-core/std", "mtk-cull/std", "mtk-model/std", "mtk-resource/std", "mtk-texture/std"]
+parallel = ["dep:rayon", "mtk-model/parallel", "mtk-resource/parallel", "mtk-texture/parallel"]
 serde = ["dep:serde", "dep:serde_json", "mtk-core/serde", "mtk-cull/serde"]
 
 [dev-dependencies]

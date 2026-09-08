@@ -49,3 +49,7 @@ path = "src/bin/verify_culling.rs"
 [[bin]]
 name = "bench_and_verify"
 path = "src/bin/bench_and_verify.rs"
+
+[[bin]]
+name = "bake_all_atlases"
+path = "src/bin/bake_all_atlases.rs"
