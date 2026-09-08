@@ -21,12 +21,53 @@ pub struct SectionStorage {
     /// Palette mapping index `u16` -> BlockState string (slot 0 is always "minecraft:air").
     pub palette: Vec<String>,
     /// Dense 4096-element palette-indexed array (`x * 256 + y * 16 + z`).
+    #[cfg_attr(feature = "serde", serde(with = "serde_voxels"))]
     pub voxels: Box<[u16; SECTION_VOLUME]>,
     /// Number of non-air voxels currently in this section.
     pub non_air_count: u32,
     /// Cached CRC32 checksum for this section.
     pub cached_crc: Option<u32>,
 }
+
+#[cfg(feature = "serde")]
+mod serde_voxels {
+    use super::*;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S>(
+        voxels: &Box<[u16; SECTION_VOLUME]>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        voxels.as_slice().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Box<[u16; SECTION_VOLUME]>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let vec = Vec::<u16>::deserialize(deserializer)?;
+        if vec.len() != SECTION_VOLUME {
+            return Err(serde::de::Error::invalid_length(
+                vec.len(),
+                &"a 4096-element array",
+            ));
+        }
+        let boxed_slice = vec.into_boxed_slice();
+        let boxed_array: Box<[u16; SECTION_VOLUME]> = match boxed_slice.try_into() {
+            Ok(arr) => arr,
+            Err(_) => {
+                return Err(serde::de::Error::custom(
+                    "failed to convert boxed slice to fixed array",
+                ))
+            }
+        };
+        Ok(boxed_array)
+    }
+}
+
 
 impl SectionStorage {
     /// Creates an empty section filled with `minecraft:air` at coordinate `coord`.

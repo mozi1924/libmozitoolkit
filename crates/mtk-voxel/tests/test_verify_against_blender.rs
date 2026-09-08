@@ -38,6 +38,7 @@ struct FluidTestCase {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct BiomeTestCase {
     biome: String,
     temperature: f32,
@@ -47,6 +48,7 @@ struct BiomeTestCase {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct FluidUvTestCase {
     name: String,
     is_flowing: Option<bool>,
@@ -56,6 +58,7 @@ struct FluidUvTestCase {
     expected_uvs: Option<Vec<[f32; 2]>>,
     expected_side_uvs: Option<Vec<[f32; 2]>>,
 }
+
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
@@ -207,18 +210,21 @@ fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
         }
     }
 
-    // 3. Verify Biome Colormap UVs
-    println!("\n[3. Biome Colormap UV Verification (vs MoziToolKit biome.py)]");
+    // 3. Verify Biome Colormap UVs & Metadata
+    println!("\n[3. Biome Colormap UV & Meta Verification (vs MoziToolKit biome.py)]");
     for tc in &truth.biome_tests {
         let meta = get_biome_meta(&tc.biome);
         let uv = get_colormap_uv(meta.temperature, meta.humidity);
         let diff_u = (uv[0] - tc.colormap_uv[0]).abs();
         let diff_v = (uv[1] - tc.colormap_uv[1]).abs();
+        let diff_temp = (meta.temperature - tc.temperature).abs();
+        let diff_hum = (meta.humidity - tc.humidity).abs();
 
         println!(
-            " • {:<24} -> UV: [{:.4}, {:.4}] | Blender: [{:.4}, {:.4}]",
-            tc.biome, uv[0], uv[1], tc.colormap_uv[0], tc.colormap_uv[1]
+            " • {:<24} -> UV: [{:.4}, {:.4}] | Blender: [{:.4}, {:.4}] | Temp: {:.2} vs {:.2}",
+            tc.biome, uv[0], uv[1], tc.colormap_uv[0], tc.colormap_uv[1], meta.temperature, tc.temperature
         );
+
         assert!(
             diff_u < 1e-4 && diff_v < 1e-4,
             "Biome colormap UV mismatch in '{}': Rust [{:?}] vs Blender [{:?}]",
@@ -226,7 +232,14 @@ fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
             uv,
             tc.colormap_uv
         );
+        assert!(
+            diff_temp < 1e-4 && diff_hum < 1e-4,
+            "Biome metadata mismatch in '{}': Rust temp/hum vs Blender ground truth",
+            tc.biome
+        );
     }
+
+
 
     // 4. Verify Fluid UV Mapping
     println!("\n[4. Fluid UVs (Top Rotations & Slanted Side Trapeze) Verification]");

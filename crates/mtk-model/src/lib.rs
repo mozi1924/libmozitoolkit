@@ -1,30 +1,42 @@
-pub mod baked;
 pub mod baker;
-pub mod blockstate;
-pub mod cull_volume;
+pub mod culling;
 pub mod error;
-pub mod math;
 pub mod mesher;
-pub mod model_json;
-pub mod obj;
+pub mod parser;
 
-pub use baked::{BakedElement, BakedFace, BakedModel};
-pub use baker::{is_block_emissive, ModelBaker};
-pub use mesher::{SectionMesher, VoxelSection};
-
-pub use blockstate::{
-    BlockState, BlockStateDefinition, BlockStateResolver, MultipartCondition, MultipartRule,
-    VariantEntry, VariantMatch, VariantModel,
-};
-pub use cull_volume::{clip_face_excluding_hidden_volume, ClippedQuadPiece};
-pub use error::ModelError;
-pub use math::{
+// Top-level re-exports
+pub use baker::{
     apply_uvlock_to_uvs, bake_face_exact, calculate_facing, default_face_uv,
-    get_face_canonical_vertex, get_face_uvlock_transform, recalculate_winding, rotate_direction,
-    rotate_element_point, rotate_point, BakedFaceGeometry,
+    get_face_canonical_vertex, get_face_uvlock_transform, is_block_emissive, recalculate_winding,
+    rotate_direction, rotate_element_point, rotate_point, BakedElement, BakedFace,
+    BakedFaceGeometry, BakedModel, ModelBaker,
 };
-pub use model_json::{
-    BlockModelJson, ElementJson, FaceJson, ResolvedBlockModel, ResolvedElement, ResolvedFace,
-    RotationJson, TextureValue,
+pub use culling::{clip_face_excluding_hidden_volume, ClippedQuadPiece};
+pub use error::ModelError;
+pub use mesher::{SectionMesher, VoxelSection};
+pub use parser::{
+    mesh_to_obj_string, BakedObjFace, BlockModelJson, BlockState, BlockStateDefinition,
+    BlockStateResolver, ElementJson, FaceJson, ModObjLoader, MultipartCondition, MultipartRule,
+    ObjRawFace, ResolvedBlockModel, ResolvedElement, ResolvedFace, RotationJson, TextureValue,
+    VariantEntry, VariantMatch, VariantModel, WavefrontObjParser,
 };
-pub use obj::{mesh_to_obj_string, BakedObjFace, ModObjLoader, ObjRawFace, WavefrontObjParser};
+
+// Backward-compatibility module aliases
+pub mod baked {
+    pub use crate::baker::baked_model::*;
+}
+pub mod blockstate {
+    pub use crate::parser::blockstate::*;
+}
+pub mod cull_volume {
+    pub use crate::culling::cull_volume::*;
+}
+pub mod math {
+    pub use crate::baker::math::*;
+}
+pub mod model_json {
+    pub use crate::parser::model_json::*;
+}
+pub mod obj {
+    pub use crate::parser::obj::*;
+}
