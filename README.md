@@ -22,6 +22,16 @@
 
 ---
 
+## 项目文档与设计规范
+
+- 🤖 **[Agent 协作与开发规范 (`AGENT.md`)](AGENT.md)**：开发铁律、多工作区交互、Crate 新增/变更规约。
+- 🏛️ **[系统架构设计 (`docs/ARCHITECTURE.md`)](docs/ARCHITECTURE.md)**：分层拓扑、模块职责、数据流向。
+- 📖 **[API 与核心抽象手册 (`docs/API_REFERENCE.md`)](docs/API_REFERENCE.md)**：Public API 清单、`mtk-core` 数据契约。
+- 🔌 **[跨语言绑定与胶水层设计 (`docs/BINDINGS_DESIGN.md`)](docs/BINDINGS_DESIGN.md)**：Python Wheel、C-ABI FFI、WASM 规范。
+
+
+---
+
 ## 构建与测试
 
 ### 1. 本地原生编译与测试
