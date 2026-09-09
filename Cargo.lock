@@ -354,8 +354,14 @@ dependencies = [
 name = "mtk-py"
 version = "0.1.0"
 dependencies = [
+ "glam",
  "libmtk",
  "mtk-core",
+ "mtk-cull",
+ "mtk-model",
+ "mtk-resource",
+ "mtk-texture",
+ "mtk-voxel",
  "pyo3",
 ]
 

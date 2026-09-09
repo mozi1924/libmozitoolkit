@@ -10,9 +10,22 @@ description = "Python bindings for libmozitoolkit using PyO3."
 [lib]
 name = "libmtk_py"
 crate-type = ["cdylib", "rlib"]
-test = false
 
 [dependencies]
 libmtk = { workspace = true }
 mtk-core = { workspace = true }
-pyo3 = { workspace = true, features = ["extension-module", "abi3-py310"] }
+mtk-cull = { workspace = true }
+mtk-model = { workspace = true }
+mtk-resource = { workspace = true, features = ["zip"] }
+mtk-texture = { workspace = true }
+mtk-voxel = { workspace = true }
+glam = { workspace = true }
+pyo3 = { workspace = true, features = ["abi3-py310"] }
+
+[features]
+default = ["extension-module", "zip"]
+extension-module = ["pyo3/extension-module"]
+zip = ["mtk-resource/zip"]
+
+[dev-dependencies]
+pyo3 = { workspace = true, features = ["auto-initialize"] }

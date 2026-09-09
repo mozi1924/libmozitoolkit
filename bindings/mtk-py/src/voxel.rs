@@ -1,0 +1,239 @@
+//! # `mtk-py` Voxel Storage and Configuration Binding
+//!
+//! Exposes `VoxelStorage` 3D world data containers and `MesherConfig` to Python.
+
+use pyo3::prelude::*;
+use pyo3::types::PyList;
+
+use mtk_voxel::storage::VoxelStorage;
+use mtk_voxel::types::{CoordinateSystem, MesherConfig};
+
+/// Python wrapper for `VoxelStorage` sparse 3D chunk voxel container.
+#[pyclass(name = "VoxelStorage")]
+#[derive(Debug, Clone)]
+pub struct PyVoxelStorage {
+    pub(crate) inner: VoxelStorage,
+}
+
+#[pymethods]
+impl PyVoxelStorage {
+    #[new]
+    pub fn new() -> Self {
+        Self {
+            inner: VoxelStorage::new(),
+        }
+    }
+
+    /// Sets the active 3D selection bounding box with incremental section pruning.
+    pub fn set_bounds(
+        &mut self,
+        min_x: i32,
+        min_y: i32,
+        min_z: i32,
+        size_x: i32,
+        size_y: i32,
+        size_z: i32,
+    ) -> bool {
+        self.inner.set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)
+    }
+
+    /// Gets the blockstate identifier string at world coordinate `(x, y, z)`.
+    pub fn get_block(&self, x: i32, y: i32, z: i32) -> &str {
+        self.inner.get_block(x, y, z)
+    }
+
+    /// Sets the blockstate at world coordinate `(x, y, z)` and marks dirty sections.
+    #[pyo3(signature = (x, y, z, state, biome=None))]
+    pub fn set_block(&mut self, x: i32, y: i32, z: i32, state: &str, biome: Option<&str>) -> bool {
+        self.inner.set_block(x, y, z, state, biome)
+    }
+
+    /// Ingests a full binary/snapshot packet with block palette and optional biome stream.
+    #[pyo3(signature = (min_x, min_y, min_z, size_x, size_y, size_z, palette, grid_indices, biome_palette=None, biome_indices=None))]
+    pub fn set_full_snapshot(
+        &mut self,
+        min_x: i32,
+        min_y: i32,
+        min_z: i32,
+        size_x: i32,
+        size_y: i32,
+        size_z: i32,
+        palette: Vec<String>,
+        grid_indices: Vec<u16>,
+        biome_palette: Option<Vec<String>>,
+        biome_indices: Option<Vec<u16>>,
+    ) {
+        self.inner.set_full_snapshot(
+            min_x,
+            min_y,
+            min_z,
+            size_x,
+            size_y,
+            size_z,
+            &palette,
+            &grid_indices,
+            biome_palette.as_deref(),
+            biome_indices.as_deref(),
+        );
+    }
+
+    /// Applies a batch of block delta modifications.
+    ///
+    /// `changes`: List of tuples `(x, y, z, new_blockstate)`
+    /// Returns: List of tuples `(x, y, z, old_blockstate, new_canonical_blockstate)`
+    pub fn apply_delta_update(
+        &mut self,
+        min_x: i32,
+        min_y: i32,
+        min_z: i32,
+        changes: Vec<(i32, i32, i32, String)>,
+    ) -> Vec<(i32, i32, i32, String, String)> {
+        let borrowed_changes: Vec<(i32, i32, i32, &str)> = changes
+            .iter()
+            .map(|(x, y, z, s)| (*x, *y, *z, s.as_str()))
+            .collect();
+        self.inner
+            .apply_delta_update(min_x, min_y, min_z, &borrowed_changes)
+    }
+
+    /// Gets current generation counter value atomically.
+    pub fn get_generation(&self) -> u64 {
+        self.inner.get_generation()
+    }
+
+    /// Returns the number of currently dirty sections requiring remeshing.
+    pub fn dirty_section_count(&self) -> usize {
+        self.inner.dirty_sections.len()
+    }
+
+    /// Marks all existing sections dirty for a full rebuild.
+    pub fn mark_all_sections_dirty(&mut self) {
+        self.inner.mark_all_sections_dirty();
+    }
+
+    /// Clears all sections, biomes, and bounds.
+    pub fn clear(&mut self) {
+        self.inner.clear();
+    }
+
+    /// Checks if world coordinate `(x, y, z)` falls within the active selection bounds.
+    pub fn contains(&self, x: i32, y: i32, z: i32) -> bool {
+        self.inner.contains(x, y, z)
+    }
+
+    /// Returns the biome registry identifier for block coordinate `(x, y, z)`.
+    pub fn get_biome(&self, x: i32, y: i32, z: i32) -> &str {
+        self.inner.get_biome(x, y, z)
+    }
+
+    /// Returns a list of all non-empty section coordinate tuples `(sx, sy, sz)`.
+    pub fn get_non_empty_sections<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
+        let list = PyList::empty(py);
+        for coord in self.inner.get_all_non_empty_sections() {
+            let tup = (coord.x, coord.y, coord.z);
+            let _ = list.append(tup);
+        }
+        list
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<VoxelStorage bounds=({}, {}, {}, size={}x{}x{}) sections={} dirty={}>",
+            self.inner.min_x,
+            self.inner.min_y,
+            self.inner.min_z,
+            self.inner.size_x,
+            self.inner.size_y,
+            self.inner.size_z,
+            self.inner.sections.len(),
+            self.inner.dirty_sections.len()
+        )
+    }
+}
+
+/// Mesher generation configuration.
+#[pyclass(name = "MesherConfig")]
+#[derive(Debug, Clone)]
+pub struct PyMesherConfig {
+    pub(crate) inner: MesherConfig,
+    pub(crate) num_threads: Option<usize>,
+}
+
+#[pymethods]
+impl PyMesherConfig {
+    #[new]
+    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, blender_coordinates=true, num_threads=None))]
+    pub fn new(
+        enable_ao: bool,
+        mesh_fluids: bool,
+        blender_coordinates: bool,
+        num_threads: Option<usize>,
+    ) -> Self {
+        let mut config = MesherConfig::default();
+        config.enable_ao = enable_ao;
+        config.mesh_fluids = mesh_fluids;
+        config.coordinate_system = if blender_coordinates {
+            CoordinateSystem::Blender
+        } else {
+            CoordinateSystem::Minecraft
+        };
+        Self {
+            inner: config,
+            num_threads,
+        }
+    }
+
+    #[getter]
+    pub fn enable_ao(&self) -> bool {
+        self.inner.enable_ao
+    }
+
+    #[setter]
+    pub fn set_enable_ao(&mut self, val: bool) {
+        self.inner.enable_ao = val;
+    }
+
+    #[getter]
+    pub fn mesh_fluids(&self) -> bool {
+        self.inner.mesh_fluids
+    }
+
+    #[setter]
+    pub fn set_mesh_fluids(&mut self, val: bool) {
+        self.inner.mesh_fluids = val;
+    }
+
+    #[getter]
+    pub fn blender_coordinates(&self) -> bool {
+        matches!(self.inner.coordinate_system, CoordinateSystem::Blender)
+    }
+
+    #[setter]
+    pub fn set_blender_coordinates(&mut self, val: bool) {
+        self.inner.coordinate_system = if val {
+            CoordinateSystem::Blender
+        } else {
+            CoordinateSystem::Minecraft
+        };
+    }
+
+    #[getter]
+    pub fn num_threads(&self) -> Option<usize> {
+        self.num_threads
+    }
+
+    #[setter]
+    pub fn set_num_threads(&mut self, val: Option<usize>) {
+        self.num_threads = val;
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<MesherConfig ao={} fluids={} coord={:?} threads={:?}>",
+            self.inner.enable_ao,
+            self.inner.mesh_fluids,
+            self.inner.coordinate_system,
+            self.num_threads
+        )
+    }
+}
