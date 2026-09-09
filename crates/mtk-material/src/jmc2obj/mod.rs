@@ -54,9 +54,9 @@ pub fn clean_jmc2obj_name(raw: &str) -> String {
         }
     }
 
-    // Replace hyphens with underscores in block stems if not in a namespace path
+    // Replace spaces and hyphens with underscores in block stems if not in a namespace path
     if !s.contains('/') {
-        s = s.replace('-', "_");
+        s = s.replace(' ', "_").replace('-', "_");
     }
 
     s
@@ -90,9 +90,37 @@ pub fn resolve_jmc2obj_candidates(cleaned_name: &str) -> Vec<String> {
         return candidates;
     }
 
-    // 4. Default prefix guessing: try "block/{name}", then "entity/{name}"
+    // 4. Strip common face/export suffixes (_all, _pattern, _side, _top, _bottom)
+    let suffixes = [
+        "_all",
+        "_pattern",
+        "_side",
+        "_top",
+        "_bottom",
+        "_front",
+        "_back",
+        "_end",
+        "_inner",
+        "_base",
+    ];
+
+    let mut stripped_stem = cleaned_name.to_string();
+    for suffix in suffixes {
+        if stripped_stem.ends_with(suffix) {
+            stripped_stem = stripped_stem[..stripped_stem.len() - suffix.len()].to_string();
+            break;
+        }
+    }
+
+    // 5. Default prefix guessing: try "block/{name}", then "entity/{name}", "item/{name}"
     candidates.push(format!("block/{}", cleaned_name));
+    if stripped_stem != cleaned_name {
+        candidates.push(format!("block/{}", stripped_stem));
+    }
     candidates.push(format!("entity/{}", cleaned_name));
+    if stripped_stem != cleaned_name {
+        candidates.push(format!("entity/{}", stripped_stem));
+    }
     candidates.push(format!("item/{}", cleaned_name));
 
     candidates

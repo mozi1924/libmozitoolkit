@@ -255,9 +255,9 @@ impl AtlasBuilder {
                         }
 
                         let u_min = (inner_x as f32) / (chunk.width as f32);
-                        let v_min = (inner_y as f32) / (chunk.height as f32);
                         let u_max = ((inner_x + fw) as f32) / (chunk.width as f32);
-                        let v_max = ((inner_y + fh) as f32) / (chunk.height as f32);
+                        let v_min = 1.0 - ((inner_y + fh) as f32) / (chunk.height as f32);
+                        let v_max = 1.0 - (inner_y as f32) / (chunk.height as f32);
 
                         address_map.sprites.insert(
                             sp.sprite_id.clone(),
@@ -395,15 +395,15 @@ impl AtlasBuilder {
 
                         // UV Bounds for entire strip
                         let strip_u_min = (inner_x as f32) / (chunk.width as f32);
-                        let strip_v_min = (inner_y as f32) / (chunk.height as f32);
                         let strip_u_max = ((inner_x + strip_w) as f32) / (chunk.width as f32);
-                        let strip_v_max = ((inner_y + strip_h) as f32) / (chunk.height as f32);
+                        let strip_v_min = 1.0 - ((inner_y + strip_h) as f32) / (chunk.height as f32);
+                        let strip_v_max = 1.0 - (inner_y as f32) / (chunk.height as f32);
 
                         // UV Bounds specifically for Frame 0 (top frame of the strip)
                         let f0_u_min = (inner_x as f32) / (chunk.width as f32);
-                        let f0_v_min = (inner_y as f32) / (chunk.height as f32);
                         let f0_u_max = ((inner_x + fw) as f32) / (chunk.width as f32);
-                        let f0_v_max = ((inner_y + fh) as f32) / (chunk.height as f32);
+                        let f0_v_min = 1.0 - ((inner_y + fh) as f32) / (chunk.height as f32);
+                        let f0_v_max = 1.0 - (inner_y as f32) / (chunk.height as f32);
 
                         // Step per frame in UV space
                         let v_step = (fh as f32) / (chunk.height as f32);
