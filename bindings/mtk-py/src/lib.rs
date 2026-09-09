@@ -3,6 +3,7 @@
 //! Exposes `libmtk` data structures and high-performance algorithms to Python via PyO3.
 
 pub mod cull;
+pub mod material;
 pub mod mesh;
 pub mod mesher;
 pub mod resource;
@@ -12,6 +13,7 @@ pub mod voxel;
 use pyo3::prelude::*;
 
 pub use cull::PyFaceCuller;
+pub use material::PyMaterialResolver;
 pub use mesh::PyMeshData;
 pub use mesher::PySectionMesher;
 pub use resource::PyResourcePackStack;
@@ -45,7 +47,10 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyAtlasBuilder>()?;
     m.add_class::<PyBakedAtlas>()?;
 
-    // 6. Metadata
+    // 6. Material & UV Remapper
+    m.add_class::<PyMaterialResolver>()?;
+
+    // 7. Metadata
     m.add_function(wrap_pyfunction!(version, m)?)?;
 
     Ok(())

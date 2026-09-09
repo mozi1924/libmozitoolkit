@@ -53,7 +53,7 @@ impl PyResourcePackStack {
                     path
                 )));
             }
-            let pack = ZipPack::from_file(p)
+            let pack = ZipPack::from_file(path, p)
                 .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
             self.inner.push_pack(Box::new(pack));
             Ok(true)

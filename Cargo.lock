@@ -236,6 +236,7 @@ version = "0.1.0"
 dependencies = [
  "mtk-core",
  "mtk-cull",
+ "mtk-material",
  "mtk-model",
  "mtk-resource",
  "mtk-texture",
@@ -338,6 +339,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "mtk-material"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "mtk-core",
+ "mtk-resource",
+ "mtk-texture",
+ "rayon",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "mtk-model"
 version = "0.1.0"
 dependencies = [
@@ -358,6 +373,7 @@ dependencies = [
  "libmtk",
  "mtk-core",
  "mtk-cull",
+ "mtk-material",
  "mtk-model",
  "mtk-resource",
  "mtk-texture",

@@ -1,0 +1,21 @@
+[package]
+name = "mtk-material"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+rust-version.workspace = true
+
+[dependencies]
+mtk-core = { workspace = true }
+mtk-resource = { workspace = true }
+mtk-texture = { workspace = true }
+glam = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+rayon = { workspace = true }
+
+[dev-dependencies]

@@ -14,6 +14,7 @@ pub use mtk_model as model;
 pub use mtk_voxel as voxel;
 pub use mtk_resource as resource;
 pub use mtk_texture as texture;
+pub use mtk_material as material;
 
 use thiserror::Error;
 
@@ -31,6 +32,9 @@ pub enum MtkError {
 
     #[error("Resource error: {0}")]
     Resource(#[from] mtk_resource::error::ResourceError),
+
+    #[error("Material error: {0}")]
+    Material(#[from] mtk_material::MaterialError),
 }
 
 pub use mtk_resource::{

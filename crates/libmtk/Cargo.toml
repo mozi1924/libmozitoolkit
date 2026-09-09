@@ -15,6 +15,7 @@ mtk-model = { workspace = true }
 mtk-voxel = { workspace = true }
 mtk-resource = { workspace = true }
 mtk-texture = { workspace = true }
+mtk-material = { workspace = true }
 thiserror = { workspace = true }
 
 [features]

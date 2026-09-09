@@ -18,6 +18,7 @@ mtk-cull = { workspace = true }
 mtk-model = { workspace = true }
 mtk-resource = { workspace = true, features = ["zip"] }
 mtk-texture = { workspace = true }
+mtk-material = { workspace = true }
 mtk-voxel = { workspace = true }
 glam = { workspace = true }
 pyo3 = { workspace = true, features = ["abi3-py310"] }
