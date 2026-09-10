@@ -27,12 +27,14 @@ std = [
     "mtk-voxel/std",
     "mtk-resource/std",
     "mtk-texture/std",
+    "mtk-material/std",
 ]
 parallel = [
     "mtk-model/parallel",
     "mtk-voxel/parallel",
     "mtk-resource/parallel",
     "mtk-texture/parallel",
+    "mtk-material/parallel",
 ]
 sync = [
     "mtk-voxel/sync",

@@ -139,6 +139,52 @@ impl MeshData {
             col.extend_from_slice(other_col);
         }
     }
+
+    /// Returns a flat contiguous slice of vertex positions `[x0, y0, z0, x1, y1, z1, ...]`.
+    ///
+    /// Memory layout is guaranteed continuous `f32` with no padding.
+    #[inline]
+    pub fn positions_flat(&self) -> &[f32] {
+        unsafe {
+            std::slice::from_raw_parts(
+                self.positions.as_ptr() as *const f32,
+                self.positions.len() * 3,
+            )
+        }
+    }
+
+    /// Returns a flat contiguous slice of vertex normals `[nx0, ny0, nz0, nx1, ny1, nz1, ...]`.
+    #[inline]
+    pub fn normals_flat(&self) -> &[f32] {
+        unsafe {
+            std::slice::from_raw_parts(
+                self.normals.as_ptr() as *const f32,
+                self.normals.len() * 3,
+            )
+        }
+    }
+
+    /// Returns a flat contiguous slice of primary UVs `[u0, v0, u1, v1, ...]`.
+    #[inline]
+    pub fn uvs_flat(&self) -> &[f32] {
+        unsafe {
+            std::slice::from_raw_parts(
+                self.uvs.as_ptr() as *const f32,
+                self.uvs.len() * 2,
+            )
+        }
+    }
+
+    /// Returns a flat contiguous slice of vertex colors `[r0, g0, b0, a0, ...]` if present.
+    #[inline]
+    pub fn colors_flat(&self) -> Option<&[f32]> {
+        self.colors.as_ref().map(|cols| unsafe {
+            std::slice::from_raw_parts(
+                cols.as_ptr() as *const f32,
+                cols.len() * 4,
+            )
+        })
+    }
 }
 
 #[cfg(test)]
@@ -162,5 +208,20 @@ mod tests {
         assert_eq!(mesh.face_count(), 1);
         assert_eq!(mesh.face_materials[0], 1);
         assert_eq!(mesh.face_tint_indices[0], 0);
+
+        let pos_flat = mesh.positions_flat();
+        assert_eq!(pos_flat.len(), 12);
+        assert_eq!(pos_flat[0], mesh.positions[0][0]);
+        assert_eq!(pos_flat[1], mesh.positions[0][1]);
+        assert_eq!(pos_flat[2], mesh.positions[0][2]);
+
+        let norm_flat = mesh.normals_flat();
+        assert_eq!(norm_flat.len(), 12);
+        assert_eq!(norm_flat[0], 0.0);
+        assert_eq!(norm_flat[1], 1.0);
+        assert_eq!(norm_flat[2], 0.0);
+
+        let uvs_flat = mesh.uvs_flat();
+        assert_eq!(uvs_flat.len(), 8);
     }
 }

@@ -199,34 +199,17 @@ impl PyMeshData {
 
     /// Flattened vertex positions `[x0, y0, z0, x1, y1, z1, ...]`.
     pub fn get_flat_positions<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
-        let mut flat = Vec::with_capacity(self.inner.positions.len() * 3);
-        for p in &self.inner.positions {
-            flat.push(p[0]);
-            flat.push(p[1]);
-            flat.push(p[2]);
-        }
-        PyList::new(py, flat).expect("failed to create list")
+        PyList::new(py, self.inner.positions_flat()).expect("failed to create list")
     }
 
     /// Flattened vertex normals `[nx0, ny0, nz0, nx1, ny1, nz1, ...]`.
     pub fn get_flat_normals<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
-        let mut flat = Vec::with_capacity(self.inner.normals.len() * 3);
-        for n in &self.inner.normals {
-            flat.push(n[0]);
-            flat.push(n[1]);
-            flat.push(n[2]);
-        }
-        PyList::new(py, flat).expect("failed to create list")
+        PyList::new(py, self.inner.normals_flat()).expect("failed to create list")
     }
 
     /// Flattened vertex UVs `[u0, v0, u1, v1, ...]`.
     pub fn get_flat_uvs<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
-        let mut flat = Vec::with_capacity(self.inner.uvs.len() * 2);
-        for uv in &self.inner.uvs {
-            flat.push(uv[0]);
-            flat.push(uv[1]);
-        }
-        PyList::new(py, flat).expect("failed to create list")
+        PyList::new(py, self.inner.uvs_flat()).expect("failed to create list")
     }
 
     /// Triangle face indices `[i0, i1, i2, i3, i4, i5, ...]`.

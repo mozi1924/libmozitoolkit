@@ -27,9 +27,6 @@ pub fn version() -> String {
 #[wasm_bindgen]
 pub struct WasmMeshData {
     inner: MeshData,
-    cached_flat_positions: Vec<f32>,
-    cached_flat_normals: Vec<f32>,
-    cached_flat_uvs: Vec<f32>,
 }
 
 #[wasm_bindgen]
@@ -38,9 +35,6 @@ impl WasmMeshData {
     pub fn new() -> Self {
         Self {
             inner: MeshData::new(),
-            cached_flat_positions: Vec::new(),
-            cached_flat_normals: Vec::new(),
-            cached_flat_uvs: Vec::new(),
         }
     }
 
@@ -65,9 +59,6 @@ impl WasmMeshData {
 
     pub fn clear(&mut self) {
         self.inner.clear();
-        self.cached_flat_positions.clear();
-        self.cached_flat_normals.clear();
-        self.cached_flat_uvs.clear();
     }
 
     /// Appends a unit cube face in given direction (0: Down, 1: Up, 2: North, 3: South, 4: West, 5: East).
@@ -91,41 +82,18 @@ impl WasmMeshData {
     }
 
     /// Returns a copied Float32Array of vertex positions `[x0, y0, z0, x1, y1, z1, ...]`.
-    pub fn get_flat_positions(&mut self) -> Float32Array {
-        let v_count = self.inner.vertex_count();
-        self.cached_flat_positions.clear();
-        self.cached_flat_positions.reserve(v_count * 3);
-        for p in &self.inner.positions {
-            self.cached_flat_positions.push(p[0]);
-            self.cached_flat_positions.push(p[1]);
-            self.cached_flat_positions.push(p[2]);
-        }
-        Float32Array::from(self.cached_flat_positions.as_slice())
+    pub fn get_flat_positions(&self) -> Float32Array {
+        Float32Array::from(self.inner.positions_flat())
     }
 
     /// Returns a copied Float32Array of vertex normals `[nx0, ny0, nz0, ...]`.
-    pub fn get_flat_normals(&mut self) -> Float32Array {
-        let v_count = self.inner.vertex_count();
-        self.cached_flat_normals.clear();
-        self.cached_flat_normals.reserve(v_count * 3);
-        for n in &self.inner.normals {
-            self.cached_flat_normals.push(n[0]);
-            self.cached_flat_normals.push(n[1]);
-            self.cached_flat_normals.push(n[2]);
-        }
-        Float32Array::from(self.cached_flat_normals.as_slice())
+    pub fn get_flat_normals(&self) -> Float32Array {
+        Float32Array::from(self.inner.normals_flat())
     }
 
     /// Returns a copied Float32Array of vertex UVs `[u0, v0, u1, v1, ...]`.
-    pub fn get_flat_uvs(&mut self) -> Float32Array {
-        let v_count = self.inner.vertex_count();
-        self.cached_flat_uvs.clear();
-        self.cached_flat_uvs.reserve(v_count * 2);
-        for uv in &self.inner.uvs {
-            self.cached_flat_uvs.push(uv[0]);
-            self.cached_flat_uvs.push(uv[1]);
-        }
-        Float32Array::from(self.cached_flat_uvs.as_slice())
+    pub fn get_flat_uvs(&self) -> Float32Array {
+        Float32Array::from(self.inner.uvs_flat())
     }
 
     /// Returns a copied Uint32Array of triangle indices.

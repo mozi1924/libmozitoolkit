@@ -39,9 +39,6 @@ pub struct MtkMeshView {
 /// Opaque heap container holding `MeshData`.
 pub struct MtkMeshBuffer {
     inner: MeshData,
-    cached_flat_positions: Vec<f32>,
-    cached_flat_normals: Vec<f32>,
-    cached_flat_uvs: Vec<f32>,
 }
 
 /// Creates a new empty `MtkMeshBuffer`.
@@ -49,9 +46,6 @@ pub struct MtkMeshBuffer {
 pub extern "C" fn mtk_mesh_buffer_new() -> *mut MtkMeshBuffer {
     Box::into_raw(Box::new(MtkMeshBuffer {
         inner: MeshData::new(),
-        cached_flat_positions: Vec::new(),
-        cached_flat_normals: Vec::new(),
-        cached_flat_uvs: Vec::new(),
     }))
 }
 
@@ -68,9 +62,6 @@ pub unsafe extern "C" fn mtk_mesh_buffer_free(buffer: *mut MtkMeshBuffer) {
 pub unsafe extern "C" fn mtk_mesh_buffer_clear(buffer: *mut MtkMeshBuffer) {
     if let Some(buf) = buffer.as_mut() {
         buf.inner.clear();
-        buf.cached_flat_positions.clear();
-        buf.cached_flat_normals.clear();
-        buf.cached_flat_uvs.clear();
     }
 }
 
@@ -112,37 +103,11 @@ pub unsafe extern "C" fn mtk_mesh_buffer_get_view(buffer: *mut MtkMeshBuffer) ->
     if let Some(buf) = buffer.as_mut() {
         let v_count = buf.inner.vertex_count();
 
-        // Flatten positions
-        buf.cached_flat_positions.clear();
-        buf.cached_flat_positions.reserve(v_count * 3);
-        for p in &buf.inner.positions {
-            buf.cached_flat_positions.push(p[0]);
-            buf.cached_flat_positions.push(p[1]);
-            buf.cached_flat_positions.push(p[2]);
-        }
-
-        // Flatten normals
-        buf.cached_flat_normals.clear();
-        buf.cached_flat_normals.reserve(v_count * 3);
-        for n in &buf.inner.normals {
-            buf.cached_flat_normals.push(n[0]);
-            buf.cached_flat_normals.push(n[1]);
-            buf.cached_flat_normals.push(n[2]);
-        }
-
-        // Flatten uvs
-        buf.cached_flat_uvs.clear();
-        buf.cached_flat_uvs.reserve(v_count * 2);
-        for uv in &buf.inner.uvs {
-            buf.cached_flat_uvs.push(uv[0]);
-            buf.cached_flat_uvs.push(uv[1]);
-        }
-
         MtkMeshView {
-            positions: buf.cached_flat_positions.as_ptr(),
+            positions: buf.inner.positions_flat().as_ptr(),
             vertex_count: v_count,
-            normals: buf.cached_flat_normals.as_ptr(),
-            uvs: buf.cached_flat_uvs.as_ptr(),
+            normals: buf.inner.normals_flat().as_ptr(),
+            uvs: buf.inner.uvs_flat().as_ptr(),
             indices: buf.inner.indices.as_ptr(),
             index_count: buf.inner.indices.len(),
             face_materials: buf.inner.face_materials.as_ptr(),

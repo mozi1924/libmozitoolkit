@@ -16,6 +16,19 @@ glam = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-rayon = { workspace = true }
+rayon = { workspace = true, optional = true }
+
+[features]
+default = ["std", "parallel"]
+std = [
+    "mtk-core/std",
+    "mtk-resource/std",
+    "mtk-texture/std",
+]
+parallel = [
+    "dep:rayon",
+    "mtk-resource/parallel",
+    "mtk-texture/parallel",
+]
 
 [dev-dependencies]
