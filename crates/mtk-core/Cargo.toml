@@ -12,8 +12,10 @@ description = "Core geometry types, mesh buffers, and Minecraft coordinate primi
 glam = { workspace = true }
 serde = { workspace = true, optional = true }
 bitflags = { workspace = true }
+rayon = { workspace = true, optional = true }
 
 [features]
 default = ["std", "serde"]
 std = ["glam/std"]
 serde = ["dep:serde", "glam/serde"]
+parallel = ["dep:rayon", "std"]

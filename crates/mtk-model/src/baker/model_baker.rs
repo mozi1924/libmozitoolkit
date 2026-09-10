@@ -513,26 +513,10 @@ impl ModelBaker {
         SF: Fn(&str) -> Option<BlockStateDefinition> + Sync + Send,
         MF: Fn(&str) -> Option<BlockModelJson> + Sync + Send,
     {
-        #[cfg(feature = "parallel")]
-        {
-            if let Some(threads) = num_threads {
-                if threads > 0 {
-                    let pool = rayon::ThreadPoolBuilder::new()
-                        .num_threads(threads)
-                        .thread_name(|i| format!("mtk-baker-{}", i))
-                        .build()
-                        .map_err(|e| ModelError::ThreadPoolError(e.to_string()))?;
-                    return pool.install(|| Self::bake_batch(states, state_loader, model_loader));
-                }
-            }
+        mtk_core::constants::concurrency::execute_parallel(num_threads, || {
             Self::bake_batch(states, state_loader, model_loader)
-        }
-
-        #[cfg(not(feature = "parallel"))]
-        {
-            let _ = num_threads;
-            Self::bake_batch(states, state_loader, model_loader)
-        }
+        })
+        .map_err(ModelError::ThreadPoolError)?
     }
 }
 

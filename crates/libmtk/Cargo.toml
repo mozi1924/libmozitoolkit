@@ -30,6 +30,7 @@ std = [
     "mtk-material/std",
 ]
 parallel = [
+    "mtk-core/parallel",
     "mtk-model/parallel",
     "mtk-voxel/parallel",
     "mtk-resource/parallel",

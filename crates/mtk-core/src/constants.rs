@@ -105,12 +105,29 @@ pub mod lighting {
 
 /// Concurrency, thread pool, and parallel scheduling constants & helpers.
 pub mod concurrency {
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    static GLOBAL_OVERRIDE_CONCURRENCY: AtomicUsize = AtomicUsize::new(0);
+
+    /// Manually sets or injects the host hardware concurrency (e.g. from `navigator.hardwareConcurrency` in WASM/browser).
+    /// Pass `0` to reset to automatic detection.
+    #[inline]
+    pub fn set_hardware_concurrency(count: usize) {
+        GLOBAL_OVERRIDE_CONCURRENCY.store(count, Ordering::Relaxed);
+    }
+
     /// Safe hardware concurrency detector that works across Native OS and WebAssembly.
     ///
+    /// - If an explicit override has been set via `set_hardware_concurrency`, returns that value.
     /// - On native targets with `std`, retrieves `std::thread::available_parallelism()`.
-    /// - On `wasm32` or single-threaded targets, returns `1`.
+    /// - On `wasm32` or single-threaded targets without override, returns `1`.
     #[inline]
     pub fn get_safe_hardware_concurrency() -> usize {
+        let override_val = GLOBAL_OVERRIDE_CONCURRENCY.load(Ordering::Relaxed);
+        if override_val > 0 {
+            return override_val;
+        }
+
         #[cfg(all(feature = "std", not(target_arch = "wasm32")))]
         {
             std::thread::available_parallelism()
@@ -124,11 +141,62 @@ pub mod concurrency {
     }
 
     /// Conservative thread count calculator: min(max_cap, max(1, available / 2)).
-    /// Leaves headroom for host UI (e.g. Blender) and OS interactivity.
+    /// Leaves headroom for host UI (e.g. Blender/Browser main thread) and OS interactivity.
     #[inline]
     pub fn determine_conservative_threads(max_cap: usize) -> usize {
         let available = get_safe_hardware_concurrency();
         (available / 2).clamp(1, max_cap.max(1))
+    }
+
+    /// Optimal throughput thread count calculator: max(1, available - 1).
+    /// Uses maximum multi-core power while leaving 1 core for the main thread.
+    #[inline]
+    pub fn determine_optimal_threads() -> usize {
+        let available = get_safe_hardware_concurrency();
+        if available <= 1 {
+            1
+        } else {
+            available.saturating_sub(1)
+        }
+    }
+
+    /// Unified parallel execution helper that bridges native OS threads, Rayon thread pools,
+    /// and WebAssembly (wasm-bindgen-rayon / web workers).
+    #[inline]
+    pub fn execute_parallel<F, R>(num_threads: Option<usize>, work: F) -> Result<R, String>
+    where
+        F: FnOnce() -> R + Send,
+        R: Send,
+    {
+        #[cfg(feature = "parallel")]
+        {
+            #[cfg(target_arch = "wasm32")]
+            {
+                let _ = num_threads;
+                Ok(work())
+            }
+
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                if let Some(threads) = num_threads {
+                    if threads > 0 {
+                        let pool = rayon::ThreadPoolBuilder::new()
+                            .num_threads(threads)
+                            .thread_name(|i| format!("mtk-worker-{}", i))
+                            .build()
+                            .map_err(|e| e.to_string())?;
+                        return Ok(pool.install(work));
+                    }
+                }
+                Ok(work())
+            }
+        }
+
+        #[cfg(not(feature = "parallel"))]
+        {
+            let _ = num_threads;
+            Ok(work())
+        }
     }
 }
 
@@ -167,10 +235,23 @@ mod tests {
 
     #[test]
     fn test_concurrency_helpers() {
+        concurrency::set_hardware_concurrency(0); // reset
         let conc = concurrency::get_safe_hardware_concurrency();
         assert!(conc >= 1);
         let cons = concurrency::determine_conservative_threads(8);
         assert!((1..=8).contains(&cons));
+
+        // Test manual override
+        concurrency::set_hardware_concurrency(16);
+        assert_eq!(concurrency::get_safe_hardware_concurrency(), 16);
+        assert_eq!(concurrency::determine_optimal_threads(), 15);
+        assert_eq!(concurrency::determine_conservative_threads(32), 8);
+
+        // Test execute_parallel
+        let res = concurrency::execute_parallel(Some(2), || 42 * 2).unwrap();
+        assert_eq!(res, 84);
+
+        concurrency::set_hardware_concurrency(0); // cleanup
     }
 }
 

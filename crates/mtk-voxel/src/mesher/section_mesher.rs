@@ -364,26 +364,10 @@ impl SectionMesher {
     where
         F: Fn(&str) -> Option<Arc<BakedModel>> + Sync + Send,
     {
-        #[cfg(feature = "parallel")]
-        {
-            if let Some(threads) = num_threads {
-                if threads > 0 {
-                    let pool = rayon::ThreadPoolBuilder::new()
-                        .num_threads(threads)
-                        .thread_name(|i| format!("mtk-mesher-{}", i))
-                        .build()
-                        .map_err(|e| VoxelError::ThreadPoolError(e.to_string()))?;
-                    return pool.install(|| Self::mesh_sections(sections, culler, model_provider, config));
-                }
-            }
+        mtk_core::constants::concurrency::execute_parallel(num_threads, || {
             Self::mesh_sections(sections, culler, model_provider, config)
-        }
-
-        #[cfg(not(feature = "parallel"))]
-        {
-            let _ = num_threads;
-            Self::mesh_sections(sections, culler, model_provider, config)
-        }
+        })
+        .map_err(VoxelError::ThreadPoolError)?
     }
 }
 
