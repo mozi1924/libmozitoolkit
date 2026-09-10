@@ -16,5 +16,7 @@ classifiers = [
 ]
 
 [tool.maturin]
-module-name = "libmtk_py"
+module-name = "libmtk_py.libmtk_py"
+python-source = "python"
 features = ["pyo3/extension-module"]
+

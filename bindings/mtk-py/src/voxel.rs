@@ -101,9 +101,58 @@ impl PyVoxelStorage {
         self.inner.get_generation()
     }
 
+    #[getter]
+    pub fn min_x(&self) -> i32 {
+        self.inner.min_x
+    }
+
+    #[getter]
+    pub fn min_y(&self) -> i32 {
+        self.inner.min_y
+    }
+
+    #[getter]
+    pub fn min_z(&self) -> i32 {
+        self.inner.min_z
+    }
+
+    #[getter]
+    pub fn size_x(&self) -> i32 {
+        self.inner.size_x
+    }
+
+    #[getter]
+    pub fn size_y(&self) -> i32 {
+        self.inner.size_y
+    }
+
+    #[getter]
+    pub fn size_z(&self) -> i32 {
+        self.inner.size_z
+    }
+
     /// Returns the number of currently dirty sections requiring remeshing.
     pub fn dirty_section_count(&self) -> usize {
         self.inner.dirty_sections.len()
+    }
+
+    /// Returns the list of dirty section coordinate tuples `(sx, sy, sz)`.
+    pub fn get_dirty_sections<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
+        let list = PyList::empty(py);
+        for coord in &self.inner.dirty_sections {
+            let _ = list.append((coord.x, coord.y, coord.z));
+        }
+        list
+    }
+
+    /// Clears all dirty section markers.
+    pub fn clear_dirty_sections(&mut self) {
+        self.inner.dirty_sections.clear();
+    }
+
+    /// Marks a specific section as dirty.
+    pub fn mark_section_dirty(&mut self, sec_x: i32, sec_y: i32, sec_z: i32) {
+        self.inner.dirty_sections.insert(glam::IVec3::new(sec_x, sec_y, sec_z));
     }
 
     /// Marks all existing sections dirty for a full rebuild.
