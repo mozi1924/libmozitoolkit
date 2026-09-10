@@ -19,7 +19,7 @@ mtk-material = { workspace = true }
 thiserror = { workspace = true }
 
 [features]
-default = ["std", "parallel"]
+default = ["std", "parallel", "sync"]
 std = [
     "mtk-core/std",
     "mtk-cull/std",
@@ -33,6 +33,9 @@ parallel = [
     "mtk-voxel/parallel",
     "mtk-resource/parallel",
     "mtk-texture/parallel",
+]
+sync = [
+    "mtk-voxel/sync",
 ]
 
 [dev-dependencies]

@@ -6,7 +6,9 @@ pub mod cull;
 pub mod material;
 pub mod mesh;
 pub mod mesher;
+pub mod protocol;
 pub mod resource;
+pub mod sync;
 pub mod texture;
 pub mod voxel;
 
@@ -16,7 +18,9 @@ pub use cull::PyFaceCuller;
 pub use material::PyMaterialResolver;
 pub use mesh::PyMeshData;
 pub use mesher::PySectionMesher;
+pub use protocol::{decode_packet, encode_full_sync_request, encode_repair_requests, encode_sync_config};
 pub use resource::PyResourcePackStack;
+pub use sync::PyLiveSyncSession;
 pub use texture::{PyAtlasBuilder, PyBakedAtlas};
 pub use voxel::{PyMesherConfig, PyVoxelStorage};
 
@@ -42,15 +46,22 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // 4. Meshing Generator
     m.add_class::<PySectionMesher>()?;
 
-    // 5. Resource Pack & Textures
+    // 5. Live Sync & Protocol
+    m.add_class::<PyLiveSyncSession>()?;
+    m.add_function(wrap_pyfunction!(decode_packet, m)?)?;
+    m.add_function(wrap_pyfunction!(encode_full_sync_request, m)?)?;
+    m.add_function(wrap_pyfunction!(encode_repair_requests, m)?)?;
+    m.add_function(wrap_pyfunction!(encode_sync_config, m)?)?;
+
+    // 6. Resource Pack & Textures
     m.add_class::<PyResourcePackStack>()?;
     m.add_class::<PyAtlasBuilder>()?;
     m.add_class::<PyBakedAtlas>()?;
 
-    // 6. Material & UV Remapper
+    // 7. Material & UV Remapper
     m.add_class::<PyMaterialResolver>()?;
 
-    // 7. Metadata
+    // 8. Metadata
     m.add_function(wrap_pyfunction!(version, m)?)?;
 
     Ok(())
@@ -107,6 +118,30 @@ mod tests {
             let rebuilt = PySectionMesher::rebuild_dirty_sections(py, &mut storage, Some(&config), None).unwrap();
             assert_eq!(rebuilt.len(), 1);
             assert_eq!(storage.dirty_section_count(), 0);
+        });
+    }
+
+    #[test]
+    fn test_python_live_sync_session_and_protocol() {
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            // Test packet decode
+            let pkt_bytes = [
+                0x4D, 0x43, 0x01, 0x01,
+                0x00, 0x00, 0x00, 0x00,
+                0x40, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00,
+                0x10, 0x00, 0x00, 0x00,
+                0x10, 0x00, 0x00, 0x00,
+                0x10, 0x00, 0x00, 0x00,
+            ];
+            let dict = decode_packet(py, &pkt_bytes).unwrap();
+            assert_eq!(dict.get_item("type").unwrap().unwrap().extract::<String>().unwrap(), "SELECTION_INFO");
+
+            // Test session
+            let session = PyLiveSyncSession::new(None, None);
+            let events = session.poll_events(py).unwrap();
+            assert_eq!(events.len(), 0);
         });
     }
 

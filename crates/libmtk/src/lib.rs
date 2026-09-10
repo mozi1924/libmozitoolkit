@@ -77,5 +77,12 @@ pub use mtk_voxel::mesher::SectionMesher;
 pub use mtk_voxel::storage::{PaddedVoxelArray, SectionStorage};
 pub use mtk_voxel::types::{CoordinateSystem, MesherConfig, WorldMeshBuildResult};
 pub use mtk_voxel::world::VoxelStorage;
+pub use mtk_voxel::protocol;
+pub use mtk_voxel::protocol::{
+    decode_packet, encode_full_sync_request, encode_repair_requests, encode_sync_config,
+    DeltaChange, ManifestSectionEntry, Packet, PacketType, ProtocolError, StreamStatus,
+};
+#[cfg(feature = "sync")]
+pub use mtk_voxel::sync::{LiveSyncSession, SyncEvent};
 
 

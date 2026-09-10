@@ -56,3 +56,47 @@ fn test_world_bounds_and_pruning() {
     // Out-of-bounds block should be pruned
     assert_eq!(world.get_block(25, 25, 25), "minecraft:air");
 }
+
+#[test]
+fn test_section_snapshot_and_manifest_validation() {
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+
+    let palette = vec!["minecraft:air".to_string(), "minecraft:stone".to_string()];
+    let mut grid = vec![0u16; 4096];
+    grid[0] = 1; // (0,0,0) is stone
+
+    world.set_section_snapshot(0, 0, 0, 0, 0, 0, 16, 16, 16, &palette, &grid, None, None);
+    assert_eq!(world.get_block(0, 0, 0), "minecraft:stone");
+
+    let crc = world.calculate_and_store_section_crc(IVec3::new(0, 0, 0));
+    assert_ne!(crc, EMPTY_SECTION_CRC);
+
+    // Matching manifest: returns empty mismatch
+    let manifest = vec![(0, 0, 0, crc)];
+    let mismatches = world.validate_manifest(&manifest, None);
+    assert!(mismatches.is_empty());
+
+    // Mismatched CRC: returns coord
+    let bad_manifest = vec![(0, 0, 0, 0x12345678)];
+    let bad_mismatches = world.validate_manifest(&bad_manifest, None);
+    assert_eq!(bad_mismatches, vec![IVec3::new(0, 0, 0)]);
+}
+
+#[test]
+fn test_manifest_metadata_export_import() {
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 32, 16, 16);
+    world.set_block(1, 2, 3, "minecraft:iron_block", None);
+    world.calculate_and_store_section_crc(IVec3::new(0, 0, 0));
+
+    let json_meta = world.export_manifest_metadata();
+    assert_eq!(json_meta["size_x"], 32);
+
+    let mut restored = VoxelStorage::new();
+    assert!(restored.import_manifest_metadata(&json_meta));
+    assert_eq!(restored.min_x, 0);
+    assert_eq!(restored.size_x, 32);
+    assert_eq!(restored.section_crc_map.get(&IVec3::new(0, 0, 0)), world.section_crc_map.get(&IVec3::new(0, 0, 0)));
+}
+

@@ -126,6 +126,113 @@ impl PyVoxelStorage {
         self.inner.get_biome(x, y, z)
     }
 
+    /// Ingests a single 16x16x16 section snapshot packet and marks dirty sections.
+    #[pyo3(signature = (sec_x, sec_y, sec_z, start_x, start_y, start_z, size_x, size_y, size_z, palette, grid_indices, biome_palette=None, biome_indices=None))]
+    pub fn set_section_snapshot(
+        &mut self,
+        sec_x: i32,
+        sec_y: i32,
+        sec_z: i32,
+        start_x: i32,
+        start_y: i32,
+        start_z: i32,
+        size_x: i32,
+        size_y: i32,
+        size_z: i32,
+        palette: Vec<String>,
+        grid_indices: Vec<u16>,
+        biome_palette: Option<Vec<String>>,
+        biome_indices: Option<Vec<u16>>,
+    ) -> bool {
+        self.inner.set_section_snapshot(
+            sec_x,
+            sec_y,
+            sec_z,
+            start_x,
+            start_y,
+            start_z,
+            size_x,
+            size_y,
+            size_z,
+            &palette,
+            &grid_indices,
+            biome_palette.as_deref(),
+            biome_indices.as_deref(),
+        )
+    }
+
+    /// Checks if incoming full snapshot data matches current memory state without mutations.
+    pub fn is_snapshot_identical(
+        &self,
+        min_x: i32,
+        min_y: i32,
+        min_z: i32,
+        size_x: i32,
+        size_y: i32,
+        size_z: i32,
+        palette: Vec<String>,
+        grid_indices: Vec<u16>,
+    ) -> bool {
+        self.inner.is_snapshot_identical(
+            min_x,
+            min_y,
+            min_z,
+            size_x,
+            size_y,
+            size_z,
+            &palette,
+            &grid_indices,
+        )
+    }
+
+    /// Compares server section CRC32 hashes with local ones and returns mismatched section coordinates.
+    pub fn validate_manifest(
+        &mut self,
+        server_sections: Vec<(i32, i32, i32, u32)>,
+        existing_section_meshes: Option<Vec<(i32, i32, i32)>>,
+    ) -> Vec<(i32, i32, i32)> {
+        let set: Option<std::collections::HashSet<glam::IVec3>> = existing_section_meshes.map(|list| {
+            list.into_iter()
+                .map(|(x, y, z)| glam::IVec3::new(x, y, z))
+                .collect()
+        });
+
+        self.inner
+            .validate_manifest(&server_sections, set.as_ref())
+            .into_iter()
+            .map(|c| (c.x, c.y, c.z))
+            .collect()
+    }
+
+    /// Checks if a CRC32 matches the canonical empty air CRC for this section's clamped volume.
+    pub fn is_empty_section_crc(&self, sec_x: i32, sec_y: i32, sec_z: i32, crc_val: u32) -> bool {
+        self.inner.is_empty_section_crc(glam::IVec3::new(sec_x, sec_y, sec_z), crc_val)
+    }
+
+    /// Computes and caches CRC32 for a single section.
+    pub fn calculate_and_store_section_crc(&mut self, sec_x: i32, sec_y: i32, sec_z: i32) -> u32 {
+        self.inner.calculate_and_store_section_crc(glam::IVec3::new(sec_x, sec_y, sec_z))
+    }
+
+    /// Recomputes CRC32 for all sections currently loaded.
+    pub fn recalculate_all_section_crcs(&mut self) {
+        self.inner.recalculate_all_section_crcs();
+    }
+
+    /// Exports manifest metadata (bounds and CRC map) as JSON string for scene persistence.
+    pub fn export_manifest_metadata(&self) -> String {
+        self.inner.export_manifest_metadata().to_string()
+    }
+
+    /// Imports manifest metadata from JSON string.
+    pub fn import_manifest_metadata(&mut self, json_str: &str) -> bool {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(json_str) {
+            self.inner.import_manifest_metadata(&val)
+        } else {
+            false
+        }
+    }
+
     /// Returns a list of all non-empty section coordinate tuples `(sx, sy, sz)`.
     pub fn get_non_empty_sections<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
         let list = PyList::empty(py);

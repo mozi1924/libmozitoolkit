@@ -110,34 +110,41 @@ pub struct Quad {
 
 ---
 
-## 6. 体素与世界网格化：`mtk-voxel`
+## 6. 体素与实时同步引擎：`mtk-voxel`
 
-负责 16x16x16 Section 体素存储、平滑环境光遮蔽 (AO) 计算、生物群系过渡与网格生成。
+负责 16x16x16 Section 体素存储、平滑环境光遮蔽 (AO) 计算、生物群系过渡、网格生成、二进制网络协议编解码与原生 WebSocket 实时协同。
 
 ### 6.1 核心类型与函数
+- `VoxelStorage`: 3D 稀疏世界体素容器，支持包围盒动态裁剪、局部区块快照 `set_section_snapshot`、CRC32 清单比对 `validate_manifest`、快照一致性比对 `is_snapshot_identical` 与场景元数据导入/导出 `export_manifest_metadata` / `import_manifest_metadata`。
 - `SectionStorage`: 紧凑的高性能 16x16x16 方块状态 ID 存储（支持调色板与位压缩）。
 - `PaddedVoxelArray`: 带有 1 格外边框 (18x18x18) 的体素采样窗口，供网格化时无锁读取邻域。
 - `SectionMesher`:
   - 输入：`PaddedVoxelArray`, `ModelBaker`, `MesherConfig`。
-  - 输出：`WorldMeshBuildResult`（包含拼接完毕的 `MeshData`、材质索引与包围盒）。
-- `DeltaMesher`: 增量网格化器，针对单点方块破坏/放置，快速重构受影响的局部几何面。
+  - 输出：`MeshData`（包含顶点、法线、UV、面材质索引、面属性与包围盒）。
+- `DeltaMesher`: 增量网格化器，针对单点方块破坏/放置与脏区块，快速并行重构受影响的局部几何面。
 - `calculate_face_ao(neighbors: &[bool; 8]) -> [f32; 4]`: 原版 4 顶点平滑 AO 遮蔽因子计算。
 - `get_smoothed_biome_data(...)`: 生物群系颜色平滑混合采样。
 - `FluidType`, `calculate_fluid_corner_heights`: 水/岩浆流体网格与流向计算。
 
+### 6.2 二进制协议编解码 (`mtk_voxel::protocol`)
+- `decode_packet(data: &[u8]) -> Result<Packet, ProtocolError>`: 极速解析 Minecraft Yefira 二进制小端序数据包。
+- `encode_full_sync_request() -> Vec<u8>`: 编码客户端全量快照请求包 (0x80)。
+- `encode_repair_requests(sections: &[IVec3], max_batch_size: usize) -> Vec<Vec<u8>>`: 编码局部区块修复请求分片包 (0x81)。
+- `encode_sync_config(throttle_mode: u8, target_fps: u8, is_active: bool) -> Vec<u8>`: 编码同步限流与帧率配置包 (0x82)。
+- `Packet`: 强类型数据包枚举（`SelectionInfo`, `FullSnapshot`, `DeltaUpdate`, `SectionManifest`, `SectionSnapshot`, `HandshakeInfo`, `StreamBegin`, `StreamEnd` 等）。
+
+### 6.3 原生实时同步会话 (`mtk_voxel::sync`)
+- `LiveSyncSession`:
+  - `session.start(url, auto_reconnect, max_reconnect_attempts)`: 启动原生 WebSocket 后台网络与网格构建管道。
+  - `session.stop()`: 优雅断开连接。
+  - `session.poll_events() -> Vec<SyncEvent>`: 非阻塞轮询已生成的 `SectionMeshReady`、`StatusChange`、`SelectionUpdated`、`Verified` 等事件。
+  - `session.send_full_sync_request()`, `session.send_repair_request(...)`, `session.send_sync_config(...)`。
+  - `session.get_storage()`: 访问内部共享的 `VoxelStorage`。
+- `SyncEvent`: 供宿主/胶水层消费的高级同步事件。
+
 ---
 
-## 7. 规划中新增模块 API 抽象预览
+## 7. 材质与映射：`mtk-material`
+- `MaterialResolver`: 依据 Block ID / OBJ Material Name / 贴图哈希匹配现代 PBR 材质规范。
+- `clean_icecube_name`, `clean_jmc2obj_name`, `decode_mineways_uv`, `remap_mesh_uvs_parallel`。
 
-### 7.1 `mtk-material` (材质替换与映射系统)
-- `MaterialRuleMatcher`: 依据 Block ID / OBJ Material Name / 贴图哈希匹配现代 PBR 材质规范。
-- `PbrMaterialSpec`: 包含 Albedo, Normal, Roughness, Metallic, Emissive, Subsurface 参数与通道映射规则。
-
-### 7.2 `mtk-net` (网络同步与实时流)
-- `NetworkPacketDecoder`: 解码 WebSocket/TCP 二进制数据包。
-- `WorldDeltaEvent`: 封装 Chunk 加载、方块更新、实体移动等增量事件流。
-
-### 7.3 `mtk-meshopt` (通用网格重构与几何优化)
-- `simplify_mesh(mesh: &MeshData, target_ratio: f32) -> MeshData`: 几何减面。
-- `generate_lod_chain(mesh: &MeshData, levels: u32) -> Vec<MeshData>`: 自动多级 LOD 生成。
-- `merge_coplanar_faces(mesh: &MeshData) -> MeshData`: 共面多边形合并优化。

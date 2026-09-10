@@ -7,8 +7,14 @@
 pub mod biome;
 pub mod fluid;
 pub mod mesher;
+pub mod protocol;
 pub mod storage;
+#[cfg(feature = "sync")]
+pub mod sync;
 pub mod types;
+
+#[cfg(feature = "sync")]
+pub use sync::{LiveSyncSession, SyncEvent};
 
 // Top-level re-exports
 pub use biome::{get_biome_meta, get_colormap_uv, get_smoothed_biome_data, BiomeMeta};

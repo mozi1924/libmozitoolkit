@@ -21,10 +21,11 @@ mtk-texture = { workspace = true }
 mtk-material = { workspace = true }
 mtk-voxel = { workspace = true }
 glam = { workspace = true }
+serde_json = { workspace = true }
 pyo3 = { workspace = true, features = ["abi3-py310"] }
 
 [features]
-default = ["extension-module", "zip"]
+default = ["zip"]
 extension-module = ["pyo3/extension-module"]
 zip = ["mtk-resource/zip"]
 

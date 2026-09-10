@@ -55,6 +55,8 @@ pub struct VoxelStorage {
     pub dirty_sections: HashSet<IVec3>,
     /// Set of section coordinates known to be completely empty.
     pub known_empty_sections: HashSet<IVec3>,
+    /// Map of section coordinate to cached CRC32 checksum.
+    pub section_crc_map: HashMap<IVec3, u32>,
     /// Incremental generation counter (Atomic for lock-free multi-thread sync).
     #[cfg_attr(feature = "serde", serde(with = "serde_atomic_u64"))]
     pub generation: AtomicU64,
@@ -74,6 +76,7 @@ impl Clone for VoxelStorage {
             primary_biome: self.primary_biome.clone(),
             dirty_sections: self.dirty_sections.clone(),
             known_empty_sections: self.known_empty_sections.clone(),
+            section_crc_map: self.section_crc_map.clone(),
             generation: AtomicU64::new(self.generation.load(Ordering::Relaxed)),
         }
     }
@@ -93,6 +96,7 @@ impl Default for VoxelStorage {
             primary_biome: None,
             dirty_sections: HashSet::new(),
             known_empty_sections: HashSet::new(),
+            section_crc_map: HashMap::new(),
             generation: AtomicU64::new(0),
         }
     }
@@ -479,5 +483,331 @@ impl VoxelStorage {
             let wz = sec_wz + lz;
             self.get_block(wx, wy, wz).to_string()
         })
+    }
+
+    /// Computes and caches CRC32 for a single section.
+    pub fn calculate_and_store_section_crc(&mut self, coord: IVec3) -> u32 {
+        let default_sec = SectionStorage::new(coord);
+        let sec = self.sections.get_mut(&coord);
+        let crc = if let Some(s) = sec {
+            s.compute_crc()
+        } else {
+            default_sec.cached_crc.unwrap_or(crate::crc::EMPTY_SECTION_CRC)
+        };
+        self.section_crc_map.insert(coord, crc);
+        crc
+    }
+
+    /// Recomputes CRC32 for all sections currently loaded.
+    pub fn recalculate_all_section_crcs(&mut self) {
+        self.section_crc_map.clear();
+        for (&coord, sec) in self.sections.iter_mut() {
+            let crc = sec.compute_crc();
+            self.section_crc_map.insert(coord, crc);
+        }
+    }
+
+    /// Returns bounding box coordinates and sizes for a given section clamped to world selection.
+    pub fn get_section_block_bounds(&self, coord: IVec3) -> (i32, i32, i32, i32, i32, i32) {
+        if self.size_x <= 0 || self.size_y <= 0 || self.size_z <= 0 {
+            return (coord.x << 4, coord.y << 4, coord.z << 4, 16, 16, 16);
+        }
+        let max_x = self.min_x + self.size_x - 1;
+        let max_y = self.min_y + self.size_y - 1;
+        let max_z = self.min_z + self.size_z - 1;
+
+        let start_x = self.min_x.max(coord.x << 4);
+        let end_x = max_x.min((coord.x << 4) + 15);
+        let start_y = self.min_y.max(coord.y << 4);
+        let end_y = max_y.min((coord.y << 4) + 15);
+        let start_z = self.min_z.max(coord.z << 4);
+        let end_z = max_z.min((coord.z << 4) + 15);
+
+        let sx = (end_x - start_x + 1).max(0);
+        let sy = (end_y - start_y + 1).max(0);
+        let sz = (end_z - start_z + 1).max(0);
+        (start_x, start_y, start_z, sx, sy, sz)
+    }
+
+    /// Returns total block volume for a given section clamped to active selection bounds.
+    pub fn get_section_block_count(&self, coord: IVec3) -> usize {
+        let (_, _, _, sx, sy, sz) = self.get_section_block_bounds(coord);
+        (sx * sy * sz) as usize
+    }
+
+    /// Checks if a CRC32 matches the canonical empty air CRC for this section's clamped volume.
+    pub fn is_empty_section_crc(&self, coord: IVec3, crc_val: u32) -> bool {
+        let count = self.get_section_block_count(coord);
+        crc_val == crate::crc::get_empty_section_crc(count)
+    }
+
+    /// Ingests a single 16x16x16 section snapshot packet and updates dirty tracking.
+    pub fn set_section_snapshot(
+        &mut self,
+        sec_x: i32,
+        sec_y: i32,
+        sec_z: i32,
+        start_x: i32,
+        start_y: i32,
+        start_z: i32,
+        size_x: i32,
+        size_y: i32,
+        size_z: i32,
+        palette: &[String],
+        grid_indices: &[u16],
+        biome_palette: Option<&[String]>,
+        biome_indices: Option<&[u16]>,
+    ) -> bool {
+        if size_x <= 0 || size_y <= 0 || size_z <= 0 {
+            return false;
+        }
+
+        if self.size_x == 0 || self.size_y == 0 || self.size_z == 0 {
+            self.min_x = start_x;
+            self.min_y = start_y;
+            self.min_z = start_z;
+            self.size_x = size_x;
+            self.size_y = size_y;
+            self.size_z = size_z;
+        }
+
+        let total_blocks = (size_x * size_y * size_z) as usize;
+        let p_len = palette.len();
+        if grid_indices.len() < total_blocks {
+            return false;
+        }
+
+        let has_biomes = biome_palette.is_some() && biome_indices.is_some();
+        if let Some(bp) = biome_palette {
+            if let Some(first) = bp.first() {
+                if self.primary_biome.is_none() {
+                    self.primary_biome = Some(first.clone());
+                }
+            }
+        }
+
+        let sec_coord = IVec3::new(sec_x, sec_y, sec_z);
+        let sec = self
+            .sections
+            .entry(sec_coord)
+            .or_insert_with(|| SectionStorage::new(sec_coord));
+
+        for idx in 0..total_blocks {
+            let p_idx = grid_indices[idx] as usize;
+            if p_idx >= p_len {
+                continue;
+            }
+            let state = &palette[p_idx];
+
+            let rem = idx % (size_y * size_z) as usize;
+            let lx = idx / (size_y * size_z) as usize;
+            let ly = rem / size_z as usize;
+            let lz = rem % size_z as usize;
+
+            let wx = start_x + lx as i32;
+            let wy = start_y + ly as i32;
+            let wz = start_z + lz as i32;
+
+            let blx = (wx & 15) as usize;
+            let bly = (wy & 15) as usize;
+            let blz = (wz & 15) as usize;
+
+            sec.set_local(blx, bly, blz, state);
+
+            if has_biomes {
+                if let (Some(bp), Some(bi)) = (biome_palette, biome_indices) {
+                    if idx < bi.len() {
+                        let b_idx = bi[idx] as usize;
+                        if b_idx < bp.len() {
+                            self.biome_map.insert(IVec3::new(wx, wy, wz), bp[b_idx].clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Compute section CRC and mark dirty with 3x3x3 neighborhood halo
+        let crc = sec.compute_crc();
+        self.section_crc_map.insert(sec_coord, crc);
+
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                for dz in -1..=1 {
+                    self.dirty_sections.insert(sec_coord + IVec3::new(dx, dy, dz));
+                }
+            }
+        }
+
+        self.advance_generation();
+        true
+    }
+
+    /// Checks if incoming full snapshot data matches current memory state without mutations.
+    pub fn is_snapshot_identical(
+        &self,
+        min_x: i32,
+        min_y: i32,
+        min_z: i32,
+        size_x: i32,
+        size_y: i32,
+        size_z: i32,
+        palette: &[String],
+        grid_indices: &[u16],
+    ) -> bool {
+        if self.min_x != min_x
+            || self.min_y != min_y
+            || self.min_z != min_z
+            || self.size_x != size_x
+            || self.size_y != size_y
+            || self.size_z != size_z
+        {
+            return false;
+        }
+
+        let total_blocks = (size_x * size_y * size_z) as usize;
+        let p_len = palette.len();
+        if grid_indices.len() < total_blocks {
+            return false;
+        }
+
+        for idx in 0..total_blocks {
+            let p_idx = grid_indices[idx] as usize;
+            if p_idx >= p_len {
+                return false;
+            }
+            let expected_state = extract_canonical_state_str(&palette[p_idx]);
+
+            let rem = idx % (size_y * size_z) as usize;
+            let lx = idx / (size_y * size_z) as usize;
+            let ly = rem / size_z as usize;
+            let lz = rem % size_z as usize;
+
+            let wx = min_x + lx as i32;
+            let wy = min_y + ly as i32;
+            let wz = min_z + lz as i32;
+
+            let actual_state = self.get_block(wx, wy, wz);
+            if actual_state != expected_state {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Compares server section CRC32 hashes with local ones and identifies out-of-sync sections.
+    pub fn validate_manifest(
+        &mut self,
+        server_sections: &[(i32, i32, i32, u32)],
+        existing_section_meshes: Option<&HashSet<IVec3>>,
+    ) -> Vec<IVec3> {
+        let mut mismatched = Vec::new();
+
+        for &(sx, sy, sz, server_crc) in server_sections {
+            let coord = IVec3::new(sx, sy, sz);
+            if self.dirty_sections.contains(&coord) || !self.section_crc_map.contains_key(&coord) {
+                self.calculate_and_store_section_crc(coord);
+            }
+
+            let local_crc = self.section_crc_map.get(&coord).copied().unwrap_or(0);
+            if local_crc != server_crc {
+                mismatched.push(coord);
+                continue;
+            }
+
+            // Bad chunk check: if non-empty section exists on server but its mesh object is missing
+            if let Some(existing_meshes) = existing_section_meshes {
+                if !self.is_empty_section_crc(coord, server_crc) {
+                    if !existing_meshes.contains(&coord) && !self.known_empty_sections.contains(&coord) {
+                        mismatched.push(coord);
+                    }
+                }
+            }
+        }
+
+        mismatched
+    }
+
+    /// Exports manifest metadata (bounds and CRC map) as JSON for scene persistence.
+    #[cfg(feature = "serde")]
+    pub fn export_manifest_metadata(&self) -> serde_json::Value {
+        let mut crc_map = serde_json::Map::new();
+        for (&coord, &crc) in &self.section_crc_map {
+            let key = format!("{},{},{}", coord.x, coord.y, coord.z);
+            crc_map.insert(key, serde_json::Value::from(crc));
+        }
+
+        let empty_list: Vec<String> = self
+            .known_empty_sections
+            .iter()
+            .map(|c| format!("{},{},{}", c.x, c.y, c.z))
+            .collect();
+
+        serde_json::json!({
+            "min_x": self.min_x,
+            "min_y": self.min_y,
+            "min_z": self.min_z,
+            "size_x": self.size_x,
+            "size_y": self.size_y,
+            "size_z": self.size_z,
+            "generation": self.get_generation(),
+            "section_crcs": crc_map,
+            "known_empty_sections": empty_list,
+        })
+    }
+
+    /// Imports manifest metadata from scene JSON properties.
+    #[cfg(feature = "serde")]
+    pub fn import_manifest_metadata(&mut self, data: &serde_json::Value) -> bool {
+        let obj = match data.as_object() {
+            Some(o) => o,
+            None => return false,
+        };
+
+        self.min_x = obj.get("min_x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+        self.min_y = obj.get("min_y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+        self.min_z = obj.get("min_z").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+        self.size_x = obj.get("size_x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+        self.size_y = obj.get("size_y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+        self.size_z = obj.get("size_z").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+        let gen = obj.get("generation").and_then(|v| v.as_u64()).unwrap_or(0);
+        self.set_generation(gen);
+
+        self.section_crc_map.clear();
+        if let Some(crcs) = obj.get("section_crcs").and_then(|v| v.as_object()) {
+            for (k, v) in crcs {
+                let parts: Vec<&str> = k.split(',').collect();
+                if parts.len() == 3 {
+                    if let (Ok(x), Ok(y), Ok(z), Some(crc_val)) = (
+                        parts[0].parse::<i32>(),
+                        parts[1].parse::<i32>(),
+                        parts[2].parse::<i32>(),
+                        v.as_u64(),
+                    ) {
+                        self.section_crc_map.insert(IVec3::new(x, y, z), crc_val as u32);
+                    }
+                }
+            }
+        }
+
+        self.known_empty_sections.clear();
+        if let Some(empty_arr) = obj.get("known_empty_sections").and_then(|v| v.as_array()) {
+            for v in empty_arr {
+                if let Some(s) = v.as_str() {
+                    let parts: Vec<&str> = s.split(',').collect();
+                    if parts.len() == 3 {
+                        if let (Ok(x), Ok(y), Ok(z)) = (
+                            parts[0].parse::<i32>(),
+                            parts[1].parse::<i32>(),
+                            parts[2].parse::<i32>(),
+                        ) {
+                            self.known_empty_sections.insert(IVec3::new(x, y, z));
+                        }
+                    }
+                }
+            }
+        }
+
+        true
     }
 }
