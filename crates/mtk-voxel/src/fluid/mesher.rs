@@ -364,6 +364,9 @@ where
             mesh.positions.push([p.x, p.y, p.z]);
             mesh.normals.push(n);
             mesh.uvs.push(uvs[i]);
+            if let Some(ref mut colors) = mesh.colors {
+                colors.push([1.0, 1.0, 1.0, 1.0]);
+            }
         }
 
         mesh.indices.push(base_idx);
