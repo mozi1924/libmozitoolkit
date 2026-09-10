@@ -79,6 +79,35 @@ impl ResourcePackStack {
         self.open_asset_raw(&path)
     }
 
+    /// List all unique texture locations discovered across all active packs in the stack.
+    /// Excludes companion files like `_n.png`, `_s.png`.
+    pub fn list_all_texture_locations(&self) -> Vec<ResourceLocation> {
+        let mut seen = HashSet::new();
+        let mut results = Vec::new();
+
+        for pack in &self.packs {
+            for file in pack.list_files("assets/") {
+                if !file.ends_with(".png") {
+                    continue;
+                }
+                if file.ends_with("_n.png")
+                    || file.ends_with("_N.png")
+                    || file.ends_with("_s.png")
+                    || file.ends_with("_S.png")
+                {
+                    continue;
+                }
+                if let Some(loc) = ResourceLocation::from_asset_path(&file, "textures", "png") {
+                    if seen.insert(loc.clone()) {
+                        results.push(loc);
+                    }
+                }
+            }
+        }
+
+        results
+    }
+
     /// Read and parse an atlas definition from `assets/<namespace>/atlases/<name>.json`.
     pub fn load_atlas_definition(&self, location: &ResourceLocation) -> Result<AtlasDefinition, ResourceError> {
         let path = location.to_asset_path("atlases", "json");

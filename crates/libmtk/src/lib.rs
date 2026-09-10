@@ -44,8 +44,11 @@ pub use mtk_resource::{
     ResourcePack, ResourcePackStack, TextureMetadata, CTM_47_LOOKUP, OVERLAY_17_LOOKUP,
 };
 pub use mtk_texture::{
-    AtlasAddressMap, AtlasBuilder, AtlasBuilderConfig, AtlasChunkMeta, AtlasSpriteLocation,
-    BakedAtlas, BakedAtlasChunk, DecodedSprite, RgbaBuffer, Stitcher,
+    align_standalone_channels, AtlasAddressMap, AtlasBuilder, AtlasBuilderConfig, AtlasChunkMeta,
+    AtlasSpriteLocation, BakedAtlas, BakedAtlasChunk, ChannelData, ChannelType, DecodedSprite,
+    RgbaBuffer, StandaloneAlignResult, StandaloneAnimationMeta, StandaloneBuilder, StandaloneConfig,
+    StandaloneFilePaths, StandaloneMapping, StandaloneResult, StandaloneTextureRecord, Stitcher,
+    STANDALONE_FORMAT_VERSION,
 };
 pub use mtk_core::constants::concurrency;
 pub use mtk_core::direction::{DirMask, Direction};

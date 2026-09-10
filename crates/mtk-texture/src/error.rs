@@ -17,4 +17,7 @@ pub enum TextureError {
 
     #[error("Paletted permutation error: {0}")]
     Palette(String),
+
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
 }

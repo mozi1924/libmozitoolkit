@@ -6,7 +6,9 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyMemoryView};
 
 use mtk_resource::{AtlasCategory, ResourceLocation};
-use mtk_texture::{AtlasBuilder, AtlasBuilderConfig, BakedAtlas};
+use mtk_texture::{
+    AtlasBuilder, AtlasBuilderConfig, BakedAtlas, StandaloneBuilder, StandaloneConfig,
+};
 
 use crate::resource::PyResourcePackStack;
 
@@ -243,3 +245,69 @@ impl PyAtlasBuilder {
         Ok(PyBakedAtlas { inner: baked })
     }
 }
+
+/// Standalone Material Asset Library precompiler result.
+#[pyclass(name = "StandaloneResult")]
+#[derive(Debug, Clone)]
+pub struct PyStandaloneResult {
+    #[pyo3(get)]
+    pub mapping_path: String,
+    #[pyo3(get)]
+    pub output_dir: String,
+    #[pyo3(get)]
+    pub texture_count: usize,
+    #[pyo3(get)]
+    pub format_version: u32,
+}
+
+#[pymethods]
+impl PyStandaloneResult {
+    fn __repr__(&self) -> String {
+        format!(
+            "<StandaloneResult textures={} dir='{}'>",
+            self.texture_count, self.output_dir
+        )
+    }
+}
+
+/// Standalone Material Asset Library Generator for resource pack stacks.
+#[pyclass(name = "StandaloneBuilder")]
+#[derive(Debug, Clone)]
+pub struct PyStandaloneBuilder {
+    config: StandaloneConfig,
+}
+
+#[pymethods]
+impl PyStandaloneBuilder {
+    #[new]
+    #[pyo3(signature = (stack_hash=None, filter_prefix=None))]
+    pub fn new(stack_hash: Option<String>, filter_prefix: Option<String>) -> Self {
+        Self {
+            config: StandaloneConfig {
+                stack_hash,
+                filter_prefix,
+            },
+        }
+    }
+
+    /// Precompiles all standalone textures from the given pack stack into `output_dir`.
+    #[pyo3(signature = (stack, output_dir))]
+    pub fn build(
+        &self,
+        stack: &PyResourcePackStack,
+        output_dir: &str,
+    ) -> PyResult<PyStandaloneResult> {
+        let builder = StandaloneBuilder::new(self.config.clone());
+        let res = builder
+            .build_to_dir(&stack.inner, output_dir)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        Ok(PyStandaloneResult {
+            mapping_path: res.mapping_path.to_string_lossy().to_string(),
+            output_dir: res.output_dir.to_string_lossy().to_string(),
+            texture_count: res.texture_count,
+            format_version: res.format_version,
+        })
+    }
+}
+

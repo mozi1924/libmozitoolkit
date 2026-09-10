@@ -21,7 +21,7 @@ pub use mesher::PySectionMesher;
 pub use protocol::{decode_packet, encode_full_sync_request, encode_repair_requests, encode_sync_config};
 pub use resource::PyResourcePackStack;
 pub use sync::PyLiveSyncSession;
-pub use texture::{PyAtlasBuilder, PyBakedAtlas};
+pub use texture::{PyAtlasBuilder, PyBakedAtlas, PyStandaloneBuilder, PyStandaloneResult};
 pub use voxel::{PyMesherConfig, PyVoxelStorage};
 
 /// Returns libmtk version string.
@@ -57,6 +57,8 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyResourcePackStack>()?;
     m.add_class::<PyAtlasBuilder>()?;
     m.add_class::<PyBakedAtlas>()?;
+    m.add_class::<PyStandaloneBuilder>()?;
+    m.add_class::<PyStandaloneResult>()?;
 
     // 7. Material & UV Remapper
     m.add_class::<PyMaterialResolver>()?;
