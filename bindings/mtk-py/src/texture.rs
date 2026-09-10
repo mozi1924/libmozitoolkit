@@ -90,6 +90,74 @@ impl PyBakedAtlas {
         }
     }
 
+    /// Saves the chunk's Albedo atlas texture as a PNG file to the given path.
+    pub fn save_chunk_albedo_png(&self, index: usize, path: &str) -> PyResult<()> {
+        if let Some(chunk) = self.inner.chunks.get(index) {
+            let png_bytes = chunk
+                .albedo
+                .to_png_bytes()
+                .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+            std::fs::write(path, png_bytes)
+                .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+            Ok(())
+        } else {
+            Err(pyo3::exceptions::PyIndexError::new_err("Chunk index out of bounds"))
+        }
+    }
+
+    /// Saves the chunk's Normal companion atlas texture as a PNG file (if present).
+    pub fn save_chunk_normal_png(&self, index: usize, path: &str) -> PyResult<bool> {
+        if let Some(chunk) = self.inner.chunks.get(index) {
+            if let Some(ref n) = chunk.normal {
+                let png_bytes = n
+                    .to_png_bytes()
+                    .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+                std::fs::write(path, png_bytes)
+                    .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Err(pyo3::exceptions::PyIndexError::new_err("Chunk index out of bounds"))
+        }
+    }
+
+    /// Saves the chunk's Specular companion atlas texture as a PNG file (if present).
+    pub fn save_chunk_specular_png(&self, index: usize, path: &str) -> PyResult<bool> {
+        if let Some(chunk) = self.inner.chunks.get(index) {
+            if let Some(ref s) = chunk.specular {
+                let png_bytes = s
+                    .to_png_bytes()
+                    .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+                std::fs::write(path, png_bytes)
+                    .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Err(pyo3::exceptions::PyIndexError::new_err("Chunk index out of bounds"))
+        }
+    }
+
+    /// Returns encoded PNG bytes of the chunk's Albedo atlas.
+    pub fn get_chunk_albedo_png_bytes<'py>(
+        &self,
+        py: Python<'py>,
+        index: usize,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        if let Some(chunk) = self.inner.chunks.get(index) {
+            let png_bytes = chunk
+                .albedo
+                .to_png_bytes()
+                .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+            Ok(PyBytes::new(py, &png_bytes))
+        } else {
+            Err(pyo3::exceptions::PyIndexError::new_err("Chunk index out of bounds"))
+        }
+    }
+
     /// Queries the baked UV coordinates and metadata for a given texture resource identifier.
     ///
     /// Returns dictionary with keys: `chunk_id`, `uv_bounds`, `frame_0_uv_bounds`, `is_animated`, `frame_count`.
