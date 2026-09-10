@@ -292,6 +292,16 @@ impl PyVoxelStorage {
         list
     }
 
+    /// Returns a list of all populated non-air blocks as `((x, y, z), blockstate)`.
+    pub fn get_all_blocks<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
+        let list = PyList::empty(py);
+        for (x, y, z, state) in self.inner.get_all_blocks() {
+            let item = ((x, y, z), state);
+            let _ = list.append(item);
+        }
+        list
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "<VoxelStorage bounds=({}, {}, {}, size={}x{}x{}) sections={} dirty={}>",
