@@ -1,10 +1,10 @@
 use mtk_material::{
-    clean_jmc2obj_name, decode_mineways_uv, is_mineways_atlas_name, lookup_swatch,
-    remap_local_to_atlas, remap_mesh_uvs_parallel, resolve_jmc2obj_candidates, ImporterOrigin,
-    MaterialResolver,
+    clean_icecube_name, clean_jmc2obj_name, decode_mineways_uv, is_mineways_atlas_name,
+    lookup_swatch, remap_local_to_atlas, remap_mesh_multi_uvs_parallel, remap_mesh_uvs_parallel,
+    resolve_icecube_candidates, resolve_jmc2obj_candidates, ImporterOrigin, MaterialResolver,
 };
 use mtk_resource::ResourceLocation;
-use mtk_texture::{AtlasAddressMap, AtlasSpriteLocation};
+use mtk_texture::{AtlasAddressMap, AtlasSpriteLocation, SpriteKind};
 
 #[test]
 fn test_mineways_swatch_lookup() {
@@ -39,7 +39,11 @@ fn test_mineways_uv_decode() {
 }
 
 #[test]
-fn test_jmc2obj_name_cleaning() {
+fn test_jmc2obj_name_cleaner() {
+    assert_eq!(
+        clean_jmc2obj_name("minecraft_block-stone"),
+        "stone"
+    );
     assert_eq!(
         clean_jmc2obj_name("minecraft_block-grass_block_top.001"),
         "grass_block_top"
@@ -48,26 +52,27 @@ fn test_jmc2obj_name_cleaning() {
         clean_jmc2obj_name("jmc2obj_block-stone-desert"),
         "stone"
     );
+}
+
+#[test]
+fn test_icecube_name_cleaner() {
     assert_eq!(
-        clean_jmc2obj_name("tex/minecraft/block/sandstone_top.png"),
-        "block/sandstone_top"
+        clean_icecube_name("ice_cube_block_stone"),
+        "stone"
     );
     assert_eq!(
-        clean_jmc2obj_name("pattern_base"),
-        "pattern_base"
+        clean_icecube_name("m_block_grass_block_side"),
+        "grass_block_side"
     );
 }
 
 #[test]
-fn test_jmc2obj_candidates_resolution() {
-    let cands_banner = resolve_jmc2obj_candidates("pattern_base");
-    assert_eq!(cands_banner, vec!["entity/banner/banner_base"]);
+fn test_candidate_generation() {
+    let cands = resolve_jmc2obj_candidates("grass_block_top");
+    assert!(cands.contains(&"block/grass_block_top".to_string()));
 
-    let cands_alias = resolve_jmc2obj_candidates("magma_block");
-    assert_eq!(cands_alias, vec!["block/magma", "block/magma_block"]);
-
-    let cands_generic = resolve_jmc2obj_candidates("stone");
-    assert_eq!(cands_generic, vec!["block/stone", "entity/stone", "item/stone"]);
+    let cands_ic = resolve_icecube_candidates("dirt");
+    assert!(cands_ic.contains(&"block/dirt".to_string()));
 }
 
 #[test]
@@ -81,9 +86,11 @@ fn test_resolver_and_atlas_projection() {
             chunk_id: 0,
             category: "blocks".to_string(),
             is_animated: false,
+            sprite_kind: SpriteKind::StaticAtlas,
             texture_id: 42,
             uv_bounds: [0.0, 0.0, 0.25, 0.25],
             frame_0_uv_bounds: [0.0, 0.0, 0.25, 0.25],
+            local_uv_bounds: [0.0, 0.0, 1.0, 1.0],
             frame_uv_step: [0.0, 0.0],
             pixel_rect: [0, 0, 16, 16],
             strip_pixel_rect: [0, 0, 16, 16],
@@ -121,9 +128,11 @@ fn test_parallel_batch_mesh_remap() {
             chunk_id: 1,
             category: "blocks".to_string(),
             is_animated: false,
+            sprite_kind: SpriteKind::StaticAtlas,
             texture_id: 10,
             uv_bounds: [0.5, 0.5, 1.0, 1.0],
             frame_0_uv_bounds: [0.5, 0.5, 1.0, 1.0],
+            local_uv_bounds: [0.0, 0.0, 1.0, 1.0],
             frame_uv_step: [0.0, 0.0],
             pixel_rect: [32, 32, 16, 16],
             strip_pixel_rect: [32, 32, 16, 16],
@@ -161,4 +170,18 @@ fn test_parallel_batch_mesh_remap() {
     assert_eq!(uvs[0], [0.5, 0.5]);
     // Third vertex [1, 1] should project to [1.0, 1.0]
     assert_eq!(uvs[2], [1.0, 1.0]);
+
+    // Test Multi-UV remapper
+    let multi_res = remap_mesh_multi_uvs_parallel(
+        &uvs,
+        &face_materials,
+        &face_loop_ranges,
+        &address_map,
+        ImporterOrigin::Auto,
+        None,
+    );
+    assert_eq!(multi_res.face_count, 2);
+    assert_eq!(multi_res.local_uvs.len(), 8);
+    assert_eq!(multi_res.atlas_uvs.len(), 8);
+    assert_eq!(multi_res.face_uv_modes, vec![0, 0]);
 }

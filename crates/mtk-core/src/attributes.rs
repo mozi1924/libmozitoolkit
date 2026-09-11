@@ -56,6 +56,8 @@ pub struct FaceAttributes {
     pub emission: f32,
     /// Whether this face is an overlay layer (e.g. grass side overlay).
     pub is_overlay: bool,
+    /// UV routing mode: 0 = Atlas, 1 = Standalone Static, 2 = Standalone Anim, 3 = Overlay Local.
+    pub uv_mode: u8,
     /// Atlas chunk/tile ID if mapped into a global atlas.
     pub atlas_chunk_id: Option<u32>,
 }
@@ -68,6 +70,7 @@ impl Default for FaceAttributes {
             tint_index: -1,
             emission: 0.0,
             is_overlay: false,
+            uv_mode: 0,
             atlas_chunk_id: None,
         }
     }

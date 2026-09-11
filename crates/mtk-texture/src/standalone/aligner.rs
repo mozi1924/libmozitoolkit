@@ -35,6 +35,24 @@ pub struct ChannelData {
     pub metadata: Option<AnimationMetadata>,
 }
 
+impl ChannelData {
+    /// Extract Frame 0 as a 1:1 square static image buffer.
+    pub fn static_frame_0(&self) -> RgbaBuffer {
+        let frame_w = self.metadata.as_ref().and_then(|m| m.width).unwrap_or(self.buffer.width);
+        let frame_h = self.metadata.as_ref().and_then(|m| m.height).unwrap_or(frame_w);
+        if self.buffer.height > frame_h && frame_h > 0 && frame_w > 0 {
+            self.buffer.crop(0, 0, frame_w.min(self.buffer.width), frame_h.min(self.buffer.height))
+        } else {
+            self.buffer.clone()
+        }
+    }
+
+    /// Return the full animation strip image buffer.
+    pub fn anim_strip(&self) -> &RgbaBuffer {
+        &self.buffer
+    }
+}
+
 /// Animation metadata serialized to `standalone_mapping.json`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StandaloneAnimationMeta {

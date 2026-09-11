@@ -162,7 +162,7 @@ impl PyBakedAtlas {
 
     /// Queries the baked UV coordinates and metadata for a given texture resource identifier.
     ///
-    /// Returns dictionary with keys: `chunk_id`, `uv_bounds`, `frame_0_uv_bounds`, `is_animated`, `frame_count`.
+    /// Returns dictionary with keys: `chunk_id`, `uv_bounds`, `frame_0_uv_bounds`, `local_uv_bounds`, `is_animated`, `sprite_kind`, `frame_count`.
     pub fn lookup_sprite<'py>(
         &self,
         py: Python<'py>,
@@ -176,6 +176,57 @@ impl PyBakedAtlas {
             dict.set_item("chunk_id", meta.chunk_id)?;
             dict.set_item("uv_bounds", meta.uv_bounds)?;
             dict.set_item("frame_0_uv_bounds", meta.frame_0_uv_bounds)?;
+            dict.set_item("local_uv_bounds", meta.local_uv_bounds)?;
+            dict.set_item("is_animated", meta.is_animated)?;
+            dict.set_item("frame_count", meta.frame_count)?;
+            dict.set_item("has_normal", meta.has_normal)?;
+            dict.set_item("has_specular", meta.has_specular)?;
+            Ok(Some(dict))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Queries the static Frame 0 sprite coordinates (100% coverage across all textures).
+    pub fn lookup_static_sprite<'py>(
+        &self,
+        py: Python<'py>,
+        location: &str,
+    ) -> PyResult<Option<Bound<'py, PyDict>>> {
+        let loc = ResourceLocation::parse(location)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+
+        if let Some(meta) = self.inner.address_map.lookup_static(&loc) {
+            let dict = PyDict::new(py);
+            dict.set_item("chunk_id", meta.chunk_id)?;
+            dict.set_item("uv_bounds", meta.uv_bounds)?;
+            dict.set_item("frame_0_uv_bounds", meta.frame_0_uv_bounds)?;
+            dict.set_item("local_uv_bounds", meta.local_uv_bounds)?;
+            dict.set_item("is_animated", meta.is_animated)?;
+            dict.set_item("frame_count", meta.frame_count)?;
+            dict.set_item("has_normal", meta.has_normal)?;
+            dict.set_item("has_specular", meta.has_specular)?;
+            Ok(Some(dict))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Queries the dedicated animated strip sprite coordinates (multi-frame textures only).
+    pub fn lookup_animated_sprite<'py>(
+        &self,
+        py: Python<'py>,
+        location: &str,
+    ) -> PyResult<Option<Bound<'py, PyDict>>> {
+        let loc = ResourceLocation::parse(location)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+
+        if let Some(meta) = self.inner.address_map.lookup_animated(&loc) {
+            let dict = PyDict::new(py);
+            dict.set_item("chunk_id", meta.chunk_id)?;
+            dict.set_item("uv_bounds", meta.uv_bounds)?;
+            dict.set_item("frame_0_uv_bounds", meta.frame_0_uv_bounds)?;
+            dict.set_item("local_uv_bounds", meta.local_uv_bounds)?;
             dict.set_item("is_animated", meta.is_animated)?;
             dict.set_item("frame_count", meta.frame_count)?;
             dict.set_item("has_normal", meta.has_normal)?;

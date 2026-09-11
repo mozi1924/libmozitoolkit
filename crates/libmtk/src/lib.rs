@@ -46,9 +46,16 @@ pub use mtk_resource::{
 pub use mtk_texture::{
     align_standalone_channels, AtlasAddressMap, AtlasBuilder, AtlasBuilderConfig, AtlasChunkMeta,
     AtlasSpriteLocation, BakedAtlas, BakedAtlasChunk, ChannelData, ChannelType, DecodedSprite,
-    RgbaBuffer, StandaloneAlignResult, StandaloneAnimationMeta, StandaloneBuilder, StandaloneConfig,
-    StandaloneFilePaths, StandaloneMapping, StandaloneResult, StandaloneTextureRecord, Stitcher,
-    STANDALONE_FORMAT_VERSION,
+    RgbaBuffer, SpriteKind, StandaloneAlignResult, StandaloneAnimationMeta, StandaloneBuilder,
+    StandaloneConfig, StandaloneFilePaths, StandaloneMapping, StandaloneResult,
+    StandaloneTextureRecord, Stitcher, STANDALONE_FORMAT_VERSION,
+};
+pub use mtk_material::{
+    clean_icecube_name, clean_jmc2obj_name, decode_mineways_uv, detect_importer_origin,
+    is_mineways_atlas_name, is_quad_uv_diamond, lookup_swatch, remap_atlas_to_local,
+    remap_local_to_atlas, remap_mesh_multi_uvs_parallel, remap_mesh_uvs_parallel,
+    remap_mineways_atlas_uv_to_local, remap_sprite_to_sprite, straighten_diamond_quad_uv,
+    ImporterOrigin, MaterialResolver, MeshMultiUvRemapResult, MeshRemapResult, SourceUvSpace,
 };
 pub use mtk_core::constants::concurrency;
 pub use mtk_core::direction::{DirMask, Direction};

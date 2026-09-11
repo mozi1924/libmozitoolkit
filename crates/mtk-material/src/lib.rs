@@ -17,10 +17,10 @@ pub use jmc2obj::{clean_jmc2obj_name, resolve_jmc2obj_candidates};
 pub use mineways::{
     decode_mineways_uv, is_mineways_atlas_name, lookup_swatch, remap_mineways_atlas_uv_to_local,
 };
-pub use remap::batch::remap_mesh_uvs_parallel;
+pub use remap::batch::{remap_mesh_multi_uvs_parallel, remap_mesh_uvs_parallel};
 pub use remap::{
     is_quad_uv_diamond, remap_atlas_to_local, remap_local_to_atlas, remap_sprite_to_sprite,
     straighten_diamond_quad_uv,
 };
 pub use resolver::{detect_importer_origin, MaterialResolver};
-pub use types::{ImporterOrigin, MeshRemapResult, SourceUvSpace};
+pub use types::{ImporterOrigin, MeshMultiUvRemapResult, MeshRemapResult, SourceUvSpace};

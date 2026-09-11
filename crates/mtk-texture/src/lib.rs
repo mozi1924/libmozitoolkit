@@ -11,7 +11,7 @@ pub mod stitcher;
 
 pub use atlas::{
     AtlasAddressMap, AtlasBuilder, AtlasBuilderConfig, AtlasChunkMeta, AtlasSpriteLocation,
-    BakedAtlas, BakedAtlasChunk,
+    BakedAtlas, BakedAtlasChunk, SpriteKind,
 };
 pub use error::TextureError;
 pub use image::{

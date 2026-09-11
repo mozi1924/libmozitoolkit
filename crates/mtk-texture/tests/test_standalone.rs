@@ -1,4 +1,4 @@
-use mtk_resource::{AnimationFrame, AnimationMetadata, MemoryPack, ResourceLocation, ResourcePackStack};
+use mtk_resource::{AnimationFrame, AnimationMetadata, MemoryPack, ResourcePackStack};
 use mtk_texture::standalone::{
     align_standalone_channels, ChannelData, ChannelType, StandaloneBuilder, StandaloneConfig,
     STANDALONE_FORMAT_VERSION,
@@ -145,6 +145,7 @@ fn test_standalone_builder_end_to_end() {
     let stone_normal_file = stone["files"]["normal"].as_str().unwrap();
     assert!(temp_dir.join(stone_albedo_file).exists());
     assert!(temp_dir.join(stone_normal_file).exists());
+    assert!(stone["files"]["albedo_static"].is_string());
 
     // Verify sea_lantern
     let sea = &mapping["textures"]["minecraft:block/sea_lantern"];
@@ -158,6 +159,10 @@ fn test_standalone_builder_end_to_end() {
     let sea_spec_file = sea["files"]["specular"].as_str().unwrap();
     assert!(temp_dir.join(sea_albedo_file).exists());
     assert!(temp_dir.join(sea_spec_file).exists());
+    assert!(sea["files"]["albedo_static"].is_string());
+    assert!(sea["files"]["albedo_anim"].is_string());
+    assert!(temp_dir.join(sea["files"]["albedo_static"].as_str().unwrap()).exists());
+    assert!(temp_dir.join(sea["files"]["albedo_anim"].as_str().unwrap()).exists());
 
     // Clean up
     let _ = std::fs::remove_dir_all(&temp_dir);

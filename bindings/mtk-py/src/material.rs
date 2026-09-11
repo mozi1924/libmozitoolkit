@@ -3,7 +3,8 @@ use pyo3::types::PyDict;
 
 use mtk_material::{
     clean_icecube_name, clean_jmc2obj_name, decode_mineways_uv, is_mineways_atlas_name,
-    lookup_swatch, remap_mesh_uvs_parallel, ImporterOrigin, MaterialResolver,
+    lookup_swatch, remap_mesh_multi_uvs_parallel, remap_mesh_uvs_parallel, ImporterOrigin,
+    MaterialResolver,
 };
 
 use crate::texture::PyBakedAtlas;
@@ -119,6 +120,72 @@ impl PyMaterialResolver {
         dict.set_item("uvs", flat_out_uvs)?;
         dict.set_item("face_chunk_ids", result.face_chunk_ids)?;
         dict.set_item("face_texture_ids", result.face_texture_ids)?;
+        dict.set_item("unmapped_faces", result.unmapped_faces)?;
+        dict.set_item("face_count", result.face_count)?;
+        dict.set_item("loop_count", result.loop_count)?;
+
+        Ok(dict.into())
+    }
+
+    /// Batch parallel multi-UV remapping of mesh loops (Atlas UV + Standalone/Local UV).
+    ///
+    /// Returns:
+    ///     dict containing:
+    ///         "atlas_uvs": list of remapped Atlas float values [u0, v0, u1, v1, ...]
+    ///         "local_uvs": list of normalized local float values [u0, v0, u1, v1, ...]
+    ///         "face_chunk_ids": list of chunk ID integers per face
+    ///         "face_texture_ids": list of texture ID integers per face
+    ///         "face_uv_modes": list of UV routing mode integers per face (0=Atlas, 1=Static, 2=Anim, 3=Overlay)
+    ///         "face_is_overlay": list of boolean flags per face
+    ///         "unmapped_faces": count of unmapped faces
+    ///         "face_count": face count
+    ///         "loop_count": loop count
+    #[staticmethod]
+    #[pyo3(signature = (uvs, face_materials, face_loop_ranges, atlas, origin="auto", mineways_size=None))]
+    pub fn remap_mesh_multi_uvs(
+        py: Python<'_>,
+        uvs: Vec<f32>,
+        face_materials: Vec<String>,
+        face_loop_ranges: Vec<(u32, u32)>,
+        atlas: &PyBakedAtlas,
+        origin: &str,
+        mineways_size: Option<(u32, u32)>,
+    ) -> PyResult<PyObject> {
+        let loop_count = uvs.len() / 2;
+        let mut uv_pairs: Vec<[f32; 2]> = Vec::with_capacity(loop_count);
+        for i in 0..loop_count {
+            uv_pairs.push([uvs[i * 2], uvs[i * 2 + 1]]);
+        }
+
+        let orig = ImporterOrigin::parse(origin);
+        let result = remap_mesh_multi_uvs_parallel(
+            &uv_pairs,
+            &face_materials,
+            &face_loop_ranges,
+            &atlas.inner.address_map,
+            orig,
+            mineways_size,
+        );
+
+        let mut flat_atlas_uvs = Vec::with_capacity(result.atlas_uvs.len() * 2);
+        for p in &result.atlas_uvs {
+            flat_atlas_uvs.push(p[0]);
+            flat_atlas_uvs.push(p[1]);
+        }
+
+        let mut flat_local_uvs = Vec::with_capacity(result.local_uvs.len() * 2);
+        for p in &result.local_uvs {
+            flat_local_uvs.push(p[0]);
+            flat_local_uvs.push(p[1]);
+        }
+
+        let dict = PyDict::new(py);
+        dict.set_item("atlas_uvs", flat_atlas_uvs)?;
+        dict.set_item("local_uvs", flat_local_uvs)?;
+        dict.set_item("face_chunk_ids", result.face_chunk_ids)?;
+        dict.set_item("face_texture_ids", result.face_texture_ids)?;
+        dict.set_item("face_uv_modes", result.face_uv_modes)?;
+        dict.set_item("face_is_overlay", result.face_is_overlay)?;
         dict.set_item("unmapped_faces", result.unmapped_faces)?;
         dict.set_item("face_count", result.face_count)?;
         dict.set_item("loop_count", result.loop_count)?;

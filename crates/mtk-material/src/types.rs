@@ -59,3 +59,26 @@ pub struct MeshRemapResult {
     /// Number of faces with unresolved textures.
     pub unmapped_faces: usize,
 }
+
+/// Summary result of a multi-UV batch mesh remapping operation (Atlas UV + Local UV).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MeshMultiUvRemapResult {
+    /// Number of faces processed.
+    pub face_count: usize,
+    /// Number of UV loops processed.
+    pub loop_count: usize,
+    /// Primary Atlas UVs mapped to chunk coordinates: [[u, v], ...]
+    pub atlas_uvs: Vec<[f32; 2]>,
+    /// Normalized Standalone/Local UVs [0..1]: [[u, v], ...]
+    pub local_uvs: Vec<[f32; 2]>,
+    /// Target Atlas Chunk ID for each face.
+    pub face_chunk_ids: Vec<u16>,
+    /// Target Texture ID for each face.
+    pub face_texture_ids: Vec<u32>,
+    /// Face UV routing mode (0 = Atlas, 1 = Standalone Static, 2 = Standalone Anim, 3 = Overlay Local).
+    pub face_uv_modes: Vec<u8>,
+    /// Whether each face is an overlay layer (e.g. grass side overlay).
+    pub face_is_overlay: Vec<bool>,
+    /// Number of faces with unresolved textures.
+    pub unmapped_faces: usize,
+}

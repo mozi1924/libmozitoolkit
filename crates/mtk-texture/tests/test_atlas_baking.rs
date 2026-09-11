@@ -88,22 +88,28 @@ fn test_atlas_builder_with_pbr_and_animation() {
     assert!(anim_chunk.specular.is_some());
 
     // Check address map
-    let stone_loc = baked.address_map.lookup(&stone_id).unwrap();
+    let stone_loc = baked.address_map.lookup_static(&stone_id).unwrap();
     assert!(!stone_loc.is_animated);
     assert_eq!(stone_loc.chunk_id, 0);
     assert!(!stone_loc.has_normal);
     assert!(!stone_loc.has_specular);
     assert_eq!(stone_loc.frame_size, [16, 16]);
 
-    let diamond_loc = baked.address_map.lookup(&diamond_id).unwrap();
-    assert!(diamond_loc.is_animated);
-    assert_eq!(diamond_loc.chunk_id, 1);
-    assert!(diamond_loc.has_normal);
-    assert!(diamond_loc.has_specular);
-    assert_eq!(diamond_loc.frame_count, 2);
-    assert!(diamond_loc.animation.is_some());
-    assert_eq!(diamond_loc.frame_size, [16, 16]);
-    assert!(diamond_loc.frame_uv_step[1] > 0.0);
+    // Static Frame 0 lookup for diamond_ore (chunk 0)
+    let diamond_static = baked.address_map.lookup_static(&diamond_id).unwrap();
+    assert!(!diamond_static.is_animated);
+    assert_eq!(diamond_static.chunk_id, 0);
+
+    // Dedicated animated strip lookup for diamond_ore (chunk 1)
+    let diamond_anim = baked.address_map.lookup_animated(&diamond_id).unwrap();
+    assert!(diamond_anim.is_animated);
+    assert_eq!(diamond_anim.chunk_id, 1);
+    assert!(diamond_anim.has_normal);
+    assert!(diamond_anim.has_specular);
+    assert_eq!(diamond_anim.frame_count, 2);
+    assert!(diamond_anim.animation.is_some());
+    assert_eq!(diamond_anim.frame_size, [16, 16]);
+    assert!(diamond_anim.frame_uv_step[1] > 0.0);
 }
 
 #[test]
@@ -139,13 +145,14 @@ fn test_pbr_auto_tiling_for_animated_sprite() {
     }];
 
     let baked = builder.build_from_sprites(sprites).unwrap();
-    assert_eq!(baked.chunks.len(), 1);
-    let chunk = &baked.chunks[0];
-    assert!(chunk.is_animated);
-    assert_eq!(chunk.file_stem(), "blocks_anim_chunk_001");
+    // 2 chunks: 1 static chunk (Frame 0) + 1 animated chunk (4-frame strip)
+    assert_eq!(baked.chunks.len(), 2);
+    let anim_chunk = &baked.chunks[1];
+    assert!(anim_chunk.is_animated);
+    assert_eq!(anim_chunk.file_stem(), "blocks_anim_chunk_001");
 
-    let norm_buf = chunk.normal.as_ref().unwrap();
-    let loc = baked.address_map.lookup(&water_id).unwrap();
+    let norm_buf = anim_chunk.normal.as_ref().unwrap();
+    let loc = baked.address_map.lookup_animated(&water_id).unwrap();
     // Normal buffer should have 4 tiled frames at the sprite's strip location
     for frame in 0..4 {
         let sample_y = loc.pixel_rect[1] + frame * 16 + 8;

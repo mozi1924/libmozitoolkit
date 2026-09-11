@@ -33,10 +33,34 @@ pub struct StandaloneConfig {
 /// Relative file paths for a single standalone texture entry's channels.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StandaloneFilePaths {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub albedo: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub normal: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub specular: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub overlay: Option<String>,
+
+    /// Dual-mode static (Frame 0 square) paths
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub albedo_static: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normal_static: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub specular_static: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overlay_static: Option<String>,
+
+    /// Dual-mode animation vertical strip paths (present if animated)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub albedo_anim: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normal_anim: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub specular_anim: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overlay_anim: Option<String>,
 }
 
 /// A single texture record inside `standalone_mapping.json`.
@@ -137,6 +161,7 @@ impl StandaloneBuilder {
             }
         }
         let fallback_bytes = fallback_buf.to_png_bytes()?;
+        let fallback_rel = "textures/mtk_fallback.png".to_string();
         fs::write(textures_dir.join("mtk_fallback.png"), fallback_bytes)?;
 
         let fallback_record = StandaloneTextureRecord {
@@ -145,10 +170,18 @@ impl StandaloneBuilder {
             texture_key: "fallback".to_string(),
             canonical_key: "mozi:fallback".to_string(),
             files: StandaloneFilePaths {
-                albedo: Some("textures/mtk_fallback.png".to_string()),
+                albedo: Some(fallback_rel.clone()),
                 normal: None,
                 specular: None,
                 overlay: None,
+                albedo_static: Some(fallback_rel.clone()),
+                normal_static: None,
+                specular_static: None,
+                overlay_static: None,
+                albedo_anim: None,
+                normal_anim: None,
+                specular_anim: None,
+                overlay_anim: None,
             },
             is_animated: false,
             animation: None,
@@ -163,7 +196,6 @@ impl StandaloneBuilder {
         }
 
         // 3. Process textures (multi-threaded via Rayon when enabled)
-
         #[cfg(feature = "parallel")]
         let process_iter = loc_vec.par_iter();
         #[cfg(not(feature = "parallel"))]
@@ -202,6 +234,28 @@ impl StandaloneBuilder {
                         }
                     }
 
+                    // Check for overlay companion (e.g. grass_block_side -> grass_block_side_overlay)
+                    let overlay_cands = [
+                        format!("{}_overlay", loc.path),
+                        loc.path.replace("grass_block_side", "grass_block_side_overlay"),
+                        loc.path.replace("grass_side", "grass_side_overlay"),
+                    ];
+                    for cand_path in overlay_cands {
+                        if cand_path != loc.path {
+                            let cand_loc = ResourceLocation::new(&loc.namespace, cand_path);
+                            if let Some(overlay_bytes) = stack.open_texture_raw(&cand_loc) {
+                                if let Ok(overlay_buf) = RgbaBuffer::from_png_bytes(&overlay_bytes) {
+                                    channels.push(ChannelData {
+                                        channel_type: ChannelType::Overlay,
+                                        buffer: overlay_buf,
+                                        metadata: None,
+                                    });
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
                     // Multi-channel frame alignment
                     let align_res = align_standalone_channels(channels);
 
@@ -211,19 +265,53 @@ impl StandaloneBuilder {
 
                     for ch in align_res.channels {
                         let ch_name = ch.channel_type.as_str();
-                        let file_name = format!(
-                            "{}_{}_{}_{}.png",
+
+                        // 1. Static Frame 0 (1:1 Square)
+                        let static_buf = ch.static_frame_0();
+                        let static_fname = format!(
+                            "{}_{}_{}_{}_static.png",
                             short_hash, loc.namespace, clean_name, ch_name
                         );
-                        let rel_path = format!("textures/{}", file_name);
+                        let static_rel = format!("textures/{}", static_fname);
 
-                        if let Ok(png_bytes) = ch.buffer.to_png_bytes() {
-                            out_files.push((file_name, png_bytes));
+                        if let Ok(png_bytes) = static_buf.to_png_bytes() {
+                            out_files.push((static_fname, png_bytes));
                             match ch.channel_type {
-                                ChannelType::Albedo => file_paths.albedo = Some(rel_path),
-                                ChannelType::Normal => file_paths.normal = Some(rel_path),
-                                ChannelType::Specular => file_paths.specular = Some(rel_path),
-                                ChannelType::Overlay => file_paths.overlay = Some(rel_path),
+                                ChannelType::Albedo => {
+                                    file_paths.albedo = Some(static_rel.clone());
+                                    file_paths.albedo_static = Some(static_rel);
+                                }
+                                ChannelType::Normal => {
+                                    file_paths.normal = Some(static_rel.clone());
+                                    file_paths.normal_static = Some(static_rel);
+                                }
+                                ChannelType::Specular => {
+                                    file_paths.specular = Some(static_rel.clone());
+                                    file_paths.specular_static = Some(static_rel);
+                                }
+                                ChannelType::Overlay => {
+                                    file_paths.overlay = Some(static_rel.clone());
+                                    file_paths.overlay_static = Some(static_rel);
+                                }
+                            }
+                        }
+
+                        // 2. Animated vertical strip (if animated)
+                        if align_res.is_animated {
+                            let anim_fname = format!(
+                                "{}_{}_{}_{}_anim.png",
+                                short_hash, loc.namespace, clean_name, ch_name
+                            );
+                            let anim_rel = format!("textures/{}", anim_fname);
+
+                            if let Ok(anim_png) = ch.buffer.to_png_bytes() {
+                                out_files.push((anim_fname, anim_png));
+                                match ch.channel_type {
+                                    ChannelType::Albedo => file_paths.albedo_anim = Some(anim_rel),
+                                    ChannelType::Normal => file_paths.normal_anim = Some(anim_rel),
+                                    ChannelType::Specular => file_paths.specular_anim = Some(anim_rel),
+                                    ChannelType::Overlay => file_paths.overlay_anim = Some(anim_rel),
+                                }
                             }
                         }
                     }

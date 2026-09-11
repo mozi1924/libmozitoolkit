@@ -2,7 +2,7 @@ use std::sync::Arc;
 use glam::IVec3;
 use mtk_cull::FaceCuller;
 use mtk_resource::{CtmRule, CtmSolver, ResourceLocation};
-use mtk_texture::atlas::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation};
+use mtk_texture::atlas::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation, SpriteKind};
 use mtk_voxel::mesher::SectionMesher;
 use mtk_voxel::storage::VoxelStorage;
 use mtk_voxel::types::MesherConfig;
@@ -23,7 +23,7 @@ fn test_ctm_horizontal_meshing_with_atlas() {
     let ctm_props = r#"
 matchBlocks=minecraft:bookshelf
 method=horizontal
-tiles=0 1 2 3
+tiles=0-3
 "#;
     let rule = CtmRule::parse_properties("optifine/ctm/bookshelf.properties", "minecraft", ctm_props).unwrap();
     let solver = Arc::new(CtmSolver::new(vec![rule]));
@@ -51,9 +51,11 @@ tiles=0 1 2 3
                 chunk_id: 0,
                 category: "blocks".to_string(),
                 is_animated: false,
+                sprite_kind: SpriteKind::StaticAtlas,
                 texture_id: i,
                 uv_bounds: uv,
                 frame_0_uv_bounds: uv,
+                local_uv_bounds: [0.0, 0.0, 1.0, 1.0],
                 frame_uv_step: [0.0, 0.0],
                 pixel_rect: rect,
                 strip_pixel_rect: rect,

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use mtk_resource::{AtlasDefinition, AtlasSource, ResourceLocation, ResourcePackStack};
-use crate::atlas::address_map::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation};
+use crate::atlas::address_map::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation, SpriteKind};
 use crate::error::TextureError;
 use crate::image::buffer::RgbaBuffer;
 use crate::image::loader::DecodedSprite;
@@ -169,10 +169,33 @@ impl AtlasBuilder {
         let mut anim_sprites = Vec::new();
 
         for sp in sprites {
+            // For static atlas chunks: 100% coverage of all textures.
+            // If animated, extract Frame 0 (1:1 square).
+            let static_sp = if sp.frame_count > 1 {
+                DecodedSprite {
+                    sprite_id: sp.sprite_id.clone(),
+                    albedo: sp.albedo.crop(0, 0, sp.frame_width, sp.frame_height),
+                    normal: sp.normal.as_ref().map(|n| {
+                        let h = n.height.min(sp.frame_height);
+                        n.crop(0, 0, n.width.min(sp.frame_width), h)
+                    }),
+                    specular: sp.specular.as_ref().map(|s| {
+                        let h = s.height.min(sp.frame_height);
+                        s.crop(0, 0, s.width.min(sp.frame_width), h)
+                    }),
+                    frame_width: sp.frame_width,
+                    frame_height: sp.frame_height,
+                    frame_count: 1,
+                    metadata: None,
+                }
+            } else {
+                sp.clone()
+            };
+            static_sprites.push(static_sp);
+
+            // For dedicated animated atlas chunks: multi-frame animated textures only
             if sp.frame_count > 1 {
                 anim_sprites.push(sp);
-            } else {
-                static_sprites.push(sp);
             }
         }
 
@@ -265,9 +288,11 @@ impl AtlasBuilder {
                                 chunk_id,
                                 category: category_name.to_string(),
                                 is_animated: false,
+                                sprite_kind: SpriteKind::StaticAtlas,
                                 texture_id: texture_id_counter,
                                 uv_bounds: [u_min, v_min, u_max, v_max],
                                 frame_0_uv_bounds: [u_min, v_min, u_max, v_max],
+                                local_uv_bounds: [0.0, 0.0, 1.0, 1.0],
                                 frame_uv_step: [0.0, 0.0],
                                 pixel_rect: [inner_x, inner_y, fw, fh],
                                 strip_pixel_rect: [inner_x, inner_y, fw, fh],
@@ -408,15 +433,17 @@ impl AtlasBuilder {
                         // Step per frame in UV space
                         let v_step = (fh as f32) / (chunk.height as f32);
 
-                        address_map.sprites.insert(
+                        address_map.anim_sprites.insert(
                             sp.sprite_id.clone(),
                             AtlasSpriteLocation {
                                 chunk_id,
                                 category: category_name.to_string(),
                                 is_animated: true,
+                                sprite_kind: SpriteKind::AnimatedAtlas,
                                 texture_id: texture_id_counter,
                                 uv_bounds: [strip_u_min, strip_v_min, strip_u_max, strip_v_max],
                                 frame_0_uv_bounds: [f0_u_min, f0_v_min, f0_u_max, f0_v_max],
+                                local_uv_bounds: [0.0, 0.0, 1.0, 1.0],
                                 frame_uv_step: [0.0, v_step],
                                 pixel_rect: [inner_x, inner_y, fw, fh],
                                 strip_pixel_rect: [inner_x, inner_y, strip_w, strip_h],
