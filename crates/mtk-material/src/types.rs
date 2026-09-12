@@ -1,36 +1,78 @@
+use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
-/// Supported external DCC / Minecraft model importer origins.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum ImporterOrigin {
-    #[default]
-    Auto,
-    Mineways,
-    Jmc2Obj,
-    IceCube,
-    Generic,
+/// Generic specification for decoding grid-based texture atlases (e.g. Mineways-style atlases).
+/// This completely decouples libmtk from any specific DCC exporter format.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GridAtlasSpec {
+    /// Total width and height of single swatch cell in pixels (e.g. 18.0 for 16px tile + 2px border).
+    pub swatch_size: f32,
+    /// Usable tile dimensions in pixels (e.g. 16.0).
+    pub tile_size: f32,
+    /// Inset border margin in pixels (e.g. 1.0).
+    pub border: f32,
+    /// Image width in pixels.
+    pub image_width: u32,
+    /// Image height in pixels.
+    pub image_height: u32,
+    /// Filename patterns/prefixes used to detect this atlas (e.g. ["terrain", "terrainrgba", "terrainrgb"]).
+    pub atlas_name_patterns: Vec<String>,
+    /// Filename suffixes used to detect this atlas (e.g. ["_rgb", "_rgba", "_alpha"]).
+    pub atlas_suffix_patterns: Vec<String>,
+    /// Mapping from swatch ID (col + row * cols_per_row) to candidate texture identifiers.
+    pub swatch_to_candidates: HashMap<usize, Vec<String>>,
 }
 
-impl ImporterOrigin {
-    pub fn parse(s: &str) -> Self {
-        match s.trim().to_lowercase().as_str() {
-            "mineways" => Self::Mineways,
-            "jmc2obj" | "jmc" => Self::Jmc2Obj,
-            "icecube" | "ice_cube" => Self::IceCube,
-            "generic" => Self::Generic,
-            _ => Self::Auto,
+impl Default for GridAtlasSpec {
+    fn default() -> Self {
+        Self {
+            swatch_size: 18.0,
+            tile_size: 16.0,
+            border: 1.0,
+            image_width: 1024,
+            image_height: 1024,
+            atlas_name_patterns: Vec::new(),
+            atlas_suffix_patterns: Vec::new(),
+            swatch_to_candidates: HashMap::new(),
         }
     }
+}
 
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Auto => "auto",
-            Self::Mineways => "mineways",
-            Self::Jmc2Obj => "jmc2obj",
-            Self::IceCube => "ice_cube",
-            Self::Generic => "generic",
+impl GridAtlasSpec {
+    /// Check if a given texture/material name matches this grid atlas specification.
+    pub fn matches_atlas_name(&self, raw_name: &str) -> bool {
+        let clean = raw_name.trim().to_lowercase();
+        let stem = clean
+            .strip_suffix(".png")
+            .or_else(|| clean.strip_suffix(".jpg"))
+            .unwrap_or(&clean);
+
+        // Strip blender numerical duplicate suffixes (e.g. ".001", "_001")
+        let stem = if let Some(idx) = stem.rfind('.') {
+            if stem[idx + 1..].chars().all(|c| c.is_ascii_digit()) {
+                &stem[..idx]
+            } else {
+                stem
+            }
+        } else {
+            stem
+        };
+
+        for pat in &self.atlas_name_patterns {
+            let pat_lower = pat.to_lowercase();
+            if stem == pat_lower || stem.starts_with(&pat_lower) {
+                return true;
+            }
         }
+
+        for suf in &self.atlas_suffix_patterns {
+            let suf_lower = suf.to_lowercase();
+            if stem.ends_with(&suf_lower) {
+                return true;
+            }
+        }
+
+        false
     }
 }
 
@@ -39,8 +81,8 @@ impl ImporterOrigin {
 pub enum SourceUvSpace {
     /// Normalized [0.0..1.0] (or tiled [0.0..N.0]) local texture space.
     Local,
-    /// Mineways merged terrain atlas with texture pixel dimensions.
-    MinewaysAtlas { width: u32, height: u32 },
+    /// Grid-based atlas with texture pixel dimensions.
+    GridAtlas { width: u32, height: u32 },
     /// Existing Atlas Chunk with normalized UV bounds [u_min, v_min, u_max, v_max].
     AtlasSprite { bounds: [f32; 4] },
 }

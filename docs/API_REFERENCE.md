@@ -145,6 +145,10 @@ pub struct Quad {
 ---
 
 ## 7. 材质与映射：`mtk-material`
-- `MaterialResolver`: 依据 Block ID / OBJ Material Name / 贴图哈希匹配现代 PBR 材质规范。
-- `clean_icecube_name`, `clean_jmc2obj_name`, `decode_mineways_uv`, `remap_mesh_uvs_parallel`。
+- `MaterialResolver`: 数据驱动的通用材质与贴图匹配器。
+  - `resolve(raw_name: &str, custom_aliases: Option<&HashMap<String, Vec<String>>>, address_map: &AtlasAddressMap) -> Option<(ResourceLocation, &AtlasSpriteLocation)>`: 支持接收外部别名表，执行 O(1) 并行检索与分类后备查找。
+  - `resolve_mineways_face(u: f32, v: f32, width: u32, height: u32, aliases: Option<&HashMap<String, Vec<String>>>, address_map: &AtlasAddressMap)`: 解算 Mineways 单图集面 UV 并投射至目标图集。
+- `clean_identifier(raw: &str) -> String`: 通用材质/贴图标识符清洗（剥离扩展名、Blender 编号后缀、常见文件夹前缀）。
+- `remap_mesh_uvs_parallel(uvs, face_materials, face_loop_ranges, address_map, aliases, mineways_size)`: 并行重映射网格 UV 缓冲与各面材质 ID。
+- `remap_mesh_multi_uvs_parallel(source_uvs, face_materials, face_loop_ranges, address_map, aliases, mineways_size) -> MeshMultiUvRemapResult`: 并行输出 Atlas UV 与 Local/Standalone [0, 1] UV，以及逐面路由模式（Atlas/Static/Anim/Overlay）。
 

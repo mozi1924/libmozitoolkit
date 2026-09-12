@@ -16,7 +16,7 @@ pub mod voxel;
 use pyo3::prelude::*;
 
 pub use cull::PyFaceCuller;
-pub use material::PyMaterialResolver;
+pub use material::{PyGridAtlasSpec, PyMaterialResolver};
 pub use mesh::PyMeshData;
 pub use mesher::PySectionMesher;
 pub use model::{PyBakedModelDatabase, PyModelBaker};
@@ -28,28 +28,24 @@ pub use voxel::{PyMesherConfig, PyVoxelStorage};
 
 /// Unified high-performance mesh processing pipeline entrypoint.
 ///
-/// Takes input raw mesh, material names, optional baked atlas, and origin type.
+/// Takes input raw mesh, material names, optional baked atlas, and optional grid atlas spec.
 /// Computes multi-threaded status resolution, UV remapping, secondary [0, 1] PBR UVs,
 /// and returns the transformed MeshData along with structured material assignments.
 #[pyfunction]
-#[pyo3(signature = (mesh, material_names, atlas=None, origin="auto", generate_secondary_uv=true, mineways_size=None))]
+#[pyo3(signature = (mesh, material_names, atlas=None, aliases=None, generate_secondary_uv=true, grid_atlas_spec=None))]
 pub fn process_mesh<'py>(
     py: Python<'py>,
     mesh: &PyMeshData,
     material_names: Vec<String>,
     atlas: Option<&PyBakedAtlas>,
-    origin: &str,
+    aliases: Option<std::collections::HashMap<String, Vec<String>>>,
     generate_secondary_uv: bool,
-    mineways_size: Option<(u32, u32)>,
+    grid_atlas_spec: Option<&PyGridAtlasSpec>,
 ) -> PyResult<(PyMeshData, Bound<'py, pyo3::types::PyList>, Bound<'py, pyo3::types::PyDict>)> {
-    let orig = mtk_material::ImporterOrigin::parse(origin);
-    let (mw_w, mw_h) = mineways_size.unwrap_or((1024, 1024));
-
     let cfg = libmtk::MeshPipelineConfig {
-        origin: orig,
+        custom_aliases: aliases,
         generate_secondary_uv,
-        mineways_width: mw_w,
-        mineways_height: mw_h,
+        grid_atlas_spec: grid_atlas_spec.map(|s| s.inner.clone()),
     };
 
     let addr_map = atlas.map(|a| &a.inner.address_map);
@@ -118,6 +114,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(precompile_all_assets, m)?)?;
 
     // 7. Material & UV Remapper
+    m.add_class::<PyGridAtlasSpec>()?;
     m.add_class::<PyMaterialResolver>()?;
 
     // 8. Model Baker
@@ -252,7 +249,7 @@ mod tests {
                 &mesh,
                 mat_names,
                 Some(&atlas),
-                "auto",
+                None,
                 true,
                 None,
             ).unwrap();

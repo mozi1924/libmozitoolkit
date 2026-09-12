@@ -2,40 +2,25 @@
 //!
 //! Provides an end-to-end, host-agnostic, data-in/data-out mesh processing engine.
 //! In a single invocation, performs:
-//! 1. Importer origin detection & material string resolution
+//! 1. External alias matching & material string resolution
 //! 2. Multi-threaded Atlas / Standalone UV remapping
 //! 3. Secondary normalized [0, 1] UV generation for PBR
 //! 4. Structured result mesh & material summary generation
 
+use std::collections::HashMap;
 use mtk_core::mesh::MeshData;
-use mtk_material::{
-    detect_importer_origin, remap_mesh_multi_uvs_parallel, ImporterOrigin,
-    MeshMultiUvRemapResult,
-};
+use mtk_material::{remap_mesh_multi_uvs_parallel, GridAtlasSpec, MeshMultiUvRemapResult};
 use mtk_texture::AtlasAddressMap;
 
 /// Configuration options for the unified mesh processing pipeline.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct MeshPipelineConfig {
-    /// Importer origin format (Auto, Jmc2Obj, Mineways, IceCube, Generic).
-    pub origin: ImporterOrigin,
+    /// Optional external material alias map (raw_name -> candidate list).
+    pub custom_aliases: Option<HashMap<String, Vec<String>>>,
     /// Whether to generate secondary [0, 1] UV coordinates for PBR shader channels.
     pub generate_secondary_uv: bool,
-    /// Image width for Mineways atlas UV decoding (default: 1024).
-    pub mineways_width: u32,
-    /// Image height for Mineways atlas UV decoding (default: 1024).
-    pub mineways_height: u32,
-}
-
-impl Default for MeshPipelineConfig {
-    fn default() -> Self {
-        Self {
-            origin: ImporterOrigin::Auto,
-            generate_secondary_uv: true,
-            mineways_width: 1024,
-            mineways_height: 1024,
-        }
-    }
+    /// Optional grid atlas specification for UV decoding.
+    pub grid_atlas_spec: Option<GridAtlasSpec>,
 }
 
 /// Information describing a resolved material slot in the output mesh.
@@ -110,13 +95,9 @@ pub fn process_mesh(
 
     // 1. Resolve material names
     if let Some(addr_map) = address_map {
+        let aliases_ref = config.custom_aliases.as_ref();
         for raw_name in material_names {
-            let actual_origin = match config.origin {
-                ImporterOrigin::Auto => detect_importer_origin(raw_name),
-                other => other,
-            };
-
-            let resolved = mtk_material::MaterialResolver::resolve(raw_name, actual_origin, addr_map);
+            let resolved = mtk_material::MaterialResolver::resolve(raw_name, aliases_ref, addr_map);
             if let Some((res_loc, sprite_loc)) = resolved {
                 resolved_materials.push(ResolvedMaterialInfo {
                     raw_name: raw_name.clone(),
@@ -164,8 +145,8 @@ pub fn process_mesh(
             &per_face_mat_names,
             &face_loop_ranges,
             addr_map,
-            config.origin,
-            Some((config.mineways_width, config.mineways_height)),
+            aliases_ref,
+            config.grid_atlas_spec.as_ref(),
         );
 
         output_mesh.uvs = remap_result.atlas_uvs;
@@ -238,7 +219,14 @@ mod tests {
         let addr_map = AtlasAddressMap::from_json(mapping_json).unwrap();
 
         let materials = vec!["Tile_Stone".to_string()];
-        let cfg = MeshPipelineConfig::default();
+        let mut custom_aliases = HashMap::new();
+        custom_aliases.insert("tile_stone".to_string(), vec!["block/stone".to_string()]);
+
+        let cfg = MeshPipelineConfig {
+            generate_secondary_uv: true,
+            grid_atlas_spec: None,
+            custom_aliases: Some(custom_aliases),
+        };
 
         let out = process_mesh(&mesh, &materials, Some(&addr_map), &cfg);
 

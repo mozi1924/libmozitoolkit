@@ -1,11 +1,13 @@
+use std::collections::HashMap;
+
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use mtk_texture::AtlasAddressMap;
 
-use crate::mineways::decode_mineways_uv;
 use crate::remap::remap_local_to_atlas;
+use crate::resolver::decode_grid_atlas_uv;
 use crate::resolver::MaterialResolver;
-use crate::types::{ImporterOrigin, MeshRemapResult};
+use crate::types::{GridAtlasSpec, MeshRemapResult};
 
 /// Parallel batch remapper for entire mesh UV layers and face material assignments.
 pub fn remap_mesh_uvs_parallel(
@@ -13,8 +15,8 @@ pub fn remap_mesh_uvs_parallel(
     face_materials: &[String],
     face_loop_ranges: &[(u32, u32)],
     address_map: &AtlasAddressMap,
-    origin: ImporterOrigin,
-    mineways_atlas_size: Option<(u32, u32)>,
+    aliases: Option<&HashMap<String, Vec<String>>>,
+    grid_atlas_spec: Option<&GridAtlasSpec>,
 ) -> MeshRemapResult {
     let face_count = face_materials.len();
     if face_count != face_loop_ranges.len() {
@@ -27,8 +29,6 @@ pub fn remap_mesh_uvs_parallel(
         };
     }
 
-    // 1. Resolve material names to sprite locations ahead of loop transforms
-    let (mw_w, mw_h) = mineways_atlas_size.unwrap_or((1024, 1024));
     let uvs_raw_addr = uvs.as_mut_ptr() as usize;
     let total_uv_len = uvs.len();
 
@@ -43,10 +43,11 @@ pub fn remap_mesh_uvs_parallel(
         }
 
         let mat_name = &face_materials[face_idx];
-        let is_mineways_atlas = mineways_atlas_size.is_some() && crate::mineways::is_mineways_atlas_name(mat_name);
+        let is_grid_atlas = grid_atlas_spec.map_or(false, |spec| spec.matches_atlas_name(mat_name));
 
-        if is_mineways_atlas {
-            // Calculate center UV of the face to decode Mineways swatch
+        if is_grid_atlas {
+            let spec = grid_atlas_spec.unwrap();
+            // Calculate center UV of the face to decode grid atlas swatch
             let mut sum_u = 0.0f32;
             let mut sum_v = 0.0f32;
             for i in start_idx..end_idx {
@@ -60,14 +61,14 @@ pub fn remap_mesh_uvs_parallel(
             let avg_v = sum_v / (count as f32);
 
             if let Some((_, sprite_loc, _)) =
-                MaterialResolver::resolve_mineways_face(avg_u, avg_v, mw_w, mw_h, address_map)
+                MaterialResolver::resolve_grid_atlas_face(avg_u, avg_v, spec, aliases, address_map)
             {
-                // Remap each loop UV from Mineways atlas -> local -> target atlas
+                // Remap each loop UV from grid atlas -> local -> target atlas
                 for i in start_idx..end_idx {
                     unsafe {
                         let p = uvs_ptr.add(i);
                         let [u_in, v_in] = *p;
-                        let (_, _, local_uv) = decode_mineways_uv(u_in, v_in, mw_w, mw_h);
+                        let (_, local_uv) = decode_grid_atlas_uv(u_in, v_in, spec);
                         let target_uv = remap_local_to_atlas(local_uv[0], local_uv[1], sprite_loc);
                         *p = target_uv;
                     }
@@ -78,7 +79,7 @@ pub fn remap_mesh_uvs_parallel(
         }
 
         // Normal material path
-        if let Some((_, sprite_loc)) = MaterialResolver::resolve(mat_name, origin, address_map) {
+        if let Some((_, sprite_loc)) = MaterialResolver::resolve(mat_name, aliases, address_map) {
             for i in start_idx..end_idx {
                 unsafe {
                     let p = uvs_ptr.add(i);
@@ -127,8 +128,8 @@ pub fn remap_mesh_multi_uvs_parallel(
     face_materials: &[String],
     face_loop_ranges: &[(u32, u32)],
     address_map: &AtlasAddressMap,
-    origin: ImporterOrigin,
-    mineways_atlas_size: Option<(u32, u32)>,
+    aliases: Option<&HashMap<String, Vec<String>>>,
+    grid_atlas_spec: Option<&GridAtlasSpec>,
 ) -> crate::types::MeshMultiUvRemapResult {
     let face_count = face_materials.len();
     let total_uv_len = source_uvs.len();
@@ -146,8 +147,6 @@ pub fn remap_mesh_multi_uvs_parallel(
             unmapped_faces: face_count,
         };
     }
-
-    let (mw_w, mw_h) = mineways_atlas_size.unwrap_or((1024, 1024));
 
     // Structure holding per-face computed results
     struct FaceOut {
@@ -183,9 +182,10 @@ pub fn remap_mesh_multi_uvs_parallel(
 
         let mat_name = &face_materials[face_idx];
         let is_overlay = mat_name.contains("overlay") || mat_name.contains("grass_side_overlay");
-        let is_mineways_atlas = mineways_atlas_size.is_some() && crate::mineways::is_mineways_atlas_name(mat_name);
+        let is_grid_atlas = grid_atlas_spec.map_or(false, |spec| spec.matches_atlas_name(mat_name));
 
-        if is_mineways_atlas {
+        if is_grid_atlas {
+            let spec = grid_atlas_spec.unwrap();
             let mut sum_u = 0.0f32;
             let mut sum_v = 0.0f32;
             for i in start_idx..end_idx {
@@ -197,12 +197,12 @@ pub fn remap_mesh_multi_uvs_parallel(
             let avg_v = sum_v / (count as f32);
 
             if let Some((_, sprite_loc, _)) =
-                MaterialResolver::resolve_mineways_face(avg_u, avg_v, mw_w, mw_h, address_map)
+                MaterialResolver::resolve_grid_atlas_face(avg_u, avg_v, spec, aliases, address_map)
             {
                 let uv_mode = if is_overlay { 3 } else { 0 };
                 for i in start_idx..end_idx {
                     let [u_in, v_in] = source_uvs[i];
-                    let (_, _, local_uv) = decode_mineways_uv(u_in, v_in, mw_w, mw_h);
+                    let (_, local_uv) = decode_grid_atlas_uv(u_in, v_in, spec);
                     let target_atlas_uv = remap_local_to_atlas(local_uv[0], local_uv[1], sprite_loc);
                     unsafe {
                         *a_ptr.add(i) = target_atlas_uv;
@@ -217,7 +217,7 @@ pub fn remap_mesh_multi_uvs_parallel(
                     success: true,
                 };
             }
-            // Unresolved mineways face
+            // Unresolved grid atlas face
             for i in start_idx..end_idx {
                 unsafe {
                     *a_ptr.add(i) = source_uvs[i];
@@ -234,7 +234,7 @@ pub fn remap_mesh_multi_uvs_parallel(
         }
 
         // Standard material path
-        if let Some((_, sprite_loc)) = MaterialResolver::resolve(mat_name, origin, address_map) {
+        if let Some((_, sprite_loc)) = MaterialResolver::resolve(mat_name, aliases, address_map) {
             let uv_mode = if is_overlay { 3 } else { 0 };
             for i in start_idx..end_idx {
                 let [u_in, v_in] = source_uvs[i];

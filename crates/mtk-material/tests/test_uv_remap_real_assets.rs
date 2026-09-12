@@ -1,5 +1,5 @@
 use std::path::Path;
-use mtk_material::{remap_local_to_atlas, ImporterOrigin, MaterialResolver};
+use mtk_material::{remap_local_to_atlas, MaterialResolver};
 use mtk_resource::{AtlasCategory, ResourcePackStack, ZipPack};
 use mtk_texture::{AtlasBuilder, AtlasBuilderConfig};
 
@@ -53,7 +53,7 @@ fn test_uv_remap_real_fabric_jar_and_spbr() {
     // =========================================================================
     let (stone_res, stone_sprite) = MaterialResolver::resolve(
         "minecraft_block-stone",
-        ImporterOrigin::Jmc2Obj,
+        None,
         address_map,
     )
     .expect("Failed to resolve jmc2obj stone");
@@ -76,7 +76,7 @@ fn test_uv_remap_real_fabric_jar_and_spbr() {
     for anim_name in animated_names {
         if let Some((anim_res, anim_sprite)) = MaterialResolver::resolve(
             &format!("minecraft_block-{}", anim_name),
-            ImporterOrigin::Jmc2Obj,
+            None,
             address_map,
         ) {
             println!(
@@ -135,7 +135,7 @@ fn test_uv_remap_real_fabric_jar_and_spbr() {
     // =========================================================================
     if let Some((torch_res, torch_sprite)) = MaterialResolver::resolve(
         "torch",
-        ImporterOrigin::Generic,
+        None,
         address_map,
     ) {
         println!("Testing torch sub-rectangle UV on {}", torch_res.as_string());
@@ -184,7 +184,7 @@ fn test_uv_remap_real_fabric_jar_and_spbr() {
         let mut unmapped_samples = Vec::new();
 
         for name in &mat_names {
-            if let Some((_, sprite)) = MaterialResolver::resolve(name, ImporterOrigin::Auto, address_map) {
+            if let Some((_, sprite)) = MaterialResolver::resolve(name, None, address_map) {
                 resolved_count += 1;
                 // Verify that remapping random UV always stays within bounds
                 let uv_mid = remap_local_to_atlas(0.5, 0.5, sprite);

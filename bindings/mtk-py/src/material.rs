@@ -1,13 +1,65 @@
+use std::collections::HashMap;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use mtk_material::{
-    clean_icecube_name, clean_jmc2obj_name, decode_mineways_uv, is_mineways_atlas_name,
-    lookup_swatch, remap_mesh_multi_uvs_parallel, remap_mesh_uvs_parallel, ImporterOrigin,
-    MaterialResolver,
+    clean_identifier, decode_grid_atlas_uv, remap_grid_atlas_uv_to_local,
+    remap_mesh_multi_uvs_parallel, remap_mesh_uvs_parallel, GridAtlasSpec, MaterialResolver,
 };
 
 use crate::texture::PyBakedAtlas;
+
+/// Python interface for Grid Atlas Specification.
+#[pyclass(name = "GridAtlasSpec")]
+#[derive(Clone)]
+pub struct PyGridAtlasSpec {
+    pub(crate) inner: GridAtlasSpec,
+}
+
+#[pymethods]
+impl PyGridAtlasSpec {
+    #[new]
+    #[pyo3(signature = (swatch_size=18.0, tile_size=16.0, border=1.0, image_width=1024, image_height=1024, atlas_name_patterns=None, atlas_suffix_patterns=None, swatch_to_candidates=None))]
+    pub fn new(
+        swatch_size: f32,
+        tile_size: f32,
+        border: f32,
+        image_width: u32,
+        image_height: u32,
+        atlas_name_patterns: Option<Vec<String>>,
+        atlas_suffix_patterns: Option<Vec<String>>,
+        swatch_to_candidates: Option<HashMap<usize, Vec<String>>>,
+    ) -> Self {
+        Self {
+            inner: GridAtlasSpec {
+                swatch_size,
+                tile_size,
+                border,
+                image_width,
+                image_height,
+                atlas_name_patterns: atlas_name_patterns.unwrap_or_default(),
+                atlas_suffix_patterns: atlas_suffix_patterns.unwrap_or_default(),
+                swatch_to_candidates: swatch_to_candidates.unwrap_or_default(),
+            },
+        }
+    }
+
+    /// Set candidate texture names for a given swatch ID.
+    pub fn set_swatch_candidates(&mut self, swatch_id: usize, candidates: Vec<String>) {
+        self.inner.swatch_to_candidates.insert(swatch_id, candidates);
+    }
+
+    /// Check if a material name matches this grid atlas specification.
+    pub fn matches_name(&self, name: &str) -> bool {
+        self.inner.matches_atlas_name(name)
+    }
+
+    /// Decode UV on this grid atlas to candidate names and local UVs.
+    pub fn decode_uv(&self, u: f32, v: f32) -> (Option<Vec<String>>, (f32, f32)) {
+        let (cands, local) = decode_grid_atlas_uv(u, v, &self.inner);
+        (cands.cloned(), (local[0], local[1]))
+    }
+}
 
 /// Python interface for Material Name Resolution and UV Remapping.
 #[pyclass(name = "MaterialResolver")]
@@ -15,55 +67,28 @@ pub struct PyMaterialResolver;
 
 #[pymethods]
 impl PyMaterialResolver {
-    /// Clean a raw jmc2obj material or texture name.
+    /// Clean a raw material or texture name into a normalized identifier stem.
     #[staticmethod]
-    pub fn clean_jmc2obj(name: &str) -> String {
-        clean_jmc2obj_name(name)
+    pub fn clean_name(name: &str) -> String {
+        clean_identifier(name)
     }
 
-    /// Clean an Ice-Cube material or texture name.
+    /// Convert a grid atlas UV coordinate (u, v) to its local [0, 1] swatch coordinate.
     #[staticmethod]
-    pub fn clean_icecube(name: &str) -> String {
-        clean_icecube_name(name)
+    pub fn remap_grid_atlas_uv_to_local(u: f32, v: f32, spec: &PyGridAtlasSpec) -> (f32, f32) {
+        let uv = remap_grid_atlas_uv_to_local(u, v, &spec.inner);
+        (uv[0], uv[1])
     }
 
-    /// Check if a name belongs to Mineways terrain atlas.
+    /// Resolve a raw material name to its target sprite (resource_id, chunk_id, texture_id) using optional external alias table.
     #[staticmethod]
-    pub fn is_mineways_atlas(name: &str) -> bool {
-        is_mineways_atlas_name(name)
-    }
-
-    /// Lookup Mineways swatch name by ID.
-    #[staticmethod]
-    pub fn lookup_mineways_swatch(swatch_id: usize) -> Option<(&'static str, &'static str)> {
-        lookup_swatch(swatch_id)
-    }
-
-    /// Decode Mineways face UV to texture names and local [0, 1] UVs.
-    #[staticmethod]
-    pub fn decode_mineways_uv(
-        u: f32,
-        v: f32,
-        width: u32,
-        height: u32,
-    ) -> (Option<String>, Option<String>, (f32, f32)) {
-        let (pri, alt, local) = decode_mineways_uv(u, v, width, height);
-        (
-            pri.map(|s| s.to_string()),
-            alt.map(|s| s.to_string()),
-            (local[0], local[1]),
-        )
-    }
-
-    /// Resolve a raw material name to its target sprite (resource_id, chunk_id, texture_id).
-    #[staticmethod]
+    #[pyo3(signature = (name, atlas, aliases=None))]
     pub fn resolve_material(
         name: &str,
-        origin: &str,
         atlas: &PyBakedAtlas,
+        aliases: Option<HashMap<String, Vec<String>>>,
     ) -> Option<(String, u16, u32)> {
-        let orig = ImporterOrigin::parse(origin);
-        MaterialResolver::resolve(name, orig, &atlas.inner.address_map)
+        MaterialResolver::resolve(name, aliases.as_ref(), &atlas.inner.address_map)
             .map(|(res, sp)| (res.as_string(), sp.chunk_id, sp.texture_id))
     }
 
@@ -74,8 +99,8 @@ impl PyMaterialResolver {
     ///     face_materials: List of material name strings per face
     ///     face_loop_ranges: List of (loop_start, loop_count) tuples per face
     ///     atlas: PyBakedAtlas reference
-    ///     origin: Importer origin string ("auto", "jmc2obj", "mineways", "ice_cube", "generic")
-    ///     mineways_size: Optional (width, height) for Mineways atlas decoding
+    ///     aliases: Optional dictionary of material name -> candidate list
+    ///     grid_atlas_spec: Optional PyGridAtlasSpec for grid atlas decoding
     ///
     /// Returns:
     ///     dict containing:
@@ -84,15 +109,15 @@ impl PyMaterialResolver {
     ///         "face_texture_ids": list of texture ID integers per face
     ///         "unmapped_faces": count of unmapped faces
     #[staticmethod]
-    #[pyo3(signature = (uvs, face_materials, face_loop_ranges, atlas, origin="auto", mineways_size=None))]
+    #[pyo3(signature = (uvs, face_materials, face_loop_ranges, atlas, aliases=None, grid_atlas_spec=None))]
     pub fn remap_mesh_uvs(
         py: Python<'_>,
         uvs: Vec<f32>,
         face_materials: Vec<String>,
         face_loop_ranges: Vec<(u32, u32)>,
         atlas: &PyBakedAtlas,
-        origin: &str,
-        mineways_size: Option<(u32, u32)>,
+        aliases: Option<HashMap<String, Vec<String>>>,
+        grid_atlas_spec: Option<&PyGridAtlasSpec>,
     ) -> PyResult<PyObject> {
         let loop_count = uvs.len() / 2;
         let mut uv_pairs: Vec<[f32; 2]> = Vec::with_capacity(loop_count);
@@ -100,14 +125,13 @@ impl PyMaterialResolver {
             uv_pairs.push([uvs[i * 2], uvs[i * 2 + 1]]);
         }
 
-        let orig = ImporterOrigin::parse(origin);
         let result = remap_mesh_uvs_parallel(
             &mut uv_pairs,
             &face_materials,
             &face_loop_ranges,
             &atlas.inner.address_map,
-            orig,
-            mineways_size,
+            aliases.as_ref(),
+            grid_atlas_spec.map(|s| &s.inner),
         );
 
         let mut flat_out_uvs = Vec::with_capacity(uv_pairs.len() * 2);
@@ -141,15 +165,15 @@ impl PyMaterialResolver {
     ///         "face_count": face count
     ///         "loop_count": loop count
     #[staticmethod]
-    #[pyo3(signature = (uvs, face_materials, face_loop_ranges, atlas, origin="auto", mineways_size=None))]
+    #[pyo3(signature = (uvs, face_materials, face_loop_ranges, atlas, aliases=None, grid_atlas_spec=None))]
     pub fn remap_mesh_multi_uvs(
         py: Python<'_>,
         uvs: Vec<f32>,
         face_materials: Vec<String>,
         face_loop_ranges: Vec<(u32, u32)>,
         atlas: &PyBakedAtlas,
-        origin: &str,
-        mineways_size: Option<(u32, u32)>,
+        aliases: Option<HashMap<String, Vec<String>>>,
+        grid_atlas_spec: Option<&PyGridAtlasSpec>,
     ) -> PyResult<PyObject> {
         let loop_count = uvs.len() / 2;
         let mut uv_pairs: Vec<[f32; 2]> = Vec::with_capacity(loop_count);
@@ -157,14 +181,13 @@ impl PyMaterialResolver {
             uv_pairs.push([uvs[i * 2], uvs[i * 2 + 1]]);
         }
 
-        let orig = ImporterOrigin::parse(origin);
         let result = remap_mesh_multi_uvs_parallel(
             &uv_pairs,
             &face_materials,
             &face_loop_ranges,
             &atlas.inner.address_map,
-            orig,
-            mineways_size,
+            aliases.as_ref(),
+            grid_atlas_spec.map(|s| &s.inner),
         );
 
         let mut flat_atlas_uvs = Vec::with_capacity(result.atlas_uvs.len() * 2);

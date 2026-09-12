@@ -60,11 +60,10 @@ pub use mtk_texture::{
     StandaloneTextureRecord, Stitcher, STANDALONE_FORMAT_VERSION,
 };
 pub use mtk_material::{
-    clean_icecube_name, clean_jmc2obj_name, decode_mineways_uv, detect_importer_origin,
-    is_mineways_atlas_name, is_quad_uv_diamond, lookup_swatch, remap_atlas_to_local,
-    remap_local_to_atlas, remap_mesh_multi_uvs_parallel, remap_mesh_uvs_parallel,
-    remap_mineways_atlas_uv_to_local, remap_sprite_to_sprite, straighten_diamond_quad_uv,
-    ImporterOrigin, MaterialResolver, MeshMultiUvRemapResult, MeshRemapResult, SourceUvSpace,
+    clean_identifier, decode_grid_atlas_uv, is_quad_uv_diamond, remap_atlas_to_local,
+    remap_grid_atlas_uv_to_local, remap_local_to_atlas, remap_mesh_multi_uvs_parallel,
+    remap_mesh_uvs_parallel, remap_sprite_to_sprite, straighten_diamond_quad_uv,
+    GridAtlasSpec, MaterialResolver, MeshMultiUvRemapResult, MeshRemapResult, SourceUvSpace,
 };
 pub use mtk_core::geometry::{
     mc_local_to_blender, mc_local_to_centered_z_up, mc_world_to_blender, mc_world_to_z_up, Aabb2d,
