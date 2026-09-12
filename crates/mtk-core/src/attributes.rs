@@ -217,6 +217,61 @@ impl MeshAttribute {
     }
 }
 
+/// Canonical built-in mesh attribute names (libmtk Spec v1).
+pub mod constants {
+    /// Canonical source texture identifier (Domain: Face, Type: String).
+    pub const ATTR_SOURCE_TEXTURE: &str = "mtk_source_texture";
+    /// Backwards-compatible alias for source texture key.
+    pub const ATTR_SOURCE_TEXTURE_KEY: &str = "mtk_source_texture_key";
+    /// Source provenance file or model origin path.
+    pub const ATTR_SOURCE_ORIGIN: &str = "mtk_source_origin";
+
+    /// Target Atlas chunk/sheet slot index (Domain: Face, Type: Int32/UInt16).
+    pub const ATTR_ATLAS_CHUNK_ID: &str = "mtk_atlas_chunk_id";
+    /// Target Atlas texture/sprite index (Domain: Face, Type: UInt32).
+    pub const ATTR_ATLAS_TEXTURE_ID: &str = "mtk_atlas_texture_id";
+    /// Material slot ID assigned to the polygon.
+    pub const ATTR_MATERIAL_SLOT: &str = "mtk_material_slot";
+    pub const ATTR_MATERIAL_ID: &str = "mtk_material_id";
+
+    /// Scalar emission intensity (Domain: Face/Point, Type: Float32, range 0.0..15.0 or 0.0..1.0).
+    pub const ATTR_EMISSION: &str = "mtk_emission";
+    /// Packed physical properties (Domain: Face, Type: Float4/RGBA [emission, roughness_mult, metallic, thin_wall]).
+    pub const ATTR_MATERIAL_PROPS: &str = "mtk_material_props";
+
+    /// Packed UV affine transform (Domain: Face, Type: Float4/RGBA [scale_u, scale_v, offset_u, offset_v]).
+    pub const ATTR_UV_TRANSFORM: &str = "mtk_uv_transform";
+    /// Dynamic UV rotation angle in radians (Domain: Face, Type: Float32).
+    pub const ATTR_UV_ROTATION: &str = "mtk_uv_rotation";
+    /// UV decoder routing mode (Domain: Face, Type: UInt8/Int32: 0=Atlas, 1=Standalone, 2=Animated, 3=Overlay).
+    pub const ATTR_UV_MODE: &str = "mtk_uv_mode";
+
+    /// Animation timing parameters (Domain: Face, Type: Float3 [total_frames, frametime, interpolate]).
+    pub const ATTR_ANIM_TIMING: &str = "mtk_anim_timing";
+    /// Animation frame size (Domain: Face, Type: Float3 [frame_width, frame_height, 0]).
+    pub const ATTR_ANIM_FRAME_SIZE: &str = "mtk_anim_frame_size";
+
+    /// Resolved linear RGBA biome tint color (Domain: Face/Corner, Type: Float4).
+    pub const ATTR_BIOME_TINT_COLOR: &str = "mtk_biome_tint_color";
+    /// Packed biome tint data and weights (Domain: Face, Type: Float4 [base_weight, overlay_weight, tint_weight, tint_type]).
+    pub const ATTR_BIOME_TINT_DATA: &str = "mtk_biome_tint_data";
+    /// Biome colormap UV coordinate (Domain: Face, Type: Float3 [u, v, 0]).
+    pub const ATTR_COLORMAP_UV: &str = "mtk_colormap_uv";
+
+    /// Minecraft absolute world coordinates (Domain: Face/Point, Type: Int32 x 3 or Float3).
+    pub const ATTR_BLOCK_POS: &str = "mtk_block_pos";
+    pub const ATTR_BLOCK_X: &str = "mtk_block_x";
+    pub const ATTR_BLOCK_Y: &str = "mtk_block_y";
+    pub const ATTR_BLOCK_Z: &str = "mtk_block_z";
+
+    /// Canonical 6-way face normal direction (Domain: Face, Type: UInt8/Int32: 0=Down, 1=Up, 2=North, 3=South, 4=West, 5=East).
+    pub const ATTR_FACE_DIR: &str = "mtk_face_dir";
+    /// Light level (Domain: Face/Point, Type: UInt8 or Float2 [block_light, sky_light]).
+    pub const ATTR_LIGHT_LEVEL: &str = "mtk_light_level";
+    /// Whether the face is opaque (Domain: Face, Type: Bool).
+    pub const ATTR_IS_OPAQUE: &str = "mtk_is_opaque";
+}
+
 /// Face-level metadata attached to baked geometry.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -227,7 +282,7 @@ pub struct FaceAttributes {
     pub material_slot: MaterialSlotId,
     /// Tint index for colormap or biome blending (-1 for none).
     pub tint_index: TintIndex,
-    /// Baked emission intensity (0.0 .. 1.0 or light emission tier).
+    /// Baked emission intensity (0.0 .. 15.0 or 0.0 .. 1.0).
     pub emission: f32,
     /// Whether this face is an overlay layer (e.g. grass side overlay).
     pub is_overlay: bool,
@@ -235,6 +290,30 @@ pub struct FaceAttributes {
     pub uv_mode: u8,
     /// Atlas chunk/tile ID if mapped into a global atlas.
     pub atlas_chunk_id: Option<u32>,
+    /// Atlas texture/sprite ID within chunk.
+    pub atlas_texture_id: Option<u32>,
+    /// Packed UV affine transform [scale_u, scale_v, offset_u, offset_v].
+    pub uv_transform: [f32; 4],
+    /// UV rotation angle in radians.
+    pub uv_rotation: f32,
+    /// Canonical 6-way face normal direction (0..5).
+    pub face_dir: u8,
+    /// Packed physical properties [emission, roughness_mult, metallic, thin_wall].
+    pub material_props: [f32; 4],
+    /// Animation timing [total_frames, frametime, interpolate].
+    pub anim_timing: [f32; 3],
+    /// Animation frame size [frame_width, frame_height, 0].
+    pub anim_frame_size: [f32; 3],
+    /// Resolved linear RGBA tint color [r, g, b, a].
+    pub biome_tint_color: [f32; 4],
+    /// Packed biome tint data [base_weight, overlay_weight, tint_weight, tint_type].
+    pub biome_tint_data: [f32; 4],
+    /// Colormap UV sampling coordinate [u, v, 0].
+    pub colormap_uv: [f32; 3],
+    /// Minecraft absolute block coordinate [x, y, z].
+    pub block_pos: [i32; 3],
+    /// Light level.
+    pub light_level: LightLevel,
 }
 
 impl Default for FaceAttributes {
@@ -247,6 +326,50 @@ impl Default for FaceAttributes {
             is_overlay: false,
             uv_mode: 0,
             atlas_chunk_id: None,
+            atlas_texture_id: None,
+            uv_transform: [1.0, 1.0, 0.0, 0.0],
+            uv_rotation: 0.0,
+            face_dir: 1, // Default Up
+            material_props: [0.0, 1.0, 0.0, 0.0],
+            anim_timing: [1.0, 1.0, 0.0],
+            anim_frame_size: [16.0, 16.0, 0.0],
+            biome_tint_color: [1.0, 1.0, 1.0, 1.0],
+            biome_tint_data: [1.0, 1.0, 0.0, 0.0],
+            colormap_uv: [0.0, 0.0, 0.0],
+            block_pos: [0, 0, 0],
+            light_level: LightLevel::ZERO,
         }
+    }
+}
+
+impl FaceAttributes {
+    /// Creates a new `FaceAttributes` with given texture key and material slot.
+    pub fn new(texture_key: impl Into<String>, material_slot: MaterialSlotId) -> Self {
+        Self {
+            texture_key: texture_key.into(),
+            material_slot,
+            ..Default::default()
+        }
+    }
+
+    /// Sets emission strength.
+    pub fn with_emission(mut self, emission: f32) -> Self {
+        self.emission = emission;
+        self.material_props[0] = emission;
+        self
+    }
+
+    /// Sets UV affine transform.
+    pub fn with_uv_transform(mut self, scale_u: f32, scale_v: f32, offset_u: f32, offset_v: f32) -> Self {
+        self.uv_transform = [scale_u, scale_v, offset_u, offset_v];
+        self
+    }
+
+    /// Sets biome tint parameters.
+    pub fn with_biome_tint(mut self, color: [f32; 4], data: [f32; 4], colormap_uv: [f32; 3]) -> Self {
+        self.biome_tint_color = color;
+        self.biome_tint_data = data;
+        self.colormap_uv = colormap_uv;
+        self
     }
 }

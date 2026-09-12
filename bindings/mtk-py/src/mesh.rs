@@ -555,6 +555,29 @@ impl PyMeshData {
         })
     }
 
+    /// Retrieve attribute data as a native Python list.
+    pub fn get_attribute_data<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
+        if let Some(attr) = self.inner.get_custom_attribute(name) {
+            use mtk_core::attributes::AttributeData;
+            match &attr.data {
+                AttributeData::Float(v) => Ok(Some(PyList::new(py, v)?.into_any())),
+                AttributeData::Float2(v) => Ok(Some(PyList::new(py, v)?.into_any())),
+                AttributeData::Float3(v) => Ok(Some(PyList::new(py, v)?.into_any())),
+                AttributeData::Float4(v) => Ok(Some(PyList::new(py, v)?.into_any())),
+                AttributeData::Int8(v) => Ok(Some(PyList::new(py, v)?.into_any())),
+                AttributeData::Int16(v) => Ok(Some(PyList::new(py, v)?.into_any())),
+                AttributeData::Int32(v) => Ok(Some(PyList::new(py, v)?.into_any())),
+                AttributeData::UInt8(v) => Ok(Some(PyList::new(py, v)?.into_any())),
+                AttributeData::UInt16(v) => Ok(Some(PyList::new(py, v)?.into_any())),
+                AttributeData::UInt32(v) => Ok(Some(PyList::new(py, v)?.into_any())),
+                AttributeData::Bool(v) => Ok(Some(PyList::new(py, v)?.into_any())),
+                AttributeData::String(v) => Ok(Some(PyList::new(py, v)?.into_any())),
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Fallback Python List Helpers (for prototyping & debugging)
     // -------------------------------------------------------------------------

@@ -142,6 +142,7 @@ pub fn remap_mesh_multi_uvs_parallel(
             local_uvs: source_uvs.to_vec(),
             face_chunk_ids: vec![0; face_count],
             face_texture_ids: vec![0; face_count],
+            face_uv_transforms: vec![[1.0, 1.0, 0.0, 0.0]; face_count],
             face_uv_modes: vec![0; face_count],
             face_is_overlay: vec![false; face_count],
             unmapped_faces: face_count,
@@ -152,6 +153,7 @@ pub fn remap_mesh_multi_uvs_parallel(
     struct FaceOut {
         chunk_id: u16,
         texture_id: u32,
+        uv_transform: [f32; 4],
         uv_mode: u8,
         is_overlay: bool,
         success: bool,
@@ -174,6 +176,7 @@ pub fn remap_mesh_multi_uvs_parallel(
             return FaceOut {
                 chunk_id: 0,
                 texture_id: 0,
+                uv_transform: [1.0, 1.0, 0.0, 0.0],
                 uv_mode: 0,
                 is_overlay: false,
                 success: false,
@@ -209,9 +212,18 @@ pub fn remap_mesh_multi_uvs_parallel(
                         *l_ptr.add(i) = local_uv;
                     }
                 }
+                let scale_u = (sprite_loc.uv_bounds[2] - sprite_loc.uv_bounds[0]).abs();
+                let scale_v = (sprite_loc.uv_bounds[3] - sprite_loc.uv_bounds[1]).abs();
+                let uv_trans = [
+                    if scale_u > 0.0 { scale_u } else { 1.0 },
+                    if scale_v > 0.0 { scale_v } else { 1.0 },
+                    sprite_loc.uv_bounds[0],
+                    sprite_loc.uv_bounds[1],
+                ];
                 return FaceOut {
                     chunk_id: sprite_loc.chunk_id,
                     texture_id: sprite_loc.texture_id,
+                    uv_transform: uv_trans,
                     uv_mode,
                     is_overlay,
                     success: true,
@@ -227,6 +239,7 @@ pub fn remap_mesh_multi_uvs_parallel(
             return FaceOut {
                 chunk_id: 0,
                 texture_id: 0,
+                uv_transform: [1.0, 1.0, 0.0, 0.0],
                 uv_mode: 0,
                 is_overlay,
                 success: false,
@@ -244,9 +257,18 @@ pub fn remap_mesh_multi_uvs_parallel(
                     *l_ptr.add(i) = [u_in, v_in];
                 }
             }
+            let scale_u = (sprite_loc.uv_bounds[2] - sprite_loc.uv_bounds[0]).abs();
+            let scale_v = (sprite_loc.uv_bounds[3] - sprite_loc.uv_bounds[1]).abs();
+            let uv_trans = [
+                if scale_u > 0.0 { scale_u } else { 1.0 },
+                if scale_v > 0.0 { scale_v } else { 1.0 },
+                sprite_loc.uv_bounds[0],
+                sprite_loc.uv_bounds[1],
+            ];
             FaceOut {
                 chunk_id: sprite_loc.chunk_id,
                 texture_id: sprite_loc.texture_id,
+                uv_transform: uv_trans,
                 uv_mode,
                 is_overlay,
                 success: true,
@@ -261,6 +283,7 @@ pub fn remap_mesh_multi_uvs_parallel(
             FaceOut {
                 chunk_id: 0,
                 texture_id: 0,
+                uv_transform: [1.0, 1.0, 0.0, 0.0],
                 uv_mode: 0,
                 is_overlay,
                 success: false,
@@ -276,6 +299,7 @@ pub fn remap_mesh_multi_uvs_parallel(
 
     let mut face_chunk_ids = vec![0u16; face_count];
     let mut face_texture_ids = vec![0u32; face_count];
+    let mut face_uv_transforms = vec![[1.0f32, 1.0f32, 0.0f32, 0.0f32]; face_count];
     let mut face_uv_modes = vec![0u8; face_count];
     let mut face_is_overlay = vec![false; face_count];
     let mut mapped_faces = 0usize;
@@ -283,6 +307,7 @@ pub fn remap_mesh_multi_uvs_parallel(
     for (i, out) in face_results.into_iter().enumerate() {
         face_chunk_ids[i] = out.chunk_id;
         face_texture_ids[i] = out.texture_id;
+        face_uv_transforms[i] = out.uv_transform;
         face_uv_modes[i] = out.uv_mode;
         face_is_overlay[i] = out.is_overlay;
         if out.success {
@@ -297,6 +322,7 @@ pub fn remap_mesh_multi_uvs_parallel(
         local_uvs,
         face_chunk_ids,
         face_texture_ids,
+        face_uv_transforms,
         face_uv_modes,
         face_is_overlay,
         unmapped_faces: face_count.saturating_sub(mapped_faces),

@@ -44,6 +44,31 @@ impl PyGridAtlasSpec {
         }
     }
 
+    #[getter]
+    pub fn swatch_size(&self) -> f32 {
+        self.inner.swatch_size
+    }
+
+    #[getter]
+    pub fn tile_size(&self) -> f32 {
+        self.inner.tile_size
+    }
+
+    #[getter]
+    pub fn border(&self) -> f32 {
+        self.inner.border
+    }
+
+    #[getter]
+    pub fn image_width(&self) -> u32 {
+        self.inner.image_width
+    }
+
+    #[getter]
+    pub fn image_height(&self) -> u32 {
+        self.inner.image_height
+    }
+
     /// Set candidate texture names for a given swatch ID.
     pub fn set_swatch_candidates(&mut self, swatch_id: usize, candidates: Vec<String>) {
         self.inner.swatch_to_candidates.insert(swatch_id, candidates);
@@ -207,6 +232,7 @@ impl PyMaterialResolver {
         dict.set_item("local_uvs", flat_local_uvs)?;
         dict.set_item("face_chunk_ids", result.face_chunk_ids)?;
         dict.set_item("face_texture_ids", result.face_texture_ids)?;
+        dict.set_item("face_uv_transforms", result.face_uv_transforms)?;
         dict.set_item("face_uv_modes", result.face_uv_modes)?;
         dict.set_item("face_is_overlay", result.face_is_overlay)?;
         dict.set_item("unmapped_faces", result.unmapped_faces)?;

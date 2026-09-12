@@ -153,6 +153,60 @@ pub fn process_mesh(
         if config.generate_secondary_uv {
             output_mesh.secondary_uvs = Some(remap_result.local_uvs);
         }
+
+        use mtk_core::attributes::constants::*;
+        use mtk_core::attributes::{AttributeData, AttributeDomain, MeshAttribute};
+
+        let chunk_ids: Vec<i32> = remap_result.face_chunk_ids.iter().map(|&c| c as i32).collect();
+        output_mesh.add_custom_attribute(MeshAttribute::new(
+            ATTR_ATLAS_CHUNK_ID,
+            AttributeDomain::Face,
+            AttributeData::Int32(chunk_ids),
+        ));
+        output_mesh.add_custom_attribute(MeshAttribute::new(
+            ATTR_ATLAS_TEXTURE_ID,
+            AttributeDomain::Face,
+            AttributeData::UInt32(remap_result.face_texture_ids),
+        ));
+        output_mesh.add_custom_attribute(MeshAttribute::new(
+            ATTR_UV_TRANSFORM,
+            AttributeDomain::Face,
+            AttributeData::Float4(remap_result.face_uv_transforms.clone()),
+        ));
+        output_mesh.add_custom_attribute(MeshAttribute::new(
+            "mtk_uv_tiling_transform",
+            AttributeDomain::Face,
+            AttributeData::Float4(remap_result.face_uv_transforms),
+        ));
+        output_mesh.add_custom_attribute(MeshAttribute::new(
+            ATTR_UV_MODE,
+            AttributeDomain::Face,
+            AttributeData::UInt8(remap_result.face_uv_modes),
+        ));
+
+        // Inject resolved canonical texture keys if available
+        let mut source_textures: Vec<String> = Vec::with_capacity(output_mesh.face_materials.len());
+        for &mat_id in &output_mesh.face_materials {
+            if let Some(mat_info) = resolved_materials.get(mat_id as usize) {
+                if let Some(ref canon) = mat_info.canonical_name {
+                    source_textures.push(canon.clone());
+                    continue;
+                }
+            }
+            source_textures.push(String::new());
+        }
+        if source_textures.iter().any(|s| !s.is_empty()) {
+            output_mesh.add_custom_attribute(MeshAttribute::new(
+                ATTR_SOURCE_TEXTURE,
+                AttributeDomain::Face,
+                AttributeData::String(source_textures.clone()),
+            ));
+            output_mesh.add_custom_attribute(MeshAttribute::new(
+                ATTR_SOURCE_TEXTURE_KEY,
+                AttributeDomain::Face,
+                AttributeData::String(source_textures),
+            ));
+        }
     } else {
         // No atlas provided - keep original materials
         for raw_name in material_names {

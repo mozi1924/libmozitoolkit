@@ -58,7 +58,7 @@ class TestLibMtkPy(unittest.TestCase):
             mesh,
             ["Tile_Stone"],
             atlas=atlas,
-            origin="auto",
+            aliases={"Tile_Stone": ["minecraft:block/stone"]},
             generate_secondary_uv=True,
         )
 
@@ -72,6 +72,31 @@ class TestLibMtkPy(unittest.TestCase):
 
         flat_sec_uvs = out_mesh.get_flat_secondary_uvs()
         self.assertEqual(flat_sec_uvs, [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0])
+
+        # Verify custom attributes on out_mesh
+        self.assertTrue(out_mesh.has_attribute("mtk_source_texture"))
+        self.assertTrue(out_mesh.has_attribute("mtk_atlas_chunk_id"))
+        self.assertTrue(out_mesh.has_attribute("mtk_uv_transform"))
+
+        tex_data = out_mesh.get_attribute_data("mtk_source_texture")
+        self.assertEqual(tex_data, ["minecraft:block/stone", "minecraft:block/stone"])
+
+        chunk_data = out_mesh.get_attribute_data("mtk_atlas_chunk_id")
+        self.assertEqual(chunk_data, [0, 0])
+
+    def test_custom_attributes_memoryview_and_list(self):
+        mesh = libmtk_py.MeshData.with_capacity(4, 6, 2)
+        mesh.append_unit_cube_face(1, material_slot=0, tint_index=-1)
+        
+        mesh.add_string_attribute("mtk_source_texture", "face", ["minecraft:block/dirt"])
+        mesh.add_attribute_from_buffer("mtk_emission", "face", "float", bytes([0, 0, 128, 63])) # 1.0f in bytes
+
+        self.assertTrue(mesh.has_attribute("mtk_source_texture"))
+        self.assertTrue(mesh.has_attribute("mtk_emission"))
+
+        self.assertEqual(mesh.get_string_attribute("mtk_source_texture"), ["minecraft:block/dirt"])
+        self.assertEqual(mesh.get_attribute_data("mtk_source_texture"), ["minecraft:block/dirt"])
+        self.assertAlmostEqual(mesh.get_attribute_data("mtk_emission")[0], 1.0)
 
 
 if __name__ == "__main__":

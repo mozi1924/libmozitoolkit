@@ -96,6 +96,8 @@ impl BakedModel {
             }
         }
 
+        let mut face_attributes_list: Vec<mtk_core::attributes::FaceAttributes> = Vec::new();
+
         // 1. Process JSON elements
         for (el_idx, el) in self.elements.iter().enumerate() {
             let other_bounds: Vec<_> = element_bounds
@@ -128,6 +130,16 @@ impl BakedModel {
                     }]
                 };
 
+                let emission = if self.is_emissive { self.emissive_level } else { 0.0 };
+                let scale_u = (face.uv_bounds[2] - face.uv_bounds[0]).abs();
+                let scale_v = (face.uv_bounds[3] - face.uv_bounds[1]).abs();
+                let uv_trans = [
+                    if scale_u > 0.0 { scale_u } else { 1.0 },
+                    if scale_v > 0.0 { scale_v } else { 1.0 },
+                    face.uv_bounds[0],
+                    face.uv_bounds[1],
+                ];
+
                 for piece in pieces {
                     let base_idx = mesh.positions.len() as u32;
                     let norm = [face.normal.x, face.normal.y, face.normal.z];
@@ -151,6 +163,22 @@ impl BakedModel {
 
                     mesh.face_materials.push(slot);
                     mesh.face_tint_indices.push(face.tint_index);
+
+                    face_attributes_list.push(mtk_core::attributes::FaceAttributes {
+                        texture_key: face.texture.clone(),
+                        material_slot: slot,
+                        tint_index: face.tint_index,
+                        emission,
+                        is_overlay: false,
+                        uv_mode: 0,
+                        atlas_chunk_id: None,
+                        atlas_texture_id: None,
+                        uv_transform: uv_trans,
+                        uv_rotation: face.uv_rot,
+                        face_dir: face.direction.to_index() as u8,
+                        material_props: [emission, 1.0, 0.0, 0.0],
+                        ..Default::default()
+                    });
                 }
             }
         }
@@ -174,6 +202,23 @@ impl BakedModel {
                 mesh.uvs.push([uv.x, 1.0 - uv.y]);
             }
 
+            let emission = if self.is_emissive { self.emissive_level } else { 0.0 };
+            let face_attr = mtk_core::attributes::FaceAttributes {
+                texture_key: obj_f.texture.clone(),
+                material_slot: slot,
+                tint_index: obj_f.tint_index,
+                emission,
+                is_overlay: false,
+                uv_mode: 0,
+                atlas_chunk_id: None,
+                atlas_texture_id: None,
+                uv_transform: [1.0, 1.0, 0.0, 0.0],
+                uv_rotation: 0.0,
+                face_dir: obj_f.direction.to_index() as u8,
+                material_props: [emission, 1.0, 0.0, 0.0],
+                ..Default::default()
+            };
+
             let n_verts = obj_f.vertices.len();
             if n_verts == 3 {
                 mesh.indices.push(base_idx);
@@ -181,6 +226,7 @@ impl BakedModel {
                 mesh.indices.push(base_idx + 2);
                 mesh.face_materials.push(slot);
                 mesh.face_tint_indices.push(obj_f.tint_index);
+                face_attributes_list.push(face_attr);
             } else if n_verts == 4 {
                 mesh.indices.push(base_idx);
                 mesh.indices.push(base_idx + 1);
@@ -191,6 +237,7 @@ impl BakedModel {
                 mesh.indices.push(base_idx + 3);
                 mesh.face_materials.push(slot);
                 mesh.face_tint_indices.push(obj_f.tint_index);
+                face_attributes_list.push(face_attr);
             } else {
                 for i in 1..n_verts - 1 {
                     mesh.indices.push(base_idx);
@@ -198,8 +245,13 @@ impl BakedModel {
                     mesh.indices.push(base_idx + (i + 1) as u32);
                     mesh.face_materials.push(slot);
                     mesh.face_tint_indices.push(obj_f.tint_index);
+                    face_attributes_list.push(face_attr.clone());
                 }
             }
+        }
+
+        if !face_attributes_list.is_empty() {
+            mesh.populate_standard_face_attributes(&face_attributes_list);
         }
 
         (mesh, texture_list)
@@ -313,5 +365,20 @@ mod tests {
         assert_eq!(mesh.triangle_count(), 2);
         assert_eq!(mesh.face_count(), 1);
         assert_eq!(mesh.face_materials[0], 0);
+
+        // Verify standard attributes
+        use mtk_core::attributes::constants::*;
+        assert!(mesh.has_custom_attribute(ATTR_SOURCE_TEXTURE));
+        assert!(mesh.has_custom_attribute(ATTR_FACE_DIR));
+        assert!(mesh.has_custom_attribute(ATTR_EMISSION));
+        assert!(mesh.has_custom_attribute(ATTR_MATERIAL_PROPS));
+        assert!(mesh.has_custom_attribute(ATTR_UV_TRANSFORM));
+
+        let tex_attr = mesh.get_custom_attribute(ATTR_SOURCE_TEXTURE).unwrap();
+        if let mtk_core::attributes::AttributeData::String(ref vals) = tex_attr.data {
+            assert_eq!(vals[0], "minecraft:block/stone");
+        } else {
+            panic!("Expected String attribute data");
+        }
     }
 }
