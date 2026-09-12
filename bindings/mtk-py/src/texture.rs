@@ -34,21 +34,6 @@ impl PyBakedAtlas {
         })
     }
 
-    /// Load a BakedAtlas address map from an atlas_mapping.json file path.
-    #[staticmethod]
-    pub fn from_mapping_file(file_path: &str) -> PyResult<Self> {
-        let content = std::fs::read_to_string(file_path)
-            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-        Self::from_mapping_json(&content)
-    }
-
-    /// Load a BakedAtlas address map from a directory containing atlas_mapping.json.
-    #[staticmethod]
-    pub fn load_from_dir(dir_path: &str) -> PyResult<Self> {
-        let path = std::path::Path::new(dir_path).join("atlas_mapping.json");
-        Self::from_mapping_file(&path.to_string_lossy())
-    }
-
     /// Number of baked texture sheets / chunks.
     pub fn get_chunk_count(&self) -> usize {
         self.inner.chunks.len()
@@ -120,55 +105,12 @@ impl PyBakedAtlas {
         }
     }
 
-    /// Saves the chunk's Albedo atlas texture as a PNG file to the given path.
-    pub fn save_chunk_albedo_png(&self, index: usize, path: &str) -> PyResult<()> {
-        if let Some(chunk) = self.inner.chunks.get(index) {
-            let png_bytes = chunk
-                .albedo
-                .to_png_bytes()
-                .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-            std::fs::write(path, png_bytes)
-                .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-            Ok(())
-        } else {
-            Err(pyo3::exceptions::PyIndexError::new_err("Chunk index out of bounds"))
-        }
-    }
-
-    /// Saves the chunk's Normal companion atlas texture as a PNG file (if present).
-    pub fn save_chunk_normal_png(&self, index: usize, path: &str) -> PyResult<bool> {
-        if let Some(chunk) = self.inner.chunks.get(index) {
-            if let Some(ref n) = chunk.normal {
-                let png_bytes = n
-                    .to_png_bytes()
-                    .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-                std::fs::write(path, png_bytes)
-                    .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-                Ok(true)
-            } else {
-                Ok(false)
-            }
-        } else {
-            Err(pyo3::exceptions::PyIndexError::new_err("Chunk index out of bounds"))
-        }
-    }
-
-    /// Saves the chunk's Specular companion atlas texture as a PNG file (if present).
-    pub fn save_chunk_specular_png(&self, index: usize, path: &str) -> PyResult<bool> {
-        if let Some(chunk) = self.inner.chunks.get(index) {
-            if let Some(ref s) = chunk.specular {
-                let png_bytes = s
-                    .to_png_bytes()
-                    .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-                std::fs::write(path, png_bytes)
-                    .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-                Ok(true)
-            } else {
-                Ok(false)
-            }
-        } else {
-            Err(pyo3::exceptions::PyIndexError::new_err("Chunk index out of bounds"))
-        }
+    /// Serializes the atlas address map into a JSON string.
+    pub fn to_mapping_json(&self) -> PyResult<String> {
+        self.inner
+            .address_map
+            .to_json()
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
     }
 
     /// Returns encoded PNG bytes of the chunk's Albedo atlas.
@@ -183,6 +125,46 @@ impl PyBakedAtlas {
                 .to_png_bytes()
                 .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
             Ok(PyBytes::new(py, &png_bytes))
+        } else {
+            Err(pyo3::exceptions::PyIndexError::new_err("Chunk index out of bounds"))
+        }
+    }
+
+    /// Returns encoded PNG bytes of the chunk's Normal companion atlas (if present).
+    pub fn get_chunk_normal_png_bytes<'py>(
+        &self,
+        py: Python<'py>,
+        index: usize,
+    ) -> PyResult<Option<Bound<'py, PyBytes>>> {
+        if let Some(chunk) = self.inner.chunks.get(index) {
+            if let Some(ref n) = chunk.normal {
+                let png_bytes = n
+                    .to_png_bytes()
+                    .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+                Ok(Some(PyBytes::new(py, &png_bytes)))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Err(pyo3::exceptions::PyIndexError::new_err("Chunk index out of bounds"))
+        }
+    }
+
+    /// Returns encoded PNG bytes of the chunk's Specular companion atlas (if present).
+    pub fn get_chunk_specular_png_bytes<'py>(
+        &self,
+        py: Python<'py>,
+        index: usize,
+    ) -> PyResult<Option<Bound<'py, PyBytes>>> {
+        if let Some(chunk) = self.inner.chunks.get(index) {
+            if let Some(ref s) = chunk.specular {
+                let png_bytes = s
+                    .to_png_bytes()
+                    .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+                Ok(Some(PyBytes::new(py, &png_bytes)))
+            } else {
+                Ok(None)
+            }
         } else {
             Err(pyo3::exceptions::PyIndexError::new_err("Chunk index out of bounds"))
         }

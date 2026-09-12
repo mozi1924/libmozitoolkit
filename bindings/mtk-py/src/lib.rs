@@ -6,6 +6,7 @@ pub mod cull;
 pub mod material;
 pub mod mesh;
 pub mod mesher;
+pub mod model;
 pub mod protocol;
 pub mod resource;
 pub mod sync;
@@ -18,6 +19,7 @@ pub use cull::PyFaceCuller;
 pub use material::PyMaterialResolver;
 pub use mesh::PyMeshData;
 pub use mesher::PySectionMesher;
+pub use model::PyModelBaker;
 pub use protocol::{decode_packet, encode_full_sync_request, encode_repair_requests, encode_sync_config};
 pub use resource::PyResourcePackStack;
 pub use sync::PyLiveSyncSession;
@@ -116,7 +118,10 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // 7. Material & UV Remapper
     m.add_class::<PyMaterialResolver>()?;
 
-    // 8. Metadata
+    // 8. Model Baker
+    m.add_class::<PyModelBaker>()?;
+
+    // 9. Metadata
     m.add_function(wrap_pyfunction!(version, m)?)?;
 
     Ok(())
