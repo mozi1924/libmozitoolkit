@@ -20,7 +20,7 @@ pub fn clean_jmc2obj_name(raw: &str) -> String {
         }
     }
 
-    // 3. Strip jmc2obj texture path prefixes
+    // 3. Strip standard exporter texture path prefixes
     let prefixes = [
         "tex/minecraft/",
         "textures/block/",
@@ -37,6 +37,12 @@ pub fn clean_jmc2obj_name(raw: &str) -> String {
         "jmc2obj_",
         "minecraft:",
         "minecraft-",
+        "tile_",
+        "tile-",
+        "tile.",
+        "block_",
+        "block-",
+        "block.",
     ];
 
     for prefix in prefixes {

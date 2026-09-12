@@ -141,6 +141,97 @@ impl PyMeshData {
         PyMemoryView::from(&bytes)
     }
 
+    /// Read-only memoryview of secondary normalized [0, 1] vertex UVs (if generated).
+    pub fn secondary_uvs_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
+        if let Some(ref sec_uvs) = self.inner.secondary_uvs {
+            if sec_uvs.is_empty() {
+                return Ok(None);
+            }
+            let byte_slice = unsafe {
+                std::slice::from_raw_parts(
+                    sec_uvs.as_ptr() as *const u8,
+                    sec_uvs.len() * std::mem::size_of::<[f32; 2]>(),
+                )
+            };
+            let bytes = PyBytes::new(py, byte_slice);
+            Ok(Some(PyMemoryView::from(&bytes)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Flattened secondary vertex UVs `[u0, v0, u1, v1, ...]`.
+    pub fn get_flat_secondary_uvs<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyList>> {
+        if let Some(ref sec_uvs) = self.inner.secondary_uvs {
+            let mut flat = Vec::with_capacity(sec_uvs.len() * 2);
+            for uv in sec_uvs {
+                flat.push(uv[0]);
+                flat.push(uv[1]);
+            }
+            Some(PyList::new(py, &flat).expect("failed to create list"))
+        } else {
+            None
+        }
+    }
+
+    /// Constructs a `MeshData` object directly from flat buffers.
+    #[staticmethod]
+    #[pyo3(signature = (positions, uvs, indices, normals=None, face_materials=None))]
+    pub fn from_raw_buffers(
+        positions: Vec<f32>,
+        uvs: Vec<f32>,
+        indices: Vec<u32>,
+        normals: Option<Vec<f32>>,
+        face_materials: Option<Vec<u16>>,
+    ) -> PyResult<Self> {
+        let v_count = positions.len() / 3;
+        let uv_count = uvs.len() / 2;
+        if v_count != uv_count {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Vertex count ({}) must match UV count ({})",
+                v_count, uv_count
+            )));
+        }
+
+        let mut pos_vec = Vec::with_capacity(v_count);
+        for i in 0..v_count {
+            pos_vec.push([positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]]);
+        }
+
+        let mut uv_vec = Vec::with_capacity(v_count);
+        for i in 0..v_count {
+            uv_vec.push([uvs[i * 2], uvs[i * 2 + 1]]);
+        }
+
+        let norm_vec = if let Some(norms) = normals {
+            let n_count = norms.len() / 3;
+            let mut nv = Vec::with_capacity(n_count);
+            for i in 0..n_count {
+                nv.push([norms[i * 3], norms[i * 3 + 1], norms[i * 3 + 2]]);
+            }
+            nv
+        } else {
+            vec![[0.0, 1.0, 0.0]; v_count]
+        };
+
+        let face_count = indices.len() / 3;
+        let mats = face_materials.unwrap_or_else(|| vec![0; face_count]);
+        let tints = vec![-1; face_count];
+
+        Ok(Self {
+            inner: MeshData {
+                positions: pos_vec,
+                normals: norm_vec,
+                uvs: uv_vec,
+                secondary_uvs: None,
+                colors: None,
+                indices,
+                face_materials: mats,
+                face_tint_indices: tints,
+            },
+        })
+    }
+
     /// Read-only memoryview of triangle indices as raw bytes (`uint32` per index).
     pub fn indices_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
         let byte_slice = unsafe {

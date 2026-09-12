@@ -252,18 +252,31 @@ impl Quad {
     }
 }
 
-/// Canonical local Minecraft voxel corner vertices to Blender space (origin at block center: [-0.5..0.5]).
-/// Minecraft: X-right, Y-up, Z-forward
-/// Blender: X-right, Y-depth (negative Z in MC), Z-up (Y in MC)
+/// Transforms a canonical local Minecraft voxel corner vertex to a centered Z-up coordinate space (origin at block center: [-0.5..0.5]).
+/// Minecraft: +X East, +Y Up, +Z South
+/// Z-Up Right-Hand: +X East, +Y North (-Z_mc), +Z Up (+Y_mc)
 #[inline]
-pub fn mc_local_to_blender(lx: f32, ly: f32, lz: f32) -> Vec3 {
+pub fn mc_local_to_centered_z_up(lx: f32, ly: f32, lz: f32) -> Vec3 {
     Vec3::new(lx - 0.5, -(lz - 0.5), ly - 0.5)
 }
 
-/// Transforms a 3D vertex from Minecraft world coordinate to Blender world coordinate.
+/// Transforms a 3D vertex from Minecraft world coordinates (+X East, +Y Up, +Z South)
+/// to standard Z-up right-hand coordinates (+X East, +Y North, +Z Up).
+#[inline]
+pub fn mc_world_to_z_up(wx: f32, wy: f32, wz: f32) -> Vec3 {
+    Vec3::new(wx, -wz, wy)
+}
+
+/// Backward compatibility alias for `mc_local_to_centered_z_up`.
+#[inline]
+pub fn mc_local_to_blender(lx: f32, ly: f32, lz: f32) -> Vec3 {
+    mc_local_to_centered_z_up(lx, ly, lz)
+}
+
+/// Backward compatibility alias for `mc_world_to_z_up`.
 #[inline]
 pub fn mc_world_to_blender(wx: f32, wy: f32, wz: f32) -> Vec3 {
-    Vec3::new(wx, -wz, wy)
+    mc_world_to_z_up(wx, wy, wz)
 }
 
 #[cfg(test)]

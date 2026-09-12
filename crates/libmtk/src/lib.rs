@@ -57,10 +57,14 @@ pub use mtk_material::{
     remap_mineways_atlas_uv_to_local, remap_sprite_to_sprite, straighten_diamond_quad_uv,
     ImporterOrigin, MaterialResolver, MeshMultiUvRemapResult, MeshRemapResult, SourceUvSpace,
 };
-pub use mtk_core::constants::concurrency;
-pub use mtk_core::direction::{DirMask, Direction};
-pub use mtk_core::geometry::{mc_local_to_blender, mc_world_to_blender, Aabb2d, Aabb3d, Quad};
-pub use mtk_core::mesh::MeshData;
+pub use mtk_core::geometry::{
+    mc_local_to_blender, mc_local_to_centered_z_up, mc_world_to_blender, mc_world_to_z_up, Aabb2d,
+    Aabb3d, Quad,
+};
+pub mod pipeline;
+pub use pipeline::{
+    process_mesh, MeshPipelineConfig, MeshProcessStats, ProcessMeshOutput, ResolvedMaterialInfo,
+};
 pub use mtk_cull::engine::{
     compute_block_cull_meta, derive_parametric_face_shapes, get_visible_face_directions,
     is_non_full_or_partial_block, parse_block_name_and_props, FaceCuller,

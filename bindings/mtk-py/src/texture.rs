@@ -21,6 +21,34 @@ pub struct PyBakedAtlas {
 
 #[pymethods]
 impl PyBakedAtlas {
+    /// Create a BakedAtlas wrapper from an atlas mapping JSON string.
+    #[staticmethod]
+    pub fn from_mapping_json(json_str: &str) -> PyResult<Self> {
+        let address_map = mtk_texture::AtlasAddressMap::from_json(json_str)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        Ok(Self {
+            inner: BakedAtlas {
+                chunks: Vec::new(),
+                address_map,
+            },
+        })
+    }
+
+    /// Load a BakedAtlas address map from an atlas_mapping.json file path.
+    #[staticmethod]
+    pub fn from_mapping_file(file_path: &str) -> PyResult<Self> {
+        let content = std::fs::read_to_string(file_path)
+            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+        Self::from_mapping_json(&content)
+    }
+
+    /// Load a BakedAtlas address map from a directory containing atlas_mapping.json.
+    #[staticmethod]
+    pub fn load_from_dir(dir_path: &str) -> PyResult<Self> {
+        let path = std::path::Path::new(dir_path).join("atlas_mapping.json");
+        Self::from_mapping_file(&path.to_string_lossy())
+    }
+
     /// Number of baked texture sheets / chunks.
     pub fn get_chunk_count(&self) -> usize {
         self.inner.chunks.len()
