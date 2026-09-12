@@ -17,7 +17,7 @@ use pyo3::prelude::*;
 
 pub use cull::PyFaceCuller;
 pub use material::{PyGridAtlasSpec, PyMaterialResolver};
-pub use mesh::PyMeshData;
+pub use mesh::{PyAttributeDomain, PyMeshData};
 pub use mesher::PySectionMesher;
 pub use model::{PyBakedModelDatabase, PyModelBaker};
 pub use protocol::{decode_packet, encode_full_sync_request, encode_repair_requests, encode_sync_config};
@@ -84,6 +84,7 @@ pub fn version() -> &'static str {
 #[pymodule]
 fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // 1. Mesh & Core
+    m.add_class::<PyAttributeDomain>()?;
     m.add_class::<PyMeshData>()?;
     m.add_function(wrap_pyfunction!(process_mesh, m)?)?;
 

@@ -8,7 +8,10 @@ pub mod direction;
 pub mod geometry;
 pub mod mesh;
 
-pub use attributes::{FaceAttributes, LightLevel, MaterialSlotId, TintIndex};
+pub use attributes::{
+    AttributeData, AttributeDomain, FaceAttributes, LightLevel, MaterialSlotId, MeshAttribute,
+    TintIndex,
+};
 pub use constants::concurrency;
 pub use direction::{DirMask, Direction};
 pub use geometry::{mc_local_to_blender, mc_world_to_blender, Aabb2d, Aabb3d, Quad};

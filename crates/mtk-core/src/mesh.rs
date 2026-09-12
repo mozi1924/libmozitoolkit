@@ -1,7 +1,11 @@
+use std::collections::HashMap;
+
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::attributes::{FaceAttributes, MaterialSlotId, TintIndex};
+use crate::attributes::{
+    AttributeData, FaceAttributes, MaterialSlotId, MeshAttribute, TintIndex,
+};
 use crate::geometry::Quad;
 
 /// Flat, contiguous mesh data buffer designed for zero-copy or direct buffer transfers
@@ -25,6 +29,8 @@ pub struct MeshData {
     pub face_materials: Vec<MaterialSlotId>,
     /// Tint index per face.
     pub face_tint_indices: Vec<TintIndex>,
+    /// Generic typed custom attributes indexed by attribute name (Domain: Point/Corner/Face/Mesh).
+    pub custom_attributes: HashMap<String, MeshAttribute>,
 }
 
 impl MeshData {
@@ -44,6 +50,7 @@ impl MeshData {
             colors: None,
             face_materials: Vec::with_capacity(num_faces),
             face_tint_indices: Vec::with_capacity(num_faces),
+            custom_attributes: HashMap::new(),
         }
     }
 
@@ -71,6 +78,36 @@ impl MeshData {
         self.positions.is_empty()
     }
 
+    /// Adds or replaces a custom attribute on the mesh.
+    pub fn add_custom_attribute(&mut self, attr: MeshAttribute) {
+        self.custom_attributes.insert(attr.name.clone(), attr);
+    }
+
+    /// Gets a reference to a custom attribute by name.
+    pub fn get_custom_attribute(&self, name: &str) -> Option<&MeshAttribute> {
+        self.custom_attributes.get(name)
+    }
+
+    /// Gets a mutable reference to a custom attribute by name.
+    pub fn get_custom_attribute_mut(&mut self, name: &str) -> Option<&mut MeshAttribute> {
+        self.custom_attributes.get_mut(name)
+    }
+
+    /// Removes a custom attribute by name, returning it if present.
+    pub fn remove_custom_attribute(&mut self, name: &str) -> Option<MeshAttribute> {
+        self.custom_attributes.remove(name)
+    }
+
+    /// Checks if a custom attribute exists.
+    pub fn has_custom_attribute(&self, name: &str) -> bool {
+        self.custom_attributes.contains_key(name)
+    }
+
+    /// Returns a list of all custom attribute names.
+    pub fn custom_attribute_names(&self) -> Vec<String> {
+        self.custom_attributes.keys().cloned().collect()
+    }
+
     /// Clears all vertices, indices, and attributes while retaining memory allocations.
     pub fn clear(&mut self) {
         self.positions.clear();
@@ -85,6 +122,7 @@ impl MeshData {
         }
         self.face_materials.clear();
         self.face_tint_indices.clear();
+        self.custom_attributes.clear();
     }
 
     /// Appends a quad (4 vertices, 2 triangles: 0-1-2 and 0-2-3) and its face attributes.
@@ -138,6 +176,30 @@ impl MeshData {
             let col = self.colors.get_or_insert_with(Vec::new);
             col.extend_from_slice(other_col);
         }
+
+        for (name, attr) in &other.custom_attributes {
+            if let Some(existing) = self.custom_attributes.get_mut(name) {
+                if existing.domain == attr.domain {
+                    match (&mut existing.data, &attr.data) {
+                        (AttributeData::Float(a), AttributeData::Float(b)) => a.extend_from_slice(b),
+                        (AttributeData::Float2(a), AttributeData::Float2(b)) => a.extend_from_slice(b),
+                        (AttributeData::Float3(a), AttributeData::Float3(b)) => a.extend_from_slice(b),
+                        (AttributeData::Float4(a), AttributeData::Float4(b)) => a.extend_from_slice(b),
+                        (AttributeData::Int8(a), AttributeData::Int8(b)) => a.extend_from_slice(b),
+                        (AttributeData::Int16(a), AttributeData::Int16(b)) => a.extend_from_slice(b),
+                        (AttributeData::Int32(a), AttributeData::Int32(b)) => a.extend_from_slice(b),
+                        (AttributeData::UInt8(a), AttributeData::UInt8(b)) => a.extend_from_slice(b),
+                        (AttributeData::UInt16(a), AttributeData::UInt16(b)) => a.extend_from_slice(b),
+                        (AttributeData::UInt32(a), AttributeData::UInt32(b)) => a.extend_from_slice(b),
+                        (AttributeData::Bool(a), AttributeData::Bool(b)) => a.extend_from_slice(b),
+                        (AttributeData::String(a), AttributeData::String(b)) => a.extend_from_slice(b),
+                        _ => {}
+                    }
+                }
+            } else {
+                self.custom_attributes.insert(name.clone(), attr.clone());
+            }
+        }
     }
 
     /// Returns a flat contiguous slice of vertex positions `[x0, y0, z0, x1, y1, z1, ...]`.
@@ -190,6 +252,7 @@ impl MeshData {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::attributes::AttributeDomain;
     use crate::direction::Direction;
 
     #[test]
@@ -223,5 +286,41 @@ mod tests {
 
         let uvs_flat = mesh.uvs_flat();
         assert_eq!(uvs_flat.len(), 8);
+    }
+
+    #[test]
+    fn test_mesh_custom_attributes() {
+        let mut mesh = MeshData::new();
+        mesh.add_custom_attribute(MeshAttribute::new(
+            "mtk_atlas_chunk_id",
+            AttributeDomain::Face,
+            AttributeData::Int32(vec![0, 1, 2]),
+        ));
+        mesh.add_custom_attribute(MeshAttribute::new(
+            "mtk_source_texture_key",
+            AttributeDomain::Face,
+            AttributeData::String(vec!["minecraft:block/stone".to_string()]),
+        ));
+
+        assert!(mesh.has_custom_attribute("mtk_atlas_chunk_id"));
+        assert_eq!(mesh.get_custom_attribute("mtk_atlas_chunk_id").unwrap().len(), 3);
+        assert_eq!(mesh.get_custom_attribute("mtk_atlas_chunk_id").unwrap().as_bytes().unwrap().len(), 12);
+        assert_eq!(mesh.get_custom_attribute("mtk_source_texture_key").unwrap().as_bytes(), None);
+
+        let mut other = MeshData::new();
+        other.add_custom_attribute(MeshAttribute::new(
+            "mtk_atlas_chunk_id",
+            AttributeDomain::Face,
+            AttributeData::Int32(vec![3, 4]),
+        ));
+
+        mesh.append_mesh(&other);
+        let merged_chunk_attr = mesh.get_custom_attribute("mtk_atlas_chunk_id").unwrap();
+        assert_eq!(merged_chunk_attr.len(), 5);
+        if let AttributeData::Int32(ref vals) = merged_chunk_attr.data {
+            assert_eq!(vals, &vec![0, 1, 2, 3, 4]);
+        } else {
+            panic!("Expected Int32 attribute data");
+        }
     }
 }
