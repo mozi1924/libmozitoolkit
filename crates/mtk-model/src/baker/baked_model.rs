@@ -212,6 +212,51 @@ impl BakedModel {
     }
 }
 
+/// In-memory database of baked models keyed by canonical BlockState strings.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BakedModelDatabase {
+    pub models: HashMap<String, BakedModel>,
+}
+
+impl BakedModelDatabase {
+    pub fn new() -> Self {
+        Self {
+            models: HashMap::new(),
+        }
+    }
+
+    pub fn insert(&mut self, state: String, model: BakedModel) {
+        self.models.insert(state, model);
+    }
+
+    pub fn get(&self, state: &str) -> Option<&BakedModel> {
+        self.models.get(state)
+    }
+
+    pub fn len(&self) -> usize {
+        self.models.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.models.is_empty()
+    }
+
+    pub fn keys(&self) -> impl Iterator<Item = &String> {
+        self.models.keys()
+    }
+
+    #[cfg(feature = "std")]
+    pub fn to_bincode(&self) -> Result<Vec<u8>, bincode::Error> {
+        bincode::serialize(&self.models)
+    }
+
+    #[cfg(feature = "std")]
+    pub fn from_bincode(bytes: &[u8]) -> Result<Self, bincode::Error> {
+        let models: HashMap<String, BakedModel> = bincode::deserialize(bytes)?;
+        Ok(Self { models })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

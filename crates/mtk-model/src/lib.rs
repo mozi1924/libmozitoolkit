@@ -9,7 +9,7 @@ pub use baker::{
     apply_uvlock_to_uvs, bake_face_exact, calculate_facing, default_face_uv,
     get_face_canonical_vertex, get_face_uvlock_transform, is_block_emissive, recalculate_winding,
     rotate_direction, rotate_element_point, rotate_point, BakedElement, BakedFace,
-    BakedFaceGeometry, BakedModel, ModelBaker,
+    BakedFaceGeometry, BakedModel, BakedModelDatabase, ModelBaker,
 };
 pub use culling::{clip_face_excluding_hidden_volume, ClippedQuadPiece};
 pub use error::ModelError;

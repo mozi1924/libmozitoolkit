@@ -19,7 +19,7 @@ pub use cull::PyFaceCuller;
 pub use material::PyMaterialResolver;
 pub use mesh::PyMeshData;
 pub use mesher::PySectionMesher;
-pub use model::PyModelBaker;
+pub use model::{PyBakedModelDatabase, PyModelBaker};
 pub use protocol::{decode_packet, encode_full_sync_request, encode_repair_requests, encode_sync_config};
 pub use resource::PyResourcePackStack;
 pub use sync::PyLiveSyncSession;
@@ -120,6 +120,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // 8. Model Baker
     m.add_class::<PyModelBaker>()?;
+    m.add_class::<PyBakedModelDatabase>()?;
 
     // 9. Metadata
     m.add_function(wrap_pyfunction!(version, m)?)?;

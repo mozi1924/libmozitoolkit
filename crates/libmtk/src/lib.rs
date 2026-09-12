@@ -65,6 +65,9 @@ pub mod pipeline;
 pub use pipeline::{
     process_mesh, MeshPipelineConfig, MeshProcessStats, ProcessMeshOutput, ResolvedMaterialInfo,
 };
+pub mod prebake;
+pub use prebake::prebake_all_models;
+pub use mtk_model::baker::{BakedModel, BakedModelDatabase, ModelBaker};
 pub use mtk_cull::engine::{
     compute_block_cull_meta, derive_parametric_face_shapes, get_visible_face_directions,
     is_non_full_or_partial_block, parse_block_name_and_props, FaceCuller,
@@ -77,8 +80,6 @@ pub use mtk_cull::rules::should_skip_rendering;
 pub use mtk_cull::types::{
     BlockCullMeta, CullCategory, GlassCullMode, LeavesCullMode, EMPTY_FACE_RECT, FULL_FACE_RECT,
 };
-pub use mtk_model::baked::BakedModel;
-pub use mtk_model::baker::ModelBaker;
 pub use mtk_model::blockstate::BlockState;
 pub use mtk_model::model_json::BlockModelJson;
 pub use mtk_model::obj::{mesh_to_obj_string, ModObjLoader, WavefrontObjParser};

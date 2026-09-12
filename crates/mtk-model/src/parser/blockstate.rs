@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 use std::str::FromStr;
 
@@ -247,6 +247,130 @@ pub struct BlockStateDefinition {
     /// Multipart rules array for composite blocks (fences, walls, redstone wires, etc.).
     #[serde(default)]
     pub multipart: Option<Vec<MultipartRule>>,
+}
+
+impl BlockStateDefinition {
+    /// Enumerates all canonical blockstate strings described by this definition.
+    ///
+    /// # Arguments
+    /// - `base_id`: Canonical block id, e.g. `"minecraft:oak_stairs"` or `"minecraft:stone"`
+    pub fn enumerate_all_states(&self, base_id: &str) -> Vec<String> {
+        let mut results = Vec::new();
+        let mut seen = BTreeSet::new();
+
+        if let Some(ref variants) = self.variants {
+            if !variants.is_empty() {
+                for key in variants.keys() {
+                    let state_str = if key.is_empty() {
+                        base_id.to_string()
+                    } else {
+                        format!("{}[{}]", base_id, key)
+                    };
+                    if let Ok(bs) = BlockState::parse(&state_str) {
+                        let canon = bs.to_canonical_string();
+                        if seen.insert(canon.clone()) {
+                            results.push(canon);
+                        }
+                    } else if seen.insert(state_str.clone()) {
+                        results.push(state_str);
+                    }
+                }
+                return results;
+            }
+        }
+
+        if let Some(ref multipart) = self.multipart {
+            if !multipart.is_empty() {
+                let mut prop_values: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+
+                for rule in multipart {
+                    if let Some(ref when) = rule.when {
+                        match when {
+                            MultipartCondition::And(map) => {
+                                for (k, v) in map {
+                                    let set = prop_values.entry(k.clone()).or_default();
+                                    for item in v.split('|') {
+                                        set.insert(item.trim().to_string());
+                                    }
+                                }
+                            }
+                            MultipartCondition::Or { or } => {
+                                for map in or {
+                                    for (k, v) in map {
+                                        let set = prop_values.entry(k.clone()).or_default();
+                                        for item in v.split('|') {
+                                            set.insert(item.trim().to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // If boolean properties only had true or false, expand to both
+                for (_, vals) in prop_values.iter_mut() {
+                    if vals.contains("true") || vals.contains("false") {
+                        vals.insert("true".to_string());
+                        vals.insert("false".to_string());
+                    }
+                }
+
+                if prop_values.is_empty() {
+                    results.push(base_id.to_string());
+                } else {
+                    let keys: Vec<String> = prop_values.keys().cloned().collect();
+                    let value_lists: Vec<Vec<String>> = keys
+                        .iter()
+                        .map(|k| prop_values[k].iter().cloned().collect())
+                        .collect();
+
+                    let mut total_combos = 1usize;
+                    for list in &value_lists {
+                        total_combos = total_combos.saturating_mul(list.len());
+                    }
+
+                    if total_combos <= 512 {
+                        let mut combos: Vec<Vec<(String, String)>> = vec![Vec::new()];
+                        for (key, values) in keys.iter().zip(value_lists.iter()) {
+                            let mut next_combos = Vec::new();
+                            for existing in combos {
+                                for val in values {
+                                    let mut cloned = existing.clone();
+                                    cloned.push((key.clone(), val.clone()));
+                                    next_combos.push(cloned);
+                                }
+                            }
+                            combos = next_combos;
+                        }
+
+                        for combo in combos {
+                            let props_str: Vec<String> = combo
+                                .into_iter()
+                                .map(|(k, v)| format!("{}={}", k, v))
+                                .collect();
+                            let state_str = format!("{}[{}]", base_id, props_str.join(","));
+                            if let Ok(bs) = BlockState::parse(&state_str) {
+                                let canon = bs.to_canonical_string();
+                                if seen.insert(canon.clone()) {
+                                    results.push(canon);
+                                }
+                            } else if seen.insert(state_str.clone()) {
+                                results.push(state_str);
+                            }
+                        }
+                    } else {
+                        // Fallback to base id if combinatorial explosion
+                        results.push(base_id.to_string());
+                    }
+                }
+                return results;
+            }
+        }
+
+        results.push(base_id.to_string());
+        results
+    }
 }
 
 /// Resolver for matching BlockState properties against `BlockStateDefinition`.

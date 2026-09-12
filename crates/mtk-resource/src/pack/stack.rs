@@ -63,6 +63,11 @@ impl ResourcePackStack {
         self.packs.is_empty()
     }
 
+    /// Returns the slice of active resource packs in priority order.
+    pub fn packs(&self) -> &[Box<dyn ResourcePack>] {
+        &self.packs
+    }
+
     /// Open a file by its explicit asset path, returning the first match from top to bottom.
     pub fn open_asset_raw(&self, asset_path: &str) -> Option<Vec<u8>> {
         for pack in &self.packs {
@@ -98,6 +103,27 @@ impl ResourcePackStack {
                     continue;
                 }
                 if let Some(loc) = ResourceLocation::from_asset_path(&file, "textures", "png") {
+                    if seen.insert(loc.clone()) {
+                        results.push(loc);
+                    }
+                }
+            }
+        }
+
+        results
+    }
+
+    /// List all unique blockstate resource locations discovered across all active packs in the stack.
+    pub fn list_all_blockstate_locations(&self) -> Vec<ResourceLocation> {
+        let mut seen = HashSet::new();
+        let mut results = Vec::new();
+
+        for pack in &self.packs {
+            for file in pack.list_files("assets/") {
+                if !file.ends_with(".json") {
+                    continue;
+                }
+                if let Some(loc) = ResourceLocation::from_asset_path(&file, "blockstates", "json") {
                     if seen.insert(loc.clone()) {
                         results.push(loc);
                     }
