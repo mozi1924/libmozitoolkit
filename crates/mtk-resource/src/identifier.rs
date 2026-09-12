@@ -152,6 +152,40 @@ impl ResourceLocation {
     pub fn short_name(&self) -> &str {
         self.path.rsplit('/').next().unwrap_or(&self.path)
     }
+
+    /// Generate all prioritized candidate asset file paths for resolving a model identifier.
+    ///
+    /// Examples:
+    /// - `"minecraft:block/stone"` -> `["assets/minecraft/models/block/stone.json", "assets/minecraft/models/stone.json"]`
+    /// - `"stone"` -> `["assets/minecraft/models/block/stone.json", "assets/minecraft/models/stone.json", "assets/minecraft/models/item/stone.json"]`
+    /// - `"item/diamond_sword"` -> `["assets/minecraft/models/item/diamond_sword.json", "assets/minecraft/models/diamond_sword.json"]`
+    pub fn model_candidate_asset_paths(input: &str) -> Vec<String> {
+        let trimmed = input.trim().replace('\\', "/");
+        let (ns, raw_path) = if let Some((ns, p)) = trimmed.split_once(':') {
+            (ns, p)
+        } else {
+            (DEFAULT_NAMESPACE, trimmed.as_str())
+        };
+
+        let clean_path = raw_path
+            .strip_prefix("models/")
+            .unwrap_or(raw_path)
+            .strip_suffix(".json")
+            .unwrap_or(raw_path);
+
+        if clean_path.starts_with("block/") || clean_path.starts_with("item/") {
+            vec![
+                format!("assets/{}/models/{}.json", ns, clean_path),
+                format!("assets/{}/models/{}.json", ns, clean_path.split_once('/').map(|(_, p)| p).unwrap_or(clean_path)),
+            ]
+        } else {
+            vec![
+                format!("assets/{}/models/block/{}.json", ns, clean_path),
+                format!("assets/{}/models/{}.json", ns, clean_path),
+                format!("assets/{}/models/item/{}.json", ns, clean_path),
+            ]
+        }
+    }
 }
 
 impl fmt::Display for ResourceLocation {

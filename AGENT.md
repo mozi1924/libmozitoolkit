@@ -34,6 +34,11 @@
 - 胶水层（`crates/mtk-py`、`crates/mtk-ffi`、`crates/mtk-wasm`）只负责**跨语言数据类型转换与内存生命周期桥接**，禁止在胶水层编写复杂计算逻辑。
 - 针对大块几何（顶点/法线/UV/索引）与贴图像素数据，优先采用连续内存缓冲（Buffer Protocol / Raw Pointers / TypedArray）实现零拷贝或单次拷贝传输。
 
+### 规则 5：工作区虚拟环境与轮子编译规范 (Workspace Venv & Wheel Build Policy)
+- 当需要使用 `maturin` 编译 Python 绑定轮子（Wheel, `.whl`）或进行 Python 绑定调试时，**必须严格使用工作区内的虚拟环境（如 `/home/mozi/libmozitoolkit/.venv`）**。
+- 若当前工作区内不存在虚拟环境，**必须首先在工作区根目录下创建专属虚拟环境**（如 `python3 -m venv .venv`），并在该虚拟环境中安装 `maturin`，严禁污染或依赖宿主系统全局环境。
+- 编译完成的 Release 轮子包（`target/wheels/*.whl`）需及时同步拷贝至 Blender 插件前端目录（`/home/mozi/MoziToolKit/wheels/`）供插件端使用。
+
 ---
 
 ## 3. 目录与内部文档索引
@@ -41,3 +46,4 @@
 - **系统架构设计**：[`docs/ARCHITECTURE.md`](file:///home/mozi/libmozitoolkit/docs/ARCHITECTURE.md)
 - **公共 API 与核心抽象参考**：[`docs/API_REFERENCE.md`](file:///home/mozi/libmozitoolkit/docs/API_REFERENCE.md)
 - **跨语言绑定与胶水层规范**：[`docs/BINDINGS_DESIGN.md`](file:///home/mozi/libmozitoolkit/docs/BINDINGS_DESIGN.md)
+

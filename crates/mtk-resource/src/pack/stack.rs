@@ -411,4 +411,28 @@ impl ResourcePackStack {
 
         Ok(results)
     }
+
+    /// Open a model JSON by its identifier, resolving standard candidate asset paths.
+    pub fn open_model_raw(&self, model_id: &str) -> Option<Vec<u8>> {
+        for path in ResourceLocation::model_candidate_asset_paths(model_id) {
+            if let Some(bytes) = self.open_asset_raw(&path) {
+                return Some(bytes);
+            }
+        }
+        None
+    }
+
+    /// Computes a deterministic fingerprint string for the active resource pack stack configuration.
+    ///
+    /// Changes if packs are reordered, added, or removed.
+    pub fn compute_stack_fingerprint(&self) -> String {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.packs.len().hash(&mut hasher);
+        for (idx, pack) in self.packs.iter().enumerate() {
+            idx.hash(&mut hasher);
+            pack.name().hash(&mut hasher);
+        }
+        format!("mtk_fp_{:016x}", hasher.finish())
+    }
 }

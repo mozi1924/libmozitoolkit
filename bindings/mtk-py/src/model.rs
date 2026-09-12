@@ -128,24 +128,11 @@ impl PyModelBaker {
         let baked = self
             .inner
             .bake_blockstate(state_str, bs_def.as_ref(), |model_id| {
-                let (ns, raw_path) = if let Some((ns, n)) = model_id.split_once(':') {
-                    (ns, n)
+                if let Some(bytes) = stack.inner.open_model_raw(model_id) {
+                    serde_json::from_slice::<BlockModelJson>(&bytes).ok()
                 } else {
-                    ("minecraft", model_id)
-                };
-                let candidates = [
-                    format!("assets/{}/models/{}.json", ns, raw_path),
-                    format!("assets/{}/models/block/{}.json", ns, raw_path),
-                    format!("assets/{}/models/item/{}.json", ns, raw_path),
-                ];
-                for path in candidates {
-                    if let Some(bytes) = stack.inner.open_asset_raw(&path) {
-                        if let Ok(model) = serde_json::from_slice::<BlockModelJson>(&bytes) {
-                            return Some(model);
-                        }
-                    }
+                    None
                 }
-                None
             })
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 

@@ -35,6 +35,15 @@ pub enum MtkError {
 
     #[error("Material error: {0}")]
     Material(#[from] mtk_material::MaterialError),
+
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("JSON serialization error: {0}")]
+    Json(#[from] serde_json::Error),
+
+    #[error("Bincode error: {0}")]
+    Bincode(#[from] bincode::Error),
 }
 
 pub use mtk_resource::{
@@ -66,7 +75,10 @@ pub use pipeline::{
     process_mesh, MeshPipelineConfig, MeshProcessStats, ProcessMeshOutput, ResolvedMaterialInfo,
 };
 pub mod prebake;
-pub use prebake::prebake_all_models;
+pub use prebake::{
+    prebake_all_models, precompile_all_assets, CacheManifest, PrecompileConfig, PrecompileResult,
+    ASSET_CACHE_FORMAT_VERSION,
+};
 pub use mtk_model::baker::{BakedModel, BakedModelDatabase, ModelBaker};
 pub use mtk_cull::engine::{
     compute_block_cull_meta, derive_parametric_face_shapes, get_visible_face_directions,

@@ -21,7 +21,7 @@ pub use mesh::PyMeshData;
 pub use mesher::PySectionMesher;
 pub use model::{PyBakedModelDatabase, PyModelBaker};
 pub use protocol::{decode_packet, encode_full_sync_request, encode_repair_requests, encode_sync_config};
-pub use resource::PyResourcePackStack;
+pub use resource::{precompile_all_assets, PyPrecompileResult, PyResourcePackStack};
 pub use sync::PyLiveSyncSession;
 pub use texture::{PyAtlasBuilder, PyBakedAtlas, PyStandaloneBuilder, PyStandaloneResult};
 pub use voxel::{PyMesherConfig, PyVoxelStorage};
@@ -114,6 +114,8 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBakedAtlas>()?;
     m.add_class::<PyStandaloneBuilder>()?;
     m.add_class::<PyStandaloneResult>()?;
+    m.add_class::<PyPrecompileResult>()?;
+    m.add_function(wrap_pyfunction!(precompile_all_assets, m)?)?;
 
     // 7. Material & UV Remapper
     m.add_class::<PyMaterialResolver>()?;

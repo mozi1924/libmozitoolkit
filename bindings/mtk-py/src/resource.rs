@@ -72,6 +72,11 @@ impl PyResourcePackStack {
         self.inner.len()
     }
 
+    /// Computes a deterministic fingerprint string for the active resource pack stack configuration.
+    pub fn compute_stack_fingerprint(&self) -> String {
+        self.inner.compute_stack_fingerprint()
+    }
+
     /// Loads raw PNG bytes for a given resource location string (e.g. `"minecraft:block/stone"`).
     pub fn open_texture_bytes<'py>(
         &self,
@@ -92,4 +97,74 @@ impl PyResourcePackStack {
             self.inner.len()
         )
     }
+}
+
+/// Result of full-scale asset precompilation.
+#[pyclass(name = "PrecompileResult")]
+#[derive(Debug, Clone)]
+pub struct PyPrecompileResult {
+    #[pyo3(get)]
+    pub success: bool,
+    #[pyo3(get)]
+    pub pack_count: usize,
+    #[pyo3(get)]
+    pub atlas_chunks: usize,
+    #[pyo3(get)]
+    pub standalone_textures: usize,
+    #[pyo3(get)]
+    pub baked_models: usize,
+    #[pyo3(get)]
+    pub fingerprint: String,
+    #[pyo3(get)]
+    pub cache_dir: String,
+}
+
+#[pymethods]
+impl PyPrecompileResult {
+    fn __repr__(&self) -> String {
+        format!(
+            "<PrecompileResult packs={} atlas_chunks={} standalone={} models={} cache_dir='{}'>",
+            self.pack_count, self.atlas_chunks, self.standalone_textures, self.baked_models, self.cache_dir
+        )
+    }
+}
+
+/// Executes unified end-to-end asset precompilation directly to persistent cache folder.
+///
+/// Releases Python GIL during multi-threaded baking.
+#[pyfunction]
+#[pyo3(signature = (stack, cache_dir, atlas_category="blocks", max_atlas_width=4096, max_atlas_height=4096, compile_atlas=true, compile_standalone=true, compile_models=true))]
+pub fn precompile_all_assets<'py>(
+    py: Python<'py>,
+    stack: &PyResourcePackStack,
+    cache_dir: &str,
+    atlas_category: &str,
+    max_atlas_width: u32,
+    max_atlas_height: u32,
+    compile_atlas: bool,
+    compile_standalone: bool,
+    compile_models: bool,
+) -> PyResult<PyPrecompileResult> {
+    let cfg = libmtk::PrecompileConfig {
+        max_atlas_width,
+        max_atlas_height,
+        atlas_category: atlas_category.to_string(),
+        compile_atlas,
+        compile_standalone,
+        compile_models,
+    };
+
+    let res = py
+        .allow_threads(|| libmtk::precompile_all_assets(&stack.inner, cache_dir, &cfg))
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+    Ok(PyPrecompileResult {
+        success: res.success,
+        pack_count: res.pack_count,
+        atlas_chunks: res.atlas_chunks,
+        standalone_textures: res.standalone_textures,
+        baked_models: res.baked_models,
+        fingerprint: res.fingerprint,
+        cache_dir: res.cache_dir,
+    })
 }
