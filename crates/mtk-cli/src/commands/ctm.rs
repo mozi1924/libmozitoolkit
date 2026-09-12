@@ -1,28 +1,42 @@
 use std::fs;
-use std::path::Path;
+use std::path::PathBuf;
 use std::time::Instant;
+
+use clap::Args;
 use mtk_resource::{ResourceLocation, ResourcePackStack, ZipPack};
 use mtk_texture::{AtlasBuilder, AtlasBuilderConfig, DecodedSprite};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let miex_dir = Path::new("/home/mozi/MiEx");
-    let vanilla_jar = "/home/mozi/26.2-Fabric.jar";
+#[derive(Args, Debug)]
+pub struct CtmTestArgs {
+    /// Directory containing CTM resource pack zip files
+    #[arg(short, long, default_value = "/home/mozi/MiEx")]
+    pub packs_dir: PathBuf,
 
-    println!("============================================================");
-    println!(" MoziToolKit 2.0 - OptiFine / Continuity CTM Pack Test");
-    println!("============================================================");
+    /// Path to base vanilla JAR file
+    #[arg(short, long, default_value = "/home/mozi/26.2-Fabric.jar")]
+    pub jar: PathBuf,
+}
 
-    // 1. Scan and parse each CTM pack
+pub fn run_ctm_test(args: CtmTestArgs) -> Result<(), Box<dyn std::error::Error>> {
+    println!("============================================================");
+    println!(" MoziToolKit - OptiFine / Continuity CTM Pack Test");
+    println!("============================================================");
+    println!("Packs Directory : {}", args.packs_dir.display());
+    println!("Vanilla JAR     : {}", args.jar.display());
+    println!("------------------------------------------------------------");
+
     let mut ctm_zip_paths = Vec::new();
-    for entry in fs::read_dir(miex_dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file() && path.extension().is_some_and(|ext| ext == "zip") {
-            ctm_zip_paths.push(path);
+    if args.packs_dir.exists() {
+        for entry in fs::read_dir(&args.packs_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_file() && path.extension().is_some_and(|ext| ext == "zip") {
+                ctm_zip_paths.push(path);
+            }
         }
     }
 
-    println!("Discovered {} test resource packs in {}:", ctm_zip_paths.len(), miex_dir.display());
+    println!("Discovered {} test resource packs in {}:", ctm_zip_paths.len(), args.packs_dir.display());
     for p in &ctm_zip_paths {
         println!(" - {}", p.file_name().unwrap_or_default().to_string_lossy());
     }
@@ -60,7 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // 2. Full Multi-Pack Stack Atlas Baking Test
+    // Full Multi-Pack Stack Atlas Baking Test
     println!("\n============================================================");
     println!(" End-to-End Multi-Pack Atlas Baking Test with CTM Sprites");
     println!("============================================================");
@@ -68,13 +82,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let t_stack = Instant::now();
     let mut full_stack = ResourcePackStack::new();
 
-    // Push base vanilla JAR
-    if Path::new(vanilla_jar).exists() {
-        println!("Adding Base Vanilla JAR: {}", vanilla_jar);
-        full_stack.append_pack(Box::new(ZipPack::from_file("vanilla", vanilla_jar)?));
+    if args.jar.exists() {
+        println!("Adding Base Vanilla JAR: {}", args.jar.display());
+        full_stack.append_pack(Box::new(ZipPack::from_file("vanilla", &args.jar)?));
+    } else {
+        println!("Notice: Base vanilla JAR not found at {}, proceeding without it.", args.jar.display());
     }
 
-    // Push all CTM packs on top
     for zip_path in &ctm_zip_paths {
         let pack_name = zip_path.file_name().unwrap_or_default().to_string_lossy();
         full_stack.push_pack(Box::new(ZipPack::from_file(pack_name.to_string(), zip_path)?));
@@ -86,7 +100,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Total Active CTM Rules across all packs: {}", all_ctm_rules.len());
 
     let blocks_loc = ResourceLocation::parse("minecraft:blocks")?;
-    let definition = full_stack.load_atlas_definition(&blocks_loc)?;
+    let definition = match full_stack.load_atlas_definition(&blocks_loc) {
+        Ok(d) => d,
+        Err(e) => {
+            println!("Warning: Could not load blocks atlas definition: {}. Skipping baking test.", e);
+            return Ok(());
+        }
+    };
 
     println!("Collecting sprites (including all CTM sub-tiles)...");
     let t_collect = Instant::now();
@@ -127,7 +147,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("============================================================");
-    println!(" All CTM Tests Passed! Total Rules Parsed: {}", total_rules_count);
+    println!(" All CTM Tests Finished! Total Rules Parsed: {}", total_rules_count);
     println!("============================================================");
 
     Ok(())

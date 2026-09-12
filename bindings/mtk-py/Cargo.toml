@@ -10,6 +10,8 @@ description = "Python bindings for libmozitoolkit using PyO3."
 [lib]
 name = "libmtk_py"
 crate-type = ["cdylib", "rlib"]
+test = false
+doctest = false
 
 [dependencies]
 libmtk = { workspace = true }

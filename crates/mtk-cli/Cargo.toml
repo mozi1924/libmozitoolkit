@@ -1,0 +1,29 @@
+[package]
+name = "mtk-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "Unified command-line interface for MoziToolKit (libmtk)."
+
+[dependencies]
+libmtk = { workspace = true }
+mtk-core = { workspace = true }
+mtk-cull = { workspace = true }
+mtk-model = { workspace = true }
+mtk-voxel = { workspace = true }
+mtk-resource = { workspace = true }
+mtk-texture = { workspace = true }
+mtk-material = { workspace = true }
+clap = { workspace = true }
+glam = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+image = { workspace = true }
+zip = { workspace = true }
+
+[[bin]]
+name = "mtk"
+path = "src/main.rs"
