@@ -51,6 +51,10 @@ impl DecodedSprite {
             (albedo.width, albedo.height, 1)
         };
 
+        // Align PBR companion buffers with albedo frame metrics and vertical tiling
+        let normal = normal.map(|n| n.align_companion_to_albedo(frame_width, frame_height, frame_count));
+        let specular = specular.map(|s| s.align_companion_to_albedo(frame_width, frame_height, frame_count));
+
         Ok(Self {
             sprite_id: discovered.sprite_id,
             albedo,

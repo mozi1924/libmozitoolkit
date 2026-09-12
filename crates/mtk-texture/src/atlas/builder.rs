@@ -125,18 +125,25 @@ impl AtlasBuilder {
                     };
 
                     for tex_loc in textures {
-                        if let Some(bytes) = stack.open_texture_raw(tex_loc) {
+                        let companions = stack.resolve_pbr_companions(tex_loc);
+                        if let Some(bytes) = companions.albedo {
                             if let Ok(base_buf) = RgbaBuffer::from_png_bytes(&bytes) {
                                 if let Ok(baked_perm) = bake_paletted_permutation(&base_buf, &key_img, &perm_img) {
                                     let sprite_path = format!("{}_{}", tex_loc.path, perm_name);
                                     let sprite_id = ResourceLocation::new(&tex_loc.namespace, sprite_path);
                                     let fw = baked_perm.width;
                                     let fh = baked_perm.height;
+                                    let normal = companions.normal
+                                        .and_then(|b| RgbaBuffer::from_png_bytes(&b).ok())
+                                        .map(|n| n.align_companion_to_albedo(fw, fh, 1));
+                                    let specular = companions.specular
+                                        .and_then(|b| RgbaBuffer::from_png_bytes(&b).ok())
+                                        .map(|s| s.align_companion_to_albedo(fw, fh, 1));
                                     decoded.push(DecodedSprite {
                                         sprite_id,
                                         albedo: baked_perm,
-                                        normal: None,
-                                        specular: None,
+                                        normal,
+                                        specular,
                                         frame_width: fw,
                                         frame_height: fh,
                                         frame_count: 1,

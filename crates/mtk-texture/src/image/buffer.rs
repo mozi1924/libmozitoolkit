@@ -137,4 +137,70 @@ impl RgbaBuffer {
         }
         tiled
     }
+
+    /// Resize buffer to exact (new_width, new_height) using nearest neighbor interpolation.
+    /// Preserves crisp pixel boundaries and avoids PBR channel interpolation artifacts.
+    pub fn resize_nearest(&self, new_width: u32, new_height: u32) -> Self {
+        if self.width == new_width && self.height == new_height {
+            return self.clone();
+        }
+        if new_width == 0 || new_height == 0 || self.width == 0 || self.height == 0 {
+            return Self::new(new_width, new_height);
+        }
+
+        let mut output = Self::new(new_width, new_height);
+        for dy in 0..new_height {
+            let sy = (dy as u64 * self.height as u64 / new_height as u64) as u32;
+            for dx in 0..new_width {
+                let sx = (dx as u64 * self.width as u64 / new_width as u64) as u32;
+                let color = self.get_pixel(sx, sy);
+                output.set_pixel(dx, dy, color);
+            }
+        }
+        output
+    }
+
+    /// Align a PBR companion buffer (`_n` or `_s`) with its corresponding Albedo texture metrics.
+    ///
+    /// - If companion has matching total dimensions, it is returned as-is.
+    /// - If companion is a single-frame texture (or has fewer frames than albedo):
+    ///   1. Its single frame is resized to match `(albedo_fw, albedo_fh)`.
+    ///   2. If albedo has multiple frames (`albedo_fc > 1`), it is vertically tiled to match `albedo_fh * albedo_fc`.
+    /// - If companion is already a multi-frame strip matching `albedo_fc`, it is resized to `(albedo_fw, albedo_fh * albedo_fc)`.
+    pub fn align_companion_to_albedo(
+        &self,
+        albedo_fw: u32,
+        albedo_fh: u32,
+        albedo_fc: u32,
+    ) -> Self {
+        let target_total_height = albedo_fh.saturating_mul(albedo_fc.max(1));
+        if self.width == albedo_fw && self.height == target_total_height {
+            return self.clone();
+        }
+
+        if self.width == 0 || self.height == 0 || albedo_fw == 0 || albedo_fh == 0 {
+            return self.clone();
+        }
+
+        let is_multi_frame_matching = albedo_fc > 1
+            && self.height > self.width
+            && (self.height / self.width) == albedo_fc;
+
+        if is_multi_frame_matching {
+            self.resize_nearest(albedo_fw, target_total_height)
+        } else {
+            let single_frame = if self.height > self.width && albedo_fc > 1 {
+                self.crop(0, 0, self.width, self.width)
+            } else {
+                self.clone()
+            };
+
+            let resized_single = single_frame.resize_nearest(albedo_fw, albedo_fh);
+            if albedo_fc > 1 {
+                resized_single.tile_vertical(target_total_height)
+            } else {
+                resized_single
+            }
+        }
+    }
 }

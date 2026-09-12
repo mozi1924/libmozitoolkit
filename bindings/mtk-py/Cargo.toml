@@ -25,7 +25,7 @@ serde_json = { workspace = true }
 pyo3 = { workspace = true, features = ["abi3-py311"] }
 
 [features]
-default = ["zip"]
+default = ["zip", "extension-module"]
 extension-module = ["pyo3/extension-module"]
 zip = ["mtk-resource/zip"]
 

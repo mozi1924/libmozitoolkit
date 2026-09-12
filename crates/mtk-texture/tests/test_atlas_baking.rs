@@ -160,3 +160,64 @@ fn test_pbr_auto_tiling_for_animated_sprite() {
         assert_eq!(px, [128, 128, 255, 255], "Frame {} normal pixel mismatch", frame);
     }
 }
+
+#[test]
+fn test_companion_dimension_scaling_and_alignment() {
+    let builder = AtlasBuilder::new(AtlasBuilderConfig {
+        max_width: 1024,
+        max_height: 1024,
+        mip_level: 0,
+        padding: 0,
+    });
+
+    // Simulate lava_flow: 32x32 single-frame, 2 frames = 32x64 albedo
+    // But companion specular is 16x16 solid emission!
+    let lava_id = ResourceLocation::parse("minecraft:block/lava_flow").unwrap();
+    let lava_albedo = RgbaBuffer::solid(32, 64, 255, 100, 0, 255);
+    let lava_spec_16 = RgbaBuffer::solid(16, 16, 10, 20, 250, 255); // Blue channel = 250 (Emission)
+
+    // DecodedSprite with companion auto-aligned
+    let aligned_spec = lava_spec_16.align_companion_to_albedo(32, 32, 2);
+    assert_eq!(aligned_spec.width, 32);
+    assert_eq!(aligned_spec.height, 64);
+
+    let sprites = vec![DecodedSprite {
+        sprite_id: lava_id.clone(),
+        albedo: lava_albedo,
+        normal: None,
+        specular: Some(aligned_spec),
+        frame_width: 32,
+        frame_height: 32,
+        frame_count: 2,
+        metadata: Some(AnimationMetadata {
+            frametime: 1,
+            ..Default::default()
+        }),
+    }];
+
+    let baked = builder.build_from_sprites(sprites).unwrap();
+    assert_eq!(baked.chunks.len(), 2);
+
+    // 1. Static chunk (Frame 0: 32x32)
+    let static_chunk = &baked.chunks[0];
+    let static_spec = static_chunk.specular.as_ref().unwrap();
+    let static_loc = baked.address_map.lookup_static(&lava_id).unwrap();
+
+    // Verify all four quadrants of the 32x32 static sprite have full emission (250)
+    for sample_x in [static_loc.pixel_rect[0] + 4, static_loc.pixel_rect[0] + 28] {
+        for sample_y in [static_loc.pixel_rect[1] + 4, static_loc.pixel_rect[1] + 28] {
+            let px = static_spec.get_pixel(sample_x, sample_y);
+            assert_eq!(px, [10, 20, 250, 255], "Static frame 0 pixel at ({}, {}) was not fully covered", sample_x, sample_y);
+        }
+    }
+
+    // 2. Animated chunk (Frame 0 and Frame 1: 32x64)
+    let anim_chunk = &baked.chunks[1];
+    let anim_spec = anim_chunk.specular.as_ref().unwrap();
+    let anim_loc = baked.address_map.lookup_animated(&lava_id).unwrap();
+    for frame in 0..2 {
+        let sample_y = anim_loc.pixel_rect[1] + frame * 32 + 16;
+        let px = anim_spec.get_pixel(anim_loc.pixel_rect[0] + 16, sample_y);
+        assert_eq!(px, [10, 20, 250, 255], "Animated frame {} specular emission mismatch", frame);
+    }
+}
