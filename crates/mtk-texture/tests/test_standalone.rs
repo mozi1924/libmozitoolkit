@@ -128,14 +128,14 @@ fn test_standalone_builder_end_to_end() {
     let mapping_str = std::fs::read_to_string(&res.mapping_path).unwrap();
     let mapping: serde_json::Value = serde_json::from_str(&mapping_str).unwrap();
 
-    assert_eq!(mapping["format_version"], 2);
+    assert_eq!(mapping["format_version"], STANDALONE_FORMAT_VERSION);
     assert_eq!(mapping["stack_hash"], "testhash123");
 
     // Verify fallback entry
     let fallback = &mapping["textures"]["mozi:fallback"];
     assert!(fallback.is_object());
-    assert_eq!(fallback["files"]["albedo"], "textures/mtk_fallback.png");
-    assert!(temp_dir.join("textures/mtk_fallback.png").exists());
+    assert_eq!(fallback["files"]["albedo"], "assets/minecraft/textures/mtk_fallback.png");
+    assert!(temp_dir.join("assets/minecraft/textures/mtk_fallback.png").exists());
 
     // Verify stone
     let stone = &mapping["textures"]["minecraft:block/stone"];

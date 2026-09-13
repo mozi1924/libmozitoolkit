@@ -36,7 +36,7 @@ impl Default for PrecompileConfig {
         Self {
             max_atlas_width: 4096,
             max_atlas_height: 4096,
-            atlas_category: "blocks".to_string(),
+            atlas_category: "all".to_string(),
             compile_atlas: true,
             compile_standalone: true,
             compile_models: true,
@@ -101,20 +101,35 @@ pub fn precompile_all_assets(
     let mut sa_count = 0;
     let mut baked_count = 0;
 
-    // 1. Atlas Baking & File Persistence
+    // 1. Atlas Baking & File Persistence (Multi-Category)
     if config.compile_atlas {
-        let cat = match config.atlas_category.as_str() {
-            "blocks" => AtlasCategory::Blocks,
-            "items" => AtlasCategory::Items,
-            "particles" => AtlasCategory::Particles,
-            "paintings" => AtlasCategory::Paintings,
-            "banner_patterns" => AtlasCategory::BannerPatterns,
-            "shield_patterns" => AtlasCategory::ShieldPatterns,
-            "shulker_boxes" => AtlasCategory::ShulkerBoxes,
-            "chests" => AtlasCategory::Chests,
-            "armor_trims" => AtlasCategory::ArmorTrims,
-            _ => AtlasCategory::Blocks,
-        };
+        let mut def_list: Vec<(String, mtk_resource::AtlasDefinition)> = Vec::new();
+        let mut seen_cats = std::collections::HashSet::new();
+
+        if config.atlas_category != "all" && config.atlas_category != "blocks" && !config.atlas_category.is_empty() {
+            let cat = AtlasCategory::parse(&config.atlas_category);
+            let def = stack.load_atlas_category(&cat);
+            def_list.push((cat.as_str().to_string(), def));
+        } else {
+            // 1. Discovered custom atlases from active packs
+            for loc in stack.list_all_atlas_locations() {
+                if let Ok(def) = stack.load_atlas_definition(&loc) {
+                    let cat_name = loc.path.clone();
+                    if seen_cats.insert(cat_name.clone()) {
+                        def_list.push((cat_name, def));
+                    }
+                }
+            }
+
+            // 2. Standard vanilla Atlas categories
+            for standard_cat in &AtlasCategory::ALL_STANDARD {
+                let cat_name = standard_cat.as_str().to_string();
+                if seen_cats.insert(cat_name.clone()) {
+                    let def = stack.load_atlas_category(standard_cat);
+                    def_list.push((cat_name, def));
+                }
+            }
+        }
 
         let atlas_cfg = AtlasBuilderConfig {
             max_width: config.max_atlas_width,
@@ -123,7 +138,7 @@ pub fn precompile_all_assets(
             padding: 0,
         };
         let atlas_builder = AtlasBuilder::new(atlas_cfg);
-        let baked_atlas = atlas_builder.build_category(stack, &cat)?;
+        let baked_atlas = atlas_builder.build_categories(stack, &def_list)?;
         chunk_count = baked_atlas.chunks.len();
 
         let mapping_json = baked_atlas.address_map.to_json()?;

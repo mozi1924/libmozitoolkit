@@ -19,7 +19,7 @@ use super::aligner::{
     align_standalone_channels, ChannelData, ChannelType, StandaloneAnimationMeta,
 };
 
-pub const STANDALONE_FORMAT_VERSION: u32 = 2;
+pub const STANDALONE_FORMAT_VERSION: u32 = 3;
 
 /// Configuration options for building the standalone asset library.
 #[derive(Debug, Clone, Default)]
@@ -137,19 +137,13 @@ impl StandaloneBuilder {
             rand_suffix
         );
         let staging_dir = parent_dir.join(staging_name);
-        let textures_dir = staging_dir.join("textures");
-        fs::create_dir_all(&textures_dir)?;
+        fs::create_dir_all(&staging_dir)?;
 
         let stack_hash = self
             .config
             .stack_hash
             .clone()
             .unwrap_or_else(|| format!("{:08x}", rand_suffix));
-        let short_hash = if stack_hash.len() >= 8 {
-            &stack_hash[..8]
-        } else {
-            &stack_hash
-        };
 
         // 1. Generate procedural 16x16 magenta/dark fallback checkerboard
         let mut fallback_buf = RgbaBuffer::solid(16, 16, 24, 24, 24, 255);
@@ -161,14 +155,18 @@ impl StandaloneBuilder {
             }
         }
         let fallback_bytes = fallback_buf.to_png_bytes()?;
-        let fallback_rel = "textures/mtk_fallback.png".to_string();
-        fs::write(textures_dir.join("mtk_fallback.png"), fallback_bytes)?;
+        let fallback_rel = "assets/minecraft/textures/mtk_fallback.png".to_string();
+        let fallback_dest = staging_dir.join(&fallback_rel);
+        if let Some(p) = fallback_dest.parent() {
+            fs::create_dir_all(p)?;
+        }
+        fs::write(fallback_dest, fallback_bytes)?;
 
         let fallback_record = StandaloneTextureRecord {
-            namespace: "mozi".to_string(),
-            texture_name: "fallback".to_string(),
-            texture_key: "fallback".to_string(),
-            canonical_key: "mozi:fallback".to_string(),
+            namespace: "minecraft".to_string(),
+            texture_name: "mtk_fallback".to_string(),
+            texture_key: "mtk_fallback".to_string(),
+            canonical_key: "minecraft:mtk_fallback".to_string(),
             files: StandaloneFilePaths {
                 albedo: Some(fallback_rel.clone()),
                 normal: None,
@@ -259,23 +257,21 @@ impl StandaloneBuilder {
                     // Multi-channel frame alignment
                     let align_res = align_standalone_channels(channels);
 
-                    let clean_name = loc.path.replace('/', "-").replace(':', "-");
                     let mut file_paths = StandaloneFilePaths::default();
                     let mut out_files = Vec::new();
 
                     for ch in align_res.channels {
-                        let ch_name = ch.channel_type.as_str();
-
-                        // 1. Static Frame 0 (1:1 Square)
+                        // 1. Static Frame 0 (1:1 Square) -> assets/<namespace>/textures/<path>[_n/_s/_overlay].png
                         let static_buf = ch.static_frame_0();
-                        let static_fname = format!(
-                            "{}_{}_{}_{}_static.png",
-                            short_hash, loc.namespace, clean_name, ch_name
-                        );
-                        let static_rel = format!("textures/{}", static_fname);
+                        let static_rel = match ch.channel_type {
+                            ChannelType::Albedo => format!("assets/{}/textures/{}.png", loc.namespace, loc.path),
+                            ChannelType::Normal => format!("assets/{}/textures/{}_n.png", loc.namespace, loc.path),
+                            ChannelType::Specular => format!("assets/{}/textures/{}_s.png", loc.namespace, loc.path),
+                            ChannelType::Overlay => format!("assets/{}/textures/{}_overlay.png", loc.namespace, loc.path),
+                        };
 
                         if let Ok(png_bytes) = static_buf.to_png_bytes() {
-                            out_files.push((static_fname, png_bytes));
+                            out_files.push((static_rel.clone(), png_bytes));
                             match ch.channel_type {
                                 ChannelType::Albedo => {
                                     file_paths.albedo = Some(static_rel.clone());
@@ -296,16 +292,17 @@ impl StandaloneBuilder {
                             }
                         }
 
-                        // 2. Animated vertical strip (if animated)
+                        // 2. Animated vertical strip (if animated) -> assets/<namespace>/textures/<path>[_n/_s]_anim.png
                         if align_res.is_animated {
-                            let anim_fname = format!(
-                                "{}_{}_{}_{}_anim.png",
-                                short_hash, loc.namespace, clean_name, ch_name
-                            );
-                            let anim_rel = format!("textures/{}", anim_fname);
+                            let anim_rel = match ch.channel_type {
+                                ChannelType::Albedo => format!("assets/{}/textures/{}_anim.png", loc.namespace, loc.path),
+                                ChannelType::Normal => format!("assets/{}/textures/{}_n_anim.png", loc.namespace, loc.path),
+                                ChannelType::Specular => format!("assets/{}/textures/{}_s_anim.png", loc.namespace, loc.path),
+                                ChannelType::Overlay => format!("assets/{}/textures/{}_overlay_anim.png", loc.namespace, loc.path),
+                            };
 
                             if let Ok(anim_png) = ch.buffer.to_png_bytes() {
-                                out_files.push((anim_fname, anim_png));
+                                out_files.push((anim_rel.clone(), anim_png));
                                 match ch.channel_type {
                                     ChannelType::Albedo => file_paths.albedo_anim = Some(anim_rel),
                                     ChannelType::Normal => file_paths.normal_anim = Some(anim_rel),
@@ -338,16 +335,22 @@ impl StandaloneBuilder {
         // 4. Write all encoded image files to staging directory
         #[cfg(feature = "parallel")]
         records.par_iter().for_each(|(_, _, files)| {
-            for (fname, bytes) in files {
-                let p = textures_dir.join(fname);
+            for (rel_path, bytes) in files {
+                let p = staging_dir.join(rel_path);
+                if let Some(parent) = p.parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
                 let _ = fs::write(p, bytes);
             }
         });
 
         #[cfg(not(feature = "parallel"))]
         for (_, _, files) in &records {
-            for (fname, bytes) in files {
-                let p = textures_dir.join(fname);
+            for (rel_path, bytes) in files {
+                let p = staging_dir.join(rel_path);
+                if let Some(parent) = p.parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
                 let _ = fs::write(p, bytes);
             }
         }

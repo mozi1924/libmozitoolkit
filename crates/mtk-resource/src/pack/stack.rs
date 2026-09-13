@@ -134,6 +134,27 @@ impl ResourcePackStack {
         results
     }
 
+    /// List all unique atlas resource locations discovered across all active packs in the stack.
+    pub fn list_all_atlas_locations(&self) -> Vec<ResourceLocation> {
+        let mut seen = HashSet::new();
+        let mut results = Vec::new();
+
+        for pack in &self.packs {
+            for file in pack.list_files("assets/") {
+                if !file.ends_with(".json") {
+                    continue;
+                }
+                if let Some(loc) = ResourceLocation::from_asset_path(&file, "atlases", "json") {
+                    if seen.insert(loc.clone()) {
+                        results.push(loc);
+                    }
+                }
+            }
+        }
+
+        results
+    }
+
     /// Read and parse an atlas definition from `assets/<namespace>/atlases/<name>.json`.
     pub fn load_atlas_definition(&self, location: &ResourceLocation) -> Result<AtlasDefinition, ResourceError> {
         let path = location.to_asset_path("atlases", "json");
@@ -327,27 +348,8 @@ impl ResourcePackStack {
                     }
                 }
 
-                AtlasSource::PalettedPermutations { palette_key: _, permutations, textures } => {
-                    // Collect permutations declarations (will be baked by mtk-texture)
-                    for tex_loc in textures {
-                        for perm_name in permutations.keys() {
-                            let sprite_path = format!("{}_{}", tex_loc.path, perm_name);
-                            let sprite_id = ResourceLocation::new(&tex_loc.namespace, sprite_path);
-                            if !registered_sprites.contains(&sprite_id) {
-                                registered_sprites.insert(sprite_id.clone());
-                                // We record base texture for permutation baking
-                                let companions = self.resolve_pbr_companions(tex_loc);
-                                results.push(DiscoveredSprite {
-                                    sprite_id,
-                                    texture_location: tex_loc.clone(),
-                                    raw_albedo: companions.albedo,
-                                    raw_normal: companions.normal,
-                                    raw_specular: companions.specular,
-                                    metadata: companions.mcmeta,
-                                });
-                            }
-                        }
-                    }
+                AtlasSource::PalettedPermutations { .. } => {
+                    // PalettedPermutations are dynamically baked directly by AtlasBuilder
                 }
 
                 AtlasSource::Unstitch { resource, divisor_x: _, divisor_y: _, regions } => {
