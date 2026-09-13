@@ -10,10 +10,8 @@
 
 | 工作区路径 | 项目名称 / 角色 | 核心职责与定位 |
 | :--- | :--- | :--- |
-| **`/home/mozi/libmozitoolkit`** | **`libmtk` (Rust Core)** | **通用 3D / Voxel 处理引擎核心**。纯 Rust 实现，严格遵循 Host-Agnostic（宿主无关）、纯数据输入输出（Data-in, Data-out）、高性能多端兼容（WASM / Python / FFI / C-ABI）。 |
-| **`/home/mozi/MoziToolKit`** | **`MoziToolKit` (Blender Addon)** | **DCC 宿主插件前端**。负责 Blender UI 交互、操作符注册、材质节点构建以及通过 `libmtk` 导出的 Python 绑定/动态库高效灌入网格与贴图数据。 |
-| **`/home/mozi/MiEx`** | **`MiEx` (Data Extractor)** | **Minecraft 资产与数据提取器**。负责从 Minecraft Jar / 存档中提取 BlockState、Model JSON、纹理图集、生物群系等原始资产数据。 |
-| **`/home/mozi/mc`** | **`mc` (Assets & Testing)** | **测试资产与环境**。包含用于集成测试的 Minecraft 原版/Mod 资源包、测试世界存档、OBJ/GLTF 样本等。 |
+| **`../libmozitoolkit`** | **`libmtk` (Rust Core)** | **通用 3D / Voxel 处理引擎核心**。纯 Rust 实现，严格遵循 Host-Agnostic（宿主无关）、纯数据输入输出（Data-in, Data-out）、高性能多端兼容（WASM / Python / FFI / C-ABI）。 |
+| **`../MoziToolKit`** | **`MoziToolKit` (Blender Addon)** | **DCC 宿主插件前端**。负责 Blender UI 交互、操作符注册、材质节点构建以及通过 `libmtk` 导出的 Python 绑定/动态库高效灌入网格与贴图数据。 |
 
 ---
 

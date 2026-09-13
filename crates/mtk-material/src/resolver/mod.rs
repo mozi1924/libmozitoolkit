@@ -20,14 +20,36 @@ pub fn clean_identifier(raw: &str) -> String {
         }
     }
 
-    // 3. Strip standard namespace / path prefixes
+    // 3. Strip standard namespace / path / exporter prefixes
     let prefixes = [
         "tex/minecraft/",
         "textures/block/",
         "textures/entity/",
         "textures/item/",
+        "textures/banner/",
         "textures/",
+        "minecraft_block-",
+        "minecraft_entity-",
+        "minecraft_item-",
+        "minecraft_banner-",
+        "minecraft_block_",
+        "minecraft_entity_",
+        "minecraft_item_",
+        "jmc2obj_block-",
+        "jmc2obj_block_",
+        "jmc2obj_entity-",
+        "jmc2obj_item-",
+        "jmc2obj_",
         "minecraft:",
+        "minecraft-",
+        "mw_",
+        "mwo_",
+        "tile_",
+        "tile-",
+        "tile.",
+        "block_",
+        "block-",
+        "block.",
         "block/",
         "entity/",
         "item/",
@@ -36,6 +58,24 @@ pub fn clean_identifier(raw: &str) -> String {
     for prefix in prefixes {
         if s.starts_with(prefix) {
             s = s[prefix.len()..].to_string();
+            break;
+        }
+    }
+
+    // 4. Strip exporter biome suffixes
+    let biome_suffixes = [
+        "-desert", "-forest", "-swamp", "-taiga", "-snow", "-ocean", "-jungle",
+        "-badlands", "-savanna", "-dark_forest", "-birch_forest", "-plains",
+        "-meadow", "-mangrove", "-cherry_grove", "-cold_ocean", "-warm_ocean",
+        "_desert", "_forest", "_swamp", "_taiga", "_snow", "_ocean", "_jungle",
+        "_badlands", "_savanna", "_dark_forest", "_birch_forest", "_plains",
+        "_meadow", "_mangrove", "_cherry_grove", "_cold_ocean", "_warm_ocean",
+        "_y",
+    ];
+
+    for suffix in biome_suffixes {
+        if s.ends_with(suffix) {
+            s = s[..s.len() - suffix.len()].to_string();
             break;
         }
     }

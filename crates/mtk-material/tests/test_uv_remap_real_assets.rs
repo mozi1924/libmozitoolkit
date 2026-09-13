@@ -68,17 +68,28 @@ fn test_uv_remap_real_fabric_jar_and_spbr() {
     assert_eq!(stone_bl, [stone_sprite.frame_0_uv_bounds[0], stone_sprite.frame_0_uv_bounds[1]]);
     assert_eq!(stone_tr, [stone_sprite.frame_0_uv_bounds[2], stone_sprite.frame_0_uv_bounds[3]]);
 
+    // Bedrock must resolve to block/bedrock, NOT red_bed!
+    let (bedrock_res, _) = MaterialResolver::resolve(
+        "minecraft_block-bedrock",
+        None,
+        address_map,
+    )
+    .expect("Failed to resolve jmc2obj bedrock");
+    assert_eq!(bedrock_res.path, "block/bedrock");
+    assert_ne!(bedrock_res.path, "block/red_bed");
+
     // =========================================================================
     // Scenario 2: Animated Texture Block (e.g. Water Still, Fire, Lava, Sea Lantern)
     // CRITICAL: Must map strictly into Frame 0, NOT stretch over full strip!
     // =========================================================================
     let animated_names = ["water_still", "lava_still", "fire_0", "sea_lantern"];
     for anim_name in animated_names {
-        if let Some((anim_res, anim_sprite)) = MaterialResolver::resolve(
+        if let Some((anim_res, _)) = MaterialResolver::resolve(
             &format!("minecraft_block-{}", anim_name),
             None,
             address_map,
         ) {
+            if let Some(anim_sprite) = address_map.lookup_animated(&anim_res) {
             println!(
                 "Testing animated sprite: {} (frames={}, is_anim={})",
                 anim_res.as_string(),
@@ -127,6 +138,7 @@ fn test_uv_remap_real_fabric_jar_and_spbr() {
                 frame_0_h
             );
         }
+    }
     }
 
     // =========================================================================
