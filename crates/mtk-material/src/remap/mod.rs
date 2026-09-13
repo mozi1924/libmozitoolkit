@@ -40,6 +40,147 @@ pub fn remap_sprite_to_sprite(
     remap_local_to_atlas(local[0], local[1], target_sprite)
 }
 
+/// Check if an angle is approximately orthogonal (multiple of 90 degrees / pi/2).
+#[inline]
+pub fn is_orthogonal_angle(theta: f32, tolerance: f32) -> bool {
+    let half_pi = std::f32::consts::FRAC_PI_2;
+    for k in -2..=2 {
+        let target = k as f32 * half_pi;
+        if (theta - target).abs() < tolerance {
+            return true;
+        }
+    }
+    false
+}
+
+/// Calculate the Euler Z rotation angle (in radians) of a face's loop UVs.
+/// Returns 0.0 for unrotated or standard axis-aligned faces.
+/// Returns non-zero angle theta in radians only when ALL valid edges of the face are non-orthogonal.
+pub fn detect_face_uv_rotation(uvs: &[[f32; 2]], tolerance: f32) -> f32 {
+    let num_uvs = uvs.len();
+    if num_uvs < 3 {
+        return 0.0;
+    }
+
+    let mut valid_edges = Vec::new();
+    for i in 0..num_uvs {
+        let p_curr = uvs[i];
+        let p_next = uvs[(i + 1) % num_uvs];
+        let dx = p_next[0] - p_curr[0];
+        let dy = p_next[1] - p_curr[1];
+        let len_sq = dx * dx + dy * dy;
+        if len_sq >= 1e-12 {
+            let mut theta = dy.atan2(dx);
+            while theta <= -std::f32::consts::PI {
+                theta += 2.0 * std::f32::consts::PI;
+            }
+            while theta > std::f32::consts::PI {
+                theta -= 2.0 * std::f32::consts::PI;
+            }
+            valid_edges.push(theta);
+        }
+    }
+
+    if valid_edges.is_empty() {
+        return 0.0;
+    }
+
+    // If ANY edge is orthogonal, the face is built in an axis-aligned grid
+    for &theta in &valid_edges {
+        if is_orthogonal_angle(theta, tolerance) {
+            return 0.0;
+        }
+    }
+
+    // If ALL valid edges are non-orthogonal, the entire face is tilted
+    let primary_theta = valid_edges[0];
+    if is_orthogonal_angle(primary_theta, tolerance) {
+        0.0
+    } else {
+        primary_theta
+    }
+}
+
+/// Straighten a rotated polygon's loop UVs back to standard axis-aligned coordinates.
+pub fn straighten_face_uv(uvs: &mut [[f32; 2]], angle: f32) -> bool {
+    if angle.abs() < 1e-4 || uvs.len() < 3 {
+        return false;
+    }
+
+    let n = uvs.len() as f32;
+    let center_u: f32 = uvs.iter().map(|p| p[0]).sum::<f32>() / n;
+    let center_v: f32 = uvs.iter().map(|p| p[1]).sum::<f32>() / n;
+
+    let cos_t = (-angle).cos();
+    let sin_t = (-angle).sin();
+
+    for p in uvs.iter_mut() {
+        let dx = p[0] - center_u;
+        let dy = p[1] - center_v;
+        p[0] = center_u + (dx * cos_t - dy * sin_t);
+        p[1] = center_v + (dx * sin_t + dy * cos_t);
+    }
+
+    true
+}
+
+/// Check if a polygon's UV coordinates escape the canonical [0, 1] unit square.
+#[inline]
+pub fn face_uv_requires_atlas_tiling(uvs: &[[f32; 2]], epsilon: f32) -> bool {
+    if uvs.is_empty() {
+        return false;
+    }
+    for p in uvs.iter() {
+        if p[0] < -epsilon || p[0] > 1.0 + epsilon || p[1] < -epsilon || p[1] > 1.0 + epsilon {
+            return true;
+        }
+    }
+    false
+}
+
+/// Normalize one face's local UV coordinates to [0, 1] and calculate Mapping inputs for MC_Atlas_UV_Tiling.
+/// Returns ([scale_u, scale_v, location_u, location_v], is_tiled).
+pub fn normalize_face_uv_for_atlas_tiling(
+    uvs: &mut [[f32; 2]],
+    epsilon: f32,
+) -> ([f32; 4], bool) {
+    if uvs.is_empty() || !face_uv_requires_atlas_tiling(uvs, 1e-4) {
+        return ([1.0, 1.0, 0.0, 0.0], false);
+    }
+
+    let mut min_u = f32::INFINITY;
+    let mut max_u = f32::NEG_INFINITY;
+    let mut min_v = f32::INFINITY;
+    let mut max_v = f32::NEG_INFINITY;
+
+    for p in uvs.iter() {
+        if p[0] < min_u { min_u = p[0]; }
+        if p[0] > max_u { max_u = p[0]; }
+        if p[1] < min_v { min_v = p[1]; }
+        if p[1] > max_v { max_v = p[1]; }
+    }
+
+    let span_u = max_u - min_u;
+    let span_v = max_v - min_v;
+
+    let safe_span_u = if span_u > epsilon { span_u } else { 1.0 };
+    let safe_span_v = if span_v > epsilon { span_v } else { 1.0 };
+
+    for p in uvs.iter_mut() {
+        p[0] = if span_u > epsilon { (p[0] - min_u) / safe_span_u } else { 0.0 };
+        p[1] = if span_v > epsilon { (p[1] - min_v) / safe_span_v } else { 0.0 };
+    }
+
+    // MC_Atlas_UV_Tiling subtracts/adds 0.5 around the Mapping node, hence
+    // location produces min + span * normalized_uv exactly.
+    let scale_u = safe_span_u;
+    let scale_v = safe_span_v;
+    let loc_u = min_u + (safe_span_u - 1.0) * 0.5;
+    let loc_v = min_v + (safe_span_v - 1.0) * 0.5;
+
+    ([scale_u, scale_v, loc_u, loc_v], true)
+}
+
 /// Check if a 4-vertex quad UV layout is rotated by non-orthogonal angles (e.g. jmc2obj 45-degree flowing liquid diamond).
 pub fn is_quad_uv_diamond(uvs: &[[f32; 2]; 4]) -> bool {
     let du0 = uvs[1][0] - uvs[0][0];

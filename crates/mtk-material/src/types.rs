@@ -119,6 +119,8 @@ pub struct MeshMultiUvRemapResult {
     pub face_texture_ids: Vec<u32>,
     /// Packed UV transform [scale_u, scale_v, offset_u, offset_v] for each face.
     pub face_uv_transforms: Vec<[f32; 4]>,
+    /// UV rotation angle in radians for each face (Euler Z).
+    pub face_uv_rotations: Vec<f32>,
     /// Face UV routing mode (0 = Atlas, 1 = Standalone Static, 2 = Standalone Anim, 3 = Overlay Local).
     pub face_uv_modes: Vec<u8>,
     /// Whether each face is an overlay layer (e.g. grass side overlay).

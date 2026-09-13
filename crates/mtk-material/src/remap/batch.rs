@@ -4,7 +4,10 @@ use std::collections::HashMap;
 use rayon::prelude::*;
 use mtk_texture::AtlasAddressMap;
 
-use crate::remap::remap_local_to_atlas;
+use crate::remap::{
+    detect_face_uv_rotation, normalize_face_uv_for_atlas_tiling, remap_local_to_atlas,
+    straighten_face_uv,
+};
 use crate::resolver::decode_grid_atlas_uv;
 use crate::resolver::MaterialResolver;
 use crate::types::{GridAtlasSpec, MeshRemapResult};
@@ -47,7 +50,6 @@ pub fn remap_mesh_uvs_parallel(
 
         if is_grid_atlas {
             let spec = grid_atlas_spec.unwrap();
-            // Calculate center UV of the face to decode grid atlas swatch
             let mut sum_u = 0.0f32;
             let mut sum_v = 0.0f32;
             for i in start_idx..end_idx {
@@ -63,7 +65,6 @@ pub fn remap_mesh_uvs_parallel(
             if let Some((_, sprite_loc, _)) =
                 MaterialResolver::resolve_grid_atlas_face(avg_u, avg_v, spec, aliases, address_map)
             {
-                // Remap each loop UV from grid atlas -> local -> target atlas
                 for i in start_idx..end_idx {
                     unsafe {
                         let p = uvs_ptr.add(i);
@@ -80,12 +81,20 @@ pub fn remap_mesh_uvs_parallel(
 
         // Normal material path
         if let Some((_, sprite_loc)) = MaterialResolver::resolve(mat_name, aliases, address_map) {
-            for i in start_idx..end_idx {
+            let mut face_uvs: Vec<[f32; 2]> = (start_idx..end_idx)
+                .map(|i| unsafe { *uvs_ptr.add(i) })
+                .collect();
+            let angle = detect_face_uv_rotation(&face_uvs, 1e-3);
+            if angle.abs() > 1e-4 {
+                straighten_face_uv(&mut face_uvs, angle);
+            }
+            let _ = normalize_face_uv_for_atlas_tiling(&mut face_uvs, 1e-6);
+
+            for (local_idx, loop_idx) in (start_idx..end_idx).enumerate() {
                 unsafe {
-                    let p = uvs_ptr.add(i);
-                    let [u_in, v_in] = *p;
-                    let target_uv = remap_local_to_atlas(u_in, v_in, sprite_loc);
-                    *p = target_uv;
+                    let [u_norm, v_norm] = face_uvs[local_idx];
+                    let p = uvs_ptr.add(loop_idx);
+                    *p = remap_local_to_atlas(u_norm, v_norm, sprite_loc);
                 }
             }
             (sprite_loc.chunk_id, sprite_loc.texture_id, true)
@@ -143,6 +152,7 @@ pub fn remap_mesh_multi_uvs_parallel(
             face_chunk_ids: vec![0; face_count],
             face_texture_ids: vec![0; face_count],
             face_uv_transforms: vec![[1.0, 1.0, 0.0, 0.0]; face_count],
+            face_uv_rotations: vec![0.0; face_count],
             face_uv_modes: vec![0; face_count],
             face_is_overlay: vec![false; face_count],
             unmapped_faces: face_count,
@@ -154,6 +164,7 @@ pub fn remap_mesh_multi_uvs_parallel(
         chunk_id: u16,
         texture_id: u32,
         uv_transform: [f32; 4],
+        uv_rotation: f32,
         uv_mode: u8,
         is_overlay: bool,
         success: bool,
@@ -177,6 +188,7 @@ pub fn remap_mesh_multi_uvs_parallel(
                 chunk_id: 0,
                 texture_id: 0,
                 uv_transform: [1.0, 1.0, 0.0, 0.0],
+                uv_rotation: 0.0,
                 uv_mode: 0,
                 is_overlay: false,
                 success: false,
@@ -212,18 +224,11 @@ pub fn remap_mesh_multi_uvs_parallel(
                         *l_ptr.add(i) = local_uv;
                     }
                 }
-                let scale_u = (sprite_loc.uv_bounds[2] - sprite_loc.uv_bounds[0]).abs();
-                let scale_v = (sprite_loc.uv_bounds[3] - sprite_loc.uv_bounds[1]).abs();
-                let uv_trans = [
-                    if scale_u > 0.0 { scale_u } else { 1.0 },
-                    if scale_v > 0.0 { scale_v } else { 1.0 },
-                    sprite_loc.uv_bounds[0],
-                    sprite_loc.uv_bounds[1],
-                ];
                 return FaceOut {
                     chunk_id: sprite_loc.chunk_id,
                     texture_id: sprite_loc.texture_id,
-                    uv_transform: uv_trans,
+                    uv_transform: [1.0, 1.0, 0.0, 0.0],
+                    uv_rotation: 0.0,
                     uv_mode,
                     is_overlay,
                     success: true,
@@ -240,6 +245,7 @@ pub fn remap_mesh_multi_uvs_parallel(
                 chunk_id: 0,
                 texture_id: 0,
                 uv_transform: [1.0, 1.0, 0.0, 0.0],
+                uv_rotation: 0.0,
                 uv_mode: 0,
                 is_overlay,
                 success: false,
@@ -249,26 +255,34 @@ pub fn remap_mesh_multi_uvs_parallel(
         // Standard material path
         if let Some((_, sprite_loc)) = MaterialResolver::resolve(mat_name, aliases, address_map) {
             let uv_mode = if is_overlay { 3 } else { 0 };
-            for i in start_idx..end_idx {
-                let [u_in, v_in] = source_uvs[i];
-                let target_atlas_uv = remap_local_to_atlas(u_in, v_in, sprite_loc);
+
+            // 1. Copy face loop UVs
+            let mut face_uvs: Vec<[f32; 2]> = (start_idx..end_idx).map(|i| source_uvs[i]).collect();
+
+            // 2. Detect and straighten rotated UVs (e.g. jmc2obj flowing liquid at 45 deg)
+            let angle = detect_face_uv_rotation(&face_uvs, 1e-3);
+            if angle.abs() > 1e-4 {
+                straighten_face_uv(&mut face_uvs, angle);
+            }
+
+            // 3. Normalize tiled UVs to [0, 1] if required and extract affine transform
+            let (uv_trans, is_tiled) = normalize_face_uv_for_atlas_tiling(&mut face_uvs, 1e-6);
+
+            // 4. Map normalized UVs to Atlas and write outputs
+            for (local_idx, loop_idx) in (start_idx..end_idx).enumerate() {
+                let [u_norm, v_norm] = face_uvs[local_idx];
+                let target_atlas_uv = remap_local_to_atlas(u_norm, v_norm, sprite_loc);
                 unsafe {
-                    *a_ptr.add(i) = target_atlas_uv;
-                    *l_ptr.add(i) = [u_in, v_in];
+                    *a_ptr.add(loop_idx) = target_atlas_uv;
+                    *l_ptr.add(loop_idx) = if is_tiled || angle.abs() > 1e-4 { [u_norm, v_norm] } else { source_uvs[loop_idx] };
                 }
             }
-            let scale_u = (sprite_loc.uv_bounds[2] - sprite_loc.uv_bounds[0]).abs();
-            let scale_v = (sprite_loc.uv_bounds[3] - sprite_loc.uv_bounds[1]).abs();
-            let uv_trans = [
-                if scale_u > 0.0 { scale_u } else { 1.0 },
-                if scale_v > 0.0 { scale_v } else { 1.0 },
-                sprite_loc.uv_bounds[0],
-                sprite_loc.uv_bounds[1],
-            ];
+
             FaceOut {
                 chunk_id: sprite_loc.chunk_id,
                 texture_id: sprite_loc.texture_id,
                 uv_transform: uv_trans,
+                uv_rotation: angle,
                 uv_mode,
                 is_overlay,
                 success: true,
@@ -284,6 +298,7 @@ pub fn remap_mesh_multi_uvs_parallel(
                 chunk_id: 0,
                 texture_id: 0,
                 uv_transform: [1.0, 1.0, 0.0, 0.0],
+                uv_rotation: 0.0,
                 uv_mode: 0,
                 is_overlay,
                 success: false,
@@ -300,6 +315,7 @@ pub fn remap_mesh_multi_uvs_parallel(
     let mut face_chunk_ids = vec![0u16; face_count];
     let mut face_texture_ids = vec![0u32; face_count];
     let mut face_uv_transforms = vec![[1.0f32, 1.0f32, 0.0f32, 0.0f32]; face_count];
+    let mut face_uv_rotations = vec![0.0f32; face_count];
     let mut face_uv_modes = vec![0u8; face_count];
     let mut face_is_overlay = vec![false; face_count];
     let mut mapped_faces = 0usize;
@@ -308,6 +324,7 @@ pub fn remap_mesh_multi_uvs_parallel(
         face_chunk_ids[i] = out.chunk_id;
         face_texture_ids[i] = out.texture_id;
         face_uv_transforms[i] = out.uv_transform;
+        face_uv_rotations[i] = out.uv_rotation;
         face_uv_modes[i] = out.uv_mode;
         face_is_overlay[i] = out.is_overlay;
         if out.success {
@@ -323,6 +340,7 @@ pub fn remap_mesh_multi_uvs_parallel(
         face_chunk_ids,
         face_texture_ids,
         face_uv_transforms,
+        face_uv_rotations,
         face_uv_modes,
         face_is_overlay,
         unmapped_faces: face_count.saturating_sub(mapped_faces),
