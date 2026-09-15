@@ -9,6 +9,7 @@ pub struct DecodedSprite {
     pub albedo: RgbaBuffer,
     pub normal: Option<RgbaBuffer>,
     pub specular: Option<RgbaBuffer>,
+    pub overlay: Option<RgbaBuffer>,
     pub frame_width: u32,
     pub frame_height: u32,
     pub frame_count: u32,
@@ -28,6 +29,10 @@ impl DecodedSprite {
             None => None,
         };
         let specular = match discovered.raw_specular {
+            Some(ref bytes) => RgbaBuffer::from_png_bytes(bytes).ok(),
+            None => None,
+        };
+        let overlay = match discovered.raw_overlay {
             Some(ref bytes) => RgbaBuffer::from_png_bytes(bytes).ok(),
             None => None,
         };
@@ -54,12 +59,14 @@ impl DecodedSprite {
         // Align PBR companion buffers with albedo frame metrics and vertical tiling
         let normal = normal.map(|n| n.align_companion_to_albedo(frame_width, frame_height, frame_count));
         let specular = specular.map(|s| s.align_companion_to_albedo(frame_width, frame_height, frame_count));
+        let overlay = overlay.map(|o| o.align_companion_to_albedo(frame_width, frame_height, frame_count));
 
         Ok(Self {
             sprite_id: discovered.sprite_id,
             albedo,
             normal,
             specular,
+            overlay,
             frame_width,
             frame_height,
             frame_count,

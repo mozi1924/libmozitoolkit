@@ -52,6 +52,7 @@ fn test_atlas_builder_with_pbr_and_animation() {
             albedo: stone_albedo,
             normal: None,
             specular: None,
+            overlay: None,
             frame_width: 16,
             frame_height: 16,
             frame_count: 1,
@@ -62,6 +63,7 @@ fn test_atlas_builder_with_pbr_and_animation() {
             albedo: diamond_albedo,
             normal: Some(diamond_normal),
             specular: Some(diamond_spec),
+            overlay: None,
             frame_width: 16,
             frame_height: 16,
             frame_count: 2,
@@ -93,6 +95,7 @@ fn test_atlas_builder_with_pbr_and_animation() {
     assert_eq!(stone_loc.chunk_id, 0);
     assert!(!stone_loc.has_normal);
     assert!(!stone_loc.has_specular);
+    assert!(!stone_loc.has_overlay);
     assert_eq!(stone_loc.frame_size, [16, 16]);
 
     // Static Frame 0 lookup for diamond_ore (chunk 0)
@@ -106,6 +109,7 @@ fn test_atlas_builder_with_pbr_and_animation() {
     assert_eq!(diamond_anim.chunk_id, 1);
     assert!(diamond_anim.has_normal);
     assert!(diamond_anim.has_specular);
+    assert!(!diamond_anim.has_overlay);
     assert_eq!(diamond_anim.frame_count, 2);
     assert!(diamond_anim.animation.is_some());
     assert_eq!(diamond_anim.frame_size, [16, 16]);
@@ -135,6 +139,7 @@ fn test_pbr_auto_tiling_for_animated_sprite() {
         albedo: water_albedo,
         normal: Some(water_normal),
         specular: None,
+        overlay: None,
         frame_width: 16,
         frame_height: 16,
         frame_count: 4,
@@ -186,6 +191,7 @@ fn test_companion_dimension_scaling_and_alignment() {
         albedo: lava_albedo,
         normal: None,
         specular: Some(aligned_spec),
+        overlay: None,
         frame_width: 32,
         frame_height: 32,
         frame_count: 2,
@@ -220,4 +226,76 @@ fn test_companion_dimension_scaling_and_alignment() {
         let px = anim_spec.get_pixel(anim_loc.pixel_rect[0] + 16, sample_y);
         assert_eq!(px, [10, 20, 250, 255], "Animated frame {} specular emission mismatch", frame);
     }
+}
+
+#[test]
+fn test_atlas_builder_with_overlay() {
+    let builder = AtlasBuilder::new(AtlasBuilderConfig {
+        max_width: 1024,
+        max_height: 1024,
+        mip_level: 0,
+        padding: 0,
+    });
+
+    let grass_side_id = ResourceLocation::parse("minecraft:block/grass_block_side").unwrap();
+    let stone_id = ResourceLocation::parse("minecraft:block/stone").unwrap();
+
+    // grass_block_side has albedo and overlay
+    let grass_albedo = RgbaBuffer::solid(16, 16, 134, 96, 67, 255);
+    let mut grass_overlay = RgbaBuffer::new(16, 16);
+    // top 4 pixels are green overlay, rest transparent
+    for y in 0..4 {
+        for x in 0..16 {
+            grass_overlay.set_pixel(x, y, [100, 200, 50, 255]);
+        }
+    }
+
+    let stone_albedo = RgbaBuffer::solid(16, 16, 120, 120, 120, 255);
+
+    let sprites = vec![
+        DecodedSprite {
+            sprite_id: grass_side_id.clone(),
+            albedo: grass_albedo,
+            normal: None,
+            specular: None,
+            overlay: Some(grass_overlay),
+            frame_width: 16,
+            frame_height: 16,
+            frame_count: 1,
+            metadata: None,
+        },
+        DecodedSprite {
+            sprite_id: stone_id.clone(),
+            albedo: stone_albedo,
+            normal: None,
+            specular: None,
+            overlay: None,
+            frame_width: 16,
+            frame_height: 16,
+            frame_count: 1,
+            metadata: None,
+        },
+    ];
+
+    let baked = builder.build_from_sprites(sprites).unwrap();
+    assert_eq!(baked.chunks.len(), 1);
+
+    let chunk = &baked.chunks[0];
+    assert!(chunk.overlay.is_some());
+    assert!(baked.address_map.chunks[0].has_overlay);
+
+    let grass_loc = baked.address_map.lookup_static(&grass_side_id).unwrap();
+    assert!(grass_loc.has_overlay);
+
+    let stone_loc = baked.address_map.lookup_static(&stone_id).unwrap();
+    assert!(!stone_loc.has_overlay);
+
+    let overlay_buf = chunk.overlay.as_ref().unwrap();
+    // Check grass overlay pixel at (x=8, y=2)
+    let px = overlay_buf.get_pixel(grass_loc.pixel_rect[0] + 8, grass_loc.pixel_rect[1] + 2);
+    assert_eq!(px, [100, 200, 50, 255]);
+
+    // Check stone region in overlay buffer is transparent [0, 0, 0, 0]
+    let stone_px = overlay_buf.get_pixel(stone_loc.pixel_rect[0] + 8, stone_loc.pixel_rect[1] + 8);
+    assert_eq!(stone_px, [0, 0, 0, 0]);
 }

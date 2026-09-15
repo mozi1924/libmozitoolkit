@@ -158,6 +158,11 @@ pub fn precompile_all_assets(
                 let spec_bytes = specular.to_png_bytes()?;
                 fs::write(atlas_dir.join(format!("{}_s.png", stem)), spec_bytes)?;
             }
+
+            if let Some(ref overlay) = chunk.overlay {
+                let overlay_bytes = overlay.to_png_bytes()?;
+                fs::write(atlas_dir.join(format!("{}_overlay.png", stem)), overlay_bytes)?;
+            }
         }
     }
 

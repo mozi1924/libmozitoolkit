@@ -80,6 +80,7 @@ fn test_resolver_and_atlas_projection() {
             animation: None,
             has_normal: false,
             has_specular: false,
+            has_overlay: false,
         },
     );
 
@@ -125,6 +126,7 @@ fn test_parallel_batch_mesh_remap() {
             animation: None,
             has_normal: false,
             has_specular: false,
+            has_overlay: false,
         },
     );
 

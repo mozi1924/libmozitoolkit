@@ -39,6 +39,7 @@ tiles=0-3
         height: 1024,
         has_normal: false,
         has_specular: false,
+        has_overlay: false,
     });
 
     for i in 0..4 {
@@ -64,6 +65,7 @@ tiles=0-3
                 animation: None,
                 has_normal: false,
                 has_specular: false,
+                has_overlay: false,
             },
         );
     }

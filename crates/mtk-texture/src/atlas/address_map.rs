@@ -57,6 +57,9 @@ pub struct AtlasSpriteLocation {
     pub has_normal: bool,
     /// Whether this slot contains a non-default Specular companion map.
     pub has_specular: bool,
+    /// Whether this slot contains a non-default Overlay companion map.
+    #[serde(default)]
+    pub has_overlay: bool,
 }
 
 fn default_category() -> String {
@@ -81,6 +84,8 @@ pub struct AtlasChunkMeta {
     pub height: u32,
     pub has_normal: bool,
     pub has_specular: bool,
+    #[serde(default)]
+    pub has_overlay: bool,
 }
 
 fn default_chunk_index() -> usize {

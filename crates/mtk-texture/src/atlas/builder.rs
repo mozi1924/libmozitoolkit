@@ -40,6 +40,7 @@ pub struct BakedAtlasChunk {
     pub albedo: RgbaBuffer,
     pub normal: Option<RgbaBuffer>,
     pub specular: Option<RgbaBuffer>,
+    pub overlay: Option<RgbaBuffer>,
 }
 
 impl BakedAtlasChunk {
@@ -147,11 +148,15 @@ impl AtlasBuilder {
                                         let specular = companions.specular
                                             .and_then(|b| RgbaBuffer::from_png_bytes(&b).ok())
                                             .map(|s| s.align_companion_to_albedo(fw, fh, 1));
+                                        let overlay = companions.overlay
+                                            .and_then(|b| RgbaBuffer::from_png_bytes(&b).ok())
+                                            .map(|o| o.align_companion_to_albedo(fw, fh, 1));
                                         decoded.push(DecodedSprite {
                                             sprite_id,
                                             albedo: baked_perm,
                                             normal,
                                             specular,
+                                            overlay,
                                             frame_width: fw,
                                             frame_height: fh,
                                             frame_count: 1,
@@ -185,6 +190,10 @@ impl AtlasBuilder {
                         specular: sp.specular.as_ref().map(|s| {
                             let h = s.height.min(sp.frame_height);
                             s.crop(0, 0, s.width.min(sp.frame_width), h)
+                        }),
+                        overlay: sp.overlay.as_ref().map(|o| {
+                            let h = o.height.min(sp.frame_height);
+                            o.crop(0, 0, o.width.min(sp.frame_width), h)
                         }),
                         frame_width: sp.frame_width,
                         frame_height: sp.frame_height,
@@ -221,11 +230,13 @@ impl AtlasBuilder {
                     let category_chunk_index = idx + 1;
                     let mut has_normal = false;
                     let mut has_specular = false;
+                    let mut has_overlay = false;
 
                     for slot in &chunk.slots {
                         if let Some(sp) = sprite_map.get(&slot.entry) {
                             if sp.normal.is_some() { has_normal = true; }
                             if sp.specular.is_some() { has_specular = true; }
+                            if sp.overlay.is_some() { has_overlay = true; }
                         }
                     }
 
@@ -236,6 +247,11 @@ impl AtlasBuilder {
                         None
                     };
                     let mut specular_buf = if has_specular {
+                        Some(RgbaBuffer::new(chunk.width, chunk.height))
+                    } else {
+                        None
+                    };
+                    let mut overlay_buf = if has_overlay {
                         Some(RgbaBuffer::new(chunk.width, chunk.height))
                     } else {
                         None
@@ -269,6 +285,14 @@ impl AtlasBuilder {
                                 }
                             }
 
+                            let slot_has_overlay = sp.overlay.is_some();
+                            if let (Some(ref mut o_buf), Some(ref over_src)) = (&mut overlay_buf, &sp.overlay) {
+                                o_buf.blit(over_src, 0, 0, inner_x, inner_y, fw, fh);
+                                if self.config.padding > 0 {
+                                    apply_edge_clamping_padding(o_buf, inner_x, inner_y, fw, fh, self.config.padding);
+                                }
+                            }
+
                             let u_min = (inner_x as f32) / (chunk.width as f32);
                             let u_max = ((inner_x + fw) as f32) / (chunk.width as f32);
                             let v_min = 1.0 - ((inner_y + fh) as f32) / (chunk.height as f32);
@@ -293,6 +317,7 @@ impl AtlasBuilder {
                                     animation: None,
                                     has_normal: slot_has_normal,
                                     has_specular: slot_has_specular,
+                                    has_overlay: slot_has_overlay,
                                 },
                             );
 
@@ -309,6 +334,7 @@ impl AtlasBuilder {
                         height: chunk.height,
                         has_normal,
                         has_specular,
+                        has_overlay,
                     });
 
                     baked_chunks.push(BakedAtlasChunk {
@@ -321,6 +347,7 @@ impl AtlasBuilder {
                         albedo: albedo_buf,
                         normal: normal_buf,
                         specular: specular_buf,
+                        overlay: overlay_buf,
                     });
                 }
             }
@@ -345,11 +372,13 @@ impl AtlasBuilder {
                     let category_chunk_index = idx + 1;
                     let mut has_normal = false;
                     let mut has_specular = false;
+                    let mut has_overlay = false;
 
                     for slot in &chunk.slots {
                         if let Some(sp) = anim_sprite_map.get(&slot.entry) {
                             if sp.normal.is_some() { has_normal = true; }
                             if sp.specular.is_some() { has_specular = true; }
+                            if sp.overlay.is_some() { has_overlay = true; }
                         }
                     }
 
@@ -360,6 +389,11 @@ impl AtlasBuilder {
                         None
                     };
                     let mut specular_buf = if has_specular {
+                        Some(RgbaBuffer::new(chunk.width, chunk.height))
+                    } else {
+                        None
+                    };
+                    let mut overlay_buf = if has_overlay {
                         Some(RgbaBuffer::new(chunk.width, chunk.height))
                     } else {
                         None
@@ -393,6 +427,14 @@ impl AtlasBuilder {
                                 }
                             }
 
+                            let slot_has_overlay = sp.overlay.is_some();
+                            if let (Some(ref mut o_buf), Some(ref over_src)) = (&mut overlay_buf, &sp.overlay) {
+                                o_buf.blit(over_src, 0, 0, inner_x, inner_y, fw, strip_h);
+                                if self.config.padding > 0 {
+                                    apply_edge_clamping_padding(o_buf, inner_x, inner_y, fw, strip_h, self.config.padding);
+                                }
+                            }
+
                             let u_min = (inner_x as f32) / (chunk.width as f32);
                             let u_max = ((inner_x + fw) as f32) / (chunk.width as f32);
                             let v_min = 1.0 - ((inner_y + strip_h) as f32) / (chunk.height as f32);
@@ -420,6 +462,7 @@ impl AtlasBuilder {
                                     animation: sp.metadata.clone(),
                                     has_normal: slot_has_normal,
                                     has_specular: slot_has_specular,
+                                    has_overlay: slot_has_overlay,
                                 },
                             );
 
@@ -436,6 +479,7 @@ impl AtlasBuilder {
                         height: chunk.height,
                         has_normal,
                         has_specular,
+                        has_overlay,
                     });
 
                     baked_chunks.push(BakedAtlasChunk {
@@ -448,6 +492,7 @@ impl AtlasBuilder {
                         albedo: albedo_buf,
                         normal: normal_buf,
                         specular: specular_buf,
+                        overlay: overlay_buf,
                     });
                 }
             }
@@ -497,6 +542,10 @@ impl AtlasBuilder {
                         let h = s.height.min(sp.frame_height);
                         s.crop(0, 0, s.width.min(sp.frame_width), h)
                     }),
+                    overlay: sp.overlay.as_ref().map(|o| {
+                        let h = o.height.min(sp.frame_height);
+                        o.crop(0, 0, o.width.min(sp.frame_width), h)
+                    }),
                     frame_width: sp.frame_width,
                     frame_height: sp.frame_height,
                     frame_count: 1,
@@ -536,11 +585,13 @@ impl AtlasBuilder {
                 let category_chunk_index = idx + 1;
                 let mut has_normal = false;
                 let mut has_specular = false;
+                let mut has_overlay = false;
 
                 for slot in &chunk.slots {
                     if let Some(sp) = sprite_map.get(&slot.entry) {
                         if sp.normal.is_some() { has_normal = true; }
                         if sp.specular.is_some() { has_specular = true; }
+                        if sp.overlay.is_some() { has_overlay = true; }
                     }
                 }
 
@@ -551,6 +602,11 @@ impl AtlasBuilder {
                     None
                 };
                 let mut specular_buf = if has_specular {
+                    Some(RgbaBuffer::new(chunk.width, chunk.height))
+                } else {
+                    None
+                };
+                let mut overlay_buf = if has_overlay {
                     Some(RgbaBuffer::new(chunk.width, chunk.height))
                 } else {
                     None
@@ -584,6 +640,14 @@ impl AtlasBuilder {
                             }
                         }
 
+                        let slot_has_overlay = sp.overlay.is_some();
+                        if let (Some(ref mut o_buf), Some(ref over_src)) = (&mut overlay_buf, &sp.overlay) {
+                            o_buf.blit(over_src, 0, 0, inner_x, inner_y, fw, fh);
+                            if self.config.padding > 0 {
+                                apply_edge_clamping_padding(o_buf, inner_x, inner_y, fw, fh, self.config.padding);
+                            }
+                        }
+
                         let u_min = (inner_x as f32) / (chunk.width as f32);
                         let u_max = ((inner_x + fw) as f32) / (chunk.width as f32);
                         let v_min = 1.0 - ((inner_y + fh) as f32) / (chunk.height as f32);
@@ -608,6 +672,7 @@ impl AtlasBuilder {
                                 animation: None,
                                 has_normal: slot_has_normal,
                                 has_specular: slot_has_specular,
+                                has_overlay: slot_has_overlay,
                             },
                         );
 
@@ -624,6 +689,7 @@ impl AtlasBuilder {
                     height: chunk.height,
                     has_normal,
                     has_specular,
+                    has_overlay,
                 });
 
                 baked_chunks.push(BakedAtlasChunk {
@@ -636,6 +702,7 @@ impl AtlasBuilder {
                     albedo: albedo_buf,
                     normal: normal_buf,
                     specular: specular_buf,
+                    overlay: overlay_buf,
                 });
             }
         }
@@ -659,11 +726,13 @@ impl AtlasBuilder {
                 let category_chunk_index = idx + 1;
                 let mut has_normal = false;
                 let mut has_specular = false;
+                let mut has_overlay = false;
 
                 for slot in &chunk.slots {
                     if let Some(sp) = anim_sprite_map.get(&slot.entry) {
                         if sp.normal.is_some() { has_normal = true; }
                         if sp.specular.is_some() { has_specular = true; }
+                        if sp.overlay.is_some() { has_overlay = true; }
                     }
                 }
 
@@ -674,6 +743,11 @@ impl AtlasBuilder {
                     None
                 };
                 let mut specular_buf = if has_specular {
+                    Some(RgbaBuffer::new(chunk.width, chunk.height))
+                } else {
+                    None
+                };
+                let mut overlay_buf = if has_overlay {
                     Some(RgbaBuffer::new(chunk.width, chunk.height))
                 } else {
                     None
@@ -707,6 +781,14 @@ impl AtlasBuilder {
                             }
                         }
 
+                        let slot_has_overlay = sp.overlay.is_some();
+                        if let (Some(ref mut o_buf), Some(ref over_src)) = (&mut overlay_buf, &sp.overlay) {
+                            o_buf.blit(over_src, 0, 0, inner_x, inner_y, fw, strip_h);
+                            if self.config.padding > 0 {
+                                apply_edge_clamping_padding(o_buf, inner_x, inner_y, fw, strip_h, self.config.padding);
+                            }
+                        }
+
                         let u_min = (inner_x as f32) / (chunk.width as f32);
                         let u_max = ((inner_x + fw) as f32) / (chunk.width as f32);
                         let v_min = 1.0 - ((inner_y + strip_h) as f32) / (chunk.height as f32);
@@ -734,6 +816,7 @@ impl AtlasBuilder {
                                 animation: sp.metadata.clone(),
                                 has_normal: slot_has_normal,
                                 has_specular: slot_has_specular,
+                                has_overlay: slot_has_overlay,
                             },
                         );
 
@@ -750,6 +833,7 @@ impl AtlasBuilder {
                     height: chunk.height,
                     has_normal,
                     has_specular,
+                    has_overlay,
                 });
 
                 baked_chunks.push(BakedAtlasChunk {
@@ -762,6 +846,7 @@ impl AtlasBuilder {
                     albedo: albedo_buf,
                     normal: normal_buf,
                     specular: specular_buf,
+                    overlay: overlay_buf,
                 });
             }
         }
