@@ -13,8 +13,12 @@ pub enum CoordinateSystem {
     /// Canonical Minecraft coordinate system: +X East, +Y Up, +Z South.
     #[default]
     Minecraft,
-    /// Canonical Blender coordinate system: +X East, +Y North (-Z_mc), +Z Up (+Y_mc).
-    Blender,
+    /// Standard Z-up right-handed coordinate system: +X East, +Y North (-Z_mc), +Z Up (+Y_mc).
+    /// Used by Unreal Engine, Blender, 3ds Max, etc.
+    ZUpRightHanded,
+    /// Standard Y-up right-handed coordinate system: +X East, +Y Up (+Y_mc), +Z South (+Z_mc).
+    /// Used by Unity, Godot, Three.js, WebGPU, etc.
+    YUpRightHanded,
 }
 
 /// Configuration options for the voxel section and world mesher.
@@ -60,7 +64,8 @@ impl MesherConfig {
     pub fn transform_coord(&self, pos: Vec3) -> Vec3 {
         match self.coordinate_system {
             CoordinateSystem::Minecraft => pos,
-            CoordinateSystem::Blender => Vec3::new(pos.x, -pos.z, pos.y),
+            CoordinateSystem::ZUpRightHanded => Vec3::new(pos.x, -pos.z, pos.y),
+            CoordinateSystem::YUpRightHanded => pos,
         }
     }
 }

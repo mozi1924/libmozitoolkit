@@ -266,19 +266,6 @@ pub fn mc_local_to_centered_z_up(lx: f32, ly: f32, lz: f32) -> Vec3 {
 pub fn mc_world_to_z_up(wx: f32, wy: f32, wz: f32) -> Vec3 {
     Vec3::new(wx, -wz, wy)
 }
-
-/// Backward compatibility alias for `mc_local_to_centered_z_up`.
-#[inline]
-pub fn mc_local_to_blender(lx: f32, ly: f32, lz: f32) -> Vec3 {
-    mc_local_to_centered_z_up(lx, ly, lz)
-}
-
-/// Backward compatibility alias for `mc_world_to_z_up`.
-#[inline]
-pub fn mc_world_to_blender(wx: f32, wy: f32, wz: f32) -> Vec3 {
-    mc_world_to_z_up(wx, wy, wz)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -306,10 +293,10 @@ mod tests {
     }
 
     #[test]
-    fn test_mc_to_blender_transforms() {
-        let b = mc_local_to_blender(0.5, 0.5, 0.5);
+    fn test_mc_to_z_up_transforms() {
+        let b = mc_local_to_centered_z_up(0.5, 0.5, 0.5);
         assert_eq!(b, Vec3::ZERO);
-        let w = mc_world_to_blender(10.0, 64.0, -20.0);
+        let w = mc_world_to_z_up(10.0, 64.0, -20.0);
         assert_eq!(w, Vec3::new(10.0, 20.0, 64.0));
     }
 }

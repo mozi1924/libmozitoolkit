@@ -262,14 +262,14 @@ impl WasmMesherConfig {
     pub fn new(
         enable_ao: bool,
         mesh_fluids: bool,
-        blender_coordinates: bool,
+        z_up_coordinates: bool,
         num_threads: Option<usize>,
     ) -> Self {
         let mut inner = MesherConfig::default();
         inner.enable_ao = enable_ao;
         inner.mesh_fluids = mesh_fluids;
-        inner.coordinate_system = if blender_coordinates {
-            mtk_voxel::types::CoordinateSystem::Blender
+        inner.coordinate_system = if z_up_coordinates {
+            mtk_voxel::types::CoordinateSystem::ZUpRightHanded
         } else {
             mtk_voxel::types::CoordinateSystem::Minecraft
         };

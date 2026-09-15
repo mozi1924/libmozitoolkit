@@ -52,8 +52,8 @@ pub struct Quad {
 - 2D/3D 包围盒相交检测、包含判断、并集与相交裁剪计算。
 
 #### 坐标系转换工具
-- `mc_local_to_blender(v: Vec3) -> Vec3`
-- `mc_world_to_blender(v: Vec3) -> Vec3`
+- `mc_local_to_centered_z_up(lx, ly, lz) -> Vec3`: 将 Minecraft 局部坐标转换为以方块中心为原点的标准右手 Z-Up 坐标。
+- `mc_world_to_z_up(wx, wy, wz) -> Vec3`: 将 Minecraft 世界坐标 (+X East, +Y Up, +Z South) 转换为标准右手 Z-Up 坐标 (+X East, +Y North, +Z Up)。
 
 ---
 

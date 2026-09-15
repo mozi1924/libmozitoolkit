@@ -328,18 +328,18 @@ pub struct PyMesherConfig {
 #[pymethods]
 impl PyMesherConfig {
     #[new]
-    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, blender_coordinates=true, num_threads=None))]
+    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, num_threads=None))]
     pub fn new(
         enable_ao: bool,
         mesh_fluids: bool,
-        blender_coordinates: bool,
+        z_up_coordinates: bool,
         num_threads: Option<usize>,
     ) -> Self {
         let mut config = MesherConfig::default();
         config.enable_ao = enable_ao;
         config.mesh_fluids = mesh_fluids;
-        config.coordinate_system = if blender_coordinates {
-            CoordinateSystem::Blender
+        config.coordinate_system = if z_up_coordinates {
+            CoordinateSystem::ZUpRightHanded
         } else {
             CoordinateSystem::Minecraft
         };
@@ -370,14 +370,14 @@ impl PyMesherConfig {
     }
 
     #[getter]
-    pub fn blender_coordinates(&self) -> bool {
-        matches!(self.inner.coordinate_system, CoordinateSystem::Blender)
+    pub fn z_up_coordinates(&self) -> bool {
+        matches!(self.inner.coordinate_system, CoordinateSystem::ZUpRightHanded)
     }
 
     #[setter]
-    pub fn set_blender_coordinates(&mut self, val: bool) {
+    pub fn set_z_up_coordinates(&mut self, val: bool) {
         self.inner.coordinate_system = if val {
-            CoordinateSystem::Blender
+            CoordinateSystem::ZUpRightHanded
         } else {
             CoordinateSystem::Minecraft
         };

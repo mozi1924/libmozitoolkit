@@ -66,8 +66,7 @@ pub use mtk_material::{
     GridAtlasSpec, MaterialResolver, MeshMultiUvRemapResult, MeshRemapResult, SourceUvSpace,
 };
 pub use mtk_core::geometry::{
-    mc_local_to_blender, mc_local_to_centered_z_up, mc_world_to_blender, mc_world_to_z_up, Aabb2d,
-    Aabb3d, Quad,
+    mc_local_to_centered_z_up, mc_world_to_z_up, Aabb2d, Aabb3d, Quad,
 };
 pub mod pipeline;
 pub use pipeline::{
