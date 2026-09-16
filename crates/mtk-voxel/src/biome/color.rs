@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+pub use mtk_material::get_colormap_uv;
 
 /// Precomputed inverse distance weights for 2D horizontal kernel radius `R=2`.
 pub const BIOME_KERNEL_R2: &[(i32, i32, f32)] = &[
@@ -9,7 +10,7 @@ pub const BIOME_KERNEL_R2: &[(i32, i32, f32)] = &[
     (2, -2, 0.2612),  (2, -1, 0.3090),  (2, 0, 0.3333),  (2, 1, 0.3090),  (2, 2, 0.2612),
 ];
 
-/// Metadata and color properties for a single Minecraft biome.
+/// Metadata and color properties for a single Minecraft biome (delegated to authoritative mtk-material).
 #[derive(Debug, Clone, PartialEq)]
 pub struct BiomeMeta {
     pub temperature: f32,
@@ -19,65 +20,23 @@ pub struct BiomeMeta {
 
 impl Default for BiomeMeta {
     fn default() -> Self {
+        let pal = mtk_material::get_biome_palette("plains");
         Self {
-            temperature: 0.8,
-            humidity: 0.4,
-            water_color_linear: [0.05, 0.17, 0.77, 0.8],
+            temperature: pal.temperature,
+            humidity: pal.humidity,
+            water_color_linear: pal.water_linear(),
         }
     }
 }
 
-/// Retrieves the canonical temperature, humidity, and water color for a biome ID.
+/// Retrieves the canonical temperature, humidity, and water color from authoritative mtk-material biome palettes.
 pub fn get_biome_meta(biome_id: &str) -> BiomeMeta {
-    let clean = biome_id.strip_prefix("minecraft:").unwrap_or(biome_id);
-    match clean {
-        "desert" => BiomeMeta {
-            temperature: 2.0,
-            humidity: 0.0,
-            water_color_linear: [0.04, 0.23, 0.88, 0.8],
-        },
-        "forest" => BiomeMeta {
-            temperature: 0.7,
-            humidity: 0.8,
-            water_color_linear: [0.05, 0.17, 0.77, 0.8],
-        },
-        "taiga" | "snowy_plains" => BiomeMeta {
-            temperature: 0.25,
-            humidity: 0.8,
-            water_color_linear: [0.05, 0.22, 0.80, 0.8],
-        },
-        "swamp" => BiomeMeta {
-            temperature: 0.8,
-            humidity: 0.9,
-            water_color_linear: [0.15, 0.20, 0.12, 0.8],
-        },
-        "jungle" => BiomeMeta {
-            temperature: 0.95,
-            humidity: 0.9,
-            water_color_linear: [0.04, 0.28, 0.85, 0.8],
-        },
-        "ocean" | "deep_ocean" => BiomeMeta {
-            temperature: 0.5,
-            humidity: 0.5,
-            water_color_linear: [0.04, 0.12, 0.75, 0.8],
-        },
-        "warm_ocean" => BiomeMeta {
-            temperature: 0.8,
-            humidity: 0.5,
-            water_color_linear: [0.01, 0.45, 0.70, 0.8],
-        },
-        _ => BiomeMeta::default(),
+    let pal = mtk_material::get_biome_palette(biome_id);
+    BiomeMeta {
+        temperature: pal.temperature,
+        humidity: pal.humidity,
+        water_color_linear: pal.water_linear(),
     }
-}
-
-/// Computes the standard Minecraft 2D colormap UV coordinate `[u, v]` from temperature and humidity.
-///
-/// Uses the canonical triangular clamping formula: `t = clamp(t, 0, 1)`, `h = clamp(h, 0, 1) * t`.
-#[inline]
-pub fn get_colormap_uv(temperature: f32, humidity: f32) -> [f32; 2] {
-    let t = temperature.clamp(0.0, 1.0);
-    let h = (humidity.clamp(0.0, 1.0)) * t;
-    [1.0 - t, h]
 }
 
 /// Computes smooth biome blending over `(x ± 2, z ± 2)` horizontal neighborhood.

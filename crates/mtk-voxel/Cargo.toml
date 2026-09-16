@@ -14,6 +14,7 @@ mtk-cull = { workspace = true }
 mtk-model = { workspace = true }
 mtk-resource = { workspace = true }
 mtk-texture = { workspace = true }
+mtk-material = { workspace = true }
 glam = { workspace = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }

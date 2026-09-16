@@ -93,9 +93,20 @@ pub fn precompile_all_assets(
     let standalone_dir = base_path.join("standalone");
     let models_dir = base_path.join("models");
 
+    let colormaps_dir = base_path.join("colormaps");
+
     fs::create_dir_all(&atlas_dir)?;
     fs::create_dir_all(&standalone_dir)?;
     fs::create_dir_all(&models_dir)?;
+    fs::create_dir_all(&colormaps_dir)?;
+
+    // Extract standard vanilla & custom colormaps
+    for cm_name in &["grass", "foliage", "dry_foliage"] {
+        let asset_path = format!("assets/minecraft/textures/colormap/{}.png", cm_name);
+        if let Some(bytes) = stack.open_asset_raw(&asset_path) {
+            let _ = fs::write(colormaps_dir.join(format!("{}.png", cm_name)), bytes);
+        }
+    }
 
     let mut chunk_count = 0;
     let mut sa_count = 0;

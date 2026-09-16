@@ -16,7 +16,10 @@ pub mod voxel;
 use pyo3::prelude::*;
 
 pub use cull::PyFaceCuller;
-pub use material::{PyGridAtlasSpec, PyMaterialResolver};
+pub use material::{
+    compute_biome_tint_attributes, get_all_biomes, get_biome_meta, PyBiomeResolver,
+    PyGridAtlasSpec, PyMaterialResolver,
+};
 pub use mesh::{PyAttributeDomain, PyMeshData};
 pub use mesher::PySectionMesher;
 pub use model::{PyBakedModelDatabase, PyModelBaker};
@@ -114,9 +117,13 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyPrecompileResult>()?;
     m.add_function(wrap_pyfunction!(precompile_all_assets, m)?)?;
 
-    // 7. Material & UV Remapper
+    // 7. Material & UV Remapper & Biome
     m.add_class::<PyGridAtlasSpec>()?;
     m.add_class::<PyMaterialResolver>()?;
+    m.add_class::<PyBiomeResolver>()?;
+    m.add_function(wrap_pyfunction!(compute_biome_tint_attributes, m)?)?;
+    m.add_function(wrap_pyfunction!(get_biome_meta, m)?)?;
+    m.add_function(wrap_pyfunction!(get_all_biomes, m)?)?;
 
     // 8. Model Baker
     m.add_class::<PyModelBaker>()?;

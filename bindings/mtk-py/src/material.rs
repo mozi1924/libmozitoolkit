@@ -7,6 +7,7 @@ use mtk_material::{
     remap_mesh_multi_uvs_parallel, remap_mesh_uvs_parallel, GridAtlasSpec, MaterialResolver,
 };
 
+use crate::resource::PyResourcePackStack;
 use crate::texture::PyBakedAtlas;
 
 /// Python interface for Grid Atlas Specification.
@@ -242,4 +243,171 @@ impl PyMaterialResolver {
 
         Ok(dict.into())
     }
+}
+
+/// Python wrapper for Rust BiomeResolver.
+#[pyclass(name = "BiomeResolver")]
+#[derive(Clone)]
+pub struct PyBiomeResolver {
+    pub(crate) inner: mtk_material::BiomeResolver,
+}
+
+#[pymethods]
+impl PyBiomeResolver {
+    #[new]
+    pub fn new() -> Self {
+        Self {
+            inner: mtk_material::BiomeResolver::new(),
+        }
+    }
+
+    /// Load block models from directory.
+    pub fn load_from_directory(&mut self, dir_path: &str) -> PyResult<()> {
+        self.inner
+            .load_from_directory(dir_path)
+            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))
+    }
+
+    /// Load block models from .jar or .zip pack.
+    pub fn load_from_zip(&mut self, zip_path: &str) -> PyResult<()> {
+        self.inner
+            .load_from_zip(zip_path)
+            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))
+    }
+
+    /// Load block models from a ResourcePackStack.
+    pub fn load_from_pack_stack(&mut self, stack: &PyResourcePackStack) -> PyResult<()> {
+        self.inner.load_from_pack_stack(&stack.inner);
+        Ok(())
+    }
+
+    /// Retrieve the paired overlay texture stem for a given base texture stem, if any.
+    pub fn get_overlay_texture(&self, texture_stem: &str) -> Option<String> {
+        self.inner.get_overlay_texture(texture_stem).map(|s| s.to_string())
+    }
+
+    /// Resolve tint metadata for a single texture.
+    #[pyo3(signature = (texture_name, block_name=None, tint_index=None))]
+    pub fn get_tint_info(
+        &self,
+        py: Python<'_>,
+        texture_name: &str,
+        block_name: Option<&str>,
+        tint_index: Option<i32>,
+    ) -> PyResult<PyObject> {
+        let info = self.inner.get_tint_info(texture_name, block_name, tint_index);
+        let dict = PyDict::new(py);
+        dict.set_item("tint_type", info.tint_type)?;
+        dict.set_item("tint_category", info.tint_category)?;
+        dict.set_item("tint_weight", info.tint_weight)?;
+        dict.set_item("base_tint_weight", info.base_tint_weight)?;
+        dict.set_item("overlay_tint_weight", info.overlay_tint_weight)?;
+        dict.set_item("has_overlay", info.has_overlay)?;
+        dict.set_item("overlay_texture", info.overlay_texture)?;
+        dict.set_item("is_hardcoded", info.is_hardcoded)?;
+        dict.set_item("hardcoded_color", info.hardcoded_color)?;
+        Ok(dict.into())
+    }
+
+    /// Compute batch mesh attributes in parallel across all faces.
+    #[pyo3(signature = (face_texture_keys, biome_name="PLAINS", multi_biomes=None))]
+    pub fn compute_biome_attributes(
+        &self,
+        py: Python<'_>,
+        face_texture_keys: Vec<String>,
+        biome_name: &str,
+        multi_biomes: Option<Vec<(String, f32)>>,
+    ) -> PyResult<PyObject> {
+        let res = mtk_material::compute_mesh_biome_attributes(
+            &face_texture_keys,
+            biome_name,
+            multi_biomes.as_deref(),
+            &self.inner,
+        );
+
+        let dict = PyDict::new(py);
+        dict.set_item("packed_tint_data", res.packed_tint_data)?;
+        dict.set_item("tint_colors", res.tint_colors)?;
+        dict.set_item("colormap_uvs", res.colormap_uvs)?;
+        Ok(dict.into())
+    }
+}
+
+/// Retrieve canonical metadata and colors for a single biome.
+#[pyfunction]
+#[pyo3(signature = (biome_name))]
+pub fn get_biome_meta(py: Python<'_>, biome_name: &str) -> PyResult<PyObject> {
+    let pal = mtk_material::get_biome_palette(biome_name);
+    let dict = PyDict::new(py);
+    dict.set_item("id", pal.id)?;
+    dict.set_item("name", pal.name)?;
+    dict.set_item("temperature", pal.temperature)?;
+    dict.set_item("humidity", pal.humidity)?;
+    dict.set_item("grass_hex", pal.grass_hex)?;
+    dict.set_item("foliage_hex", pal.foliage_hex)?;
+    dict.set_item("dry_foliage_hex", pal.dry_foliage_hex)?;
+    dict.set_item("water_hex", pal.water_hex)?;
+    dict.set_item("grass_linear", pal.grass_linear())?;
+    dict.set_item("foliage_linear", pal.foliage_linear())?;
+    dict.set_item("dry_foliage_linear", pal.dry_foliage_linear())?;
+    dict.set_item("water_linear", pal.water_linear())?;
+    dict.set_item("colormap_uv", pal.colormap_uv())?;
+    dict.set_item("has_custom_grass", pal.has_custom_grass)?;
+    dict.set_item("has_custom_foliage", pal.has_custom_foliage)?;
+    dict.set_item("has_custom_dry_foliage", pal.has_custom_dry_foliage)?;
+    Ok(dict.into())
+}
+
+/// Retrieve a list of all canonical vanilla biomes.
+#[pyfunction]
+pub fn get_all_biomes(py: Python<'_>) -> PyResult<PyObject> {
+    let list = pyo3::types::PyList::empty(py);
+    for pal in mtk_material::CANONICAL_BIOMES {
+        let dict = PyDict::new(py);
+        dict.set_item("id", pal.id)?;
+        dict.set_item("name", pal.name)?;
+        dict.set_item("temperature", pal.temperature)?;
+        dict.set_item("humidity", pal.humidity)?;
+        dict.set_item("grass_hex", pal.grass_hex)?;
+        dict.set_item("foliage_hex", pal.foliage_hex)?;
+        dict.set_item("dry_foliage_hex", pal.dry_foliage_hex)?;
+        dict.set_item("water_hex", pal.water_hex)?;
+        dict.set_item("grass_linear", pal.grass_linear())?;
+        dict.set_item("foliage_linear", pal.foliage_linear())?;
+        dict.set_item("dry_foliage_linear", pal.dry_foliage_linear())?;
+        dict.set_item("water_linear", pal.water_linear())?;
+        dict.set_item("colormap_uv", pal.colormap_uv())?;
+        dict.set_item("has_custom_grass", pal.has_custom_grass)?;
+        dict.set_item("has_custom_foliage", pal.has_custom_foliage)?;
+        dict.set_item("has_custom_dry_foliage", pal.has_custom_dry_foliage)?;
+        list.append(dict)?;
+    }
+    Ok(list.into())
+}
+
+/// Standalone batch function to compute mesh biome attributes in Rust parallel Rayon.
+#[pyfunction]
+#[pyo3(signature = (face_texture_keys, biome_name="PLAINS", multi_biomes=None, resolver=None))]
+pub fn compute_biome_tint_attributes(
+    py: Python<'_>,
+    face_texture_keys: Vec<String>,
+    biome_name: &str,
+    multi_biomes: Option<Vec<(String, f32)>>,
+    resolver: Option<&PyBiomeResolver>,
+) -> PyResult<PyObject> {
+    let default_resolver = mtk_material::BiomeResolver::new();
+    let res_ref = resolver.map(|r| &r.inner).unwrap_or(&default_resolver);
+
+    let res = mtk_material::compute_mesh_biome_attributes(
+        &face_texture_keys,
+        biome_name,
+        multi_biomes.as_deref(),
+        res_ref,
+    );
+
+    let dict = PyDict::new(py);
+    dict.set_item("packed_tint_data", res.packed_tint_data)?;
+    dict.set_item("tint_colors", res.tint_colors)?;
+    dict.set_item("colormap_uvs", res.colormap_uvs)?;
+    Ok(dict.into())
 }
