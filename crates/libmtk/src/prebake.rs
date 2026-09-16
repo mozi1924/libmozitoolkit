@@ -11,6 +11,7 @@ use std::path::Path;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use mtk_material::BiomeResolver;
 use mtk_model::{BakedModelDatabase, BlockModelJson, BlockStateDefinition, ModelBaker};
 use mtk_resource::{AtlasCategory, ResourceLocation, ResourcePackStack};
 use mtk_texture::{AtlasBuilder, AtlasBuilderConfig, StandaloneBuilder, StandaloneConfig};
@@ -99,6 +100,14 @@ pub fn precompile_all_assets(
     fs::create_dir_all(&standalone_dir)?;
     fs::create_dir_all(&models_dir)?;
     fs::create_dir_all(&colormaps_dir)?;
+
+    // 0. Discover Biome Tinting, Model tintindex, and Overlay Pairs (Save biome_mapping.json)
+    let mut biome_resolver = BiomeResolver::new();
+    biome_resolver.load_from_pack_stack(stack);
+    if let Ok(biome_json) = biome_resolver.to_json() {
+        let _ = fs::write(base_path.join("biome_mapping.json"), biome_json.as_bytes());
+        let _ = fs::write(atlas_dir.join("biome_mapping.json"), biome_json.as_bytes());
+    }
 
     // Extract standard vanilla & custom colormaps
     for cm_name in &["grass", "foliage", "dry_foliage"] {

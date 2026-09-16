@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::hardcoded::{
@@ -13,7 +14,7 @@ use super::hardcoded::{
 };
 
 /// Complete resolved tint metadata for a single texture or block face.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TintInfo {
     pub tint_type: u8,
     pub tint_category: String,
@@ -44,7 +45,7 @@ impl Default for TintInfo {
 
 /// Resource-pack aware Biome Resolver.
 /// Discovers model JSON `tintindex` metadata and `side` / `overlay` texture pairings.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BiomeResolver {
     pub overlay_pairs: HashMap<String, String>,
     pub texture_tint_categories: HashMap<String, String>,
@@ -71,6 +72,23 @@ impl BiomeResolver {
             texture_tint_categories: HashMap::new(),
             texture_hardcoded_colors: HashMap::new(),
         }
+    }
+
+    /// Serialize BiomeResolver mapping table to a JSON string.
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string_pretty(self)
+    }
+
+    /// Deserialize BiomeResolver mapping table from a JSON string.
+    pub fn from_json(json_str: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(json_str)
+    }
+
+    /// Load BiomeResolver from a JSON file on disk.
+    pub fn from_file<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
+        let bytes = std::fs::read(path)?;
+        serde_json::from_slice(&bytes)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
     }
 
     /// Retrieve the paired overlay texture stem for a given base texture stem, if any.
