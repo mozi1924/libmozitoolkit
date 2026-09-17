@@ -333,20 +333,63 @@ impl PyBiomeResolver {
     }
 
     /// Compute batch mesh attributes in parallel across all faces.
-    #[pyo3(signature = (face_texture_keys, biome_name="PLAINS", multi_biomes=None))]
+    #[pyo3(signature = (
+        face_texture_keys,
+        biome_name="PLAINS",
+        multi_biomes=None,
+        custom_temp=None,
+        custom_humidity=None,
+        custom_grass=None,
+        custom_foliage=None,
+        custom_dry_foliage=None,
+        custom_water=None,
+        has_custom_grass=false,
+        has_custom_foliage=false,
+        has_custom_dry_foliage=false,
+    ))]
     pub fn compute_biome_attributes(
         &self,
         py: Python<'_>,
         face_texture_keys: Vec<String>,
         biome_name: &str,
         multi_biomes: Option<Vec<(String, f32)>>,
+        custom_temp: Option<f32>,
+        custom_humidity: Option<f32>,
+        custom_grass: Option<[f32; 4]>,
+        custom_foliage: Option<[f32; 4]>,
+        custom_dry_foliage: Option<[f32; 4]>,
+        custom_water: Option<[f32; 4]>,
+        has_custom_grass: bool,
+        has_custom_foliage: bool,
+        has_custom_dry_foliage: bool,
     ) -> PyResult<PyObject> {
-        let res = mtk_material::compute_mesh_biome_attributes(
-            &face_texture_keys,
-            biome_name,
-            multi_biomes.as_deref(),
-            &self.inner,
-        );
+        let res = if biome_name.eq_ignore_ascii_case("custom")
+            || custom_temp.is_some()
+            || custom_humidity.is_some()
+            || custom_grass.is_some()
+            || custom_foliage.is_some()
+            || custom_water.is_some()
+        {
+            let settings = mtk_material::CustomBiomeSettings {
+                temperature: custom_temp.unwrap_or(0.8),
+                humidity: custom_humidity.unwrap_or(0.4),
+                grass_color: custom_grass,
+                foliage_color: custom_foliage,
+                dry_foliage_color: custom_dry_foliage,
+                water_color: custom_water,
+                has_custom_grass,
+                has_custom_foliage,
+                has_custom_dry_foliage,
+            };
+            mtk_material::compute_mesh_biome_attributes_custom(&face_texture_keys, &settings, &self.inner)
+        } else {
+            mtk_material::compute_mesh_biome_attributes(
+                &face_texture_keys,
+                biome_name,
+                multi_biomes.as_deref(),
+                &self.inner,
+            )
+        };
 
         let dict = PyDict::new(py);
         dict.set_item("packed_tint_data", res.packed_tint_data)?;
@@ -360,6 +403,27 @@ impl PyBiomeResolver {
 #[pyfunction]
 #[pyo3(signature = (biome_name))]
 pub fn get_biome_meta(py: Python<'_>, biome_name: &str) -> PyResult<PyObject> {
+    if biome_name.eq_ignore_ascii_case("custom") {
+        let dict = PyDict::new(py);
+        dict.set_item("id", "custom")?;
+        dict.set_item("name", "Custom")?;
+        dict.set_item("temperature", 0.8f32)?;
+        dict.set_item("humidity", 0.4f32)?;
+        dict.set_item("grass_hex", "#91BD59")?;
+        dict.set_item("foliage_hex", "#77AB2F")?;
+        dict.set_item("dry_foliage_hex", "#A37546")?;
+        dict.set_item("water_hex", "#3F76E4")?;
+        dict.set_item("grass_linear", mtk_material::hex_to_linear_rgba("#91BD59"))?;
+        dict.set_item("foliage_linear", mtk_material::hex_to_linear_rgba("#77AB2F"))?;
+        dict.set_item("dry_foliage_linear", mtk_material::hex_to_linear_rgba("#A37546"))?;
+        dict.set_item("water_linear", mtk_material::hex_to_linear_rgba("#3F76E4"))?;
+        dict.set_item("colormap_uv", mtk_material::get_colormap_uv(0.8, 0.4))?;
+        dict.set_item("has_custom_grass", false)?;
+        dict.set_item("has_custom_foliage", false)?;
+        dict.set_item("has_custom_dry_foliage", false)?;
+        return Ok(dict.into());
+    }
+
     let pal = mtk_material::get_biome_palette(biome_name);
     let dict = PyDict::new(py);
     dict.set_item("id", pal.id)?;
@@ -408,25 +472,100 @@ pub fn get_all_biomes(py: Python<'_>) -> PyResult<PyObject> {
     Ok(list.into())
 }
 
+/// Compute colormap UV coordinates from temperature and humidity.
+#[pyfunction]
+#[pyo3(signature = (temperature, humidity))]
+pub fn get_colormap_uv(temperature: f32, humidity: f32) -> [f32; 2] {
+    mtk_material::get_colormap_uv(temperature, humidity)
+}
+
+/// Convert sRGB [r, g, b, a] color to Linear RGBA.
+#[pyfunction]
+#[pyo3(signature = (color))]
+pub fn srgb_to_linear(color: [f32; 4]) -> [f32; 4] {
+    [
+        mtk_material::srgb_to_linear(color[0]),
+        mtk_material::srgb_to_linear(color[1]),
+        mtk_material::srgb_to_linear(color[2]),
+        color[3],
+    ]
+}
+
+/// Convert Linear RGBA [r, g, b, a] color to sRGB.
+#[pyfunction]
+#[pyo3(signature = (color))]
+pub fn linear_to_srgb(color: [f32; 4]) -> [f32; 4] {
+    [
+        mtk_material::linear_to_srgb(color[0]),
+        mtk_material::linear_to_srgb(color[1]),
+        mtk_material::linear_to_srgb(color[2]),
+        color[3],
+    ]
+}
+
 /// Standalone batch function to compute mesh biome attributes in Rust parallel Rayon.
 #[pyfunction]
-#[pyo3(signature = (face_texture_keys, biome_name="PLAINS", multi_biomes=None, resolver=None))]
+#[pyo3(signature = (
+    face_texture_keys,
+    biome_name="PLAINS",
+    multi_biomes=None,
+    resolver=None,
+    custom_temp=None,
+    custom_humidity=None,
+    custom_grass=None,
+    custom_foliage=None,
+    custom_dry_foliage=None,
+    custom_water=None,
+    has_custom_grass=false,
+    has_custom_foliage=false,
+    has_custom_dry_foliage=false,
+))]
 pub fn compute_biome_tint_attributes(
     py: Python<'_>,
     face_texture_keys: Vec<String>,
     biome_name: &str,
     multi_biomes: Option<Vec<(String, f32)>>,
     resolver: Option<&PyBiomeResolver>,
+    custom_temp: Option<f32>,
+    custom_humidity: Option<f32>,
+    custom_grass: Option<[f32; 4]>,
+    custom_foliage: Option<[f32; 4]>,
+    custom_dry_foliage: Option<[f32; 4]>,
+    custom_water: Option<[f32; 4]>,
+    has_custom_grass: bool,
+    has_custom_foliage: bool,
+    has_custom_dry_foliage: bool,
 ) -> PyResult<PyObject> {
     let default_resolver = mtk_material::BiomeResolver::new();
     let res_ref = resolver.map(|r| &r.inner).unwrap_or(&default_resolver);
 
-    let res = mtk_material::compute_mesh_biome_attributes(
-        &face_texture_keys,
-        biome_name,
-        multi_biomes.as_deref(),
-        res_ref,
-    );
+    let res = if biome_name.eq_ignore_ascii_case("custom")
+        || custom_temp.is_some()
+        || custom_humidity.is_some()
+        || custom_grass.is_some()
+        || custom_foliage.is_some()
+        || custom_water.is_some()
+    {
+        let settings = mtk_material::CustomBiomeSettings {
+            temperature: custom_temp.unwrap_or(0.8),
+            humidity: custom_humidity.unwrap_or(0.4),
+            grass_color: custom_grass,
+            foliage_color: custom_foliage,
+            dry_foliage_color: custom_dry_foliage,
+            water_color: custom_water,
+            has_custom_grass,
+            has_custom_foliage,
+            has_custom_dry_foliage,
+        };
+        mtk_material::compute_mesh_biome_attributes_custom(&face_texture_keys, &settings, res_ref)
+    } else {
+        mtk_material::compute_mesh_biome_attributes(
+            &face_texture_keys,
+            biome_name,
+            multi_biomes.as_deref(),
+            res_ref,
+        )
+    };
 
     let dict = PyDict::new(py);
     dict.set_item("packed_tint_data", res.packed_tint_data)?;

@@ -124,6 +124,9 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compute_biome_tint_attributes, m)?)?;
     m.add_function(wrap_pyfunction!(get_biome_meta, m)?)?;
     m.add_function(wrap_pyfunction!(get_all_biomes, m)?)?;
+    m.add_function(wrap_pyfunction!(material::get_colormap_uv, m)?)?;
+    m.add_function(wrap_pyfunction!(material::srgb_to_linear, m)?)?;
+    m.add_function(wrap_pyfunction!(material::linear_to_srgb, m)?)?;
 
     // 8. Model Baker
     m.add_class::<PyModelBaker>()?;

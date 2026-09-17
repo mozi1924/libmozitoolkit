@@ -5,7 +5,10 @@ pub mod hardcoded;
 pub mod palettes;
 pub mod resolver;
 
-pub use batch::{compute_mesh_biome_attributes, MeshBiomeAttributesResult};
+pub use batch::{
+    compute_mesh_biome_attributes, compute_mesh_biome_attributes_custom,
+    CustomBiomeSettings, MeshBiomeAttributesResult,
+};
 pub use hardcoded::{
     classify_tint_category, get_hardcoded_tint, HARDCODED_BLOCK_TINTS,
     TINT_TYPE_DRY_FOLIAGE, TINT_TYPE_FOLIAGE, TINT_TYPE_GRASS, TINT_TYPE_HARDCODED,
