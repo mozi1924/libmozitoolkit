@@ -7,6 +7,7 @@ pub mod constants;
 pub mod direction;
 pub mod geometry;
 pub mod mesh;
+pub mod uv;
 
 pub use attributes::{
     AttributeData, AttributeDomain, FaceAttributes, LightLevel, MaterialSlotId, MeshAttribute,

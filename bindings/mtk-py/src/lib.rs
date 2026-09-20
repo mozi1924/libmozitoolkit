@@ -11,6 +11,7 @@ pub mod protocol;
 pub mod resource;
 pub mod sync;
 pub mod texture;
+pub mod uv;
 pub mod voxel;
 
 use pyo3::prelude::*;
@@ -116,6 +117,10 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyStandaloneResult>()?;
     m.add_class::<PyPrecompileResult>()?;
     m.add_function(wrap_pyfunction!(precompile_all_assets, m)?)?;
+    m.add_function(wrap_pyfunction!(texture::sample_uv_alpha_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(texture::is_face_transparent_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(texture::batch_analyze_transparent_faces_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(texture::batch_analyze_transparent_faces_u8, m)?)?;
 
     // 7. Material & UV Remapper & Biome
     m.add_class::<PyGridAtlasSpec>()?;
@@ -132,7 +137,20 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyModelBaker>()?;
     m.add_class::<PyBakedModelDatabase>()?;
 
-    // 9. Metadata
+    // 9. UV Geometry Algorithms
+    m.add_function(wrap_pyfunction!(uv::calculate_uv_area, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::get_uv_bounds, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::get_uv_center, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::is_uv_collapsed, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::is_orthogonal_angle, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::detect_uv_rotation, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::straighten_uv, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::scale_uv, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::normalize_uv_for_atlas_tiling, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::uv_requires_atlas_tiling, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::restore_atlas_tiling_uv, m)?)?;
+
+    // 10. Metadata
     m.add_function(wrap_pyfunction!(version, m)?)?;
 
     Ok(())
@@ -276,5 +294,37 @@ mod tests {
     #[test]
     fn test_python_version_string() {
         assert_eq!(version(), env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn test_python_uv_functions() {
+        let quad = vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+        assert!((uv::calculate_uv_area(quad.clone()) - 1.0).abs() < 1e-6);
+
+        let bounds = uv::get_uv_bounds(quad.clone());
+        assert_eq!(bounds, (0.0, 0.0, 1.0, 1.0, 1.0, 1.0));
+
+        let center = uv::get_uv_center(quad.clone());
+        assert_eq!(center, (0.5, 0.5));
+
+        assert!(!uv::is_uv_collapsed(quad.clone(), None, None, None));
+        assert!(uv::is_orthogonal_angle(0.0, 1e-3));
+        assert!((uv::detect_uv_rotation(quad.clone(), 1e-3)).abs() < 1e-6);
+
+        let (ang, straightened, new_uvs) = uv::straighten_uv(quad.clone(), None);
+        assert!(!straightened);
+        assert_eq!(ang, 0.0);
+        assert_eq!(new_uvs.len(), 4);
+
+        let scaled = uv::scale_uv(quad.clone(), 0.5);
+        assert_eq!(scaled[0], (0.25, 0.25));
+
+        let (norm, scale, loc) = uv::normalize_uv_for_atlas_tiling(quad.clone(), 1e-6);
+        assert_eq!(norm.len(), 4);
+        assert_eq!(scale, (1.0, 1.0, 1.0));
+        assert_eq!(loc, (0.0, 0.0, 0.0));
+
+        assert!(!uv::uv_requires_atlas_tiling(quad, 1e-4));
+        assert_eq!(uv::restore_atlas_tiling_uv(0.5, 0.5, (1.0, 1.0, 1.0), (0.0, 0.0, 0.0), 0.0), (0.5, 0.5));
     }
 }

@@ -15,8 +15,10 @@ pub use atlas::{
 };
 pub use error::TextureError;
 pub use image::{
-    apply_edge_clamping_padding, bake_paletted_permutation, extract_palette_colors,
-    DecodedSprite, RgbaBuffer,
+    apply_edge_clamping_padding, bake_paletted_permutation, batch_analyze_transparent_faces_f32,
+    batch_analyze_transparent_faces_u8, extract_palette_colors, is_face_transparent_f32,
+    is_face_transparent_u8, sample_alpha_f32, sample_alpha_u8, DecodedSprite, RgbaBuffer,
+    SampleMode,
 };
 pub use standalone::{
     align_standalone_channels, ChannelData, ChannelType, StandaloneAlignResult,
