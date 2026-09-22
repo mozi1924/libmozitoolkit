@@ -113,3 +113,65 @@ pub fn restore_atlas_tiling_uv(
         rotation,
     )
 }
+
+#[pyfunction]
+#[pyo3(signature = (verts, uvs, normal=None, force=false, min_slope_threshold=0.005))]
+pub fn repair_quad_fluid_uv(
+    verts: Vec<(f32, f32, f32)>,
+    uvs: Vec<(f32, f32)>,
+    normal: Option<(f32, f32, f32)>,
+    force: bool,
+    min_slope_threshold: f32,
+) -> PyResult<(bool, Vec<(f32, f32)>)> {
+    if verts.len() != 4 || uvs.len() != 4 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "repair_quad_fluid_uv requires exactly 4 vertices and 4 UV coordinates",
+        ));
+    }
+
+    let v_arr = [
+        glam::Vec3::new(verts[0].0, verts[0].1, verts[0].2),
+        glam::Vec3::new(verts[1].0, verts[1].1, verts[1].2),
+        glam::Vec3::new(verts[2].0, verts[2].1, verts[2].2),
+        glam::Vec3::new(verts[3].0, verts[3].1, verts[3].2),
+    ];
+    let mut uv_arr = [
+        Vec2::new(uvs[0].0, uvs[0].1),
+        Vec2::new(uvs[1].0, uvs[1].1),
+        Vec2::new(uvs[2].0, uvs[2].1),
+        Vec2::new(uvs[3].0, uvs[3].1),
+    ];
+    let norm = normal.map(|(x, y, z)| glam::Vec3::new(x, y, z));
+
+    let repaired = uv::repair_quad_fluid_uv(&v_arr, &mut uv_arr, norm, force, min_slope_threshold);
+    let out_uvs = vec2_to_tuples(&uv_arr);
+    Ok((repaired, out_uvs))
+}
+
+#[pyfunction]
+#[pyo3(signature = (verts_flat, uvs_flat, normals_flat=None, force=false, min_slope_threshold=0.005))]
+pub fn batch_repair_fluid_uv(
+    verts_flat: Vec<f32>,
+    mut uvs_flat: Vec<f32>,
+    normals_flat: Option<Vec<f32>>,
+    force: bool,
+    min_slope_threshold: f32,
+) -> (usize, Vec<f32>) {
+    let n_slice = normals_flat.as_deref();
+    let count = uv::batch_repair_fluid_uv(&verts_flat, &mut uvs_flat, n_slice, force, min_slope_threshold);
+    (count, uvs_flat)
+}
+
+#[pyfunction]
+#[pyo3(signature = (is_flowing=true, rotation=0.0))]
+pub fn get_fluid_top_uvs(is_flowing: bool, rotation: f32) -> Vec<(f32, f32)> {
+    let arr = uv::get_fluid_top_uvs(is_flowing, rotation);
+    vec2_to_tuples(&arr)
+}
+
+#[pyfunction]
+pub fn get_fluid_side_uvs(h_left_top: f32, h_right_top: f32) -> Vec<(f32, f32)> {
+    let arr = uv::get_fluid_side_uvs(h_left_top, h_right_top);
+    vec2_to_tuples(&arr)
+}
+

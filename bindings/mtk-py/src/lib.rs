@@ -149,6 +149,10 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(uv::normalize_uv_for_atlas_tiling, m)?)?;
     m.add_function(wrap_pyfunction!(uv::uv_requires_atlas_tiling, m)?)?;
     m.add_function(wrap_pyfunction!(uv::restore_atlas_tiling_uv, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::repair_quad_fluid_uv, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::batch_repair_fluid_uv, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::get_fluid_top_uvs, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::get_fluid_side_uvs, m)?)?;
 
     // 10. Metadata
     m.add_function(wrap_pyfunction!(version, m)?)?;
@@ -326,5 +330,31 @@ mod tests {
 
         assert!(!uv::uv_requires_atlas_tiling(quad, 1e-4));
         assert_eq!(uv::restore_atlas_tiling_uv(0.5, 0.5, (1.0, 1.0, 1.0), (0.0, 0.0, 0.0), 0.0), (0.5, 0.5));
+
+        let verts = vec![
+            (0.0, 0.0, 1.0),
+            (0.0, 0.0, 0.0),
+            (0.0, 0.2, 0.0),
+            (0.0, 0.8, 1.0),
+        ];
+        let inv_uvs = vec![
+            (1.0, 0.0),
+            (0.0, 0.0),
+            (0.0, 0.8),
+            (1.0, 0.2),
+        ];
+        let (repaired, out_uvs) = uv::repair_quad_fluid_uv(verts, inv_uvs, None, false, 0.005).unwrap();
+        assert!(repaired);
+        assert!((out_uvs[2].1 - 0.2).abs() < 1e-5);
+        assert!((out_uvs[3].1 - 0.8).abs() < 1e-5);
+
+        let top_uvs = uv::get_fluid_top_uvs(true, 0.0);
+        assert_eq!(top_uvs.len(), 4);
+        assert_eq!(top_uvs[0], (0.25, 0.25));
+
+        let side_uvs = uv::get_fluid_side_uvs(0.8, 0.2);
+        assert_eq!(side_uvs.len(), 4);
+        assert!((side_uvs[0].1 - 0.1).abs() < 1e-6);
     }
 }
+
