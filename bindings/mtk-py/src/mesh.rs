@@ -623,6 +623,26 @@ impl PyMeshData {
         PyList::new(py, &self.inner.indices).expect("failed to create list")
     }
 
+    /// Quad polygon vertex indices `[v0, v1, v2, v3, ...]` (4 u32 per quad).
+    pub fn get_quad_indices<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
+        let quad_count = self.inner.indices.len() / 6;
+        let mut quads = Vec::with_capacity(quad_count * 4);
+        for q in 0..quad_count {
+            let base = q * 6;
+            quads.push(self.inner.indices[base]);
+            quads.push(self.inner.indices[base + 1]);
+            quads.push(self.inner.indices[base + 2]);
+            quads.push(self.inner.indices[base + 5]);
+        }
+        PyList::new(py, &quads).expect("failed to create list")
+    }
+
+    /// Number of quad faces recorded.
+    #[getter]
+    pub fn quad_count(&self) -> usize {
+        self.inner.indices.len() / 6
+    }
+
     /// Material slot per face.
     pub fn get_face_materials<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
         PyList::new(py, &self.inner.face_materials).expect("failed to create list")

@@ -13,8 +13,8 @@ use crate::mesh::MeshData;
 
 /// Calculates target (cols, rows) subdivisions for a quad face based on texture resolution and UV span.
 ///
-/// Automatically guards against vertical strip animations (e.g. 16x512) by clamping effective height
-/// to a single square frame (`tex_w`).
+/// Computes exact UV edge vector lengths in texture pixel space, ensuring 1:1 physical pixel alignment
+/// for Atlas sub-regions, non-square tiles, rotated UVs, and long vertical animated strips.
 pub fn calculate_face_target_grid(
     uvs: &[[f32; 2]],
     tex_w: u32,
@@ -29,21 +29,48 @@ pub fn calculate_face_target_grid(
     let ppf = if pixels_per_face <= 0.0 { 1.0 } else { pixels_per_face };
     let max_sub = max(1, max_subdivisions);
 
-    // 1. Long vertical animated strip detection (anti-explosion defense)
-    let effective_h = if tex_h > tex_w && (tex_h % tex_w == 0) {
-        tex_w
+    // If we have 4 quad corner UVs [uv0, uv1, uv2, uv3]:
+    let (u_pixels, v_pixels) = if uvs.len() >= 4 {
+        let uv0 = uvs[0];
+        let uv1 = uvs[1];
+        let uv2 = uvs[2];
+        let uv3 = uvs[3];
+
+        // Bottom edge (0 -> 1) and top edge (3 -> 2)
+        let du0 = uv1[0] - uv0[0];
+        let dv0 = uv1[1] - uv0[1];
+        let du1 = uv2[0] - uv3[0];
+        let dv1 = uv2[1] - uv3[1];
+
+        // Left edge (0 -> 3) and right edge (1 -> 2)
+        let du2 = uv3[0] - uv0[0];
+        let dv2 = uv3[1] - uv0[1];
+        let du3 = uv2[0] - uv1[0];
+        let dv3 = uv2[1] - uv1[1];
+
+        let px_u0 = ((du0 * tex_w as f32).powi(2) + (dv0 * tex_h as f32).powi(2)).sqrt();
+        let px_u1 = ((du1 * tex_w as f32).powi(2) + (dv1 * tex_h as f32).powi(2)).sqrt();
+        let px_v0 = ((du2 * tex_w as f32).powi(2) + (dv2 * tex_h as f32).powi(2)).sqrt();
+        let px_v1 = ((du3 * tex_w as f32).powi(2) + (dv3 * tex_h as f32).powi(2)).sqrt();
+
+        (0.5 * (px_u0 + px_u1), 0.5 * (px_v0 + px_v1))
     } else {
-        tex_h
+        // Fallback for non-quad: compute bounding box span
+        let aabb = Aabb2d::from_points(uvs);
+        let u_span = (aabb.max.x - aabb.min.x).abs();
+        let v_span = (aabb.max.y - aabb.min.y).abs();
+        (u_span * tex_w as f32, v_span * tex_h as f32)
     };
 
-    // 2. Compute UV bounding box span
-    let aabb = Aabb2d::from_points(uvs);
-    let u_span = (aabb.max.x - aabb.min.x).abs();
-    let v_span = (aabb.max.y - aabb.min.y).abs();
+    // Anti-explosion defense for long vertical animated strips (e.g. 16x512)
+    let effective_v_pixels = if tex_h > tex_w && (tex_h % tex_w == 0) && v_pixels > (tex_w as f32 * 1.5) {
+        tex_w as f32
+    } else {
+        v_pixels
+    };
 
-    // 3. Adaptive resolution calculation
-    let cols = ((u_span * tex_w as f32 / ppf).round() as u32).clamp(1, max_sub);
-    let rows = ((v_span * effective_h as f32 / ppf).round() as u32).clamp(1, max_sub);
+    let cols = ((u_pixels / ppf).round() as u32).clamp(1, max_sub);
+    let rows = ((effective_v_pixels / ppf).round() as u32).clamp(1, max_sub);
 
     (cols, rows)
 }
@@ -329,6 +356,41 @@ mod tests {
         let (cols, rows) = calculate_face_target_grid(&uvs, 16, 512, 1.0, 64);
         assert_eq!(cols, 16);
         assert_eq!(rows, 16, "Must clamp to single square frame 16x16 instead of 512!");
+    }
+
+    #[test]
+    fn test_calculate_face_target_grid_atlas_subregion() {
+        // 16x16 tile inside a 512x512 atlas
+        let u0 = 32.0 / 512.0;
+        let u1 = 48.0 / 512.0;
+        let v0 = 64.0 / 512.0;
+        let v1 = 80.0 / 512.0;
+        let uvs = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+        let (cols, rows) = calculate_face_target_grid(&uvs, 512, 512, 1.0, 64);
+        assert_eq!(cols, 16);
+        assert_eq!(rows, 16);
+    }
+
+    #[test]
+    fn test_calculate_face_target_grid_rotated_uv() {
+        // 16x16 tile rotated 90 degrees in a 512x512 atlas
+        let u0 = 32.0 / 512.0;
+        let u1 = 48.0 / 512.0;
+        let v0 = 64.0 / 512.0;
+        let v1 = 80.0 / 512.0;
+        let uvs = [[u1, v0], [u1, v1], [u0, v1], [u0, v0]];
+        let (cols, rows) = calculate_face_target_grid(&uvs, 512, 512, 1.0, 64);
+        assert_eq!(cols, 16);
+        assert_eq!(rows, 16);
+    }
+
+    #[test]
+    fn test_calculate_face_target_grid_nonsquare_tile() {
+        // 32x16 tile in 16x16 pixels_per_face=1.0
+        let uvs = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
+        let (cols, rows) = calculate_face_target_grid(&uvs, 32, 16, 1.0, 64);
+        assert_eq!(cols, 32);
+        assert_eq!(rows, 16);
     }
 
     #[test]
