@@ -112,6 +112,27 @@ impl PyMeshData {
         Ok(())
     }
 
+    /// Sets raw vertex and face buffers from Python lists.
+    #[pyo3(signature = (positions, normals, uvs, indices, face_materials=None, face_tint_indices=None))]
+    pub fn set_buffers(
+        &mut self,
+        positions: Vec<[f32; 3]>,
+        normals: Vec<[f32; 3]>,
+        uvs: Vec<[f32; 2]>,
+        indices: Vec<u32>,
+        face_materials: Option<Vec<MaterialSlotId>>,
+        face_tint_indices: Option<Vec<TintIndex>>,
+    ) {
+        let fc = indices.len() / 6;
+        self.inner.positions = positions;
+        self.inner.normals = normals;
+        self.inner.uvs = uvs;
+        self.inner.indices = indices;
+        self.inner.face_materials = face_materials.unwrap_or_else(|| vec![0; fc]);
+        self.inner.face_tint_indices = face_tint_indices.unwrap_or_else(|| vec![-1; fc]);
+    }
+
+
     // -------------------------------------------------------------------------
     // Zero-Copy MemoryView Exports (for Blender `foreach_set` & NumPy `frombuffer`)
     // -------------------------------------------------------------------------
@@ -621,3 +642,47 @@ impl PyMeshData {
         )
     }
 }
+
+/// Calculates adaptive (cols, rows) subdivisions based on UV bounds and texture size.
+#[pyfunction]
+#[pyo3(signature = (uvs, tex_w, tex_h, pixels_per_face=1.0, max_subdivisions=64))]
+pub fn calculate_face_target_grid(
+    uvs: Vec<[f32; 2]>,
+    tex_w: u32,
+    tex_h: u32,
+    pixels_per_face: f32,
+    max_subdivisions: u32,
+) -> (u32, u32) {
+    mtk_core::subdivide::calculate_face_target_grid(
+        &uvs,
+        tex_w,
+        tex_h,
+        pixels_per_face,
+        max_subdivisions,
+    )
+}
+
+/// Performs adaptive pixel grid subdivision on a `PyMeshData` buffer.
+#[pyfunction]
+#[pyo3(signature = (mesh, face_resolutions=None, default_resolution=(16, 16), pixels_per_face=1.0, max_subdivisions=64, weld_dist=1e-4))]
+pub fn adaptive_pixel_split_mesh(
+    mesh: &PyMeshData,
+    face_resolutions: Option<Vec<Option<(u32, u32)>>>,
+    default_resolution: (u32, u32),
+    pixels_per_face: f32,
+    max_subdivisions: u32,
+    weld_dist: f32,
+) -> PyMeshData {
+    let empty_vec = Vec::new();
+    let res_slice = face_resolutions.as_deref().unwrap_or(&empty_vec);
+    let output_mesh = mtk_core::subdivide::adaptive_pixel_split_mesh(
+        &mesh.inner,
+        res_slice,
+        default_resolution,
+        pixels_per_face,
+        max_subdivisions,
+        weld_dist,
+    );
+    PyMeshData { inner: output_mesh }
+}
+

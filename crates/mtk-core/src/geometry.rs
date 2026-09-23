@@ -38,6 +38,25 @@ impl Aabb2d {
     }
 
     #[inline]
+    pub fn from_points(points: &[[f32; 2]]) -> Self {
+        if points.is_empty() {
+            return Self::ZERO;
+        }
+        let mut min_x = f32::MAX;
+        let mut min_y = f32::MAX;
+        let mut max_x = f32::MIN;
+        let mut max_y = f32::MIN;
+        for &[x, y] in points {
+            if x < min_x { min_x = x; }
+            if y < min_y { min_y = y; }
+            if x > max_x { max_x = x; }
+            if y > max_y { max_y = y; }
+        }
+        Self::from_min_max(min_x, min_y, max_x, max_y)
+    }
+
+
+    #[inline]
     pub fn width(&self) -> f32 {
         (self.max.x - self.min.x).max(0.0)
     }

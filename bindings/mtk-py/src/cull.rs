@@ -64,3 +64,32 @@ impl PyFaceCuller {
         )
     }
 }
+
+/// Performs spatial-hashing based face culling on a `PyMeshData` buffer.
+///
+/// Removes interior touching faces with opposite normals and duplicate overlapping faces.
+#[pyfunction]
+#[pyo3(signature = (mesh, tolerance=1e-3, cull_coplanar_opposite=true, cull_duplicates=true))]
+pub fn cull_mesh_faces<'py>(
+    py: Python<'py>,
+    mesh: &crate::mesh::PyMeshData,
+    tolerance: f32,
+    cull_coplanar_opposite: bool,
+    cull_duplicates: bool,
+) -> PyResult<(crate::mesh::PyMeshData, Bound<'py, pyo3::types::PyDict>)> {
+    let cfg = mtk_cull::MeshCullConfig {
+        tolerance,
+        cull_coplanar_opposite,
+        cull_duplicates,
+    };
+
+    let result = mtk_cull::cull_mesh_faces(&mesh.inner, &cfg);
+
+    let stats_dict = pyo3::types::PyDict::new(py);
+    stats_dict.set_item("initial_faces", result.initial_faces)?;
+    stats_dict.set_item("culled_faces", result.culled_faces)?;
+    stats_dict.set_item("remaining_faces", result.remaining_faces)?;
+
+    Ok((crate::mesh::PyMeshData { inner: result.mesh }, stats_dict))
+}
+

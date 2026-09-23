@@ -65,13 +65,23 @@ pub use mtk_material::{
     remap_mesh_uvs_parallel, remap_sprite_to_sprite, straighten_diamond_quad_uv,
     GridAtlasSpec, MaterialResolver, MeshMultiUvRemapResult, MeshRemapResult, SourceUvSpace,
 };
+pub use mtk_core::extrude::{
+    cellular_noise_3d, generate_extrude_heights, perlin_noise_3d, repair_extruded_side_uv,
+    ExtrudeNoiseType, ExtrudeUvMode,
+};
 pub use mtk_core::geometry::{
     mc_local_to_centered_z_up, mc_world_to_z_up, Aabb2d, Aabb3d, Quad,
 };
+pub use mtk_core::subdivide::{
+    adaptive_pixel_split_mesh, calculate_face_target_grid, interpolate_bilinear_2d,
+    interpolate_bilinear_3d, interpolate_bilinear_4d, weld_mesh_vertices,
+};
+pub use mtk_cull::mesh_cull::{cull_mesh_faces, MeshCullConfig, MeshCullResult};
 pub mod pipeline;
 pub use pipeline::{
     process_mesh, MeshPipelineConfig, MeshProcessStats, ProcessMeshOutput, ResolvedMaterialInfo,
 };
+
 pub mod prebake;
 pub use prebake::{
     prebake_all_models, precompile_all_assets, CacheManifest, PrecompileConfig, PrecompileResult,

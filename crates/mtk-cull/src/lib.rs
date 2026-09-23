@@ -4,6 +4,7 @@ extern crate alloc;
 
 pub mod engine;
 pub mod geometry;
+pub mod mesh_cull;
 pub mod rules;
 pub mod types;
 
@@ -15,6 +16,7 @@ pub use geometry::{
     extract_face_occlusion_from_boxes, extract_quad_face_occlusion_rect,
     is_face_completely_occluded, is_fully_occluded, subtract_rect, subtract_rect_multi,
 };
+pub use mesh_cull::{cull_mesh_faces, MeshCullConfig, MeshCullResult};
 pub use rules::should_skip_rendering;
 pub use types::{
     is_empty_rect, is_full_rect, BlockCullMeta, CullCategory, GlassCullMode, LeavesCullMode,
@@ -25,3 +27,4 @@ pub use types::{
 pub mod rect_ops {
     pub use crate::geometry::rect_ops::*;
 }
+

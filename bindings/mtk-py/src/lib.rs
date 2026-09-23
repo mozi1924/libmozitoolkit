@@ -91,9 +91,12 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyAttributeDomain>()?;
     m.add_class::<PyMeshData>()?;
     m.add_function(wrap_pyfunction!(process_mesh, m)?)?;
+    m.add_function(wrap_pyfunction!(mesh::calculate_face_target_grid, m)?)?;
+    m.add_function(wrap_pyfunction!(mesh::adaptive_pixel_split_mesh, m)?)?;
 
     // 2. Culling
     m.add_class::<PyFaceCuller>()?;
+    m.add_function(wrap_pyfunction!(cull::cull_mesh_faces, m)?)?;
 
     // 3. Voxel Storage & Config
     m.add_class::<PyVoxelStorage>()?;
@@ -137,7 +140,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyModelBaker>()?;
     m.add_class::<PyBakedModelDatabase>()?;
 
-    // 9. UV Geometry Algorithms
+    // 9. UV Geometry Algorithms & Extrude
     m.add_function(wrap_pyfunction!(uv::calculate_uv_area, m)?)?;
     m.add_function(wrap_pyfunction!(uv::get_uv_bounds, m)?)?;
     m.add_function(wrap_pyfunction!(uv::get_uv_center, m)?)?;
@@ -153,12 +156,15 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(uv::batch_repair_fluid_uv, m)?)?;
     m.add_function(wrap_pyfunction!(uv::get_fluid_top_uvs, m)?)?;
     m.add_function(wrap_pyfunction!(uv::get_fluid_side_uvs, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::repair_extruded_side_uv, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::generate_random_extrude_heights, m)?)?;
 
     // 10. Metadata
     m.add_function(wrap_pyfunction!(version, m)?)?;
 
     Ok(())
 }
+
 
 #[cfg(test)]
 mod tests {
