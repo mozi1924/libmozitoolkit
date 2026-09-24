@@ -83,7 +83,7 @@ pub fn is_uv_collapsed(uvs: &[[f32; 2]], pixel_step: Option<[f32; 2]>) -> bool {
         return true;
     }
     let (area_thresh, dist_thresh) = if let Some([su, sv]) = pixel_step {
-        (su * sv * 0.05, su.min(sv) * 0.1)
+        (su * sv * 0.01, su.min(sv) * 0.02)
     } else {
         (1e-6, 1e-4)
     };
@@ -404,16 +404,20 @@ pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutpu
                                             let min_sv = adj_min_v + pad_v;
                                             let max_sv = adj_max_v - pad_v;
 
-                                            let base_a = adj_uva;
-                                            let base_b = adj_uvb;
+                                            let mut base_a = adj_uva;
+                                            let mut base_b = adj_uvb;
                                             let mut top_a = [base_a[0] + offset_u, base_a[1] + offset_v];
                                             let mut top_b = [base_b[0] + offset_u, base_b[1] + offset_v];
 
                                             if max_su >= min_su {
+                                                base_a[0] = base_a[0].clamp(min_su, max_su);
+                                                base_b[0] = base_b[0].clamp(min_su, max_su);
                                                 top_a[0] = top_a[0].clamp(min_su, max_su);
                                                 top_b[0] = top_b[0].clamp(min_su, max_su);
                                             }
                                             if max_sv >= min_sv {
+                                                base_a[1] = base_a[1].clamp(min_sv, max_sv);
+                                                base_b[1] = base_b[1].clamp(min_sv, max_sv);
                                                 top_a[1] = top_a[1].clamp(min_sv, max_sv);
                                                 top_b[1] = top_b[1].clamp(min_sv, max_sv);
                                             }
@@ -432,25 +436,25 @@ pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutpu
                     if let Some((ba, bb, ta, tb)) = adjacent_strip {
                         (ba, bb, ta, tb)
                     } else {
-                        let mut top_a = uv_a;
-                        let mut top_b = uv_b;
+                        let mut base_a = uv_a;
+                        let mut base_b = uv_b;
 
-                        // Anisotropic pixel grid boundary alignment on the top edge
+                        // Anisotropic pixel grid boundary alignment on the base edge
                         if uv_outward_dir[0].abs() > 0.5 {
                             if uv_outward_dir[0] > 0.0 {
-                                top_a[0] = (uv_a[0] / step_u - 1e-5).ceil() * step_u;
-                                top_b[0] = (uv_b[0] / step_u - 1e-5).ceil() * step_u;
+                                base_a[0] = (uv_a[0] / step_u - 1e-5).ceil() * step_u;
+                                base_b[0] = (uv_b[0] / step_u - 1e-5).ceil() * step_u;
                             } else {
-                                top_a[0] = (uv_a[0] / step_u + 1e-5).floor() * step_u;
-                                top_b[0] = (uv_b[0] / step_u + 1e-5).floor() * step_u;
+                                base_a[0] = (uv_a[0] / step_u + 1e-5).floor() * step_u;
+                                base_b[0] = (uv_b[0] / step_u + 1e-5).floor() * step_u;
                             }
                         } else if uv_outward_dir[1].abs() > 0.5 {
                             if uv_outward_dir[1] > 0.0 {
-                                top_a[1] = (uv_a[1] / step_v - 1e-5).ceil() * step_v;
-                                top_b[1] = (uv_b[1] / step_v - 1e-5).ceil() * step_v;
+                                base_a[1] = (uv_a[1] / step_v - 1e-5).ceil() * step_v;
+                                base_b[1] = (uv_b[1] / step_v - 1e-5).ceil() * step_v;
                             } else {
-                                top_a[1] = (uv_a[1] / step_v + 1e-5).floor() * step_v;
-                                top_b[1] = (uv_b[1] / step_v + 1e-5).floor() * step_v;
+                                base_a[1] = (uv_a[1] / step_v + 1e-5).floor() * step_v;
+                                base_b[1] = (uv_b[1] / step_v + 1e-5).floor() * step_v;
                             }
                         }
 
@@ -462,8 +466,8 @@ pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutpu
                         let offset_u = uv_outward_dir[0] * dir_mult * (step_u * 0.1);
                         let offset_v = uv_outward_dir[1] * dir_mult * (step_v * 0.1);
 
-                        let mut base_a = [top_a[0] + offset_u, top_a[1] + offset_v];
-                        let mut base_b = [top_b[0] + offset_u, top_b[1] + offset_v];
+                        let mut top_a = [base_a[0] + offset_u, base_a[1] + offset_v];
+                        let mut top_b = [base_b[0] + offset_u, base_b[1] + offset_v];
 
                         let pad_u = (step_u * 0.05).min((top_face_bounds.max.x - top_face_bounds.min.x).abs() * 0.1);
                         let pad_v = (step_v * 0.05).min((top_face_bounds.max.y - top_face_bounds.min.y).abs() * 0.1);
@@ -475,10 +479,14 @@ pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutpu
                         if max_su >= min_su {
                             base_a[0] = base_a[0].clamp(min_su, max_su);
                             base_b[0] = base_b[0].clamp(min_su, max_su);
+                            top_a[0] = top_a[0].clamp(min_su, max_su);
+                            top_b[0] = top_b[0].clamp(min_su, max_su);
                         }
                         if max_sv >= min_sv {
                             base_a[1] = base_a[1].clamp(min_sv, max_sv);
                             base_b[1] = base_b[1].clamp(min_sv, max_sv);
+                            top_a[1] = top_a[1].clamp(min_sv, max_sv);
+                            top_b[1] = top_b[1].clamp(min_sv, max_sv);
                         }
 
                         (base_a, base_b, top_a, top_b)

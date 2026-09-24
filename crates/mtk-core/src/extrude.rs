@@ -67,50 +67,51 @@ pub fn repair_extruded_side_uv(
         }
     }
 
-    let top_a = uv_base_a;
-    let top_b = uv_base_b;
-    let (base_a, base_b) = {
-        let edge_du = uv_base_b[0] - uv_base_a[0];
-        let edge_dv = uv_base_b[1] - uv_base_a[1];
+    let mut base_a = uv_base_a;
+    let mut base_b = uv_base_b;
 
-        let norm_len = (edge_du * edge_du + edge_dv * edge_dv).sqrt();
-        let (out_u, out_v) = if norm_len > 1e-6 {
-            (edge_dv / norm_len, -edge_du / norm_len)
-        } else {
-            (0.0, 1.0)
-        };
+    let edge_du = uv_base_b[0] - uv_base_a[0];
+    let edge_dv = uv_base_b[1] - uv_base_a[1];
 
-        let dir_multiplier = match resolved_mode {
-            ExtrudeUvMode::Inward => -1.0,
-            _ => 1.0,
-        };
-
-        let offset_u = out_u * dir_multiplier * (step_u * 0.1);
-        let offset_v = out_v * dir_multiplier * (step_v * 0.1);
-
-        let mut ba = [uv_base_a[0] + offset_u, uv_base_a[1] + offset_v];
-        let mut bb = [uv_base_b[0] + offset_u, uv_base_b[1] + offset_v];
-
-        // Safety Padding Clamping for base vertices to remain within top UV bounds
-        let pad_u = (step_u * 0.05).min((top_uv_bounds.max.x - top_uv_bounds.min.x).abs() * 0.1);
-        let pad_v = (step_v * 0.05).min((top_uv_bounds.max.y - top_uv_bounds.min.y).abs() * 0.1);
-
-        let min_safe_u = top_uv_bounds.min.x + pad_u;
-        let max_safe_u = top_uv_bounds.max.x - pad_u;
-        let min_safe_v = top_uv_bounds.min.y + pad_v;
-        let max_safe_v = top_uv_bounds.max.y - pad_v;
-
-        if max_safe_u >= min_safe_u {
-            ba[0] = ba[0].clamp(min_safe_u, max_safe_u);
-            bb[0] = bb[0].clamp(min_safe_u, max_safe_u);
-        }
-        if max_safe_v >= min_safe_v {
-            ba[1] = ba[1].clamp(min_safe_v, max_safe_v);
-            bb[1] = bb[1].clamp(min_safe_v, max_safe_v);
-        }
-
-        (ba, bb)
+    let norm_len = (edge_du * edge_du + edge_dv * edge_dv).sqrt();
+    let (out_u, out_v) = if norm_len > 1e-6 {
+        (edge_dv / norm_len, -edge_du / norm_len)
+    } else {
+        (0.0, 1.0)
     };
+
+    let dir_multiplier = match resolved_mode {
+        ExtrudeUvMode::Inward => -1.0,
+        _ => 1.0,
+    };
+
+    let offset_u = out_u * dir_multiplier * (step_u * 0.1);
+    let offset_v = out_v * dir_multiplier * (step_v * 0.1);
+
+    let mut top_a = [base_a[0] + offset_u, base_a[1] + offset_v];
+    let mut top_b = [base_b[0] + offset_u, base_b[1] + offset_v];
+
+    // Safety Padding Clamping for all 4 vertices to form a neat rectangle with margins on 4 sides
+    let pad_u = (step_u * 0.05).min((top_uv_bounds.max.x - top_uv_bounds.min.x).abs() * 0.1);
+    let pad_v = (step_v * 0.05).min((top_uv_bounds.max.y - top_uv_bounds.min.y).abs() * 0.1);
+
+    let min_safe_u = top_uv_bounds.min.x + pad_u;
+    let max_safe_u = top_uv_bounds.max.x - pad_u;
+    let min_safe_v = top_uv_bounds.min.y + pad_v;
+    let max_safe_v = top_uv_bounds.max.y - pad_v;
+
+    if max_safe_u >= min_safe_u {
+        base_a[0] = base_a[0].clamp(min_safe_u, max_safe_u);
+        base_b[0] = base_b[0].clamp(min_safe_u, max_safe_u);
+        top_a[0] = top_a[0].clamp(min_safe_u, max_safe_u);
+        top_b[0] = top_b[0].clamp(min_safe_u, max_safe_u);
+    }
+    if max_safe_v >= min_safe_v {
+        base_a[1] = base_a[1].clamp(min_safe_v, max_safe_v);
+        base_b[1] = base_b[1].clamp(min_safe_v, max_safe_v);
+        top_a[1] = top_a[1].clamp(min_safe_v, max_safe_v);
+        top_b[1] = top_b[1].clamp(min_safe_v, max_safe_v);
+    }
 
     [base_a, base_b, top_b, top_a]
 }
