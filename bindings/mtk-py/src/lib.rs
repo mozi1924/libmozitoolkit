@@ -92,6 +92,8 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMeshData>()?;
     m.add_function(wrap_pyfunction!(process_mesh, m)?)?;
     m.add_function(wrap_pyfunction!(mesh::calculate_face_target_grid, m)?)?;
+    m.add_function(wrap_pyfunction!(mesh::calculate_pixel_grid_cut_factors, m)?)?;
+    m.add_function(wrap_pyfunction!(mesh::slice_face_by_pixel_grid, m)?)?;
     m.add_function(wrap_pyfunction!(mesh::adaptive_pixel_split_mesh, m)?)?;
 
     // 2. Culling
@@ -363,6 +365,39 @@ mod tests {
         let side_uvs = uv::get_fluid_side_uvs(0.8, 0.2);
         assert_eq!(side_uvs.len(), 4);
         assert!((side_uvs[0].1 - 0.1).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_python_pixel_grid_cut_factors() {
+        let u0 = 1.3 / 16.0;
+        let u1 = 4.7 / 16.0;
+        let v0 = 2.4 / 16.0;
+        let v1 = 5.8 / 16.0;
+        let uvs = vec![[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+
+        let (u_cuts, v_cuts) = mesh::calculate_pixel_grid_cut_factors(uvs, 16, 16, 1.0, 64);
+        assert_eq!(u_cuts.len(), 5);
+        assert_eq!(v_cuts.len(), 5);
+    }
+
+    #[test]
+    fn test_python_slice_face_by_pixel_grid() {
+        let positions = vec![
+            [-1.0, -1.0, 0.0],
+            [1.0, -1.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [-1.0, 1.0, 0.0],
+        ];
+        let uvs = vec![
+            [0.5, 0.0],
+            [1.0, 0.5],
+            [0.5, 1.0],
+            [0.0, 0.5],
+        ];
+        let (pos, out_uvs, faces, params) = mesh::slice_face_by_pixel_grid(positions, uvs, 16, 16, 1.0, 64);
+        assert!(!faces.is_empty());
+        assert_eq!(pos.len(), out_uvs.len());
+        assert_eq!(pos.len(), params.len());
     }
 }
 
