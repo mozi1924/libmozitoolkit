@@ -768,7 +768,8 @@ pub fn adaptive_pixel_split_mesh(
     repair_uv=true,
     add_crease=false,
     crease_val=1.0,
-    only_collapsed=false
+    only_collapsed=false,
+    smart_side_faces=None
 ))]
 pub fn process_mesh_extrude_repair(
     positions: Vec<[f32; 3]>,
@@ -782,6 +783,7 @@ pub fn process_mesh_extrude_repair(
     add_crease: bool,
     crease_val: f32,
     only_collapsed: bool,
+    smart_side_faces: Option<Vec<u32>>,
 ) -> (
     Vec<(u32, Vec<[f32; 2]>)>,
     Vec<(u32, u32)>,
@@ -801,6 +803,7 @@ pub fn process_mesh_extrude_repair(
         face_materials,
         selected_faces,
         pixel_steps,
+        smart_side_faces,
         config: mtk_core::extrude_mesh::MeshExtrudeRepairConfig {
             uv_mode: mode,
             repair_uv,

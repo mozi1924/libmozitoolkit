@@ -44,6 +44,7 @@ pub struct ExtrudeMeshInput {
     pub face_materials: Vec<u32>,
     pub selected_faces: Vec<u32>,
     pub pixel_steps: Vec<[f32; 2]>,
+    pub smart_side_faces: Option<Vec<u32>>,
     pub config: MeshExtrudeRepairConfig,
 }
 
@@ -293,9 +294,16 @@ pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutpu
                     .or_else(|| input.face_uvs.get(side_face_idx_usize));
 
                 if input.config.only_collapsed {
-                    if let Some(s_uvs) = cur_side_uvs {
-                        if !is_uv_collapsed(s_uvs, Some([step_u, step_v])) {
-                            continue;
+                    let is_tracked = input
+                        .smart_side_faces
+                        .as_ref()
+                        .map(|s| s.contains(&side_face_idx))
+                        .unwrap_or(false);
+                    if !is_tracked {
+                        if let Some(s_uvs) = cur_side_uvs {
+                            if !is_uv_collapsed(s_uvs, Some([step_u, step_v])) {
+                                continue;
+                            }
                         }
                     }
                 }
@@ -396,20 +404,16 @@ pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutpu
                                             let min_sv = adj_min_v + pad_v;
                                             let max_sv = adj_max_v - pad_v;
 
-                                            let mut base_a = adj_uva;
-                                            let mut base_b = adj_uvb;
+                                            let base_a = adj_uva;
+                                            let base_b = adj_uvb;
                                             let mut top_a = [base_a[0] + offset_u, base_a[1] + offset_v];
                                             let mut top_b = [base_b[0] + offset_u, base_b[1] + offset_v];
 
                                             if max_su >= min_su {
-                                                base_a[0] = base_a[0].clamp(min_su, max_su);
-                                                base_b[0] = base_b[0].clamp(min_su, max_su);
                                                 top_a[0] = top_a[0].clamp(min_su, max_su);
                                                 top_b[0] = top_b[0].clamp(min_su, max_su);
                                             }
                                             if max_sv >= min_sv {
-                                                base_a[1] = base_a[1].clamp(min_sv, max_sv);
-                                                base_b[1] = base_b[1].clamp(min_sv, max_sv);
                                                 top_a[1] = top_a[1].clamp(min_sv, max_sv);
                                                 top_b[1] = top_b[1].clamp(min_sv, max_sv);
                                             }
@@ -428,25 +432,25 @@ pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutpu
                     if let Some((ba, bb, ta, tb)) = adjacent_strip {
                         (ba, bb, ta, tb)
                     } else {
-                        let mut ba = uv_a;
-                        let mut bb = uv_b;
+                        let mut top_a = uv_a;
+                        let mut top_b = uv_b;
 
-                        // Anisotropic pixel grid boundary alignment
+                        // Anisotropic pixel grid boundary alignment on the top edge
                         if uv_outward_dir[0].abs() > 0.5 {
                             if uv_outward_dir[0] > 0.0 {
-                                ba[0] = (uv_a[0] / step_u - 1e-5).ceil() * step_u;
-                                bb[0] = (uv_b[0] / step_u - 1e-5).ceil() * step_u;
+                                top_a[0] = (uv_a[0] / step_u - 1e-5).ceil() * step_u;
+                                top_b[0] = (uv_b[0] / step_u - 1e-5).ceil() * step_u;
                             } else {
-                                ba[0] = (uv_a[0] / step_u + 1e-5).floor() * step_u;
-                                bb[0] = (uv_b[0] / step_u + 1e-5).floor() * step_u;
+                                top_a[0] = (uv_a[0] / step_u + 1e-5).floor() * step_u;
+                                top_b[0] = (uv_b[0] / step_u + 1e-5).floor() * step_u;
                             }
                         } else if uv_outward_dir[1].abs() > 0.5 {
                             if uv_outward_dir[1] > 0.0 {
-                                ba[1] = (uv_a[1] / step_v - 1e-5).ceil() * step_v;
-                                bb[1] = (uv_b[1] / step_v - 1e-5).ceil() * step_v;
+                                top_a[1] = (uv_a[1] / step_v - 1e-5).ceil() * step_v;
+                                top_b[1] = (uv_b[1] / step_v - 1e-5).ceil() * step_v;
                             } else {
-                                ba[1] = (uv_a[1] / step_v + 1e-5).floor() * step_v;
-                                bb[1] = (uv_b[1] / step_v + 1e-5).floor() * step_v;
+                                top_a[1] = (uv_a[1] / step_v + 1e-5).floor() * step_v;
+                                top_b[1] = (uv_b[1] / step_v + 1e-5).floor() * step_v;
                             }
                         }
 
@@ -458,8 +462,8 @@ pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutpu
                         let offset_u = uv_outward_dir[0] * dir_mult * (step_u * 0.1);
                         let offset_v = uv_outward_dir[1] * dir_mult * (step_v * 0.1);
 
-                        let mut ta = [ba[0] + offset_u, ba[1] + offset_v];
-                        let mut tb = [bb[0] + offset_u, bb[1] + offset_v];
+                        let mut base_a = [top_a[0] + offset_u, top_a[1] + offset_v];
+                        let mut base_b = [top_b[0] + offset_u, top_b[1] + offset_v];
 
                         let pad_u = (step_u * 0.05).min((top_face_bounds.max.x - top_face_bounds.min.x).abs() * 0.1);
                         let pad_v = (step_v * 0.05).min((top_face_bounds.max.y - top_face_bounds.min.y).abs() * 0.1);
@@ -469,19 +473,15 @@ pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutpu
                         let max_sv = top_face_bounds.max.y - pad_v;
 
                         if max_su >= min_su {
-                            ba[0] = ba[0].clamp(min_su, max_su);
-                            bb[0] = bb[0].clamp(min_su, max_su);
-                            ta[0] = ta[0].clamp(min_su, max_su);
-                            tb[0] = tb[0].clamp(min_su, max_su);
+                            base_a[0] = base_a[0].clamp(min_su, max_su);
+                            base_b[0] = base_b[0].clamp(min_su, max_su);
                         }
                         if max_sv >= min_sv {
-                            ba[1] = ba[1].clamp(min_sv, max_sv);
-                            bb[1] = bb[1].clamp(min_sv, max_sv);
-                            ta[1] = ta[1].clamp(min_sv, max_sv);
-                            tb[1] = tb[1].clamp(min_sv, max_sv);
+                            base_a[1] = base_a[1].clamp(min_sv, max_sv);
+                            base_b[1] = base_b[1].clamp(min_sv, max_sv);
                         }
 
-                        (ba, bb, ta, tb)
+                        (base_a, base_b, top_a, top_b)
                     };
 
                 let mut expected_uvs = BTreeMap::new();
@@ -685,6 +685,7 @@ pub fn process_random_extrude_mesh(input: &RandomExtrudeMeshInput) -> RandomExtr
             face_materials: new_face_materials.clone(),
             selected_faces: newly_extruded_faces.clone(),
             pixel_steps: new_pixel_steps,
+            smart_side_faces: None,
             config: MeshExtrudeRepairConfig {
                 uv_mode: input.uv_mode,
                 repair_uv: input.repair_uv,
@@ -762,6 +763,7 @@ mod tests {
             face_materials: vec![0; 5],
             selected_faces: vec![0],
             pixel_steps: vec![[1.0 / 16.0, 1.0 / 16.0]; 5],
+            smart_side_faces: None,
             config: MeshExtrudeRepairConfig {
                 uv_mode: ExtrudeUvMode::Smart,
                 repair_uv: true,
