@@ -1,4 +1,4 @@
-use mtk_voxel::sync::LiveSyncSession;
+use mtk_sync::LiveSyncSession;
 use mtk_voxel::types::MesherConfig;
 
 #[test]

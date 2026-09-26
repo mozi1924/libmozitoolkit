@@ -22,6 +22,7 @@ mtk-resource = { workspace = true, features = ["zip"] }
 mtk-texture = { workspace = true }
 mtk-material = { workspace = true }
 mtk-voxel = { workspace = true }
+mtk-sync = { workspace = true }
 glam = { workspace = true }
 serde_json = { workspace = true }
 pyo3 = { workspace = true, features = ["abi3-py311"] }

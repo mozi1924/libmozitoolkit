@@ -6,12 +6,12 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
 
 use glam::IVec3;
-use mtk_voxel::protocol::*;
+use mtk_sync::protocol::*;
 
 /// Decodes a raw binary packet into a Python dict.
 #[pyfunction]
 pub fn decode_packet<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, PyDict>> {
-    let packet = mtk_voxel::protocol::decode_packet(data)
+    let packet = mtk_sync::protocol::decode_packet(data)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
     let dict = PyDict::new(py);
@@ -161,7 +161,7 @@ pub fn decode_packet<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, P
 /// Encodes a Full Sync Request (0x80) packet as bytes.
 #[pyfunction]
 pub fn encode_full_sync_request<'py>(py: Python<'py>) -> Bound<'py, PyBytes> {
-    let bytes = mtk_voxel::protocol::encode_full_sync_request();
+    let bytes = mtk_sync::protocol::encode_full_sync_request();
     PyBytes::new(py, &bytes)
 }
 
@@ -177,11 +177,11 @@ pub fn encode_repair_requests<'py>(
         .into_iter()
         .map(|(x, y, z)| IVec3::new(x, y, z))
         .collect();
-    let packets = mtk_voxel::protocol::encode_repair_requests(&vec, max_batch_size);
+    let packets = mtk_sync::protocol::encode_repair_requests(&vec, max_batch_size);
 
     let list = PyList::empty(py);
-    for pkt in packets {
-        let _ = list.append(PyBytes::new(py, &pkt));
+    for pkt in &packets {
+        let _ = list.append(PyBytes::new(py, pkt));
     }
     list
 }
@@ -195,6 +195,6 @@ pub fn encode_sync_config<'py>(
     target_fps: u8,
     is_active: bool,
 ) -> Bound<'py, PyBytes> {
-    let bytes = mtk_voxel::protocol::encode_sync_config(throttle_mode, target_fps, is_active);
+    let bytes = mtk_sync::protocol::encode_sync_config(throttle_mode, target_fps, is_active);
     PyBytes::new(py, &bytes)
 }

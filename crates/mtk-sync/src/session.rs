@@ -10,12 +10,13 @@ use crossbeam_channel::{Receiver, Sender};
 use glam::IVec3;
 use mtk_cull::FaceCuller;
 
-use crate::mesher::{DeltaMesher, SectionMesher};
+use mtk_voxel::mesher::{DeltaMesher, SectionMesher};
+use mtk_voxel::storage::VoxelStorage;
+use mtk_voxel::types::MesherConfig;
+
+use crate::client::{ClientMessage, SyncClient};
+use crate::events::SyncEvent;
 use crate::protocol::*;
-use crate::storage::VoxelStorage;
-use crate::sync::client::{ClientMessage, SyncClient};
-use crate::sync::events::SyncEvent;
-use crate::types::MesherConfig;
 
 /// High-level Live Sync Session managing connection, storage, multi-threaded meshing, and event queues.
 pub struct LiveSyncSession {

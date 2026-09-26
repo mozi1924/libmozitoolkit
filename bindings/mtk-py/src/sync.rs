@@ -6,7 +6,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
 use glam::IVec3;
-use mtk_voxel::sync::{LiveSyncSession, SyncEvent};
+use mtk_sync::{LiveSyncSession, SyncEvent};
 
 use crate::cull::PyFaceCuller;
 use crate::mesh::PyMeshData;

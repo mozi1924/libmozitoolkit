@@ -160,12 +160,32 @@ pub struct Quad {
 
 ---
 
-## 6. 体素与实时同步引擎：`mtk-voxel`
+## 6. 体素核心与抽象引擎：`mtk-voxel`
 
-负责 16x16x16 Section 体素存储、平滑环境光遮蔽 (AO) 计算、流体曲面、网格生成、二进制网络协议编解码与原生 WebSocket 实时协同。
+负责 16x16x16 Section 体素存储、平滑环境光遮蔽 (AO) 计算、流体曲面、网格生成，以及支持多输入源适配的统一抽象 Trait。
 
-### 6.1 核心类型与函数
-- `VoxelStorage`: 3D 稀疏世界体素容器，支持包围盒动态裁剪、局部区块快照 `set_section_snapshot`、CRC32 清单比对 `validate_manifest` 与快照一致性比对。
+### 6.1 体素源与访问抽象 (`mtk_voxel::source`)
+- `VoxelReader`: 统一只读体素访问接口。
+  - `get_block(x, y, z) -> &str`: 获取指定方块坐标处的完整 BlockState 字符串。
+  - `get_section(sx, sy, sz) -> Option<&SectionStorage>`: 获取切片引用。
+  - `contains_section(sx, sy, sz) -> bool`: 检查切片是否存在。
+  - `block_bounds() -> Option<(IVec3, IVec3)>`: 获取世界包围盒。
+  - `get_biome(x, y, z) -> &str`: 获取方块坐标处的生物群系。
+- `VoxelWriter`: 统一体素修改与区块写入接口。
+  - `set_block(x, y, z, state, biome)`: 单点写入方块与生物群系。
+  - `set_section(sx, sy, sz, section)`: 整段写入/替换 16x16x16 切片。
+  - `mark_section_dirty(sx, sy, sz)`: 标记切片为脏状态（触发重构网格）。
+  - `set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)`: 设定活动包围盒。
+  - `clear()`: 清空所有切片与状态。
+- `VoxelSource`: 跨数据源统一生产者 Trait（供离线存档 MCA/LevelDB、实时网络流、点云/网格逆向推算、程序化生成统一实现）。
+  - `source_name() -> &str`: 数据源标识。
+  - `has_section(sx, sy, sz) -> bool`: 检查切片是否就绪。
+  - `load_section(sx, sy, sz) -> Result<Option<SectionStorage>, VoxelError>`: 按需加载切片。
+  - `section_bounds() -> Option<(IVec3, IVec3)>`: 提供切片坐标包围盒。
+- `ingest_from_source(source, target, sections)`: 从任意 `VoxelSource` 批量流式灌入 `VoxelWriter`。
+
+### 6.2 存储与网格化器
+- `VoxelStorage`: 3D 稀疏世界体素容器（实现 `VoxelReader` 与 `VoxelWriter`），支持包围盒动态裁剪、局部区块快照 `set_section_snapshot`、CRC32 清单比对 `validate_manifest` 与 `ingest_source` 快速灌流。
 - `SectionStorage`: 紧凑的高性能 16x16x16 方块状态 ID 存储。
 - `PaddedVoxelArray`: 带有 1 格外边框 (18x18x18) 的体素采样窗口。
 - `SectionMesher`:
@@ -175,13 +195,20 @@ pub struct Quad {
 - `calculate_face_ao(neighbors: &[bool; 8]) -> [f32; 4]`: 原版 4 顶点平滑 AO 遮蔽因子计算。
 - `FluidType`, `calculate_fluid_corner_heights`: 水/岩浆流体网格与流向计算。
 
-### 6.2 二进制协议编解码 (`mtk_voxel::protocol`)
+---
+
+## 7. 实时网络协同引擎：`mtk-sync`
+
+负责与 Minecraft 伴随插件/模组的原生 WebSocket 双向流式通信、二进制协议编解码与 Live Sync 会话生命周期管理。
+
+### 7.1 二进制协议编解码 (`mtk_sync::protocol`)
 - `decode_packet(data: &[u8]) -> Result<Packet, ProtocolError>`: 极速解析二进制小端序数据包。
 - `encode_full_sync_request()`, `encode_repair_requests(...)`, `encode_sync_config(...)`。
 - `Packet`: 强类型数据包枚举（`SelectionInfo`, `FullSnapshot`, `DeltaUpdate`, `SectionManifest` 等）。
 
-### 6.3 原生实时同步会话 (`mtk_voxel::sync`)
-- `LiveSyncSession`: 启动原生后台 WebSocket 传输线程与网格构建管道，对外提供 `poll_events() -> Vec<SyncEvent>` 非阻塞事件队列。
+### 7.2 原生实时同步会话 (`mtk_sync`)
+- `LiveSyncSession`: 启动原生后台多线程 WebSocket 传输线程 (`SyncClient`) 与 `VoxelStorage` 驱动通道，对外提供 `poll_events() -> Vec<SyncEvent>` 非阻塞事件队列。
+- `SyncClient`: 基于 `tungstenite` 与 `crossbeam-channel` 的低延迟网络套接字守护线程，支持心跳检测与断线自动重连。
 
 ---
 

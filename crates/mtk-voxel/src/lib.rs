@@ -2,19 +2,15 @@
 //!
 //! **mtk-voxel** provides Minecraft chunk section and world-level voxel storage,
 //! physically-accurate fluid surface meshing, smooth ambient occlusion lighting,
-//! biome color blending, and high-performance multi-threaded world mesh assembly.
+//! biome color blending, high-performance world mesh assembly, and abstract
+//! voxel source interfaces for multi-source ingestion.
 
 pub mod biome;
 pub mod fluid;
 pub mod mesher;
-pub mod protocol;
+pub mod source;
 pub mod storage;
-#[cfg(feature = "sync")]
-pub mod sync;
 pub mod types;
-
-#[cfg(feature = "sync")]
-pub use sync::{LiveSyncSession, SyncEvent};
 
 // Top-level re-exports
 pub use biome::{get_biome_meta, get_colormap_uv, get_smoothed_biome_data, BiomeMeta};
@@ -27,6 +23,7 @@ pub use mesher::{
     ao_level_to_brightness, calculate_face_ao, should_flip_quad_diagonal, vertex_ao, DeltaMesher,
     SectionMesher,
 };
+pub use source::{ingest_from_source, VoxelReader, VoxelSource, VoxelWriter};
 pub use storage::{
     block_index, crc32, crc32_update, extract_canonical_state_str, get_empty_section_crc,
     padded_index, PaddedVoxelArray, SectionStorage, VoxelStorage, EMPTY_SECTION_CRC, PADDED_SIZE,

@@ -838,4 +838,68 @@ impl VoxelStorage {
 
         true
     }
+
+    /// Ingests sections from an external `VoxelSource` provider.
+    pub fn ingest_source<S: crate::source::VoxelSource + ?Sized>(
+        &mut self,
+        source: &mut S,
+        sections: Option<&[IVec3]>,
+    ) -> Result<usize, crate::types::VoxelError> {
+        crate::source::ingest_from_source(source, self, sections)
+    }
 }
+
+impl crate::source::VoxelReader for VoxelStorage {
+    fn get_block(&self, x: i32, y: i32, z: i32) -> &str {
+        VoxelStorage::get_block(self, x, y, z)
+    }
+
+    fn get_section(&self, sx: i32, sy: i32, sz: i32) -> Option<&SectionStorage> {
+        self.sections.get(&IVec3::new(sx, sy, sz))
+    }
+
+    fn contains_section(&self, sx: i32, sy: i32, sz: i32) -> bool {
+        self.sections.contains_key(&IVec3::new(sx, sy, sz))
+    }
+
+    fn block_bounds(&self) -> Option<(IVec3, IVec3)> {
+        if self.size_x > 0 && self.size_y > 0 && self.size_z > 0 {
+            Some((
+                IVec3::new(self.min_x, self.min_y, self.min_z),
+                IVec3::new(self.min_x + self.size_x, self.min_y + self.size_y, self.min_z + self.size_z),
+            ))
+        } else {
+            None
+        }
+    }
+
+    fn get_biome(&self, x: i32, y: i32, z: i32) -> &str {
+        VoxelStorage::get_biome(self, x, y, z)
+    }
+}
+
+impl crate::source::VoxelWriter for VoxelStorage {
+    fn set_block(&mut self, x: i32, y: i32, z: i32, state: &str, biome: Option<&str>) {
+        VoxelStorage::set_block(self, x, y, z, state, biome);
+    }
+
+    fn set_section(&mut self, sx: i32, sy: i32, sz: i32, section: SectionStorage) {
+        let coord = IVec3::new(sx, sy, sz);
+        self.sections.insert(coord, section);
+        self.dirty_sections.insert(coord);
+        self.known_empty_sections.remove(&coord);
+    }
+
+    fn mark_section_dirty(&mut self, sx: i32, sy: i32, sz: i32) {
+        self.dirty_sections.insert(IVec3::new(sx, sy, sz));
+    }
+
+    fn set_bounds(&mut self, min_x: i32, min_y: i32, min_z: i32, size_x: i32, size_y: i32, size_z: i32) {
+        VoxelStorage::set_bounds(self, min_x, min_y, min_z, size_x, size_y, size_z);
+    }
+
+    fn clear(&mut self) {
+        VoxelStorage::clear(self);
+    }
+}
+

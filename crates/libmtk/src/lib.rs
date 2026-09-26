@@ -118,15 +118,22 @@ pub use mtk_voxel::crc::{crc32, get_empty_section_crc, EMPTY_SECTION_CRC};
 pub use mtk_voxel::delta_mesher::DeltaMesher;
 pub use mtk_voxel::fluid::{calculate_fluid_corner_heights, calculate_fluid_flow_vector, FluidType};
 pub use mtk_voxel::mesher::SectionMesher;
+pub use mtk_voxel::source::{ingest_from_source, VoxelReader, VoxelSource, VoxelWriter};
 pub use mtk_voxel::storage::{PaddedVoxelArray, SectionStorage};
 pub use mtk_voxel::types::{CoordinateSystem, MesherConfig, WorldMeshBuildResult};
 pub use mtk_voxel::world::VoxelStorage;
-pub use mtk_voxel::protocol;
-pub use mtk_voxel::protocol::{
+
+#[cfg(feature = "sync")]
+pub use mtk_sync as sync;
+#[cfg(feature = "sync")]
+pub use mtk_sync::protocol;
+#[cfg(feature = "sync")]
+pub use mtk_sync::protocol::{
     decode_packet, encode_full_sync_request, encode_repair_requests, encode_sync_config,
     DeltaChange, ManifestSectionEntry, Packet, PacketType, ProtocolError, StreamStatus,
 };
 #[cfg(feature = "sync")]
-pub use mtk_voxel::sync::{LiveSyncSession, SyncEvent};
+pub use mtk_sync::{LiveSyncSession, SyncClient, SyncEvent};
+
 
 

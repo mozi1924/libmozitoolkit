@@ -1,5 +1,5 @@
 use glam::IVec3;
-use mtk_voxel::protocol::*;
+use mtk_sync::protocol::*;
 
 #[test]
 fn test_selection_info_codec() {

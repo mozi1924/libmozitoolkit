@@ -15,7 +15,8 @@
 | **[`mtk-core`](crates/mtk-core)** | 基础几何基元、紧凑网格缓冲容器 (`MeshData`)、Minecraft 标准 6 向拓扑、自适应像素网格切分 (`subdivide`) 与智能挤出/UV 修复 (`extrude`) |
 | **[`mtk-cull`](crates/mtk-cull)** | 6 向邻域遮挡状态机、原版剔除规则与 2D 矩形差集切分（消除内部重叠面） |
 | **[`mtk-model`](crates/mtk-model)** | 无头 BlockState 状态机解析与对齐 1.21+ 规范的 Model JSON 模型烘焙、OBJ 导出/加载 |
-| **[`mtk-voxel`](crates/mtk-voxel)** | 16x16x16 Chunk Section 体素存储、流体曲面计算、平滑环境光遮蔽 (AO)、二进制小端序协议与原生 WebSocket 实时同步会话 |
+| **[`mtk-voxel`](crates/mtk-voxel)** | 纯体素核心：16x16x16 Chunk Section 体素存储、流体曲面计算、平滑环境光遮蔽 (AO)、网格化器 (Mesher)、差量网格构建与统一体素源抽象接口 (`VoxelSource` / `VoxelReader` / `VoxelWriter`) |
+| **[`mtk-sync`](crates/mtk-sync)** | 实时网络协同：原生 WebSocket 客户端、小端序二进制协议编解码、增量同步与 Live Sync 会话生命周期管理 |
 | **[`mtk-resource`](crates/mtk-resource)** | 无头资源包虚拟文件系统 (VFS)、.mcmeta 动图元数据、原版 atlases/*.json 规范解析与 CTM 47/17 连接纹理求解 |
 | **[`mtk-texture`](crates/mtk-texture)** | 矩形空间装箱 Stitcher、多类别 PBR 图集与 Companion Overlay 贴图烘焙、Standalone 资源层级规范对齐 |
 | **[`mtk-material`](crates/mtk-material)** | 66 种原版生物群系调色板与线性色彩数学引擎 (SSOT)、`BiomeResolver` 模型扫描与预编译映射、多线程并行 UV 重映射与外部别名解算 |

@@ -6,7 +6,7 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 readme = "README.md"
-description = "Section and World-level voxel storage, fluid surface calculation, ambient occlusion, and chunk mesh generator for libmtk."
+description = "Section and World-level voxel storage, fluid surface calculation, ambient occlusion, chunk meshing, and source abstraction for libmtk."
 
 [dependencies]
 mtk-core = { workspace = true }
@@ -20,16 +20,12 @@ serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
 rayon = { workspace = true, optional = true }
-tungstenite = { workspace = true, optional = true }
-crossbeam-channel = { workspace = true, optional = true }
-url = { workspace = true, optional = true }
 
 [features]
-default = ["std", "parallel", "sync", "serde"]
+default = ["std", "parallel", "serde"]
 std = ["mtk-core/std", "mtk-cull/std", "mtk-model/std", "mtk-resource/std", "mtk-texture/std"]
 parallel = ["dep:rayon", "mtk-model/parallel", "mtk-resource/parallel", "mtk-texture/parallel"]
 serde = ["dep:serde", "dep:serde_json", "mtk-core/serde", "mtk-cull/serde"]
-sync = ["dep:tungstenite", "dep:crossbeam-channel", "dep:url"]
 
 [dev-dependencies]
 serde = { workspace = true }

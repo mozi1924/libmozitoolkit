@@ -1,0 +1,29 @@
+[package]
+name = "mtk-sync"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "Native WebSocket Live Sync client, binary network protocol codecs, and session controller for libmtk."
+
+[dependencies]
+mtk-core = { workspace = true }
+mtk-cull = { workspace = true }
+mtk-voxel = { workspace = true }
+glam = { workspace = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+thiserror = { workspace = true }
+tungstenite = { workspace = true }
+crossbeam-channel = { workspace = true }
+url = { workspace = true }
+
+[features]
+default = ["serde"]
+serde = ["dep:serde", "dep:serde_json"]
+
+[dev-dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

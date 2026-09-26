@@ -515,6 +515,7 @@ dependencies = [
  "mtk-material",
  "mtk-model",
  "mtk-resource",
+ "mtk-sync",
  "mtk-texture",
  "mtk-voxel",
  "rayon",
@@ -682,6 +683,7 @@ dependencies = [
  "mtk-material",
  "mtk-model",
  "mtk-resource",
+ "mtk-sync",
  "mtk-texture",
  "mtk-voxel",
  "pyo3",
@@ -702,6 +704,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "mtk-sync"
+version = "0.1.0"
+dependencies = [
+ "crossbeam-channel",
+ "glam",
+ "mtk-core",
+ "mtk-cull",
+ "mtk-voxel",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tungstenite",
+ "url",
+]
+
+[[package]]
 name = "mtk-texture"
 version = "0.1.0"
 dependencies = [
@@ -719,7 +737,6 @@ dependencies = [
 name = "mtk-voxel"
 version = "0.1.0"
 dependencies = [
- "crossbeam-channel",
  "glam",
  "mtk-core",
  "mtk-cull",
@@ -731,8 +748,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
- "tungstenite",
- "url",
 ]
 
 [[package]]

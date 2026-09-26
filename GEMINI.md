@@ -61,7 +61,8 @@ libmozitoolkit/
 │   ├── mtk-core/       -> 基础几何基元、Quad、MeshData、自适应像素切分与挤出算子
 │   ├── mtk-cull/       -> 6 向邻域遮挡状态机、面剔除、2D 矩形差集切分
 │   ├── mtk-model/      -> BlockState 状态解析、1.21+ Block Model JSON 烘焙、OBJ 解析
-│   ├── mtk-voxel/      -> 16x16x16 Chunk Section 体素存储、流体曲面、平滑 AO 与网络协同
+│   ├── mtk-voxel/      -> 16x16x16 Chunk Section 体素存储、流体曲面、平滑 AO 与体素源抽象
+│   ├── mtk-sync/       -> 原生 WebSocket 实时同步客户端、小端序二进制协议与会话管理
 │   ├── mtk-resource/   -> 虚拟文件系统 (VFS)、.mcmeta 动图元数据、原版 atlases/*.json 解析
 │   ├── mtk-texture/    -> 矩形装箱 Stitcher、多类别 PBR 图集与 Overlay 烘焙、Standalone 转换
 │   ├── mtk-material/   -> 66 生物群系调色板引擎、BiomeResolver、并行 UV 重映射与别名解析

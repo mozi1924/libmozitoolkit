@@ -30,13 +30,13 @@ graph TD
     end
 
     subgraph Layer1_Domain["Layer 1: 领域子系统 (Domain Engines)"]
-        VOXEL["mtk-voxel (Mesher / AO / WebSocket Sync)"]
+        VOXEL["mtk-voxel (Chunk Section / Fluid / Mesher / AO / VoxelSource)"]
+        SYNC["mtk-sync (Native WebSocket / Packet Codec / Live Sync Session)"]
         MODEL["mtk-model (BlockState / Baker / OBJ)"]
         TEXTURE["mtk-texture (Atlas / Overlay / PBR Packing / Standalone)"]
         RESOURCE["mtk-resource (VFS / Pack Stack / CTM / Atlases)"]
         CULL["mtk-cull (Occlusion / Rect Difference / Mesh Cull)"]
         MAT["mtk-material (66 Biomes SSOT / BiomeResolver / UV Remap)"]
-        NET["mtk-net (流式网络协议 [已并入 mtk-voxel::protocol])"]
     end
 
     subgraph Layer0_Core["Layer 0: 核心数据与几何基础设施 (Foundation)"]
@@ -50,12 +50,15 @@ graph TD
     BENCH --> LIBMTK
 
     LIBMTK --> VOXEL
+    LIBMTK --> SYNC
     LIBMTK --> MODEL
     LIBMTK --> TEXTURE
     LIBMTK --> RESOURCE
     LIBMTK --> CULL
     LIBMTK --> MAT
 
+    SYNC --> VOXEL
+    SYNC --> CULL
     VOXEL --> CORE
     VOXEL --> CULL
     MODEL --> CORE
@@ -75,8 +78,8 @@ graph TD
 | **`crates/mtk-cull`** | 面剔除状态机、2D/3D 矩形差集切分 (Subtract Rect)、外部导入模型面剔除 (`cull_mesh_faces`) | `mtk-core` | `BlockCullMeta`, `FaceCuller`, 裁剪后微矩形列表, `MeshCullResult` |
 | **`crates/mtk-model`** | BlockState 状态解析、1.21+ Block Model JSON 烘焙、Wavefront OBJ 解析与导出 | `mtk-core` | `BlockState`, `BlockModelJson`, `BakedModel`, `BakedModelDatabase` |
 | **`crates/mtk-texture`**| 空间装箱图集拼接器 (Stitcher)、多类别图集烘焙 (`build_categories`)、Companion Overlay 贴图合成、Standalone 资产层级对齐 | `mtk-core` | `AtlasBuilder`, `BakedAtlas`, `BakedAtlasChunk`, `RgbaBuffer`, UV 坐标映射表 |
-| **`crates/mtk-resource`**| 虚拟文件系统 (VFS / Zip / Memory / Dir)、CTM 47/17 连接纹理求解、动画元数据与原版 atlases/*.json 解析 | `mtk-core` | `ResourcePackStack`, `CtmSolver`, `AnimationMetadata`, `AtlasDefinition` |
-| **`crates/mtk-voxel`**  | 16x16x16 Chunk Section 体素存储、平滑 AO 计算、网格化器 (Mesher)、二进制小端序协议与原生 WebSocket 实时协同会话 | `mtk-core`, `mtk-cull` | `SectionStorage`, `VoxelStorage`, `SectionMesher`, `DeltaMesher`, `LiveSyncSession`, `WorldMeshBuildResult` |
+| **`crates/mtk-voxel`**  | 纯体素核心：16x16x16 Chunk Section 体素存储、平滑 AO 计算、网格化器 (Mesher)、物理流体曲面、统一体素源抽象 (`VoxelSource` / `VoxelReader` / `VoxelWriter`) | `mtk-core`, `mtk-cull`, `mtk-model`, `mtk-texture`, `mtk-resource`, `mtk-material` | `SectionStorage`, `VoxelStorage`, `SectionMesher`, `DeltaMesher`, `VoxelSource`, `WorldMeshBuildResult` |
+| **`crates/mtk-sync`**   | 实时网络协同：原生多线程 WebSocket 客户端、小端序二进制协议编解码、增量修复包生成与 Live Sync 会话生命周期管理 | `mtk-voxel`, `mtk-cull`, `mtk-core` | `LiveSyncSession`, `SyncClient`, `SyncEvent`, `decode_packet`, `encode_full_sync_request` |
 | **`crates/mtk-material`** | 66 种原版生物群系调色板与线性色彩数学引擎 (SSOT)、`BiomeResolver` 模型扫描与预编译映射、多线程 Rayon 并行 UV 重映射与外部别名解算 | `mtk-core` | `BiomePalette`, `BiomeResolver`, `compute_mesh_biome_attributes`, `MaterialResolver`, `MeshMultiUvRemapResult` |
 | **`crates/libmtk`** | 顶层统一 Facade 库，提供开箱即用的高阶预编译管线 (`precompile_all_assets`) 与一站式统一错误处理 `MtkError` | 全部 Layer 1 Crates | 高阶 API、统一 Error 与 Pipeline、`CacheManifest` |
 | **`crates/mtk-bench`** | 性能基准测试套件，覆盖 4000 区块大规模网格化与复杂面剔除场景 | 全部核心 Crates | 基准测试报告与性能指标 |
