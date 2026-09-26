@@ -26,8 +26,10 @@ bindings/
 
 ### 2.1 Python 绑定 (`bindings/mtk-py`)
 
-- **技术栈**：`PyO3` + `maturin` (构建发布为标准 `abi3` 或 CPython 3.11+ wheel 轮子)。
-- **构建规范**：必须在工作区专属虚拟环境（`.venv`）中调用 `maturin build --release`。编译产物拷贝至 `MoziToolKit/wheels/`。
+- **构建与分发规范**：
+  - 必须在工作区专属虚拟环境（`.venv`）中调用 `maturin build --release` 编译标准 Wheel。
+  - 严格遵循 Blender 4.2+ 扩展轮子规范，编译产物仅同步拷贝至 `MoziToolKit/wheels/` 并由 `blender_manifest.toml` 统一声明。
+  - **严禁将编译产物安装（`pip install`）到系统全局 Python 或宿主 Blender 的全局 `bpy` 环境中**，杜绝破坏沙箱与环境隔离。
 
 #### 核心导出模块与 API 概览
 

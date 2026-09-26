@@ -42,7 +42,10 @@
 ### 规则 6：工作区虚拟环境与轮子编译规范 (Workspace Venv & Wheel Build Policy)
 - 当需要使用 `maturin` 编译 Python 绑定轮子（Wheel, `.whl`）或进行 Python 绑定调试时，**必须严格使用工作区内的虚拟环境（如 `/home/mozi/libmozitoolkit/.venv`）**。
 - 若当前工作区内不存在虚拟环境，**必须首先在工作区根目录下创建专属虚拟环境**（如 `python3 -m venv .venv`），并在该虚拟环境中安装 `maturin`，严禁污染或依赖宿主系统全局环境。
-- 编译完成的 Release 轮子包（`target/wheels/*.whl`）需及时同步拷贝至 Blender 插件前端目录（`/home/mozi/MoziToolKit/wheels/`）供插件端使用，并进行端到端测试。
+- **Blender 4.2+ 扩展轮子规范与严禁全局 bpy 污染**：
+  - 编译产物必须是符合 CPython 3.11+ 标准 ABI 与目标平台 Tag 的规范 Wheel 包。
+  - 编译完成的 Release 轮子包（`target/wheels/*.whl`）**必须且仅能同步拷贝至 Blender 插件前端目录（`/home/mozi/MoziToolKit/wheels/`）**供 Blender 4.2+ 扩展清单声明与本地隔离加载。
+  - **严禁将编译产物直接安装（`pip install`）到宿主系统的全局 Python 或 Blender 全局 `bpy` 环境中**，杜绝破坏环境隔离与沙箱完整性。
 
 ### 规则 7：资产缓存与预编译规范 (Precompile Cache Contract)
 - 资产预烘焙（Atlas 拼接、Standalone PBR 对齐、Model Baking、BiomeResolver 映射预提取）由 `libmtk::prebake` 统一无头处理，产出格式受 `ASSET_CACHE_FORMAT_VERSION` 版本约束。

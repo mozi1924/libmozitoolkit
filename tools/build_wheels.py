@@ -16,6 +16,15 @@ import sys
 
 def find_maturin_executable() -> list[str]:
     """Finds a working maturin executable or python -m maturin invocation."""
+    repo_root = Path(__file__).resolve().parent.parent
+    for venv_dir in [repo_root / ".venv", repo_root / "venv"]:
+        candidate = venv_dir / "bin" / "maturin"
+        if candidate.exists() and os.access(candidate, os.X_OK):
+            return [str(candidate)]
+        candidate_win = venv_dir / "Scripts" / "maturin.exe"
+        if candidate_win.exists() and os.access(candidate_win, os.X_OK):
+            return [str(candidate_win)]
+
     which_maturin = shutil.which("maturin")
     if which_maturin:
         return [which_maturin]
@@ -28,6 +37,7 @@ def find_maturin_executable() -> list[str]:
         sys.executable,
         "/Applications/Blender.app/Contents/Resources/5.2/python/bin/python3.13",
         "/Applications/Blender.app/Contents/Resources/4.2/python/bin/python3.11",
+        "/opt/blender-5.2.0-linux-x64/5.2/python/bin/python3.13",
         "/opt/homebrew/bin/python3",
         shutil.which("python3"),
     ]
