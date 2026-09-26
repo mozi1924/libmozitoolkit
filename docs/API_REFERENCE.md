@@ -204,10 +204,13 @@ pub struct Quad {
 ### 7.1 二进制协议编解码 (`mtk_sync::protocol`)
 - `decode_packet(data: &[u8]) -> Result<Packet, ProtocolError>`: 极速解析二进制小端序数据包。
 - `encode_full_sync_request()`, `encode_repair_requests(...)`, `encode_sync_config(...)`。
-- `Packet`: 强类型数据包枚举（`SelectionInfo`, `FullSnapshot`, `DeltaUpdate`, `SectionManifest` 等）。
+- `Packet`: 强类型数据包枚举（`SelectionInfo`, `FullSnapshot`, `DeltaUpdate`, `SectionManifest`, `StreamBegin`, `StreamEnd` 等）。
 
 ### 7.2 原生实时同步会话 (`mtk_sync`)
 - `LiveSyncSession`: 启动原生后台多线程 WebSocket 传输线程 (`SyncClient`) 与 `VoxelStorage` 驱动通道，对外提供 `poll_events() -> Vec<SyncEvent>` 非阻塞事件队列。
+  - 支持 `model_db: Option<Arc<BakedModelDatabase>>` 注入，全面支持纯 JSON 模型与复杂模组几何剖分。
+  - 支持 `unified_mesh: bool` 单一世界无缝网格模式，派发 `WorldMeshReady` 事件，彻底根除相邻小区块拼接发黑与次表面散射 (SSS) 撕裂缺陷。
+  - 支持 `get_world_mesh() -> MeshData` 主动提取当前世界全量合并网格。
 - `SyncClient`: 基于 `tungstenite` 与 `crossbeam-channel` 的低延迟网络套接字守护线程，支持心跳检测与断线自动重连。
 
 ---

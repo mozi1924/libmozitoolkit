@@ -1,18 +1,18 @@
-//! # `mtk-py` Mesh Generator and Delta Mesher Binding
-//!
-//! Exposes parallel Section meshing (`SectionMesher`) and incremental dirty section
-//! rebuilding (`DeltaMesher`) to Python.
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use mtk_cull::FaceCuller;
+use mtk_model::baked::BakedModel;
 use mtk_voxel::delta_mesher::DeltaMesher;
 use mtk_voxel::mesher::SectionMesher;
 use mtk_voxel::types::MesherConfig;
 
 use crate::cull::PyFaceCuller;
 use crate::mesh::PyMeshData;
+use crate::model::PyBakedModelDatabase;
 use crate::voxel::{PyMesherConfig, PyVoxelStorage};
 
 /// Python wrapper for Section and World Mesher generator.
@@ -23,11 +23,12 @@ pub struct PySectionMesher;
 impl PySectionMesher {
     /// Meshes the entire `VoxelStorage` and returns a single merged `MeshData`.
     #[staticmethod]
-    #[pyo3(signature = (storage, config=None, culler=None))]
+    #[pyo3(signature = (storage, config=None, culler=None, model_db=None))]
     pub fn mesh_world(
         storage: &PyVoxelStorage,
         config: Option<&PyMesherConfig>,
         culler: Option<&PyFaceCuller>,
+        model_db: Option<&PyBakedModelDatabase>,
     ) -> PyResult<PyMeshData> {
         let default_config = MesherConfig::default();
         let cfg = config.map(|c| &c.inner).unwrap_or(&default_config);
@@ -46,10 +47,23 @@ impl PySectionMesher {
             .map(|coord| storage.inner.get_section_padded_array(coord))
             .collect();
 
+        let arc_map = model_db.map(|db| {
+            Arc::new(
+                db.inner
+                    .models
+                    .iter()
+                    .map(|(k, v)| (k.clone(), Arc::new(v.clone())))
+                    .collect::<HashMap<String, Arc<BakedModel>>>(),
+            )
+        });
+        let model_lookup = move |state: &str| -> Option<Arc<BakedModel>> {
+            arc_map.as_ref().and_then(|map| map.get(state).cloned())
+        };
+
         let results = SectionMesher::mesh_sections_parallel(
             &padded_sections,
             cul,
-            |_| None,
+            model_lookup,
             cfg,
             num_threads,
         )
@@ -65,12 +79,13 @@ impl PySectionMesher {
 
     /// Meshes all non-empty sections and returns a dictionary mapping `(sx, sy, sz)` to `MeshData`.
     #[staticmethod]
-    #[pyo3(signature = (storage, config=None, culler=None))]
+    #[pyo3(signature = (storage, config=None, culler=None, model_db=None))]
     pub fn mesh_sections_split<'py>(
         py: Python<'py>,
         storage: &PyVoxelStorage,
         config: Option<&PyMesherConfig>,
         culler: Option<&PyFaceCuller>,
+        model_db: Option<&PyBakedModelDatabase>,
     ) -> PyResult<Bound<'py, PyDict>> {
         let default_config = MesherConfig::default();
         let cfg = config.map(|c| &c.inner).unwrap_or(&default_config);
@@ -91,10 +106,23 @@ impl PySectionMesher {
             .map(|coord| storage.inner.get_section_padded_array(coord))
             .collect();
 
+        let arc_map = model_db.map(|db| {
+            Arc::new(
+                db.inner
+                    .models
+                    .iter()
+                    .map(|(k, v)| (k.clone(), Arc::new(v.clone())))
+                    .collect::<HashMap<String, Arc<BakedModel>>>(),
+            )
+        });
+        let model_lookup = move |state: &str| -> Option<Arc<BakedModel>> {
+            arc_map.as_ref().and_then(|map| map.get(state).cloned())
+        };
+
         let results = SectionMesher::mesh_sections_parallel(
             &padded_sections,
             cul,
-            |_| None,
+            model_lookup,
             cfg,
             num_threads,
         )
@@ -113,12 +141,13 @@ impl PySectionMesher {
     ///
     /// Returns a dictionary mapping `(sx, sy, sz)` to rebuilt `MeshData`.
     #[staticmethod]
-    #[pyo3(signature = (storage, config=None, culler=None))]
+    #[pyo3(signature = (storage, config=None, culler=None, model_db=None))]
     pub fn rebuild_dirty_sections<'py>(
         py: Python<'py>,
         storage: &mut PyVoxelStorage,
         config: Option<&PyMesherConfig>,
         culler: Option<&PyFaceCuller>,
+        model_db: Option<&PyBakedModelDatabase>,
     ) -> PyResult<Bound<'py, PyDict>> {
         let default_config = MesherConfig::default();
         let cfg = config.map(|c| &c.inner).unwrap_or(&default_config);
@@ -126,10 +155,23 @@ impl PySectionMesher {
         let default_culler = FaceCuller::default();
         let cul = culler.map(|c| &c.inner).unwrap_or(&default_culler);
 
+        let arc_map = model_db.map(|db| {
+            Arc::new(
+                db.inner
+                    .models
+                    .iter()
+                    .map(|(k, v)| (k.clone(), Arc::new(v.clone())))
+                    .collect::<HashMap<String, Arc<BakedModel>>>(),
+            )
+        });
+        let model_lookup = move |state: &str| -> Option<Arc<BakedModel>> {
+            arc_map.as_ref().and_then(|map| map.get(state).cloned())
+        };
+
         let results = DeltaMesher::rebuild_dirty_sections(
             &mut storage.inner,
             cul,
-            |_| None,
+            model_lookup,
             cfg,
         );
 

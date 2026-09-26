@@ -325,15 +325,20 @@ pub struct PyMesherConfig {
     pub(crate) num_threads: Option<usize>,
 }
 
+use std::sync::Arc;
+
+use crate::texture::PyBakedAtlas;
+
 #[pymethods]
 impl PyMesherConfig {
     #[new]
-    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, num_threads=None))]
+    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, num_threads=None, atlas=None))]
     pub fn new(
         enable_ao: bool,
         mesh_fluids: bool,
         z_up_coordinates: bool,
         num_threads: Option<usize>,
+        atlas: Option<&PyBakedAtlas>,
     ) -> Self {
         let mut config = MesherConfig::default();
         config.enable_ao = enable_ao;
@@ -343,10 +348,21 @@ impl PyMesherConfig {
         } else {
             CoordinateSystem::Minecraft
         };
+        config.atlas_address_map = atlas.map(|a| Arc::new(a.inner.address_map.clone()));
         Self {
             inner: config,
             num_threads,
         }
+    }
+
+    /// Sets or clears the Atlas address mapping table for UV remapping and material slotting.
+    pub fn set_atlas(&mut self, atlas: Option<&PyBakedAtlas>) {
+        self.inner.atlas_address_map = atlas.map(|a| Arc::new(a.inner.address_map.clone()));
+    }
+
+    /// Checks if an Atlas address map is configured.
+    pub fn has_atlas(&self) -> bool {
+        self.inner.atlas_address_map.is_some()
     }
 
     #[getter]

@@ -1,6 +1,4 @@
-//! # `mtk-py` Live Sync Session and Networking Binding
-//!
-//! Exposes `LiveSyncSession` native WebSocket sync engine and event dispatcher to Python.
+use std::sync::Arc;
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
@@ -10,6 +8,7 @@ use mtk_sync::{LiveSyncSession, SyncEvent};
 
 use crate::cull::PyFaceCuller;
 use crate::mesh::PyMeshData;
+use crate::model::PyBakedModelDatabase;
 use crate::voxel::{PyMesherConfig, PyVoxelStorage};
 
 /// Python wrapper for `LiveSyncSession` real-time WebSocket synchronization engine.
@@ -21,12 +20,35 @@ pub struct PyLiveSyncSession {
 #[pymethods]
 impl PyLiveSyncSession {
     #[new]
-    #[pyo3(signature = (config=None, culler=None))]
-    pub fn new(config: Option<&PyMesherConfig>, culler: Option<&PyFaceCuller>) -> Self {
+    #[pyo3(signature = (config=None, culler=None, model_db=None, unified_mesh=true))]
+    pub fn new(
+        config: Option<&PyMesherConfig>,
+        culler: Option<&PyFaceCuller>,
+        model_db: Option<&PyBakedModelDatabase>,
+        unified_mesh: bool,
+    ) -> Self {
         let cfg = config.map(|c| c.inner.clone());
         let cul = culler.map(|c| c.inner.clone());
+        let mdb = model_db.map(|db| Arc::new(db.inner.clone()));
         Self {
-            inner: LiveSyncSession::new(cfg, cul),
+            inner: LiveSyncSession::new(cfg, cul, mdb, unified_mesh),
+        }
+    }
+
+    /// Sets or updates the active baked model database.
+    pub fn set_model_db(&mut self, model_db: Option<&PyBakedModelDatabase>) {
+        self.inner.set_model_db(model_db.map(|db| Arc::new(db.inner.clone())));
+    }
+
+    /// Sets whether to output unified world mesh or individual section meshes.
+    pub fn set_unified_mesh(&mut self, unified_mesh: bool) {
+        self.inner.set_unified_mesh(unified_mesh);
+    }
+
+    /// Meshes the entire active VoxelStorage volume and returns a unified `MeshData`.
+    pub fn get_world_mesh(&self) -> PyMeshData {
+        PyMeshData {
+            inner: self.inner.get_world_mesh(),
         }
     }
 
@@ -89,6 +111,10 @@ impl PyLiveSyncSession {
                     dict.set_item("sec_y", coord.y)?;
                     dict.set_item("sec_z", coord.z)?;
                     dict.set_item("coord", (coord.x, coord.y, coord.z))?;
+                    dict.set_item("mesh", PyMeshData { inner: mesh })?;
+                }
+                SyncEvent::WorldMeshReady { mesh } => {
+                    dict.set_item("type", "WORLD_MESH_READY")?;
                     dict.set_item("mesh", PyMeshData { inner: mesh })?;
                 }
                 SyncEvent::StreamProgress {

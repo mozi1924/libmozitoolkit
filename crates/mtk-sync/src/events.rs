@@ -35,6 +35,11 @@ pub enum SyncEvent {
         mesh: MeshData,
     },
 
+    /// A unified, merged world mesh containing the entire active volume has been assembled.
+    WorldMeshReady {
+        mesh: MeshData,
+    },
+
     /// Stream batch progress update.
     StreamProgress {
         current: usize,

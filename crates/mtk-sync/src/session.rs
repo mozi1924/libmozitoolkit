@@ -1,14 +1,13 @@
-//! # Live Sync Session Controller
-//!
-//! Orchestrates the background network client, VoxelStorage, SectionMesher, and event routing.
-
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 
 use crossbeam_channel::{Receiver, Sender};
 use glam::IVec3;
+use mtk_core::mesh::MeshData;
 use mtk_cull::FaceCuller;
+use mtk_model::baked::{BakedModel, BakedModelDatabase};
 
 use mtk_voxel::mesher::{DeltaMesher, SectionMesher};
 use mtk_voxel::storage::VoxelStorage;
@@ -26,6 +25,10 @@ pub struct LiveSyncSession {
     pub config: MesherConfig,
     /// Face Culling rules.
     pub culler: FaceCuller,
+    /// Prebaked Minecraft blockstate model database for custom JSON models.
+    pub model_db: Option<Arc<BakedModelDatabase>>,
+    /// Whether to merge all chunk sections into a single, seamless world mesh.
+    pub unified_mesh: bool,
 
     client: Option<SyncClient>,
     event_sender: Sender<SyncEvent>,
@@ -39,12 +42,19 @@ pub struct LiveSyncSession {
 
 impl LiveSyncSession {
     /// Creates a new `LiveSyncSession`.
-    pub fn new(config: Option<MesherConfig>, culler: Option<FaceCuller>) -> Self {
+    pub fn new(
+        config: Option<MesherConfig>,
+        culler: Option<FaceCuller>,
+        model_db: Option<Arc<BakedModelDatabase>>,
+        unified_mesh: bool,
+    ) -> Self {
         let (event_sender, event_receiver) = crossbeam_channel::unbounded::<SyncEvent>();
         Self {
             storage: Arc::new(RwLock::new(VoxelStorage::new())),
             config: config.unwrap_or_default(),
             culler: culler.unwrap_or_default(),
+            model_db,
+            unified_mesh,
             client: None,
             event_sender,
             event_receiver,
@@ -52,6 +62,25 @@ impl LiveSyncSession {
             worker_handle: None,
             current_stream_id: Arc::new(AtomicU32::new(0)),
         }
+    }
+}
+
+impl Default for LiveSyncSession {
+    fn default() -> Self {
+        Self::new(None, None, None, true)
+    }
+}
+
+impl LiveSyncSession {
+
+    /// Sets or replaces the baked model database.
+    pub fn set_model_db(&mut self, model_db: Option<Arc<BakedModelDatabase>>) {
+        self.model_db = model_db;
+    }
+
+    /// Toggles single unified world mesh mode.
+    pub fn set_unified_mesh(&mut self, unified_mesh: bool) {
+        self.unified_mesh = unified_mesh;
     }
 
     /// Starts the live sync session connecting to the given WebSocket `url`.
@@ -70,6 +99,8 @@ impl LiveSyncSession {
         let event_sender_clone = self.event_sender.clone();
         let config_clone = self.config.clone();
         let culler_clone = self.culler.clone();
+        let model_db_clone = self.model_db.clone();
+        let unified_mesh = self.unified_mesh;
         let stream_id_clone = self.current_stream_id.clone();
         let worker_running = Arc::new(AtomicBool::new(true));
         self.worker_running = worker_running.clone();
@@ -81,6 +112,8 @@ impl LiveSyncSession {
                 event_sender_clone,
                 config_clone,
                 culler_clone,
+                model_db_clone,
+                unified_mesh,
                 stream_id_clone,
                 worker_running,
             );
@@ -112,6 +145,44 @@ impl LiveSyncSession {
             events.push(evt);
         }
         events
+    }
+
+    /// Meshes the entire active VoxelStorage volume and returns a unified `MeshData`.
+    pub fn get_world_mesh(&self) -> MeshData {
+        let st = self.storage.read().unwrap();
+        let non_empty = st.get_all_non_empty_sections();
+        if non_empty.is_empty() {
+            return MeshData::new();
+        }
+
+        let padded: Vec<_> = non_empty.iter().map(|&c| st.get_section_padded_array(c)).collect();
+        let arc_map = self.model_db.as_ref().map(|db| {
+            Arc::new(
+                db.models
+                    .iter()
+                    .map(|(k, v)| (k.clone(), Arc::new(v.clone())))
+                    .collect::<HashMap<String, Arc<BakedModel>>>(),
+            )
+        });
+        let model_lookup = move |state: &str| -> Option<Arc<BakedModel>> {
+            arc_map.as_ref().and_then(|map| map.get(state).cloned())
+        };
+
+        if let Ok(results) = SectionMesher::mesh_sections_parallel(
+            &padded,
+            &self.culler,
+            model_lookup,
+            &self.config,
+            None,
+        ) {
+            let mut merged = MeshData::new();
+            for (_coord, m) in results {
+                merged.append_mesh(&m);
+            }
+            merged
+        } else {
+            MeshData::new()
+        }
     }
 
     /// Sends a Full Sync Request (0x80) to Minecraft server.
@@ -150,9 +221,22 @@ impl LiveSyncSession {
         event_sender: Sender<SyncEvent>,
         config: MesherConfig,
         culler: FaceCuller,
+        model_db: Option<Arc<BakedModelDatabase>>,
+        unified_mesh: bool,
         stream_id_atomic: Arc<AtomicU32>,
         running: Arc<AtomicBool>,
     ) {
+        let arc_model_map = model_db.map(|db| {
+            Arc::new(
+                db.models
+                    .iter()
+                    .map(|(k, v)| (k.clone(), Arc::new(v.clone())))
+                    .collect::<HashMap<String, Arc<BakedModel>>>(),
+            )
+        });
+
+        let mut section_mesh_cache: HashMap<IVec3, MeshData> = HashMap::new();
+
         while running.load(Ordering::Relaxed) {
             match msg_receiver.recv_timeout(std::time::Duration::from_millis(100)) {
                 Ok(ClientMessage::Status(status)) => {
@@ -169,6 +253,9 @@ impl LiveSyncSession {
                         &event_sender,
                         &config,
                         &culler,
+                        &arc_model_map,
+                        unified_mesh,
+                        &mut section_mesh_cache,
                         &stream_id_atomic,
                     );
                 }
@@ -184,8 +271,15 @@ impl LiveSyncSession {
         event_sender: &Sender<SyncEvent>,
         config: &MesherConfig,
         culler: &FaceCuller,
+        arc_model_map: &Option<Arc<HashMap<String, Arc<BakedModel>>>>,
+        unified_mesh: bool,
+        section_mesh_cache: &mut HashMap<IVec3, MeshData>,
         stream_id_atomic: &Arc<AtomicU32>,
     ) {
+        let model_lookup = |state: &str| -> Option<Arc<BakedModel>> {
+            arc_model_map.as_ref().and_then(|map| map.get(state).cloned())
+        };
+
         match packet {
             Packet::SelectionInfo { min_pos, size } => {
                 {
@@ -278,20 +372,36 @@ impl LiveSyncSession {
                         .collect()
                 };
 
+                section_mesh_cache.clear();
+
                 if let Ok(results) = SectionMesher::mesh_sections_parallel(
                     &padded_sections,
                     culler,
-                    |_| None,
+                    &model_lookup,
                     config,
                     None,
                 ) {
-                    for (i, (coord, mesh)) in results.into_iter().enumerate() {
-                        let _ = event_sender.send(SyncEvent::SectionMeshReady { coord, mesh });
-                        let _ = event_sender.send(SyncEvent::StreamProgress {
-                            current: i + 1,
-                            total,
-                            message: format!("Meshed chunk ({}/{})", i + 1, total),
-                        });
+                    for (coord, mesh) in results {
+                        if !mesh.is_empty() {
+                            section_mesh_cache.insert(coord, mesh);
+                        }
+                    }
+
+                    if unified_mesh {
+                        let mut world_mesh = MeshData::new();
+                        for mesh in section_mesh_cache.values() {
+                            world_mesh.append_mesh(mesh);
+                        }
+                        let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
+                    } else {
+                        for (i, (coord, mesh)) in section_mesh_cache.iter().enumerate() {
+                            let _ = event_sender.send(SyncEvent::SectionMeshReady { coord: *coord, mesh: mesh.clone() });
+                            let _ = event_sender.send(SyncEvent::StreamProgress {
+                                current: i + 1,
+                                total,
+                                message: format!("Meshed chunk ({}/{})", i + 1, total),
+                            });
+                        }
                     }
                 }
 
@@ -333,12 +443,28 @@ impl LiveSyncSession {
                     st.get_section_padded_array(sec_coord)
                 };
 
-                // Immediately mesh and dispatch this section
-                let mesh = SectionMesher::mesh_section(&padded, culler, |_| None, config);
-                let _ = event_sender.send(SyncEvent::SectionMeshReady {
-                    coord: sec_coord,
-                    mesh,
-                });
+                let mesh = SectionMesher::mesh_section(&padded, culler, &model_lookup, config);
+                if mesh.is_empty() {
+                    section_mesh_cache.remove(&sec_coord);
+                } else {
+                    section_mesh_cache.insert(sec_coord, mesh.clone());
+                }
+
+                if unified_mesh {
+                    // If receiving an out-of-stream section repair, emit unified mesh immediately
+                    if stream_id_atomic.load(Ordering::SeqCst) == 0 {
+                        let mut world_mesh = MeshData::new();
+                        for m in section_mesh_cache.values() {
+                            world_mesh.append_mesh(m);
+                        }
+                        let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
+                    }
+                } else {
+                    let _ = event_sender.send(SyncEvent::SectionMeshReady {
+                        coord: sec_coord,
+                        mesh,
+                    });
+                }
             }
 
             Packet::DeltaUpdate {
@@ -354,12 +480,27 @@ impl LiveSyncSession {
                 let rebuilt_meshes = {
                     let mut st = storage.write().unwrap();
                     st.apply_delta_update(min_pos.x, min_pos.y, min_pos.z, &borrowed_changes);
-                    DeltaMesher::rebuild_dirty_sections(&mut st, culler, |_| None, config)
+                    DeltaMesher::rebuild_dirty_sections(&mut st, culler, &model_lookup, config)
                 };
 
                 let affected: Vec<IVec3> = rebuilt_meshes.iter().map(|(c, _)| *c).collect();
                 for (coord, mesh) in rebuilt_meshes {
-                    let _ = event_sender.send(SyncEvent::SectionMeshReady { coord, mesh });
+                    if mesh.is_empty() {
+                        section_mesh_cache.remove(&coord);
+                    } else {
+                        section_mesh_cache.insert(coord, mesh.clone());
+                    }
+                    if !unified_mesh {
+                        let _ = event_sender.send(SyncEvent::SectionMeshReady { coord, mesh });
+                    }
+                }
+
+                if unified_mesh {
+                    let mut world_mesh = MeshData::new();
+                    for m in section_mesh_cache.values() {
+                        world_mesh.append_mesh(m);
+                    }
+                    let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
                 }
 
                 let _ = event_sender.send(SyncEvent::DeltaApplied {
@@ -410,6 +551,16 @@ impl LiveSyncSession {
                 sent_sections,
                 status: _,
             } => {
+                stream_id_atomic.store(0, Ordering::SeqCst);
+
+                if unified_mesh {
+                    let mut world_mesh = MeshData::new();
+                    for m in section_mesh_cache.values() {
+                        world_mesh.append_mesh(m);
+                    }
+                    let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
+                }
+
                 let _ = event_sender.send(SyncEvent::StreamFinished {
                     stream_id,
                     built_sections: sent_sections as usize,

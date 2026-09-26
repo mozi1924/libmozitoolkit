@@ -11,6 +11,7 @@ description = "Native WebSocket Live Sync client, binary network protocol codecs
 [dependencies]
 mtk-core = { workspace = true }
 mtk-cull = { workspace = true }
+mtk-model = { workspace = true }
 mtk-voxel = { workspace = true }
 glam = { workspace = true }
 serde = { workspace = true, optional = true }

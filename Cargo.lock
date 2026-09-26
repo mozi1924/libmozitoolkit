@@ -711,6 +711,7 @@ dependencies = [
  "glam",
  "mtk-core",
  "mtk-cull",
+ "mtk-model",
  "mtk-voxel",
  "serde",
  "serde_json",
