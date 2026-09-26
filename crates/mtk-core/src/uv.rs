@@ -8,6 +8,22 @@ use glam::{Vec2, Vec3};
 
 use crate::geometry::Aabb2d;
 
+/// Calculate 2D signed area of a polygon loop in UV space ([f32; 2]) using the Shoelace formula.
+#[inline]
+pub fn calculate_uv_area_2d(uvs: &[[f32; 2]]) -> f32 {
+    let n = uvs.len();
+    if n < 3 {
+        return 0.0;
+    }
+    let mut area = 0.0f32;
+    for i in 0..n {
+        let p1 = uvs[i];
+        let p2 = uvs[(i + 1) % n];
+        area += p1[0] * p2[1] - p2[0] * p1[1];
+    }
+    0.5 * area.abs()
+}
+
 /// Calculate 2D signed area of a polygon in UV space using the Shoelace formula.
 #[inline]
 pub fn calculate_uv_area(uvs: &[Vec2]) -> f32 {
@@ -56,6 +72,37 @@ pub fn get_uv_center(uvs: &[Vec2]) -> Vec2 {
         sum += *uv;
     }
     sum / (uvs.len() as f32)
+}
+
+/// Check if face UVs ([f32; 2]) are collapsed to a point, line segment, or near zero 2D area.
+#[inline]
+pub fn is_uv_collapsed_2d(uvs: &[[f32; 2]], pixel_step: Option<[f32; 2]>) -> bool {
+    if uvs.len() < 3 {
+        return true;
+    }
+    let (area_thresh, dist_thresh) = if let Some([su, sv]) = pixel_step {
+        (su * sv * 0.01, su.min(sv) * 0.02)
+    } else {
+        (1e-6, 1e-4)
+    };
+
+    if calculate_uv_area_2d(uvs) < area_thresh {
+        return true;
+    }
+
+    let mut max_dist_sq = 0.0f32;
+    for i in 0..uvs.len() {
+        for j in (i + 1)..uvs.len() {
+            let du = uvs[i][0] - uvs[j][0];
+            let dv = uvs[i][1] - uvs[j][1];
+            let d2 = du * du + dv * dv;
+            if d2 > max_dist_sq {
+                max_dist_sq = d2;
+            }
+        }
+    }
+
+    max_dist_sq < (dist_thresh * dist_thresh)
 }
 
 /// Check if face UVs are collapsed to a point, line segment, or near zero 2D area.
@@ -644,6 +691,17 @@ mod tests {
         let side = get_fluid_side_uvs(0.8, 0.2);
         assert!((side[0].y - (1.0 - 0.8) * 0.5).abs() < 1e-6);
         assert!((side[3].y - (1.0 - 0.2) * 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_uv_area_2d_and_collapse_2d() {
+        let quad_uvs = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
+        assert!((calculate_uv_area_2d(&quad_uvs) - 1.0).abs() < 1e-6);
+        assert!(!is_uv_collapsed_2d(&quad_uvs, Some([1.0 / 16.0, 1.0 / 16.0])));
+
+        let collapsed_line = [[0.1, 0.2], [0.1, 0.2], [0.1, 0.2], [0.1, 0.2]];
+        assert_eq!(calculate_uv_area_2d(&collapsed_line), 0.0);
+        assert!(is_uv_collapsed_2d(&collapsed_line, Some([1.0 / 16.0, 1.0 / 16.0])));
     }
 }
 

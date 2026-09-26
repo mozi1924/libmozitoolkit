@@ -77,10 +77,12 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
     let poly_step = if is_quad_mesh { 6 } else { 3 };
     let face_count = mesh.indices.len() / poly_step;
 
-    let inv_tol = if config.tolerance > 0.0 { 1.0 / config.tolerance } else { 1000.0 };
+    let tol = if config.tolerance > 0.0 { config.tolerance } else { 1e-3 };
+    let tol_sq = tol * tol;
+    let inv_tol = 1.0 / tol;
 
-    // Map: quantized center -> list of (face_idx, quantized_normal)
-    let mut spatial_buckets: HashMap<[i32; 3], Vec<(usize, [i8; 3])>> = HashMap::new();
+    // Map: quantized center -> list of (face_idx, quantized_normal, raw_center)
+    let mut spatial_buckets: HashMap<[i32; 3], Vec<(usize, [i8; 3], [f32; 3])>> = HashMap::new();
     let mut faces_to_cull: BTreeSet<usize> = BTreeSet::new();
 
     for face_idx in 0..face_count {
@@ -128,38 +130,52 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
         let center_key = quantize_point(center, inv_tol);
         let normal_key = quantize_normal(normal);
 
-        if let Some(neighbors) = spatial_buckets.get_mut(&center_key) {
-            for &(other_idx, other_norm) in neighbors.iter() {
-                if faces_to_cull.contains(&other_idx) {
-                    continue;
-                }
+        'search: for dx in -1..=1 {
+            for dy in -1..=1 {
+                for dz in -1..=1 {
+                    let neighbor_key = [center_key[0] + dx, center_key[1] + dy, center_key[2] + dz];
+                    if let Some(neighbors) = spatial_buckets.get(&neighbor_key) {
+                        for &(other_idx, other_norm, other_center) in neighbors {
+                            if faces_to_cull.contains(&other_idx) {
+                                continue;
+                            }
 
-                // Check opposite normals: n1 + n2 ~= 0
-                let is_opposite = (normal_key[0] + other_norm[0]).abs() <= 1
-                    && (normal_key[1] + other_norm[1]).abs() <= 1
-                    && (normal_key[2] + other_norm[2]).abs() <= 1;
+                            // Precise distance check within tolerance
+                            let dist_sq = (center[0] - other_center[0]).powi(2)
+                                + (center[1] - other_center[1]).powi(2)
+                                + (center[2] - other_center[2]).powi(2);
+                            if dist_sq > tol_sq {
+                                continue;
+                            }
 
-                if config.cull_coplanar_opposite && is_opposite {
-                    // Both contacting faces are culled (interior contact)
-                    faces_to_cull.insert(face_idx);
-                    faces_to_cull.insert(other_idx);
-                    break;
-                }
+                            // Check opposite normals: n1 + n2 ~= 0
+                            let is_opposite = (normal_key[0] + other_norm[0]).abs() <= 1
+                                && (normal_key[1] + other_norm[1]).abs() <= 1
+                                && (normal_key[2] + other_norm[2]).abs() <= 1;
 
-                // Check identical duplicate faces
-                let is_duplicate = (normal_key[0] - other_norm[0]).abs() <= 1
-                    && (normal_key[1] - other_norm[1]).abs() <= 1
-                    && (normal_key[2] - other_norm[2]).abs() <= 1;
+                            if config.cull_coplanar_opposite && is_opposite {
+                                // Both contacting faces are culled (interior contact)
+                                faces_to_cull.insert(face_idx);
+                                faces_to_cull.insert(other_idx);
+                                break 'search;
+                            }
 
-                if config.cull_duplicates && is_duplicate {
-                    faces_to_cull.insert(face_idx);
-                    break;
+                            // Check identical duplicate faces
+                            let is_duplicate = (normal_key[0] - other_norm[0]).abs() <= 1
+                                && (normal_key[1] - other_norm[1]).abs() <= 1
+                                && (normal_key[2] - other_norm[2]).abs() <= 1;
+
+                            if config.cull_duplicates && is_duplicate {
+                                faces_to_cull.insert(face_idx);
+                                break 'search;
+                            }
+                        }
+                    }
                 }
             }
-            neighbors.push((face_idx, normal_key));
-        } else {
-            spatial_buckets.insert(center_key, vec![(face_idx, normal_key)]);
         }
+
+        spatial_buckets.entry(center_key).or_default().push((face_idx, normal_key, center));
     }
 
     if faces_to_cull.is_empty() {
@@ -282,6 +298,44 @@ mod tests {
         let res = cull_mesh_faces(&mesh, &MeshCullConfig::default());
         assert_eq!(res.initial_faces, 2);
         assert_eq!(res.culled_faces, 2, "Both contacting interior faces must be culled!");
+        assert_eq!(res.remaining_faces, 0);
+    }
+
+    #[test]
+    fn test_cull_across_quantization_boundary() {
+        let mut mesh = MeshData::new();
+        // Quad 1: Center at x = 0.00049 (rounds to cell 0 under inv_tol=1000)
+        let offset1 = 0.00049f32;
+        mesh.positions.extend_from_slice(&[
+            [offset1, -0.5, -0.5],
+            [offset1, 0.5, -0.5],
+            [offset1, 0.5, 0.5],
+            [offset1, -0.5, 0.5],
+        ]);
+        mesh.normals.extend_from_slice(&[[1.0, 0.0, 0.0]; 4]);
+        mesh.uvs.extend_from_slice(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]);
+        mesh.indices.extend_from_slice(&[0, 1, 2, 0, 2, 3]);
+        mesh.face_materials.push(0);
+        mesh.face_tint_indices.push(-1);
+
+        // Quad 2: Center at x = 0.00051 (rounds to cell 1 under inv_tol=1000)
+        // Actual distance between faces is only 0.00002 << 1e-3 tolerance
+        let offset2 = 0.00051f32;
+        mesh.positions.extend_from_slice(&[
+            [offset2, -0.5, -0.5],
+            [offset2, -0.5, 0.5],
+            [offset2, 0.5, 0.5],
+            [offset2, 0.5, -0.5],
+        ]);
+        mesh.normals.extend_from_slice(&[[-1.0, 0.0, 0.0]; 4]);
+        mesh.uvs.extend_from_slice(&[[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0]]);
+        mesh.indices.extend_from_slice(&[4, 5, 6, 4, 6, 7]);
+        mesh.face_materials.push(0);
+        mesh.face_tint_indices.push(-1);
+
+        let res = cull_mesh_faces(&mesh, &MeshCullConfig::default());
+        assert_eq!(res.initial_faces, 2);
+        assert_eq!(res.culled_faces, 2, "Faces across quantization boundary must be detected and culled!");
         assert_eq!(res.remaining_faces, 0);
     }
 }

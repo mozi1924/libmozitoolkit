@@ -67,12 +67,15 @@ pub use mtk_material::{
 };
 pub use mtk_core::extrude::{
     cellular_noise_3d, generate_extrude_heights, perlin_noise_3d, repair_extruded_side_uv,
-    ExtrudeNoiseType, ExtrudeUvMode,
+    repair_extruded_side_uv_advanced, ExtrudeNoiseType, ExtrudeUvMode,
+};
+pub use mtk_core::uv::{
+    calculate_uv_area, calculate_uv_area_2d, get_uv_bounds, get_uv_center, is_uv_collapsed,
+    is_uv_collapsed_2d,
 };
 pub use mtk_core::extrude_mesh::{
-    calculate_uv_area, is_uv_collapsed as is_mesh_uv_collapsed, process_mesh_extrude_repair,
-    process_random_extrude_mesh, ExtrudeMeshInput, ExtrudeMeshOutput, MeshExtrudeRepairConfig,
-    RandomExtrudeMeshInput, RandomExtrudeMeshOutput,
+    process_mesh_extrude_repair, process_random_extrude_mesh, ExtrudeMeshInput, ExtrudeMeshOutput,
+    MeshExtrudeRepairConfig, RandomExtrudeMeshInput, RandomExtrudeMeshOutput,
 };
 pub use mtk_core::geometry::{
     mc_local_to_centered_z_up, mc_world_to_z_up, Aabb2d, Aabb3d, Quad,
