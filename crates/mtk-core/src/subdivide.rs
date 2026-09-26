@@ -77,8 +77,6 @@ pub fn calculate_face_target_grid(
 
 /// Calculates non-uniform [0, 1] parameter cut factors along U and V axes of a quad face,
 /// directly snapping interior cuts to the integer pixel grid lines of the texture image.
-/// Calculates non-uniform [0, 1] parameter cut factors along U and V axes of a quad face,
-/// directly snapping interior cuts to the integer pixel grid lines of the texture image.
 ///
 /// Returns `(u_factors: Vec<f32>, v_factors: Vec<f32>)` where each factor list starts with 0.0 and ends with 1.0.
 pub fn calculate_pixel_grid_cut_factors(

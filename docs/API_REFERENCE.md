@@ -80,8 +80,23 @@ pub struct Quad {
 - `ExtrudeNoiseType`: `UniformRandom` (均匀伪随机), `Perlin` (3D 连续梯度噪声), `Cellular` (Voronoi 细胞阶梯噪声)。
 - `repair_extruded_side_uv(uv_base_a, uv_base_b, top_normal, extrude_vec, mode, step_u, step_v, top_uv_bounds, adjacent_uv_strip) -> [[f32; 2]; 4]`:
   计算侧面重构的 4 个角点 UV，并执行 Safe Padding Clamping 防止采样溢出到图集邻近精灵图。
+- `FlatPolygonMesh`:
+  扁平连续内存网格拓扑表示结构体（消除数千个嵌套堆分配 `Vec<Vec<T>>`），直接适配 GPU/NumPy 连续 1D 缓冲区：
+  ```rust
+  pub struct FlatPolygonMesh {
+      pub positions: Vec<[f32; 3]>,
+      pub loop_vertices: Vec<u32>,
+      pub loop_uvs: Vec<[f32; 2]>,
+      pub face_loop_starts: Vec<u32>,
+      pub face_loop_totals: Vec<u32>,
+      pub face_materials: Vec<u32>,
+  }
+  ```
+  提供 `from_nested`, `from_flat_buffers`, `to_nested`, `face_vertices(i) -> &[u32]`, `face_uvs(i) -> &[[f32; 2]]` 等零拷贝切片访问器。
+- `process_flat_mesh_extrude_repair(mesh: &FlatPolygonMesh, selected_faces: &[u32], pixel_steps: &[[f32; 2]], config: &MeshExtrudeRepairConfig, target_side_faces: Option<&[u32]>) -> ExtrudeMeshOutput`:
+  基于扁平连续内存网格的全网格批量挤出修复算子，输出 `ExtrudeMeshOutput`（包含 `modified_face_uvs`, `modified_face_materials`, `modified_edges`, `modified_edge_creases`, `repaired_count`）。
 - `process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutput`:
-  全网格批量 Data In Data Out 挤出修复，识别塌陷面并输出修改后的稀疏 UV、同步材质与 Crease 锐边。
+  全网格批量 Data In Data Out 挤出修复兼容门面，内部委托至 `process_flat_mesh_extrude_repair`。
 - `process_random_extrude_mesh(input: &RandomExtrudeMeshInput) -> RandomExtrudeMeshOutput`:
   单批次完成离散选区面随机挤出、3D 噪声几何位移、侧面拓扑缝合与自动 UV 修复。
 

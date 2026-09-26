@@ -18,9 +18,19 @@ use crate::extrude::{
 pub struct MeshExtrudeRepairConfig {
     pub uv_mode: ExtrudeUvMode,
     pub repair_uv: bool,
+    /// Whether to track modified feature edges (creases / contours)
     pub add_crease: bool,
+    /// Crease sharpness value associated with feature edges (defaults to 1.0)
     pub crease_val: f32,
     pub only_collapsed: bool,
+}
+
+impl MeshExtrudeRepairConfig {
+    /// Pure geometric alias for add_crease.
+    #[inline]
+    pub fn track_edges(&self) -> bool {
+        self.add_crease
+    }
 }
 
 impl Default for MeshExtrudeRepairConfig {
@@ -35,6 +45,166 @@ impl Default for MeshExtrudeRepairConfig {
     }
 }
 
+/// Flat contiguous buffer representation of polygonal mesh topology and UVs.
+///
+/// Eliminates thousands of nested heap allocations (`Vec<Vec<T>>`) and enables
+/// zero-copy memoryview ingestion directly from flat GPU/DCC vertex and loop buffers.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct FlatPolygonMesh {
+    /// 3D vertex positions for the mesh [x, y, z]
+    pub positions: Vec<[f32; 3]>,
+    /// Flattened vertex indices for all polygon loops (contiguous buffer)
+    pub loop_vertices: Vec<u32>,
+    /// Flattened UV coordinates for all polygon loops (contiguous buffer)
+    pub loop_uvs: Vec<[f32; 2]>,
+    /// Starting offset of each face into loop_vertices and loop_uvs
+    pub face_loop_starts: Vec<u32>,
+    /// Number of vertices (loops) for each face
+    pub face_loop_totals: Vec<u32>,
+    /// Material slot ID for each face
+    pub face_materials: Vec<u32>,
+}
+
+impl FlatPolygonMesh {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    #[inline]
+    pub fn face_count(&self) -> usize {
+        self.face_loop_totals.len()
+    }
+
+    #[inline]
+    pub fn vertex_count(&self) -> usize {
+        self.positions.len()
+    }
+
+    #[inline]
+    pub fn loop_count(&self) -> usize {
+        self.loop_vertices.len()
+    }
+
+    /// Returns a zero-copy slice of vertex indices for the given face.
+    #[inline]
+    pub fn face_vertices(&self, face_idx: usize) -> &[u32] {
+        if face_idx >= self.face_loop_starts.len() || face_idx >= self.face_loop_totals.len() {
+            return &[];
+        }
+        let start = self.face_loop_starts[face_idx] as usize;
+        let total = self.face_loop_totals[face_idx] as usize;
+        let end = (start + total).min(self.loop_vertices.len());
+        if start <= end {
+            &self.loop_vertices[start..end]
+        } else {
+            &[]
+        }
+    }
+
+    /// Returns a zero-copy slice of UV coordinates for the given face.
+    #[inline]
+    pub fn face_uvs(&self, face_idx: usize) -> &[[f32; 2]] {
+        if face_idx >= self.face_loop_starts.len() || face_idx >= self.face_loop_totals.len() {
+            return &[];
+        }
+        let start = self.face_loop_starts[face_idx] as usize;
+        let total = self.face_loop_totals[face_idx] as usize;
+        let end = (start + total).min(self.loop_uvs.len());
+        if start <= end {
+            &self.loop_uvs[start..end]
+        } else {
+            &[]
+        }
+    }
+
+    /// Constructs a `FlatPolygonMesh` by flattening nested face collections.
+    pub fn from_nested(
+        positions: Vec<[f32; 3]>,
+        face_vertices: &[Vec<u32>],
+        face_uvs: &[Vec<[f32; 2]>],
+        face_materials: &[u32],
+    ) -> Self {
+        let face_count = face_vertices.len();
+        let total_loops: usize = face_vertices.iter().map(|f| f.len()).sum();
+
+        let mut loop_vertices = Vec::with_capacity(total_loops);
+        let mut loop_uvs = Vec::with_capacity(total_loops);
+        let mut face_loop_starts = Vec::with_capacity(face_count);
+        let mut face_loop_totals = Vec::with_capacity(face_count);
+
+        let mut current_offset = 0u32;
+        for (i, f_verts) in face_vertices.iter().enumerate() {
+            let total = f_verts.len() as u32;
+            face_loop_starts.push(current_offset);
+            face_loop_totals.push(total);
+
+            loop_vertices.extend_from_slice(f_verts);
+
+            if let Some(uvs) = face_uvs.get(i) {
+                if uvs.len() == f_verts.len() {
+                    loop_uvs.extend_from_slice(uvs);
+                } else {
+                    for j in 0..f_verts.len() {
+                        loop_uvs.push(uvs.get(j).copied().unwrap_or([0.0, 0.0]));
+                    }
+                }
+            } else {
+                loop_uvs.resize(loop_uvs.len() + f_verts.len(), [0.0, 0.0]);
+            }
+
+            current_offset += total;
+        }
+
+        Self {
+            positions,
+            loop_vertices,
+            loop_uvs,
+            face_loop_starts,
+            face_loop_totals,
+            face_materials: face_materials.to_vec(),
+        }
+    }
+
+    /// Constructs a `FlatPolygonMesh` from raw contiguous 1D slices (e.g. from NumPy or C-ABI).
+    pub fn from_flat_buffers(
+        positions_flat: &[f32],
+        loop_vertices: Vec<u32>,
+        loop_uvs_flat: &[f32],
+        face_loop_starts: Vec<u32>,
+        face_loop_totals: Vec<u32>,
+        face_materials: Vec<u32>,
+    ) -> Self {
+        let positions = positions_flat
+            .chunks_exact(3)
+            .map(|c| [c[0], c[1], c[2]])
+            .collect();
+        let loop_uvs = loop_uvs_flat
+            .chunks_exact(2)
+            .map(|c| [c[0], c[1]])
+            .collect();
+        Self {
+            positions,
+            loop_vertices,
+            loop_uvs,
+            face_loop_starts,
+            face_loop_totals,
+            face_materials,
+        }
+    }
+
+    /// Converts this flat representation back into nested collections for compatibility.
+    pub fn to_nested(&self) -> (Vec<Vec<u32>>, Vec<Vec<[f32; 2]>>) {
+        let count = self.face_count();
+        let mut faces = Vec::with_capacity(count);
+        let mut uvs = Vec::with_capacity(count);
+        for i in 0..count {
+            faces.push(self.face_vertices(i).to_vec());
+            uvs.push(self.face_uvs(i).to_vec());
+        }
+        (faces, uvs)
+    }
+}
+
 /// Input mesh buffer payload for extrude UV repair.
 #[derive(Debug, Clone)]
 pub struct ExtrudeMeshInput {
@@ -44,6 +214,7 @@ pub struct ExtrudeMeshInput {
     pub face_materials: Vec<u32>,
     pub selected_faces: Vec<u32>,
     pub pixel_steps: Vec<[f32; 2]>,
+    /// Explicit target side faces to repair (host-agnostic alias for smart_side_faces)
     pub smart_side_faces: Option<Vec<u32>>,
     pub config: MeshExtrudeRepairConfig,
 }
@@ -55,8 +226,10 @@ pub struct ExtrudeMeshOutput {
     pub modified_face_uvs: Vec<(u32, Vec<[f32; 2]>)>,
     /// Sparse map of side face index -> synchronized material index
     pub modified_face_materials: Vec<(u32, u32)>,
-    /// Sparse list of ((v1, v2), crease_value)
+    /// Sparse list of ((v1, v2), crease_value) for DCC crease assignment
     pub modified_edge_creases: Vec<((u32, u32), f32)>,
+    /// Pure geometric list of affected feature edges (v1, v2) where v1 < v2
+    pub modified_edges: Vec<(u32, u32)>,
     /// Total number of side faces repaired
     pub repaired_count: usize,
 }
@@ -90,21 +263,29 @@ fn compute_face_normal(face_verts: &[u32], positions: &[[f32; 3]]) -> [f32; 3] {
     }
 }
 
-/// Performs complete batch UV repair and crease assignment across a mesh.
-pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutput {
+/// Performs complete batch UV repair and crease assignment across a mesh using contiguous flat buffers.
+pub fn process_flat_mesh_extrude_repair(
+    mesh: &FlatPolygonMesh,
+    selected_faces: &[u32],
+    pixel_steps: &[[f32; 2]],
+    config: &MeshExtrudeRepairConfig,
+    target_side_faces: Option<&[u32]>,
+) -> ExtrudeMeshOutput {
     let mut output = ExtrudeMeshOutput::default();
-    if !input.config.repair_uv && !input.config.add_crease {
+    if !config.repair_uv && !config.add_crease {
         return output;
     }
 
-    let selected_faces_set: BTreeSet<u32> = input.selected_faces.iter().copied().collect();
+    let selected_faces_set: BTreeSet<u32> = selected_faces.iter().copied().collect();
     if selected_faces_set.is_empty() {
         return output;
     }
 
     // Build edge -> list of (face_index, edge_vert_idx_in_face)
     let mut edge_to_faces: BTreeMap<(u32, u32), Vec<(u32, usize)>> = BTreeMap::new();
-    for (f_idx, f_verts) in input.face_vertices.iter().enumerate() {
+    let num_faces = mesh.face_count();
+    for f_idx in 0..num_faces {
+        let f_verts = mesh.face_vertices(f_idx);
         let n = f_verts.len();
         for i in 0..n {
             let v1 = f_verts[i];
@@ -119,25 +300,21 @@ pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutpu
     let mut modified_uvs: BTreeMap<u32, Vec<[f32; 2]>> = BTreeMap::new();
     let mut modified_mats: BTreeMap<u32, u32> = BTreeMap::new();
 
-    for &top_face_idx in &input.selected_faces {
+    for &top_face_idx in selected_faces {
         let top_face_idx_usize = top_face_idx as usize;
-        if top_face_idx_usize >= input.face_vertices.len() {
+        if top_face_idx_usize >= num_faces {
             continue;
         }
 
-        let top_verts = &input.face_vertices[top_face_idx_usize];
-        let top_uvs = if top_face_idx_usize < input.face_uvs.len() {
-            &input.face_uvs[top_face_idx_usize]
-        } else {
-            continue;
-        };
+        let top_verts = mesh.face_vertices(top_face_idx_usize);
+        let top_uvs = mesh.face_uvs(top_face_idx_usize);
 
         if top_verts.len() < 3 || top_uvs.len() != top_verts.len() {
             continue;
         }
 
-        let [step_u, step_v] = if top_face_idx_usize < input.pixel_steps.len() {
-            input.pixel_steps[top_face_idx_usize]
+        let [step_u, step_v] = if top_face_idx_usize < pixel_steps.len() {
+            pixel_steps[top_face_idx_usize]
         } else {
             [1.0 / 64.0, 1.0 / 64.0]
         };
@@ -170,8 +347,8 @@ pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutpu
             uv_sum_u / top_verts.len() as f32,
             uv_sum_v / top_verts.len() as f32,
         ];
-        let top_normal = compute_face_normal(top_verts, &input.positions);
-        let top_material = input.face_materials.get(top_face_idx_usize).copied().unwrap_or(0);
+        let top_normal = compute_face_normal(top_verts, &mesh.positions);
+        let top_material = mesh.face_materials.get(top_face_idx_usize).copied().unwrap_or(0);
 
         let n = top_verts.len();
         for i in 0..n {
@@ -190,16 +367,16 @@ pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutpu
                 }
 
                 let side_face_idx_usize = side_face_idx as usize;
-                if side_face_idx_usize >= input.face_vertices.len() {
+                if side_face_idx_usize >= num_faces {
                     continue;
                 }
-                let side_verts = &input.face_vertices[side_face_idx_usize];
+                let side_verts = mesh.face_vertices(side_face_idx_usize);
                 if side_verts.len() != 4 {
                     continue;
                 }
 
                 // Material sync
-                let side_mat = input.face_materials.get(side_face_idx_usize).copied().unwrap_or(0);
+                let side_mat = mesh.face_materials.get(side_face_idx_usize).copied().unwrap_or(0);
                 if side_mat != top_material {
                     modified_mats.insert(side_face_idx, top_material);
                 }
@@ -249,35 +426,32 @@ pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutpu
 
                 let cur_side_uvs = modified_uvs
                     .get(&side_face_idx)
-                    .or_else(|| input.face_uvs.get(side_face_idx_usize));
+                    .map(|v| v.as_slice())
+                    .unwrap_or_else(|| mesh.face_uvs(side_face_idx_usize));
 
-                if input.config.only_collapsed {
-                    let is_tracked = input
-                        .smart_side_faces
-                        .as_ref()
+                if config.only_collapsed {
+                    let is_tracked = target_side_faces
                         .map(|s| s.contains(&side_face_idx))
                         .unwrap_or(false);
                     if !is_tracked {
-                        if let Some(s_uvs) = cur_side_uvs {
-                            if !is_uv_collapsed(s_uvs, Some([step_u, step_v])) {
-                                continue;
-                            }
+                        if !is_uv_collapsed(cur_side_uvs, Some([step_u, step_v])) {
+                            continue;
                         }
                     }
                 }
 
-                let pos_ta = input.positions[v_top_a as usize];
-                let pos_tb = input.positions[v_top_b as usize];
-                let pos_ba = input.positions[v_base_a as usize];
-                let pos_bb = input.positions[v_base_b as usize];
+                let pos_ta = mesh.positions[v_top_a as usize];
+                let pos_tb = mesh.positions[v_top_b as usize];
+                let pos_ba = mesh.positions[v_base_a as usize];
+                let pos_bb = mesh.positions[v_base_b as usize];
                 let ext_vec = [
-                    ((pos_ta[0] - pos_ba[0]) + (pos_tb[0] - pos_bb[0])) * 0.5,
+                    ((pos_ta[0] - pos_ba[0]) + (pos_tb[0] - pos_ba[0])) * 0.5,
                     ((pos_ta[1] - pos_ba[1]) + (pos_tb[1] - pos_bb[1])) * 0.5,
                     ((pos_ta[2] - pos_ba[2]) + (pos_tb[2] - pos_bb[2])) * 0.5,
                 ];
 
                 // Resolve UV mode
-                let resolved_mode = match input.config.uv_mode {
+                let resolved_mode = match config.uv_mode {
                     ExtrudeUvMode::Smart => {
                         let dot = ext_vec[0] * top_normal[0]
                             + ext_vec[1] * top_normal[1]
@@ -305,10 +479,10 @@ pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutpu
                                 && !selected_faces_set.contains(&adj_f_idx)
                             {
                                 let adj_f_idx_u = adj_f_idx as usize;
-                                let adj_mat = input.face_materials.get(adj_f_idx_u).copied().unwrap_or(0);
-                                if adj_mat == top_material && adj_f_idx_u < input.face_uvs.len() {
-                                    let adj_verts = &input.face_vertices[adj_f_idx_u];
-                                    let adj_uvs = &input.face_uvs[adj_f_idx_u];
+                                let adj_mat = mesh.face_materials.get(adj_f_idx_u).copied().unwrap_or(0);
+                                if adj_mat == top_material && adj_f_idx_u < num_faces {
+                                    let adj_verts = mesh.face_vertices(adj_f_idx_u);
+                                    let adj_uvs = mesh.face_uvs(adj_f_idx_u);
                                     let mut adj_map = BTreeMap::new();
                                     let mut adj_sum_u = 0.0f32;
                                     let mut adj_sum_v = 0.0f32;
@@ -317,7 +491,7 @@ pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutpu
                                     let mut adj_min_v = f32::MAX;
                                     let mut adj_max_v = f32::MIN;
                                     for (ai, &av) in adj_verts.iter().enumerate() {
-                                        let auv = adj_uvs[ai];
+                                        let auv = adj_uvs.get(ai).copied().unwrap_or([0.0, 0.0]);
                                         adj_map.insert(av, auv);
                                         adj_sum_u += auv[0];
                                         adj_sum_v += auv[1];
@@ -373,23 +547,13 @@ pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutpu
                     }
                 }
 
-                let pos_ta = input.positions[v_top_a as usize];
-                let pos_tb = input.positions[v_top_b as usize];
-                let pos_ba = input.positions[v_base_a as usize];
-                let pos_bb = input.positions[v_base_b as usize];
-                let ext_vec = [
-                    ((pos_ta[0] - pos_ba[0]) + (pos_tb[0] - pos_bb[0])) * 0.5,
-                    ((pos_ta[1] - pos_ba[1]) + (pos_tb[1] - pos_bb[1])) * 0.5,
-                    ((pos_ta[2] - pos_ba[2]) + (pos_tb[2] - pos_bb[2])) * 0.5,
-                ];
-
                 let adj_arr = adjacent_strip.map(|(ba, bb, ta, tb)| [ba, bb, tb, ta]);
                 let repaired_quad = crate::extrude::repair_extruded_side_uv_advanced(
                     uv_a,
                     uv_b,
                     top_normal,
                     ext_vec,
-                    input.config.uv_mode,
+                    config.uv_mode,
                     step_u,
                     step_v,
                     top_face_bounds,
@@ -413,11 +577,11 @@ pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutpu
                 for (k, &sv) in side_verts.iter().enumerate() {
                     let exp = match expected_uvs.get(&sv) {
                         Some(&u) => u,
-                        None => cur_side_uvs.map(|u| u[k]).unwrap_or([0.0, 0.0]),
+                        None => cur_side_uvs.get(k).copied().unwrap_or([0.0, 0.0]),
                     };
-                    if let Some(s_uvs) = cur_side_uvs {
-                        let du = exp[0] - s_uvs[k][0];
-                        let dv = exp[1] - s_uvs[k][1];
+                    if let Some(&s_uv) = cur_side_uvs.get(k) {
+                        let du = exp[0] - s_uv[0];
+                        let dv = exp[1] - s_uv[1];
                         if (du * du + dv * dv) > 1e-12 {
                             uv_changed = true;
                         }
@@ -432,8 +596,8 @@ pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutpu
                     output.repaired_count += 1;
                 }
 
-                if input.config.add_crease {
-                    let c_val = input.config.crease_val;
+                if config.add_crease {
+                    let c_val = config.crease_val;
                     let top_edge_key = if v_top_a < v_top_b { (v_top_a, v_top_b) } else { (v_top_b, v_top_a) };
                     let base_edge_key = if v_base_a < v_base_b { (v_base_a, v_base_b) } else { (v_base_b, v_base_a) };
                     let side_edge_a = if v_top_a < v_base_a { (v_top_a, v_base_a) } else { (v_base_a, v_top_a) };
@@ -447,22 +611,40 @@ pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutpu
             }
         }
 
-        if input.config.add_crease {
+        if config.add_crease {
             let n = top_verts.len();
             for i in 0..n {
                 let v1 = top_verts[i];
                 let v2 = top_verts[(i + 1) % n];
                 let e_key = if v1 < v2 { (v1, v2) } else { (v2, v1) };
-                modified_creases.insert(e_key, input.config.crease_val);
+                modified_creases.insert(e_key, config.crease_val);
             }
         }
     }
 
+    output.modified_edges = modified_creases.keys().copied().collect();
+    output.modified_edge_creases = modified_creases.into_iter().collect();
     output.modified_face_uvs = modified_uvs.into_iter().collect();
     output.modified_face_materials = modified_mats.into_iter().collect();
-    output.modified_edge_creases = modified_creases.into_iter().collect();
 
     output
+}
+
+/// Performs complete batch UV repair and crease assignment across a mesh.
+pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutput {
+    let flat_mesh = FlatPolygonMesh::from_nested(
+        input.positions.clone(),
+        &input.face_vertices,
+        &input.face_uvs,
+        &input.face_materials,
+    );
+    process_flat_mesh_extrude_repair(
+        &flat_mesh,
+        &input.selected_faces,
+        &input.pixel_steps,
+        &input.config,
+        input.smart_side_faces.as_deref(),
+    )
 }
 
 /// Input parameters for batch discrete random noise extrusion.
@@ -694,6 +876,81 @@ mod tests {
         let output = process_mesh_extrude_repair(&input);
         assert_eq!(output.repaired_count, 4);
         assert_eq!(output.modified_face_uvs.len(), 4);
+
+        for (_f_idx, uvs) in output.modified_face_uvs {
+            assert_eq!(uvs.len(), 4);
+            assert!(!is_uv_collapsed(&uvs, Some([1.0 / 16.0, 1.0 / 16.0])));
+        }
+        assert!(!output.modified_edges.is_empty());
+        assert_eq!(output.modified_edges.len(), output.modified_edge_creases.len());
+    }
+
+    #[test]
+    fn test_flat_polygon_mesh_and_flat_repair() {
+        let positions_flat = vec![
+            -0.5, -0.5, 0.0,
+            0.5, -0.5, 0.0,
+            0.5, 0.5, 0.0,
+            -0.5, 0.5, 0.0,
+            -0.5, -0.5, 1.0,
+            0.5, -0.5, 1.0,
+            0.5, 0.5, 1.0,
+            -0.5, 0.5, 1.0,
+        ];
+        let loop_vertices = vec![
+            4, 5, 6, 7,
+            0, 1, 5, 4,
+            1, 2, 6, 5,
+            2, 3, 7, 6,
+            3, 0, 4, 7,
+        ];
+        let loop_uvs_flat = vec![
+            0.0, 0.0,  1.0, 0.0,  1.0, 1.0,  0.0, 1.0,
+            0.0, 0.0,  1.0, 0.0,  1.0, 0.0,  0.0, 0.0,
+            1.0, 0.0,  1.0, 1.0,  1.0, 1.0,  1.0, 0.0,
+            1.0, 1.0,  0.0, 1.0,  0.0, 1.0,  1.0, 1.0,
+            0.0, 1.0,  0.0, 0.0,  0.0, 0.0,  0.0, 1.0,
+        ];
+        let face_loop_starts = vec![0, 4, 8, 12, 16];
+        let face_loop_totals = vec![4, 4, 4, 4, 4];
+        let face_materials = vec![0, 0, 0, 0, 0];
+
+        let flat_mesh = FlatPolygonMesh::from_flat_buffers(
+            &positions_flat,
+            loop_vertices,
+            &loop_uvs_flat,
+            face_loop_starts,
+            face_loop_totals,
+            face_materials,
+        );
+
+        assert_eq!(flat_mesh.face_count(), 5);
+        assert_eq!(flat_mesh.vertex_count(), 8);
+        assert_eq!(flat_mesh.loop_count(), 20);
+        assert_eq!(flat_mesh.face_vertices(0), &[4, 5, 6, 7]);
+        assert_eq!(flat_mesh.face_uvs(0), &[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]);
+
+        let pixel_steps = vec![[1.0 / 16.0, 1.0 / 16.0]; 5];
+        let config = MeshExtrudeRepairConfig {
+            uv_mode: ExtrudeUvMode::Smart,
+            repair_uv: true,
+            add_crease: true,
+            crease_val: 1.0,
+            only_collapsed: true,
+        };
+
+        let output = process_flat_mesh_extrude_repair(
+            &flat_mesh,
+            &[0],
+            &pixel_steps,
+            &config,
+            None,
+        );
+
+        assert_eq!(output.repaired_count, 4);
+        assert_eq!(output.modified_face_uvs.len(), 4);
+        assert!(!output.modified_edges.is_empty());
+        assert_eq!(output.modified_edges.len(), output.modified_edge_creases.len());
 
         for (_f_idx, uvs) in output.modified_face_uvs {
             assert_eq!(uvs.len(), 4);

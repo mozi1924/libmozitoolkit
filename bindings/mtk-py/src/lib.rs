@@ -161,6 +161,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(uv::repair_extruded_side_uv, m)?)?;
     m.add_function(wrap_pyfunction!(uv::generate_random_extrude_heights, m)?)?;
     m.add_function(wrap_pyfunction!(mesh::process_mesh_extrude_repair, m)?)?;
+    m.add_function(wrap_pyfunction!(mesh::process_flat_mesh_extrude_repair, m)?)?;
     m.add_function(wrap_pyfunction!(mesh::process_random_extrude_mesh, m)?)?;
 
     // 10. Metadata

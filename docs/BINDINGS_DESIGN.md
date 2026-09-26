@@ -39,6 +39,8 @@ bindings/
   - `indices_memoryview(py)`: 零拷贝返回 `[M]` u32 三角形/多边形索引。
   - `face_materials_memoryview(py)`: 逐面材质插槽 ID。
 - **高阶 Data-In Data-Out 算子**：
+  - `process_flat_mesh_extrude_repair(...)`:
+    使用扁平连续 1D 缓冲区（`positions`, `loop_vertices`, `loop_uvs`, `face_loop_starts`, `face_loop_totals`, `face_materials`）进行极致性能的批量挤出修复，彻底消除 Python 列表嵌套开销，完美适配 Blender `foreach_get` 与 NumPy 数组。
   - `process_mesh_extrude_repair(...)`:
     输入全网格位置、面顶点索引、循环 UV 与像素步长，由 Rust 核心并行分析面面积与法线朝向，输出修改后的稀疏 UV、同步材质与 Crease 锐边。
   - `process_random_extrude_mesh(...)`:

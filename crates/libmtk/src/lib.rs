@@ -74,8 +74,9 @@ pub use mtk_core::uv::{
     is_uv_collapsed_2d,
 };
 pub use mtk_core::extrude_mesh::{
-    process_mesh_extrude_repair, process_random_extrude_mesh, ExtrudeMeshInput, ExtrudeMeshOutput,
-    MeshExtrudeRepairConfig, RandomExtrudeMeshInput, RandomExtrudeMeshOutput,
+    process_flat_mesh_extrude_repair, process_mesh_extrude_repair, process_random_extrude_mesh,
+    ExtrudeMeshInput, ExtrudeMeshOutput, FlatPolygonMesh, MeshExtrudeRepairConfig,
+    RandomExtrudeMeshInput, RandomExtrudeMeshOutput,
 };
 pub use mtk_core::geometry::{
     mc_local_to_centered_z_up, mc_world_to_z_up, Aabb2d, Aabb3d, Quad,
