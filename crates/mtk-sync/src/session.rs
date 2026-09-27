@@ -155,6 +155,14 @@ impl LiveSyncSession {
             return MeshData::new();
         }
 
+        let mut config = self.config.clone();
+        if config.origin_centered && config.selection_bounds.is_none() {
+            let (min_x, min_y, min_z, sz_x, sz_y, sz_z) = st.get_bounds();
+            if sz_x > 0 && sz_y > 0 && sz_z > 0 {
+                config.selection_bounds = Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]));
+            }
+        }
+
         let padded: Vec<_> = non_empty.iter().map(|&c| st.get_section_padded_array(c)).collect();
         let arc_map = self.model_db.as_ref().map(|db| {
             Arc::new(
@@ -172,12 +180,15 @@ impl LiveSyncSession {
             &padded,
             &self.culler,
             model_lookup,
-            &self.config,
+            &config,
             None,
         ) {
             let mut merged = MeshData::new();
             for (_coord, m) in results {
                 merged.append_mesh(&m);
+            }
+            if config.weld_vertices {
+                merged.weld_spatial_vertices(1e-4);
             }
             merged
         } else {
@@ -374,11 +385,16 @@ impl LiveSyncSession {
 
                 section_mesh_cache.clear();
 
+                let mut mesher_config = config.clone();
+                if mesher_config.origin_centered && mesher_config.selection_bounds.is_none() {
+                    mesher_config.selection_bounds = Some(([min_pos.x, min_pos.y, min_pos.z], [size.x, size.y, size.z]));
+                }
+
                 if let Ok(results) = SectionMesher::mesh_sections_parallel(
                     &padded_sections,
                     culler,
                     &model_lookup,
-                    config,
+                    &mesher_config,
                     None,
                 ) {
                     for (coord, mesh) in results {
@@ -391,6 +407,9 @@ impl LiveSyncSession {
                         let mut world_mesh = MeshData::new();
                         for mesh in section_mesh_cache.values() {
                             world_mesh.append_mesh(mesh);
+                        }
+                        if mesher_config.weld_vertices {
+                            world_mesh.weld_spatial_vertices(1e-4);
                         }
                         let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
                     } else {
@@ -457,6 +476,9 @@ impl LiveSyncSession {
                         for m in section_mesh_cache.values() {
                             world_mesh.append_mesh(m);
                         }
+                        if config.weld_vertices {
+                            world_mesh.weld_spatial_vertices(1e-4);
+                        }
                         let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
                     }
                 } else {
@@ -499,6 +521,9 @@ impl LiveSyncSession {
                     let mut world_mesh = MeshData::new();
                     for m in section_mesh_cache.values() {
                         world_mesh.append_mesh(m);
+                    }
+                    if config.weld_vertices {
+                        world_mesh.weld_spatial_vertices(1e-4);
                     }
                     let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
                 }
@@ -557,6 +582,9 @@ impl LiveSyncSession {
                     let mut world_mesh = MeshData::new();
                     for m in section_mesh_cache.values() {
                         world_mesh.append_mesh(m);
+                    }
+                    if config.weld_vertices {
+                        world_mesh.weld_spatial_vertices(1e-4);
                     }
                     let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
                 }

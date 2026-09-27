@@ -37,6 +37,11 @@ impl PyVoxelStorage {
         self.inner.set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)
     }
 
+    /// Returns the active or calculated bounding box: `(min_x, min_y, min_z, size_x, size_y, size_z)`.
+    pub fn get_bounds(&self) -> (i32, i32, i32, i32, i32, i32) {
+        self.inner.get_bounds()
+    }
+
     /// Gets the blockstate identifier string at world coordinate `(x, y, z)`.
     pub fn get_block(&self, x: i32, y: i32, z: i32) -> &str {
         self.inner.get_block(x, y, z)
@@ -334,11 +339,13 @@ use crate::texture::PyBakedAtlas;
 #[pymethods]
 impl PyMesherConfig {
     #[new]
-    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None))]
+    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, origin_centered=true, weld_vertices=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None))]
     pub fn new(
         enable_ao: bool,
         mesh_fluids: bool,
         z_up_coordinates: bool,
+        origin_centered: bool,
+        weld_vertices: bool,
         num_threads: Option<usize>,
         atlas: Option<&PyBakedAtlas>,
         biome_resolver: Option<&PyBiomeResolver>,
@@ -347,6 +354,8 @@ impl PyMesherConfig {
         let mut config = MesherConfig::default();
         config.enable_ao = enable_ao;
         config.mesh_fluids = mesh_fluids;
+        config.origin_centered = origin_centered;
+        config.weld_vertices = weld_vertices;
         config.coordinate_system = if z_up_coordinates {
             CoordinateSystem::ZUpRightHanded
         } else {
@@ -407,6 +416,36 @@ impl PyMesherConfig {
     }
 
     #[getter]
+    pub fn origin_centered(&self) -> bool {
+        self.inner.origin_centered
+    }
+
+    #[setter]
+    pub fn set_origin_centered(&mut self, val: bool) {
+        self.inner.origin_centered = val;
+    }
+
+    #[getter]
+    pub fn weld_vertices(&self) -> bool {
+        self.inner.weld_vertices
+    }
+
+    #[setter]
+    pub fn set_weld_vertices(&mut self, val: bool) {
+        self.inner.weld_vertices = val;
+    }
+
+    /// Sets explicit bounding box `(min_x, min_y, min_z, size_x, size_y, size_z)` for origin centering.
+    pub fn set_bounds(&mut self, min_x: i32, min_y: i32, min_z: i32, size_x: i32, size_y: i32, size_z: i32) {
+        self.inner.selection_bounds = Some(([min_x, min_y, min_z], [size_x, size_y, size_z]));
+    }
+
+    /// Clears any explicit bounding box, falling back to auto-detected bounds.
+    pub fn clear_bounds(&mut self) {
+        self.inner.selection_bounds = None;
+    }
+
+    #[getter]
     pub fn z_up_coordinates(&self) -> bool {
         matches!(self.inner.coordinate_system, CoordinateSystem::ZUpRightHanded)
     }
@@ -432,9 +471,11 @@ impl PyMesherConfig {
 
     fn __repr__(&self) -> String {
         format!(
-            "<MesherConfig ao={} fluids={} coord={:?} threads={:?}>",
+            "<MesherConfig ao={} fluids={} centered={} weld={} coord={:?} threads={:?}>",
             self.inner.enable_ao,
             self.inner.mesh_fluids,
+            self.inner.origin_centered,
+            self.inner.weld_vertices,
             self.inner.coordinate_system,
             self.num_threads
         )

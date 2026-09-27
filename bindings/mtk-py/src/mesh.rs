@@ -260,6 +260,7 @@ impl PyMeshData {
                 secondary_uvs: None,
                 colors: None,
                 indices,
+                quad_indices: None,
                 face_materials: mats,
                 face_tint_indices: tints,
                 custom_attributes: HashMap::new(),
@@ -277,6 +278,22 @@ impl PyMeshData {
         };
         let bytes = PyBytes::new(py, byte_slice);
         PyMemoryView::from(&bytes)
+    }
+
+    /// Read-only memoryview of quad indices as raw bytes (`uint32` per index) if quads are recorded.
+    pub fn quad_indices_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
+        if let Some(ref quads) = self.inner.quad_indices {
+            let byte_slice = unsafe {
+                std::slice::from_raw_parts(
+                    quads.as_ptr() as *const u8,
+                    quads.len() * std::mem::size_of::<u32>(),
+                )
+            };
+            let bytes = PyBytes::new(py, byte_slice);
+            Ok(Some(PyMemoryView::from(&bytes)?))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Read-only memoryview of face material slots (`uint16` per face).
@@ -625,6 +642,9 @@ impl PyMeshData {
 
     /// Quad polygon vertex indices `[v0, v1, v2, v3, ...]` (4 u32 per quad).
     pub fn get_quad_indices<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
+        if let Some(ref quads) = self.inner.quad_indices {
+            return PyList::new(py, quads).expect("failed to create list");
+        }
         let quad_count = self.inner.indices.len() / 6;
         let mut quads = Vec::with_capacity(quad_count * 4);
         for q in 0..quad_count {
@@ -666,7 +686,17 @@ impl PyMeshData {
     /// Number of quad faces recorded.
     #[getter]
     pub fn quad_count(&self) -> usize {
-        self.inner.indices.len() / 6
+        if let Some(ref quads) = self.inner.quad_indices {
+            quads.len() / 4
+        } else {
+            self.inner.indices.len() / 6
+        }
+    }
+
+    /// Welds spatially duplicate vertices within tolerance while preserving indices and face attributes.
+    #[pyo3(signature = (tolerance=1e-4))]
+    pub fn weld_spatial_vertices(&mut self, tolerance: f32) {
+        self.inner.weld_spatial_vertices(tolerance);
     }
 
     /// Material slot per face.

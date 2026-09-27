@@ -424,7 +424,7 @@ mod tests {
 
         let mesh = WasmSectionMesher::mesh_world(&storage, Some(config), Some(culler)).unwrap();
         assert!(!mesh.is_empty());
-        assert_eq!(mesh.vertex_count(), 24);
+        assert_eq!(mesh.vertex_count(), 8);
         assert_eq!(mesh.triangle_count(), 12);
         assert_eq!(mesh.face_count(), 6);
     }

@@ -31,7 +31,13 @@ impl PySectionMesher {
         model_db: Option<&PyBakedModelDatabase>,
     ) -> PyResult<PyMeshData> {
         let default_config = MesherConfig::default();
-        let cfg = config.map(|c| &c.inner).unwrap_or(&default_config);
+        let mut cfg = config.map(|c| c.inner.clone()).unwrap_or(default_config);
+        if cfg.origin_centered && cfg.selection_bounds.is_none() {
+            let (min_x, min_y, min_z, sz_x, sz_y, sz_z) = storage.inner.get_bounds();
+            if sz_x > 0 && sz_y > 0 && sz_z > 0 {
+                cfg.selection_bounds = Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]));
+            }
+        }
         let num_threads = config.and_then(|c| c.num_threads);
 
         let default_culler = FaceCuller::default();
@@ -64,7 +70,7 @@ impl PySectionMesher {
             &padded_sections,
             cul,
             model_lookup,
-            cfg,
+            &cfg,
             num_threads,
         )
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
@@ -72,6 +78,10 @@ impl PySectionMesher {
         let mut merged = PyMeshData::new();
         for (_coord, mesh) in results {
             merged.inner.append_mesh(&mesh);
+        }
+
+        if cfg.weld_vertices {
+            merged.inner.weld_spatial_vertices(1e-4);
         }
 
         Ok(merged)
@@ -88,7 +98,13 @@ impl PySectionMesher {
         model_db: Option<&PyBakedModelDatabase>,
     ) -> PyResult<Bound<'py, PyDict>> {
         let default_config = MesherConfig::default();
-        let cfg = config.map(|c| &c.inner).unwrap_or(&default_config);
+        let mut cfg = config.map(|c| c.inner.clone()).unwrap_or(default_config);
+        if cfg.origin_centered && cfg.selection_bounds.is_none() {
+            let (min_x, min_y, min_z, sz_x, sz_y, sz_z) = storage.inner.get_bounds();
+            if sz_x > 0 && sz_y > 0 && sz_z > 0 {
+                cfg.selection_bounds = Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]));
+            }
+        }
         let num_threads = config.and_then(|c| c.num_threads);
 
         let default_culler = FaceCuller::default();
@@ -123,7 +139,7 @@ impl PySectionMesher {
             &padded_sections,
             cul,
             model_lookup,
-            cfg,
+            &cfg,
             num_threads,
         )
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
@@ -150,7 +166,13 @@ impl PySectionMesher {
         model_db: Option<&PyBakedModelDatabase>,
     ) -> PyResult<Bound<'py, PyDict>> {
         let default_config = MesherConfig::default();
-        let cfg = config.map(|c| &c.inner).unwrap_or(&default_config);
+        let mut cfg = config.map(|c| c.inner.clone()).unwrap_or(default_config);
+        if cfg.origin_centered && cfg.selection_bounds.is_none() {
+            let (min_x, min_y, min_z, sz_x, sz_y, sz_z) = storage.inner.get_bounds();
+            if sz_x > 0 && sz_y > 0 && sz_z > 0 {
+                cfg.selection_bounds = Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]));
+            }
+        }
 
         let default_culler = FaceCuller::default();
         let cul = culler.map(|c| &c.inner).unwrap_or(&default_culler);
@@ -172,7 +194,7 @@ impl PySectionMesher {
             &mut storage.inner,
             cul,
             model_lookup,
-            cfg,
+            &cfg,
         );
 
         let dict = PyDict::new(py);

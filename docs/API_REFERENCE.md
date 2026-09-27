@@ -17,6 +17,7 @@ pub struct MeshData {
     pub positions: Vec<[f32; 3]>,
     pub normals: Vec<[f32; 3]>,
     pub indices: Vec<u32>,
+    pub quad_indices: Option<Vec<u32>>,
     pub uvs: Vec<[f32; 2]>,
     pub secondary_uvs: Option<Vec<[f32; 2]>>,
     pub colors: Option<Vec<[f32; 4]>>,
@@ -26,8 +27,9 @@ pub struct MeshData {
 ```
 **主要方法**：
 - `MeshData::new()` / `MeshData::with_capacity(...)`
-- `mesh.append_quad(&Quad, &FaceAttributes)`: 追加一个四边形（自动剖分为 2 个 CCW 三角形）
+- `mesh.append_quad(&Quad, &FaceAttributes)`: 追加一个四边形（自动剖分为 2 个 CCW 三角形并维护四边形循环顶角）
 - `mesh.append_mesh(&MeshData)`: 合并另一个网格数据
+- `mesh.weld_spatial_vertices(tolerance: f32)`: 空间距离顶点去重焊接（保持三角索引与 Quad 索引映射，Per-Corner UV/AO 保留）
 - `mesh.vertex_count()`, `mesh.triangle_count()`, `mesh.face_count()`, `mesh.is_empty()`, `mesh.clear()`
 
 #### `Quad` (通用四边形基元)
@@ -189,7 +191,7 @@ pub struct Quad {
 - `SectionStorage`: 紧凑的高性能 16x16x16 方块状态 ID 存储。
 - `PaddedVoxelArray`: 带有 1 格外边框 (18x18x18) 的体素采样窗口。
 - `SectionMesher`:
-  - 输入：`PaddedVoxelArray`, `ModelBaker`, `MesherConfig`（配置 `z_up_coordinates: bool` 标准化输出、`atlas: Option<Arc<AtlasAddressMap>>` 图集寻址、`biome_resolver: Option<Arc<BiomeResolver>>` 生物群系调色板着色与 `custom_aliases` 别名映射）。
+  - 输入：`PaddedVoxelArray`, `ModelBaker`, `MesherConfig`（配置 `z_up_coordinates: bool` 标准化输出、`origin_centered: bool` 底部中心原点对齐、`weld_vertices: bool` 空间顶点焊接、`selection_bounds: Option<([i32; 3], [i32; 3])>` 包围盒对齐、`atlas: Option<Arc<AtlasAddressMap>>` 图集寻址、`biome_resolver: Option<Arc<BiomeResolver>>` 生物群系调色板着色与 `custom_aliases` 别名映射）。
   - 输出：`MeshData`（包含 `mtk_source_texture_key`、`mtk_material_slot`、`mtk_atlas_chunk_id`、`mtk_uv_tiling_transform`、`mtk_biome_tint_data` 等 15 项标准面属性）。
 - `DeltaMesher`: 增量网格化器，针对单点方块破坏/放置与脏区块，快速并行重构局部几何面。
 - `calculate_face_ao(neighbors: &[bool; 8]) -> [f32; 4]`: 原版 4 顶点平滑 AO 遮蔽因子计算。

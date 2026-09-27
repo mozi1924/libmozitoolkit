@@ -22,7 +22,14 @@ fn test_solid_cube_culling_in_mesher() {
     // Two touching cubes have 2 * 6 - 2 = 10 visible faces = 20 triangles
     assert_eq!(mesh.face_count(), 10);
     assert_eq!(mesh.triangle_count(), 20);
-    assert_eq!(mesh.vertex_count(), 40);
+    assert_eq!(mesh.vertex_count(), 12); // Welded: 12 vertices
+
+    let unwelded_config = MesherConfig {
+        weld_vertices: false,
+        ..Default::default()
+    };
+    let unwelded_mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &unwelded_config);
+    assert_eq!(unwelded_mesh.vertex_count(), 40);
 }
 
 #[test]

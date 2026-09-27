@@ -29,6 +29,8 @@ pub struct MeshData {
     pub face_materials: Vec<MaterialSlotId>,
     /// Tint index per face.
     pub face_tint_indices: Vec<TintIndex>,
+    /// Optional Quad polygon vertex indices (4 u32 per quad) preserving exact corner cyclic order.
+    pub quad_indices: Option<Vec<u32>>,
     /// Generic typed custom attributes indexed by attribute name (Domain: Point/Corner/Face/Mesh).
     pub custom_attributes: HashMap<String, MeshAttribute>,
 }
@@ -50,6 +52,7 @@ impl MeshData {
             colors: None,
             face_materials: Vec::with_capacity(num_faces),
             face_tint_indices: Vec::with_capacity(num_faces),
+            quad_indices: None,
             custom_attributes: HashMap::new(),
         }
     }
@@ -122,6 +125,9 @@ impl MeshData {
         }
         self.face_materials.clear();
         self.face_tint_indices.clear();
+        if let Some(ref mut quads) = self.quad_indices {
+            quads.clear();
+        }
         self.custom_attributes.clear();
     }
 
@@ -147,6 +153,10 @@ impl MeshData {
         self.indices.push(base_idx + 2);
         self.indices.push(base_idx + 3);
 
+        if let Some(ref mut quads) = self.quad_indices {
+            quads.extend_from_slice(&[base_idx, base_idx + 1, base_idx + 2, base_idx + 3]);
+        }
+
         self.face_materials.push(attributes.material_slot);
         self.face_tint_indices.push(attributes.tint_index);
     }
@@ -162,6 +172,14 @@ impl MeshData {
         self.indices.reserve(other.indices.len());
         for &idx in &other.indices {
             self.indices.push(base_idx + idx);
+        }
+
+        if let Some(ref o_quads) = other.quad_indices {
+            let quads = self.quad_indices.get_or_insert_with(Vec::new);
+            quads.reserve(o_quads.len());
+            for &idx in o_quads {
+                quads.push(base_idx + idx);
+            }
         }
 
         self.face_materials.extend_from_slice(&other.face_materials);
@@ -199,6 +217,61 @@ impl MeshData {
             } else {
                 self.custom_attributes.insert(name.clone(), attr.clone());
             }
+        }
+    }
+
+    /// Welds co-located vertices within `tolerance` distance into shared topology,
+    /// remapping indices while preserving per-corner loop UVs and colors.
+    pub fn weld_spatial_vertices(&mut self, tolerance: f32) {
+        if self.positions.is_empty() || tolerance <= 0.0 {
+            return;
+        }
+
+        let inv_dist = 1.0 / tolerance;
+        let mut coord_map: HashMap<[i32; 3], u32> = HashMap::with_capacity(self.positions.len());
+        let mut remap: Vec<u32> = Vec::with_capacity(self.positions.len());
+        let mut new_positions: Vec<[f32; 3]> = Vec::with_capacity(self.positions.len());
+        let mut new_normals: Vec<[f32; 3]> = Vec::with_capacity(self.normals.len());
+
+        for (i, &p) in self.positions.iter().enumerate() {
+            let key = [
+                (p[0] * inv_dist).round() as i32,
+                (p[1] * inv_dist).round() as i32,
+                (p[2] * inv_dist).round() as i32,
+            ];
+
+            if let Some(&existing_idx) = coord_map.get(&key) {
+                remap.push(existing_idx);
+            } else {
+                let new_idx = new_positions.len() as u32;
+                coord_map.insert(key, new_idx);
+                remap.push(new_idx);
+                new_positions.push(p);
+                if let Some(&norm) = self.normals.get(i) {
+                    new_normals.push(norm);
+                }
+            }
+        }
+
+        // Remap triangle/polygon indices
+        for idx in &mut self.indices {
+            if let Some(&new_i) = remap.get(*idx as usize) {
+                *idx = new_i;
+            }
+        }
+
+        // Remap quad indices if present
+        if let Some(ref mut quads) = self.quad_indices {
+            for idx in quads {
+                if let Some(&new_i) = remap.get(*idx as usize) {
+                    *idx = new_i;
+                }
+            }
+        }
+
+        self.positions = new_positions;
+        if !self.normals.is_empty() {
+            self.normals = new_normals;
         }
     }
 

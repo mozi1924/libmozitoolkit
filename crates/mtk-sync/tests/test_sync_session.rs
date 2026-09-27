@@ -24,8 +24,10 @@ fn test_sync_session_packet_flow() {
         assert_eq!(st.get_block(0, 0, 0), "minecraft:stone");
     }
 
-    // 2. Test get_world_mesh on session
+    // 2. Test get_world_mesh on session (welded by default: 8 vertices, 36 indices, 24 UVs)
     let world_mesh = session.get_world_mesh();
     assert!(!world_mesh.is_empty());
-    assert_eq!(world_mesh.positions.len(), 24); // 1 cube face count (6 faces * 4 verts)
+    assert_eq!(world_mesh.positions.len(), 8); // 1 cube welded vertices
+    assert_eq!(world_mesh.indices.len(), 36);  // 6 faces * 2 tris * 3 indices
+    assert_eq!(world_mesh.uvs.len(), 24);      // 6 faces * 4 corner UVs
 }

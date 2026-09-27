@@ -679,6 +679,9 @@ impl SectionMesher {
         }
 
         collector.attach_to_mesh(&mut mesh);
+        if config.weld_vertices {
+            mesh.weld_spatial_vertices(1e-4);
+        }
         mesh
     }
 
@@ -762,14 +765,14 @@ fn emit_baked_face(
     dir: Direction,
 ) {
     let base_idx = mesh.positions.len() as u32;
-    let norm = config.transform_coord(face.normal);
+    let norm = config.transform_direction(face.normal);
     let n = [norm.x, norm.y, norm.z];
 
     let colors = mesh.colors.get_or_insert_with(Vec::new);
 
     for i in 0..4 {
         let v = face.vertices[i];
-        let p = config.transform_coord(Vec3::new(wx + v.x, wy + v.y, wz + v.z));
+        let p = config.transform_position(Vec3::new(wx + v.x, wy + v.y, wz + v.z));
         mesh.positions.push([p.x, p.y, p.z]);
         mesh.normals.push(n);
         if let Some(ref uvs) = override_uvs {
@@ -781,6 +784,10 @@ fn emit_baked_face(
         let ao_b = ao_level_to_brightness(ao_levels[i]);
         colors.push([ao_b, ao_b, ao_b, 1.0]);
     }
+
+    mesh.quad_indices
+        .get_or_insert_with(Vec::new)
+        .extend_from_slice(&[base_idx, base_idx + 1, base_idx + 2, base_idx + 3]);
 
     // Triangulate with anisotropy diagonal flip
     if should_flip_quad_diagonal(ao_levels) {
@@ -842,7 +849,7 @@ fn emit_unit_cube_face(
     block_pos: IVec3,
 ) {
     let base_idx = mesh.positions.len() as u32;
-    let norm = config.transform_coord(dir.normal());
+    let norm = config.transform_direction(dir.normal());
     let n = [norm.x, norm.y, norm.z];
 
     let (v0, v1, v2, v3) = match dir {
@@ -887,13 +894,17 @@ fn emit_unit_cube_face(
     let colors = mesh.colors.get_or_insert_with(Vec::new);
 
     for (i, v) in [v0, v1, v2, v3].into_iter().enumerate() {
-        let p = config.transform_coord(Vec3::new(wx + v.x, wy + v.y, wz + v.z));
+        let p = config.transform_position(Vec3::new(wx + v.x, wy + v.y, wz + v.z));
         mesh.positions.push([p.x, p.y, p.z]);
         mesh.normals.push(n);
 
         let ao_b = ao_level_to_brightness(ao_levels[i]);
         colors.push([ao_b, ao_b, ao_b, 1.0]);
     }
+
+    mesh.quad_indices
+        .get_or_insert_with(Vec::new)
+        .extend_from_slice(&[base_idx, base_idx + 1, base_idx + 2, base_idx + 3]);
 
     if let Some(ref uvs) = override_uvs {
         for uv in uvs {

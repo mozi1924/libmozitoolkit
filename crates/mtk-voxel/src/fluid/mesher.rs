@@ -372,7 +372,7 @@ where
     // Helper to emit quad face
     let mut emit_quad = |verts: [Vec3; 4], raw_uvs: [[f32; 2]; 4], norm: Vec3, dir: Direction, face_flowing: bool| {
         let base_idx = mesh.positions.len() as u32;
-        let norm_transformed = config.transform_coord(norm);
+        let norm_transformed = config.transform_direction(norm);
         let n = [norm_transformed.x, norm_transformed.y, norm_transformed.z];
 
         let target_sprite = if face_flowing {
@@ -402,7 +402,7 @@ where
         };
 
         for i in 0..4 {
-            let p = config.transform_coord(verts[i]);
+            let p = config.transform_position(verts[i]);
             mesh.positions.push([p.x, p.y, p.z]);
             mesh.normals.push(n);
             mesh.uvs.push(uvs[i]);
@@ -410,6 +410,10 @@ where
                 colors.push([1.0, 1.0, 1.0, 1.0]);
             }
         }
+
+        mesh.quad_indices
+            .get_or_insert_with(Vec::new)
+            .extend_from_slice(&[base_idx, base_idx + 1, base_idx + 2, base_idx + 3]);
 
         mesh.indices.push(base_idx);
         mesh.indices.push(base_idx + 1);

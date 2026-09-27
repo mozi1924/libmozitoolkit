@@ -27,8 +27,12 @@ pub enum CoordinateSystem {
 pub struct MesherConfig {
     /// Target coordinate system transformation.
     pub coordinate_system: CoordinateSystem,
-    /// Whether to center local geometry relative to active selection origin.
+    /// Whether to center local geometry relative to active selection origin (bottom center).
     pub origin_centered: bool,
+    /// Whether to weld adjacent coplanar/shared vertices into manifold topology.
+    pub weld_vertices: bool,
+    /// Optional selection bounds `(min_pos, size)`: `([min_x, min_y, min_z], [size_x, size_y, size_z])`.
+    pub selection_bounds: Option<([i32; 3], [i32; 3])>,
     /// Whether to calculate 4-corner ambient occlusion on faces.
     pub enable_ao: bool,
     /// Whether internal overlapping faces of complex non-cube models are clipped.
@@ -53,7 +57,9 @@ impl Default for MesherConfig {
     fn default() -> Self {
         Self {
             coordinate_system: CoordinateSystem::Minecraft,
-            origin_centered: false,
+            origin_centered: true,
+            weld_vertices: true,
+            selection_bounds: None,
             enable_ao: true,
             exclude_hidden_volume: true,
             mesh_fluids: true,
@@ -66,15 +72,46 @@ impl Default for MesherConfig {
 }
 
 impl MesherConfig {
+    /// Converts a 3D vertex position in Minecraft coordinates `(x, y, z)`
+    /// to the configured target coordinate system, taking into account origin centering.
+    #[inline]
+    pub fn transform_position(&self, pos: Vec3) -> Vec3 {
+        let centered = if self.origin_centered {
+            if let Some((min, size)) = self.selection_bounds {
+                let cx = min[0] as f32 + size[0] as f32 / 2.0;
+                let by = min[1] as f32;
+                let cz = min[2] as f32 + size[2] as f32 / 2.0;
+                Vec3::new(pos.x - cx, pos.y - by, pos.z - cz)
+            } else {
+                pos
+            }
+        } else {
+            pos
+        };
+
+        match self.coordinate_system {
+            CoordinateSystem::Minecraft => centered,
+            CoordinateSystem::ZUpRightHanded => Vec3::new(centered.x, -centered.z, centered.y),
+            CoordinateSystem::YUpRightHanded => centered,
+        }
+    }
+
+    /// Converts a direction vector (normal) to the configured target coordinate system.
+    /// Direction vectors are rotated/axis-swapped, but never translated by origin.
+    #[inline]
+    pub fn transform_direction(&self, dir: Vec3) -> Vec3 {
+        match self.coordinate_system {
+            CoordinateSystem::Minecraft => dir,
+            CoordinateSystem::ZUpRightHanded => Vec3::new(dir.x, -dir.z, dir.y),
+            CoordinateSystem::YUpRightHanded => dir,
+        }
+    }
+
     /// Converts a local coordinate (x, y, z in block space [0..1] or world space)
     /// to the configured target coordinate system.
     #[inline]
     pub fn transform_coord(&self, pos: Vec3) -> Vec3 {
-        match self.coordinate_system {
-            CoordinateSystem::Minecraft => pos,
-            CoordinateSystem::ZUpRightHanded => Vec3::new(pos.x, -pos.z, pos.y),
-            CoordinateSystem::YUpRightHanded => pos,
-        }
+        self.transform_position(pos)
     }
 }
 

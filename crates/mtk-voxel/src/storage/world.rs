@@ -156,6 +156,31 @@ impl VoxelStorage {
             && z < self.min_z + self.size_z
     }
 
+    /// Returns active or computed 3D world bounding box `(min_x, min_y, min_z, size_x, size_y, size_z)`.
+    pub fn get_bounds(&self) -> (i32, i32, i32, i32, i32, i32) {
+        if self.size_x > 0 && self.size_y > 0 && self.size_z > 0 {
+            (self.min_x, self.min_y, self.min_z, self.size_x, self.size_y, self.size_z)
+        } else {
+            let non_empty = self.get_all_non_empty_sections();
+            if non_empty.is_empty() {
+                return (0, 0, 0, 0, 0, 0);
+            }
+            let mut min_sec = non_empty[0];
+            let mut max_sec = non_empty[0];
+            for &c in &non_empty[1..] {
+                min_sec = min_sec.min(c);
+                max_sec = max_sec.max(c);
+            }
+            let min_x = min_sec.x * 16;
+            let min_y = min_sec.y * 16;
+            let min_z = min_sec.z * 16;
+            let size_x = (max_sec.x - min_sec.x + 1) * 16;
+            let size_y = (max_sec.y - min_sec.y + 1) * 16;
+            let size_z = (max_sec.z - min_sec.z + 1) * 16;
+            (min_x, min_y, min_z, size_x, size_y, size_z)
+        }
+    }
+
     /// Updates selection bounding box with incremental pruning and boundary seam dirtying.
     pub fn set_bounds(
         &mut self,

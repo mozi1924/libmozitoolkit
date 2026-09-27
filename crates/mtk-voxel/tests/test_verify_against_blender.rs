@@ -284,7 +284,16 @@ fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
     // 5. Verify Section Mesh Generation (Quads, Vertices, Triangles, Occlusion Culling)
     println!("\n[5. 3D Section Mesh Assembly Verification (vs MoziToolKit RawSectionGeometryBuffer)]");
     let culler = FaceCuller::default();
-    let config = MesherConfig::default();
+    let unwelded_config = MesherConfig {
+        weld_vertices: false,
+        origin_centered: false,
+        ..Default::default()
+    };
+    let welded_config = MesherConfig {
+        weld_vertices: true,
+        origin_centered: false,
+        ..Default::default()
+    };
 
     for tc in &truth.mesh_tests {
         let mut world = VoxelStorage::new();
@@ -295,7 +304,7 @@ fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
         }
 
         let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
-        let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+        let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &unwelded_config);
 
         println!(
             " • {:<28} -> Faces: {} (Blender: {}) | Vertices: {} (Blender: {})",
@@ -318,6 +327,12 @@ fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
             "Vertex count mismatch in '{}'",
             tc.name
         );
+
+        // Also verify welded mesh produces 8 vertices for single_cube_mesh
+        let welded_mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &welded_config);
+        if tc.name == "single_cube_mesh" {
+            assert_eq!(welded_mesh.vertex_count(), 8, "Welded single cube must have 8 vertices");
+        }
     }
 
     println!("\n============================================================");
