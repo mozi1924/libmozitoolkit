@@ -189,8 +189,8 @@ pub struct Quad {
 - `SectionStorage`: 紧凑的高性能 16x16x16 方块状态 ID 存储。
 - `PaddedVoxelArray`: 带有 1 格外边框 (18x18x18) 的体素采样窗口。
 - `SectionMesher`:
-  - 输入：`PaddedVoxelArray`, `ModelBaker`, `MesherConfig`（配置 `z_up_coordinates: bool` 标准化输出）。
-  - 输出：`MeshData`。
+  - 输入：`PaddedVoxelArray`, `ModelBaker`, `MesherConfig`（配置 `z_up_coordinates: bool` 标准化输出、`atlas: Option<Arc<AtlasAddressMap>>` 图集寻址、`biome_resolver: Option<Arc<BiomeResolver>>` 生物群系调色板着色与 `custom_aliases` 别名映射）。
+  - 输出：`MeshData`（包含 `mtk_source_texture_key`、`mtk_material_slot`、`mtk_atlas_chunk_id`、`mtk_uv_tiling_transform`、`mtk_biome_tint_data` 等 15 项标准面属性）。
 - `DeltaMesher`: 增量网格化器，针对单点方块破坏/放置与脏区块，快速并行重构局部几何面。
 - `calculate_face_ao(neighbors: &[bool; 8]) -> [f32; 4]`: 原版 4 顶点平滑 AO 遮蔽因子计算。
 - `FluidType`, `calculate_fluid_corner_heights`: 水/岩浆流体网格与流向计算。

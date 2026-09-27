@@ -45,7 +45,7 @@ impl Default for TintInfo {
 
 /// Resource-pack aware Biome Resolver.
 /// Discovers model JSON `tintindex` metadata and `side` / `overlay` texture pairings.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BiomeResolver {
     pub overlay_pairs: HashMap<String, String>,
     pub texture_tint_categories: HashMap<String, String>,

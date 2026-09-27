@@ -325,20 +325,24 @@ pub struct PyMesherConfig {
     pub(crate) num_threads: Option<usize>,
 }
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::material::PyBiomeResolver;
 use crate::texture::PyBakedAtlas;
 
 #[pymethods]
 impl PyMesherConfig {
     #[new]
-    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, num_threads=None, atlas=None))]
+    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None))]
     pub fn new(
         enable_ao: bool,
         mesh_fluids: bool,
         z_up_coordinates: bool,
         num_threads: Option<usize>,
         atlas: Option<&PyBakedAtlas>,
+        biome_resolver: Option<&PyBiomeResolver>,
+        custom_aliases: Option<HashMap<String, Vec<String>>>,
     ) -> Self {
         let mut config = MesherConfig::default();
         config.enable_ao = enable_ao;
@@ -349,6 +353,8 @@ impl PyMesherConfig {
             CoordinateSystem::Minecraft
         };
         config.atlas_address_map = atlas.map(|a| Arc::new(a.inner.address_map.clone()));
+        config.biome_resolver = biome_resolver.map(|r| Arc::new(r.inner.clone()));
+        config.custom_aliases = custom_aliases.map(Arc::new);
         Self {
             inner: config,
             num_threads,
@@ -363,6 +369,21 @@ impl PyMesherConfig {
     /// Checks if an Atlas address map is configured.
     pub fn has_atlas(&self) -> bool {
         self.inner.atlas_address_map.is_some()
+    }
+
+    /// Sets or clears the BiomeResolver for face tint calculations.
+    pub fn set_biome_resolver(&mut self, resolver: Option<&PyBiomeResolver>) {
+        self.inner.biome_resolver = resolver.map(|r| Arc::new(r.inner.clone()));
+    }
+
+    /// Checks if a BiomeResolver is configured.
+    pub fn has_biome_resolver(&self) -> bool {
+        self.inner.biome_resolver.is_some()
+    }
+
+    /// Sets or clears custom texture alias mapping.
+    pub fn set_custom_aliases(&mut self, aliases: Option<HashMap<String, Vec<String>>>) {
+        self.inner.custom_aliases = aliases.map(Arc::new);
     }
 
     #[getter]

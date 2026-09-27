@@ -334,6 +334,7 @@ pub fn emit_fluid_geometry<F>(
     culler: &FaceCuller,
     config: &MesherConfig,
     material_slot: u16,
+    mut collector: Option<&mut crate::mesher::FaceAttributesCollector>,
 ) -> usize
 where
     F: FnMut(i32, i32, i32) -> String,
@@ -352,12 +353,53 @@ where
 
     let own_meta = culler.get_meta(state_str, None, None);
 
+    let (still_sprite, flow_sprite) = if let Some(atlas) = &config.atlas_address_map {
+        let (still_name, flow_name) = match fluid_type {
+            FluidType::Water => ("block/water_still", "block/water_flow"),
+            FluidType::Lava => ("block/lava_still", "block/lava_flow"),
+        };
+        let still = mtk_material::MaterialResolver::resolve(still_name, config.custom_aliases.as_deref(), atlas)
+            .map(|(res, sp)| (res.as_string(), sp.chunk_id, sp.texture_id, sp.frame_0_uv_bounds));
+        let flow = mtk_material::MaterialResolver::resolve(flow_name, config.custom_aliases.as_deref(), atlas)
+            .map(|(res, sp)| (res.as_string(), sp.chunk_id, sp.texture_id, sp.frame_0_uv_bounds));
+        (still, flow)
+    } else {
+        (None, None)
+    };
+
     let mut faces_emitted = 0;
 
     // Helper to emit quad face
-    let mut emit_quad = |verts: [Vec3; 4], uvs: [[f32; 2]; 4], norm: Vec3, _dir: Direction| {
+    let mut emit_quad = |verts: [Vec3; 4], raw_uvs: [[f32; 2]; 4], norm: Vec3, dir: Direction, face_flowing: bool| {
         let base_idx = mesh.positions.len() as u32;
-        let n = [norm.x, norm.y, norm.z];
+        let norm_transformed = config.transform_coord(norm);
+        let n = [norm_transformed.x, norm_transformed.y, norm_transformed.z];
+
+        let target_sprite = if face_flowing {
+            flow_sprite.as_ref().or(still_sprite.as_ref())
+        } else {
+            still_sprite.as_ref().or(flow_sprite.as_ref())
+        };
+
+        let (final_mat_slot, uvs, chunk_id, tex_id, source_key) = if let Some((res_name, cid, tid, bounds)) = target_sprite {
+            let u_min = bounds[0];
+            let v_min = bounds[1];
+            let u_span = bounds[2] - u_min;
+            let v_span = bounds[3] - v_min;
+            let mapped = [
+                [u_min + raw_uvs[0][0] * u_span, v_min + raw_uvs[0][1] * v_span],
+                [u_min + raw_uvs[1][0] * u_span, v_min + raw_uvs[1][1] * v_span],
+                [u_min + raw_uvs[2][0] * u_span, v_min + raw_uvs[2][1] * v_span],
+                [u_min + raw_uvs[3][0] * u_span, v_min + raw_uvs[3][1] * v_span],
+            ];
+            (*cid, mapped, *cid as i32, *tid, res_name.clone())
+        } else {
+            let default_name = match fluid_type {
+                FluidType::Water => if face_flowing { "minecraft:block/water_flow" } else { "minecraft:block/water_still" },
+                FluidType::Lava => if face_flowing { "minecraft:block/lava_flow" } else { "minecraft:block/lava_still" },
+            };
+            (material_slot, raw_uvs, 0, 0, default_name.to_string())
+        };
 
         for i in 0..4 {
             let p = config.transform_coord(verts[i]);
@@ -377,9 +419,33 @@ where
         mesh.indices.push(base_idx + 2);
         mesh.indices.push(base_idx + 3);
 
-        mesh.face_materials.push(material_slot);
+        mesh.face_materials.push(final_mat_slot);
         mesh.face_tint_indices
             .push(if fluid_type == FluidType::Water { 0 } else { -1 });
+
+        if let Some(ref mut col) = collector {
+            let (tint_data, tint_color, colormap_uv) = if fluid_type == FluidType::Water {
+                ([1.0, 1.0, 1.0, 3.0], [0.24, 0.44, 0.99, 1.0], [0.8, 0.4, 0.0])
+            } else {
+                ([1.0, 1.0, 0.0, 0.0], [1.0, 1.0, 1.0, 1.0], [0.8, 0.4, 0.0])
+            };
+            let dir_code = dir.to_index() as u8;
+            col.push_face(
+                source_key,
+                final_mat_slot as i32,
+                chunk_id,
+                tex_id,
+                [1.0, 1.0, 0.0, 0.0],
+                0.0,
+                0,
+                tint_data,
+                tint_color,
+                colormap_uv,
+                glam::IVec3::new(x, y, z),
+                dir_code,
+            );
+        }
+
         faces_emitted += 1;
     };
 
@@ -405,7 +471,7 @@ where
         let v_ne = Vec3::new(wx + 1.0, wy + c_ne, wz);
 
         let top_uvs = get_fluid_top_uvs(is_flowing, if is_flowing { flow_angle } else { 0.0 });
-        emit_quad([v_nw, v_sw, v_se, v_ne], top_uvs, Vec3::Y, Direction::Up);
+        emit_quad([v_nw, v_sw, v_se, v_ne], top_uvs, Vec3::Y, Direction::Up, is_flowing);
     }
 
     // 2. BOTTOM FACE (DOWN)
@@ -430,7 +496,7 @@ where
         let v_se = Vec3::new(wx + 1.0, wy, wz + 1.0);
 
         let bot_uvs = get_fluid_top_uvs(false, 0.0);
-        emit_quad([v_sw, v_nw, v_ne, v_se], bot_uvs, -Vec3::Y, Direction::Down);
+        emit_quad([v_sw, v_nw, v_ne, v_se], bot_uvs, -Vec3::Y, Direction::Down, false);
     }
 
     // 3. SIDE FACES (North, South, West, East)
@@ -459,6 +525,7 @@ where
             uvs,
             -Vec3::Z,
             Direction::North,
+            is_flowing || (c_ne != c_nw),
         );
     }
 
@@ -487,6 +554,7 @@ where
             uvs,
             Vec3::Z,
             Direction::South,
+            is_flowing || (c_sw != c_se),
         );
     }
 
@@ -515,6 +583,7 @@ where
             uvs,
             -Vec3::X,
             Direction::West,
+            is_flowing || (c_nw != c_sw),
         );
     }
 
@@ -543,6 +612,7 @@ where
             uvs,
             Vec3::X,
             Direction::East,
+            is_flowing || (c_se != c_ne),
         );
     }
 

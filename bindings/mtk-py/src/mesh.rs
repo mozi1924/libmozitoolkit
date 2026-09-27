@@ -629,10 +629,36 @@ impl PyMeshData {
         let mut quads = Vec::with_capacity(quad_count * 4);
         for q in 0..quad_count {
             let base = q * 6;
-            quads.push(self.inner.indices[base]);
-            quads.push(self.inner.indices[base + 1]);
-            quads.push(self.inner.indices[base + 2]);
-            quads.push(self.inner.indices[base + 5]);
+            let t1 = [
+                self.inner.indices[base],
+                self.inner.indices[base + 1],
+                self.inner.indices[base + 2],
+            ];
+            let t2 = [
+                self.inner.indices[base + 3],
+                self.inner.indices[base + 4],
+                self.inner.indices[base + 5],
+            ];
+
+            // Identify the unique non-shared vertex of triangle 1 (O1)
+            let mut o1_idx = 0;
+            for i in 0..3 {
+                if !t2.contains(&t1[i]) {
+                    o1_idx = i;
+                    break;
+                }
+            }
+            let o1 = t1[o1_idx];
+            let d1 = t1[(o1_idx + 2) % 3]; // predecessor in t1
+            let d2 = t1[(o1_idx + 1) % 3]; // successor in t1
+
+            // Identify the unique non-shared vertex of triangle 2 (O2)
+            let o2 = t2.iter().copied().find(|v| !t1.contains(v)).unwrap_or(d2);
+
+            quads.push(d1);
+            quads.push(o1);
+            quads.push(d2);
+            quads.push(o2);
         }
         PyList::new(py, &quads).expect("failed to create list")
     }

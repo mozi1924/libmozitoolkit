@@ -64,7 +64,7 @@ bindings/
 - `VoxelStorage`: 稀疏体素世界存储，纳秒级快照更新与选区包围盒裁剪。
 - `SectionMesher`:
   - `mesh_world(storage, config)`: 多线程并行世界网格化。
-  - `MesherConfig(enable_ao=True, mesh_fluids=True, z_up_coordinates=True)`: 标准化 3D 几何坐标系配置。
+  - `MesherConfig(enable_ao=True, mesh_fluids=True, z_up_coordinates=True, atlas=None, biome_resolver=None, custom_aliases=None)`: 标准化 3D 几何坐标系与图集材质寻址/生物群系着色配置。
 - `LiveSyncSession`: 原生 WebSocket 后台协同管道。
 
 #### Blender Python 极速灌入范式示例

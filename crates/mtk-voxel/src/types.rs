@@ -41,6 +41,12 @@ pub struct MesherConfig {
     /// Optional Atlas address map for UV remapping and material slotting.
     #[cfg_attr(feature = "serde", serde(skip))]
     pub atlas_address_map: Option<Arc<AtlasAddressMap>>,
+    /// Optional BiomeResolver for foliage, grass, and water tinting.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub biome_resolver: Option<Arc<mtk_material::BiomeResolver>>,
+    /// Optional custom material/texture alias map.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub custom_aliases: Option<Arc<std::collections::HashMap<String, Vec<String>>>>,
 }
 
 impl Default for MesherConfig {
@@ -53,6 +59,8 @@ impl Default for MesherConfig {
             mesh_fluids: true,
             ctm_solver: None,
             atlas_address_map: None,
+            biome_resolver: None,
+            custom_aliases: None,
         }
     }
 }
