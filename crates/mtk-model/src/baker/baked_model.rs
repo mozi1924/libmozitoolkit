@@ -108,6 +108,15 @@ impl BakedModel {
                 .collect();
 
             for face in el.faces.values() {
+                // Skip standalone overlay decal faces: in MoziToolKit/libmtk, overlays are
+                // composited directly onto base faces in the shader via companion atlas (_overlay.png).
+                if face.texture.ends_with("_overlay")
+                    || face.texture.ends_with("_OVERLAY")
+                    || face.texture.contains("side_overlay")
+                {
+                    continue;
+                }
+
                 let slot = *texture_to_slot
                     .entry(face.texture.clone())
                     .or_insert_with(|| {

@@ -150,7 +150,7 @@ pub struct Quad {
   - `builder.add_sprite(location, rgba_buffer)`
   - `builder.build() -> BakedAtlas`
   - `builder.build_categories(pack_stack: &ResourcePackStack) -> HashMap<AtlasCategory, BakedAtlas>`:
-    多类别（Blocks, Items, ArmorTrims, Beds, Chests, ShulkerBoxes 等）批量烘焙，自动合成伴随的 `_overlay.png` 贴图。
+    多类别（Blocks, Items, ArmorTrims, Beds, Chests, ShulkerBoxes 等）批量烘焙，自动合成伴随的 `_overlay.png` 贴图。对伴随的 Overlay 纹理自动在 `AtlasAddressMap` 中注册同位置别名（如 `minecraft:block/grass_block_side_overlay`），避免寻址模糊并保证 UV 与基底方块 1:1 对齐。
 - `BakedAtlas`: 包含烘焙后的合成贴图大图（Albedo / Normal / Specular / Roughness / Overlay）与 `AtlasAddressMap`。
 - `StandaloneBuilder`: 将资源包贴图对齐导出为 Minecraft 标准资源目录结构的独立 PBR 材质库。
 
@@ -161,6 +161,7 @@ pub struct Quad {
 负责 Minecraft 资源包的虚拟文件系统解压、加载与 CTM 连接纹理计算。
 
 ### 5.1 核心类型与函数
+- `is_companion_asset_path(file: &str) -> bool`: 检查贴图路径是否为伴随贴图（`_n.png`, `_s.png`, `_overlay.png`, `grass_block_side_overlay.png` 等），避免其被误收录为图集独立 Albedo 图块。
 - `ResourcePackStack`: 多层资源包叠加栈（按优先级自顶向下查询材质与模型，支持 Companion PBR 贴图探测）。
 - `DirectoryPack`, `MemoryPack`, `ZipPack`: VFS 数据源适配器。
 - `CtmSolver`: CTM 47 / 17 规则求解器。
@@ -199,7 +200,7 @@ pub struct Quad {
 - `PaddedVoxelArray`: 带有 1 格外边框 (18x18x18) 的体素采样窗口。
 - `SectionMesher`:
   - 输入：`PaddedVoxelArray`, `ModelBaker`, `MesherConfig`（配置 `z_up_coordinates: bool` 标准化输出、`origin_centered: bool` 底部中心原点对齐、`weld_vertices: bool` 空间顶点焊接、`selection_bounds: Option<([i32; 3], [i32; 3])>` 包围盒对齐、`atlas: Option<Arc<AtlasAddressMap>>` 图集寻址、`biome_resolver: Option<Arc<BiomeResolver>>` 生物群系调色板着色与 `custom_aliases` 别名映射）。
-  - 输出：`MeshData`（包含 `mtk_source_texture_key`、`mtk_material_slot`、`mtk_atlas_chunk_id`、`mtk_uv_tiling_transform`、`mtk_biome_tint_data` 等 15 项标准面属性）。
+  - 输出：`MeshData`（包含 `mtk_source_texture_key`、`mtk_material_slot`、`mtk_atlas_chunk_id`、`mtk_uv_tiling_transform`、`mtk_biome_tint_data` 等 15 项标准面属性）。自动剔除多 Element 模型中的冗余 Overlay Decal 面（如草方块侧面叠加层），由前端着色器单面多重采样无缝合成，杜绝共面发黑与 Z-fighting。
 - `DeltaMesher`: 增量网格化器，针对单点方块破坏/放置与脏区块，快速并行重构局部几何面。
 - `calculate_face_ao(neighbors: &[bool; 8]) -> [f32; 4]`: 原版 4 顶点平滑 AO 遮蔽因子计算。
 - `FluidType`, `calculate_fluid_corner_heights`: 水/岩浆流体网格与流向计算。

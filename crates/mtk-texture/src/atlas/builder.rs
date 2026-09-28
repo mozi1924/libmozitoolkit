@@ -298,28 +298,39 @@ impl AtlasBuilder {
                             let v_min = 1.0 - ((inner_y + fh) as f32) / (chunk.height as f32);
                             let v_max = 1.0 - (inner_y as f32) / (chunk.height as f32);
 
-                            address_map.sprites.insert(
-                                sp.sprite_id.clone(),
-                                AtlasSpriteLocation {
-                                    chunk_id,
-                                    category: category_name.to_string(),
-                                    is_animated: false,
-                                    sprite_kind: SpriteKind::StaticAtlas,
-                                    texture_id: texture_id_counter,
-                                    uv_bounds: [u_min, v_min, u_max, v_max],
-                                    frame_0_uv_bounds: [u_min, v_min, u_max, v_max],
-                                    local_uv_bounds: [0.0, 0.0, 1.0, 1.0],
-                                    frame_uv_step: [0.0, 0.0],
-                                    pixel_rect: [inner_x, inner_y, fw, fh],
-                                    strip_pixel_rect: [inner_x, inner_y, fw, fh],
-                                    frame_size: [fw, fh],
-                                    frame_count: 1,
-                                    animation: None,
-                                    has_normal: slot_has_normal,
-                                    has_specular: slot_has_specular,
-                                    has_overlay: slot_has_overlay,
-                                },
-                            );
+                            let sprite_loc = AtlasSpriteLocation {
+                                chunk_id,
+                                category: category_name.to_string(),
+                                is_animated: false,
+                                sprite_kind: SpriteKind::StaticAtlas,
+                                texture_id: texture_id_counter,
+                                uv_bounds: [u_min, v_min, u_max, v_max],
+                                frame_0_uv_bounds: [u_min, v_min, u_max, v_max],
+                                local_uv_bounds: [0.0, 0.0, 1.0, 1.0],
+                                frame_uv_step: [0.0, 0.0],
+                                pixel_rect: [inner_x, inner_y, fw, fh],
+                                strip_pixel_rect: [inner_x, inner_y, fw, fh],
+                                frame_size: [fw, fh],
+                                frame_count: 1,
+                                animation: None,
+                                has_normal: slot_has_normal,
+                                has_specular: slot_has_specular,
+                                has_overlay: slot_has_overlay,
+                            };
+
+                            address_map.sprites.insert(sp.sprite_id.clone(), sprite_loc.clone());
+
+                            if slot_has_overlay {
+                                let overlay_id = sp.sprite_id.with_suffix("_overlay");
+                                address_map.sprites.insert(overlay_id, sprite_loc.clone());
+                                if sp.sprite_id.path.ends_with("side") {
+                                    let alt_path = sp.sprite_id.path.replace("side", "side_overlay");
+                                    address_map.sprites.insert(
+                                        ResourceLocation::new(&sp.sprite_id.namespace, alt_path),
+                                        sprite_loc,
+                                    );
+                                }
+                            }
 
                             texture_id_counter += 1;
                         }
@@ -443,28 +454,39 @@ impl AtlasBuilder {
                             let v_frame_step = (sp.frame_height as f32) / (chunk.height as f32);
                             let frame_0_v_min = v_max - v_frame_step;
 
-                            address_map.anim_sprites.insert(
-                                sp.sprite_id.clone(),
-                                AtlasSpriteLocation {
-                                    chunk_id,
-                                    category: category_name.to_string(),
-                                    is_animated: true,
-                                    sprite_kind: SpriteKind::AnimatedAtlas,
-                                    texture_id: texture_id_counter,
-                                    uv_bounds: [u_min, v_min, u_max, v_max],
-                                    frame_0_uv_bounds: [u_min, frame_0_v_min, u_max, v_max],
-                                    local_uv_bounds: [0.0, 0.0, 1.0, 1.0],
-                                    frame_uv_step: [0.0, v_frame_step],
-                                    pixel_rect: [inner_x, inner_y, fw, sp.frame_height],
-                                    strip_pixel_rect: [inner_x, inner_y, fw, strip_h],
-                                    frame_size: [fw, sp.frame_height],
-                                    frame_count: sp.frame_count,
-                                    animation: sp.metadata.clone(),
-                                    has_normal: slot_has_normal,
-                                    has_specular: slot_has_specular,
-                                    has_overlay: slot_has_overlay,
-                                },
-                            );
+                            let sprite_loc = AtlasSpriteLocation {
+                                chunk_id,
+                                category: category_name.to_string(),
+                                is_animated: true,
+                                sprite_kind: SpriteKind::AnimatedAtlas,
+                                texture_id: texture_id_counter,
+                                uv_bounds: [u_min, v_min, u_max, v_max],
+                                frame_0_uv_bounds: [u_min, frame_0_v_min, u_max, v_max],
+                                local_uv_bounds: [0.0, 0.0, 1.0, 1.0],
+                                frame_uv_step: [0.0, v_frame_step],
+                                pixel_rect: [inner_x, inner_y, fw, sp.frame_height],
+                                strip_pixel_rect: [inner_x, inner_y, fw, strip_h],
+                                frame_size: [fw, sp.frame_height],
+                                frame_count: sp.frame_count,
+                                animation: sp.metadata.clone(),
+                                has_normal: slot_has_normal,
+                                has_specular: slot_has_specular,
+                                has_overlay: slot_has_overlay,
+                            };
+
+                            address_map.anim_sprites.insert(sp.sprite_id.clone(), sprite_loc.clone());
+
+                            if slot_has_overlay {
+                                let overlay_id = sp.sprite_id.with_suffix("_overlay");
+                                address_map.anim_sprites.insert(overlay_id, sprite_loc.clone());
+                                if sp.sprite_id.path.ends_with("side") {
+                                    let alt_path = sp.sprite_id.path.replace("side", "side_overlay");
+                                    address_map.anim_sprites.insert(
+                                        ResourceLocation::new(&sp.sprite_id.namespace, alt_path),
+                                        sprite_loc,
+                                    );
+                                }
+                            }
 
                             texture_id_counter += 1;
                         }
@@ -653,28 +675,39 @@ impl AtlasBuilder {
                         let v_min = 1.0 - ((inner_y + fh) as f32) / (chunk.height as f32);
                         let v_max = 1.0 - (inner_y as f32) / (chunk.height as f32);
 
-                        address_map.sprites.insert(
-                            sp.sprite_id.clone(),
-                            AtlasSpriteLocation {
-                                chunk_id,
-                                category: category_name.to_string(),
-                                is_animated: false,
-                                sprite_kind: SpriteKind::StaticAtlas,
-                                texture_id: texture_id_counter,
-                                uv_bounds: [u_min, v_min, u_max, v_max],
-                                frame_0_uv_bounds: [u_min, v_min, u_max, v_max],
-                                local_uv_bounds: [0.0, 0.0, 1.0, 1.0],
-                                frame_uv_step: [0.0, 0.0],
-                                pixel_rect: [inner_x, inner_y, fw, fh],
-                                strip_pixel_rect: [inner_x, inner_y, fw, fh],
-                                frame_size: [fw, fh],
-                                frame_count: 1,
-                                animation: None,
-                                has_normal: slot_has_normal,
-                                has_specular: slot_has_specular,
-                                has_overlay: slot_has_overlay,
-                            },
-                        );
+                        let sprite_loc = AtlasSpriteLocation {
+                            chunk_id,
+                            category: category_name.to_string(),
+                            is_animated: false,
+                            sprite_kind: SpriteKind::StaticAtlas,
+                            texture_id: texture_id_counter,
+                            uv_bounds: [u_min, v_min, u_max, v_max],
+                            frame_0_uv_bounds: [u_min, v_min, u_max, v_max],
+                            local_uv_bounds: [0.0, 0.0, 1.0, 1.0],
+                            frame_uv_step: [0.0, 0.0],
+                            pixel_rect: [inner_x, inner_y, fw, fh],
+                            strip_pixel_rect: [inner_x, inner_y, fw, fh],
+                            frame_size: [fw, fh],
+                            frame_count: 1,
+                            animation: None,
+                            has_normal: slot_has_normal,
+                            has_specular: slot_has_specular,
+                            has_overlay: slot_has_overlay,
+                        };
+
+                        address_map.sprites.insert(sp.sprite_id.clone(), sprite_loc.clone());
+
+                        if slot_has_overlay {
+                            let overlay_id = sp.sprite_id.with_suffix("_overlay");
+                            address_map.sprites.insert(overlay_id, sprite_loc.clone());
+                            if sp.sprite_id.path.ends_with("side") {
+                                let alt_path = sp.sprite_id.path.replace("side", "side_overlay");
+                                address_map.sprites.insert(
+                                    ResourceLocation::new(&sp.sprite_id.namespace, alt_path),
+                                    sprite_loc,
+                                );
+                            }
+                        }
 
                         texture_id_counter += 1;
                     }
@@ -797,28 +830,39 @@ impl AtlasBuilder {
                         let v_frame_step = (sp.frame_height as f32) / (chunk.height as f32);
                         let frame_0_v_min = v_max - v_frame_step;
 
-                        address_map.anim_sprites.insert(
-                            sp.sprite_id.clone(),
-                            AtlasSpriteLocation {
-                                chunk_id,
-                                category: category_name.to_string(),
-                                is_animated: true,
-                                sprite_kind: SpriteKind::AnimatedAtlas,
-                                texture_id: texture_id_counter,
-                                uv_bounds: [u_min, v_min, u_max, v_max],
-                                frame_0_uv_bounds: [u_min, frame_0_v_min, u_max, v_max],
-                                local_uv_bounds: [0.0, 0.0, 1.0, 1.0],
-                                frame_uv_step: [0.0, v_frame_step],
-                                pixel_rect: [inner_x, inner_y, fw, sp.frame_height],
-                                strip_pixel_rect: [inner_x, inner_y, fw, strip_h],
-                                frame_size: [fw, sp.frame_height],
-                                frame_count: sp.frame_count,
-                                animation: sp.metadata.clone(),
-                                has_normal: slot_has_normal,
-                                has_specular: slot_has_specular,
-                                has_overlay: slot_has_overlay,
-                            },
-                        );
+                        let sprite_loc = AtlasSpriteLocation {
+                            chunk_id,
+                            category: category_name.to_string(),
+                            is_animated: true,
+                            sprite_kind: SpriteKind::AnimatedAtlas,
+                            texture_id: texture_id_counter,
+                            uv_bounds: [u_min, v_min, u_max, v_max],
+                            frame_0_uv_bounds: [u_min, frame_0_v_min, u_max, v_max],
+                            local_uv_bounds: [0.0, 0.0, 1.0, 1.0],
+                            frame_uv_step: [0.0, v_frame_step],
+                            pixel_rect: [inner_x, inner_y, fw, sp.frame_height],
+                            strip_pixel_rect: [inner_x, inner_y, fw, strip_h],
+                            frame_size: [fw, sp.frame_height],
+                            frame_count: sp.frame_count,
+                            animation: sp.metadata.clone(),
+                            has_normal: slot_has_normal,
+                            has_specular: slot_has_specular,
+                            has_overlay: slot_has_overlay,
+                        };
+
+                        address_map.anim_sprites.insert(sp.sprite_id.clone(), sprite_loc.clone());
+
+                        if slot_has_overlay {
+                            let overlay_id = sp.sprite_id.with_suffix("_overlay");
+                            address_map.anim_sprites.insert(overlay_id, sprite_loc.clone());
+                            if sp.sprite_id.path.ends_with("side") {
+                                let alt_path = sp.sprite_id.path.replace("side", "side_overlay");
+                                address_map.anim_sprites.insert(
+                                    ResourceLocation::new(&sp.sprite_id.namespace, alt_path),
+                                    sprite_loc,
+                                );
+                            }
+                        }
 
                         texture_id_counter += 1;
                     }

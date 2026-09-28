@@ -18,6 +18,9 @@ pub use ctm::{
 pub use error::ResourceError;
 pub use identifier::{DEFAULT_NAMESPACE, ResourceLocation};
 pub use meta::{AnimationFrame, AnimationMetadata, TextureMetadata};
-pub use pack::{DirectoryPack, DiscoveredSprite, MemoryPack, PbrCompanions, ResourcePack, ResourcePackStack};
+pub use pack::{
+    is_companion_asset_path, DirectoryPack, DiscoveredSprite, MemoryPack, PbrCompanions,
+    ResourcePack, ResourcePackStack,
+};
 #[cfg(feature = "zip")]
 pub use pack::ZipPack;

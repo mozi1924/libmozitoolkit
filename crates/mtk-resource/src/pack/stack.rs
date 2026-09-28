@@ -41,6 +41,18 @@ impl Default for ResourcePackStack {
     }
 }
 
+/// Returns true if the given texture asset path is a companion texture (_n, _s, _overlay)
+/// that must not become an independent standalone sprite in the atlas.
+pub fn is_companion_asset_path(file: &str) -> bool {
+    let lower = file.to_ascii_lowercase();
+    lower.ends_with("_n.png")
+        || lower.ends_with("_s.png")
+        || lower.ends_with("_overlay.png")
+        || lower.ends_with("_overlay_anim.png")
+        || lower.ends_with("grass_block_side_overlay.png")
+        || lower.ends_with("grass_side_overlay.png")
+}
+
 impl ResourcePackStack {
     pub fn new() -> Self {
         Self { packs: Vec::new() }
@@ -87,7 +99,8 @@ impl ResourcePackStack {
     }
 
     /// List all unique texture locations discovered across all active packs in the stack.
-    /// Excludes companion files like `_n.png`, `_s.png`.
+    /// List all unique texture locations discovered across all active packs in the stack.
+    /// Excludes companion files like `_n.png`, `_s.png`, `_overlay.png`.
     pub fn list_all_texture_locations(&self) -> Vec<ResourceLocation> {
         let mut seen = HashSet::new();
         let mut results = Vec::new();
@@ -97,11 +110,7 @@ impl ResourcePackStack {
                 if !file.ends_with(".png") {
                     continue;
                 }
-                if file.ends_with("_n.png")
-                    || file.ends_with("_N.png")
-                    || file.ends_with("_s.png")
-                    || file.ends_with("_S.png")
-                {
+                if is_companion_asset_path(&file) {
                     continue;
                 }
                 if let Some(loc) = ResourceLocation::from_asset_path(&file, "textures", "png") {
@@ -307,9 +316,8 @@ impl ResourcePackStack {
                             if !file.ends_with(".png") {
                                 continue;
                             }
-                            // Companion textures (_n, _s) must never become standalone sprites
-                            if file.ends_with("_n.png") || file.ends_with("_N.png")
-                                || file.ends_with("_s.png") || file.ends_with("_S.png") {
+                            // Companion textures (_n, _s, _overlay) must never become standalone sprites
+                            if is_companion_asset_path(&file) {
                                 continue;
                             }
 

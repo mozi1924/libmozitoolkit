@@ -409,6 +409,15 @@ impl SectionMesher {
                     if let Some(baked) = baked_opt {
                         for el in &baked.elements {
                             for face in el.faces.values() {
+                                // Skip standalone overlay decal faces: in MoziToolKit/libmtk, overlays are
+                                // composited directly onto base faces in the shader via companion atlas (_overlay.png).
+                                if face.texture.ends_with("_overlay")
+                                    || face.texture.ends_with("_OVERLAY")
+                                    || face.texture.contains("side_overlay")
+                                {
+                                    continue;
+                                }
+
                                 // Check cullface
                                 let should_render = if let Some(cull_dir) = face.cullface {
                                     let offset = cull_dir.offset();

@@ -287,6 +287,13 @@ fn test_atlas_builder_with_overlay() {
     let grass_loc = baked.address_map.lookup_static(&grass_side_id).unwrap();
     assert!(grass_loc.has_overlay);
 
+    // Verify overlay alias in address_map
+    let overlay_id = grass_side_id.with_suffix("_overlay");
+    let overlay_loc = baked.address_map.lookup_static(&overlay_id).expect("Overlay alias must exist in address_map");
+    assert_eq!(overlay_loc.pixel_rect, grass_loc.pixel_rect);
+    assert_eq!(overlay_loc.uv_bounds, grass_loc.uv_bounds);
+    assert!(overlay_loc.has_overlay);
+
     let stone_loc = baked.address_map.lookup_static(&stone_id).unwrap();
     assert!(!stone_loc.has_overlay);
 
