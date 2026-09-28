@@ -508,19 +508,19 @@ impl SectionMesher {
                                             let remapped = [
                                                 glam::Vec2::new(
                                                     u_min + face.uvs[0].x * u_span,
-                                                    v_min + face.uvs[0].y * v_span,
+                                                    v_min + (1.0 - face.uvs[0].y) * v_span,
                                                 ),
                                                 glam::Vec2::new(
                                                     u_min + face.uvs[1].x * u_span,
-                                                    v_min + face.uvs[1].y * v_span,
+                                                    v_min + (1.0 - face.uvs[1].y) * v_span,
                                                 ),
                                                 glam::Vec2::new(
                                                     u_min + face.uvs[2].x * u_span,
-                                                    v_min + face.uvs[2].y * v_span,
+                                                    v_min + (1.0 - face.uvs[2].y) * v_span,
                                                 ),
                                                 glam::Vec2::new(
                                                     u_min + face.uvs[3].x * u_span,
-                                                    v_min + face.uvs[3].y * v_span,
+                                                    v_min + (1.0 - face.uvs[3].y) * v_span,
                                                 ),
                                             ];
                                             (
@@ -660,10 +660,10 @@ impl SectionMesher {
                                         let u_max = atlas_loc.frame_0_uv_bounds[2];
                                         let v_max = atlas_loc.frame_0_uv_bounds[3];
                                         let remapped = [
-                                            glam::Vec2::new(u_min, v_min),
                                             glam::Vec2::new(u_min, v_max),
-                                            glam::Vec2::new(u_max, v_max),
+                                            glam::Vec2::new(u_min, v_min),
                                             glam::Vec2::new(u_max, v_min),
+                                            glam::Vec2::new(u_max, v_max),
                                         ];
                                         (
                                             res_loc.as_string(),
@@ -829,7 +829,7 @@ fn emit_baked_face(
         if let Some(ref uvs) = override_uvs {
             mesh.uvs.push([uvs[i].x, uvs[i].y]);
         } else {
-            mesh.uvs.push([face.uvs[i].x, face.uvs[i].y]);
+            mesh.uvs.push([face.uvs[i].x, 1.0 - face.uvs[i].y]);
         }
 
         let ao_b = ao_level_to_brightness(ao_levels[i]);
@@ -962,10 +962,10 @@ fn emit_unit_cube_face(
             mesh.uvs.push([uv.x, uv.y]);
         }
     } else {
-        mesh.uvs.push([0.0, 0.0]);
         mesh.uvs.push([0.0, 1.0]);
-        mesh.uvs.push([1.0, 1.0]);
+        mesh.uvs.push([0.0, 0.0]);
         mesh.uvs.push([1.0, 0.0]);
+        mesh.uvs.push([1.0, 1.0]);
     }
 
     if should_flip_quad_diagonal(ao_levels) {

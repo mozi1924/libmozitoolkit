@@ -387,10 +387,10 @@ where
             let u_span = bounds[2] - u_min;
             let v_span = bounds[3] - v_min;
             let mapped = [
-                [u_min + raw_uvs[0][0] * u_span, v_min + raw_uvs[0][1] * v_span],
-                [u_min + raw_uvs[1][0] * u_span, v_min + raw_uvs[1][1] * v_span],
-                [u_min + raw_uvs[2][0] * u_span, v_min + raw_uvs[2][1] * v_span],
-                [u_min + raw_uvs[3][0] * u_span, v_min + raw_uvs[3][1] * v_span],
+                [u_min + raw_uvs[0][0] * u_span, v_min + (1.0 - raw_uvs[0][1]) * v_span],
+                [u_min + raw_uvs[1][0] * u_span, v_min + (1.0 - raw_uvs[1][1]) * v_span],
+                [u_min + raw_uvs[2][0] * u_span, v_min + (1.0 - raw_uvs[2][1]) * v_span],
+                [u_min + raw_uvs[3][0] * u_span, v_min + (1.0 - raw_uvs[3][1]) * v_span],
             ];
             (*cid, mapped, *cid as i32, *tid, res_name.clone())
         } else {
@@ -398,7 +398,13 @@ where
                 FluidType::Water => if face_flowing { "minecraft:block/water_flow" } else { "minecraft:block/water_still" },
                 FluidType::Lava => if face_flowing { "minecraft:block/lava_flow" } else { "minecraft:block/lava_still" },
             };
-            (material_slot, raw_uvs, 0, 0, default_name.to_string())
+            let mapped_fallback = [
+                [raw_uvs[0][0], 1.0 - raw_uvs[0][1]],
+                [raw_uvs[1][0], 1.0 - raw_uvs[1][1]],
+                [raw_uvs[2][0], 1.0 - raw_uvs[2][1]],
+                [raw_uvs[3][0], 1.0 - raw_uvs[3][1]],
+            ];
+            (material_slot, mapped_fallback, 0, 0, default_name.to_string())
         };
 
         for i in 0..4 {
