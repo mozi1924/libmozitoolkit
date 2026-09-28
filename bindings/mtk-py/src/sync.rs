@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
@@ -29,7 +27,7 @@ impl PyLiveSyncSession {
     ) -> Self {
         let cfg = config.map(|c| c.inner.clone());
         let cul = culler.map(|c| c.inner.clone());
-        let mdb = model_db.map(|db| Arc::new(db.inner.clone()));
+        let mdb = model_db.map(|db| db.inner.clone());
         Self {
             inner: LiveSyncSession::new(cfg, cul, mdb, unified_mesh),
         }
@@ -37,7 +35,7 @@ impl PyLiveSyncSession {
 
     /// Sets or updates the active baked model database.
     pub fn set_model_db(&mut self, model_db: Option<&PyBakedModelDatabase>) {
-        self.inner.set_model_db(model_db.map(|db| Arc::new(db.inner.clone())));
+        self.inner.set_model_db(model_db.map(|db| db.inner.clone()));
     }
 
     /// Sets whether to output unified world mesh or individual section meshes.

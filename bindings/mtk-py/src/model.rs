@@ -2,6 +2,8 @@
 //!
 //! Exposes universal headless BlockState and Minecraft model baking to Python.
 
+use std::sync::Arc;
+
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use mtk_model::{BakedModelDatabase, BlockModelJson, BlockState, BlockStateDefinition, ModelBaker};
@@ -12,7 +14,7 @@ use crate::resource::PyResourcePackStack;
 #[pyclass(name = "BakedModelDatabase")]
 #[derive(Default, Clone)]
 pub struct PyBakedModelDatabase {
-    pub(crate) inner: BakedModelDatabase,
+    pub(crate) inner: Arc<BakedModelDatabase>,
 }
 
 #[pymethods]
@@ -20,7 +22,7 @@ impl PyBakedModelDatabase {
     #[new]
     pub fn new() -> Self {
         Self {
-            inner: BakedModelDatabase::new(),
+            inner: Arc::new(BakedModelDatabase::new()),
         }
     }
 
@@ -62,7 +64,7 @@ impl PyBakedModelDatabase {
     pub fn from_bincode_bytes(bytes: &[u8]) -> PyResult<Self> {
         let inner = BakedModelDatabase::from_bincode(bytes)
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-        Ok(Self { inner })
+        Ok(Self { inner: Arc::new(inner) })
     }
 }
 
@@ -99,7 +101,7 @@ impl PyModelBaker {
             .allow_threads(|| libmtk::prebake_all_models(&stack.inner))
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
-        Ok(PyBakedModelDatabase { inner: db })
+        Ok(PyBakedModelDatabase { inner: Arc::new(db) })
     }
 
     /// Bakes a single blockstate string into a `PyMeshData` and texture list.

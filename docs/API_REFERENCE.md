@@ -127,7 +127,14 @@ pub struct Quad {
 - `BlockState`: 解析 `minecraft:oak_stairs[facing=east,half=bottom,shape=straight]` 为状态名与键值对 Map。
 - `BlockModelJson`: 反序列化 Minecraft 原版 Model JSON 结构（`parent`, `textures`, `elements`, `display`）。
 - `ModelBaker`: 模型烘焙器，负责递归解析父模型引用、继承纹理变量、根据 UV 旋转和 Element 构建 `BakedModel`。
-- `BakedModel`: 包含预计算好的 6 向四边形列表 (`Quad` + `FaceAttributes`) 与未指定 cullface 的自由面。
+- `BakedModel`: 包含预计算好的 6 向四边形列表 (`Quad` + `FaceAttributes`) 与未指定 cullface 的自由面，以及原始方块要素元素 (`BakedElement`)。
+- `BakedModelDatabase`: 烘焙模型数据库容器，支持快速序列化与反序列化（bincode 二进制高速流）。
+  - `db.get(state: &str) -> Option<&BakedModel>`:
+    多级智能 BlockState 寻址匹配引擎：
+    - **Tier 1 (Exact Match)**: 极速精确哈希查询（针对纯净模型定义键）。
+    - **Tier 2 (Canonical Filter)**: 剥离世界运行时非几何状态属性（如 `waterlogged`, `occupied`, `distance`, `persistent`, `stage`, `unstable`, `conditional`, `disarmed`）进行规范键查询。
+    - **Tier 3 (Compatibility Subset Match)**: 提取方块标识与关键几何变体属性（如 `facing`, `half`, `part`, `type`, `shape`, `open`, `lit`, `axis`）进行属性子集模糊降级匹配。
+    - **Tier 4 (Base ID Fallback)**: 回退到基础 Block ID 默认形态。
 - `WavefrontObjParser` / `ModObjLoader`: 解析通用 Wavefront OBJ 模型并转化为 `MeshData`。
 
 ---

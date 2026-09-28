@@ -164,16 +164,9 @@ impl LiveSyncSession {
         }
 
         let padded: Vec<_> = non_empty.iter().map(|&c| st.get_section_padded_array(c)).collect();
-        let arc_map = self.model_db.as_ref().map(|db| {
-            Arc::new(
-                db.models
-                    .iter()
-                    .map(|(k, v)| (k.clone(), Arc::new(v.clone())))
-                    .collect::<HashMap<String, Arc<BakedModel>>>(),
-            )
-        });
+        let db_opt = self.model_db.clone();
         let model_lookup = move |state: &str| -> Option<Arc<BakedModel>> {
-            arc_map.as_ref().and_then(|map| map.get(state).cloned())
+            db_opt.as_ref().and_then(|db| db.get(state).cloned().map(Arc::new))
         };
 
         if let Ok(results) = SectionMesher::mesh_sections_parallel(
@@ -237,15 +230,6 @@ impl LiveSyncSession {
         stream_id_atomic: Arc<AtomicU32>,
         running: Arc<AtomicBool>,
     ) {
-        let arc_model_map = model_db.map(|db| {
-            Arc::new(
-                db.models
-                    .iter()
-                    .map(|(k, v)| (k.clone(), Arc::new(v.clone())))
-                    .collect::<HashMap<String, Arc<BakedModel>>>(),
-            )
-        });
-
         let mut section_mesh_cache: HashMap<IVec3, MeshData> = HashMap::new();
 
         while running.load(Ordering::Relaxed) {
@@ -264,7 +248,7 @@ impl LiveSyncSession {
                         &event_sender,
                         &config,
                         &culler,
-                        &arc_model_map,
+                        &model_db,
                         unified_mesh,
                         &mut section_mesh_cache,
                         &stream_id_atomic,
@@ -282,13 +266,13 @@ impl LiveSyncSession {
         event_sender: &Sender<SyncEvent>,
         config: &MesherConfig,
         culler: &FaceCuller,
-        arc_model_map: &Option<Arc<HashMap<String, Arc<BakedModel>>>>,
+        model_db: &Option<Arc<BakedModelDatabase>>,
         unified_mesh: bool,
         section_mesh_cache: &mut HashMap<IVec3, MeshData>,
         stream_id_atomic: &Arc<AtomicU32>,
     ) {
         let model_lookup = |state: &str| -> Option<Arc<BakedModel>> {
-            arc_model_map.as_ref().and_then(|map| map.get(state).cloned())
+            model_db.as_ref().and_then(|db| db.get(state).cloned().map(Arc::new))
         };
 
         match packet {

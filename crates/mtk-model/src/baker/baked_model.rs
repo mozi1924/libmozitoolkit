@@ -281,8 +281,114 @@ impl BakedModelDatabase {
         self.models.insert(state, model);
     }
 
+    /// Resolves a baked model using multi-tiered smart BlockState resolution:
+    /// 1. Exact string match in `self.models`.
+    /// 2. Normalized match with non-geometric properties stripped (e.g. `waterlogged`, `occupied`).
+    /// 3. Best compatibility subset match against variant keys for this block ID.
+    /// 4. Base unparameterized block ID fallback (e.g. `minecraft:chest`).
     pub fn get(&self, state: &str) -> Option<&BakedModel> {
-        self.models.get(state)
+        // Tier 1: Fast exact match
+        if let Some(model) = self.models.get(state) {
+            return Some(model);
+        }
+
+        let parsed = match crate::parser::blockstate::BlockState::parse(state) {
+            Ok(p) => p,
+            Err(_) => return None,
+        };
+
+        let base_id = parsed.block_id();
+
+        // Tier 2: Strip known non-geometric properties that never affect block model geometry in vanilla
+        const NON_GEOMETRIC_PROPS: &[&str] = &[
+            "waterlogged",
+            "occupied",
+            "distance",
+            "persistent",
+            "stage",
+            "unstable",
+            "conditional",
+            "disarmed",
+        ];
+
+        let mut has_non_geom = false;
+        let mut filtered_props = parsed.properties.clone();
+        for &prop in NON_GEOMETRIC_PROPS {
+            if filtered_props.remove(prop).is_some() {
+                has_non_geom = true;
+            }
+        }
+
+        if has_non_geom {
+            let canon_filtered = if filtered_props.is_empty() {
+                base_id.clone()
+            } else {
+                let props_str: Vec<String> = filtered_props
+                    .iter()
+                    .map(|(k, v)| format!("{}={}", k, v))
+                    .collect();
+                format!("{}[{}]", base_id, props_str.join(","))
+            };
+
+            if let Some(model) = self.models.get(&canon_filtered) {
+                return Some(model);
+            }
+        }
+
+        // Tier 3: Compatibility match - find the variant whose properties are a subset of the query
+        let prefix = format!("{}[", base_id);
+        let mut best_model: Option<&BakedModel> = None;
+        let mut best_score = -1i32;
+
+        for (key, model) in &self.models {
+            if key == &base_id {
+                if best_score < 0 {
+                    best_model = Some(model);
+                    best_score = 0;
+                }
+                continue;
+            }
+
+            if key.starts_with(&prefix) && key.ends_with(']') {
+                let cand_props_str = &key[prefix.len()..key.len() - 1];
+                let mut matches = true;
+                let mut score = 0i32;
+
+                for pair in cand_props_str.split(',') {
+                    if let Some((k, v)) = pair.split_once('=') {
+                        let k = k.trim();
+                        let v = v.trim();
+                        if let Some(query_v) = parsed.properties.get(k) {
+                            if query_v != v {
+                                matches = false;
+                                break;
+                            }
+                            score += 1;
+                        } else {
+                            matches = false;
+                            break;
+                        }
+                    }
+                }
+
+                if matches && score > best_score {
+                    best_score = score;
+                    best_model = Some(model);
+                }
+            }
+        }
+
+        if best_model.is_some() {
+            return best_model;
+        }
+
+        // Tier 4: Base block ID fallback (e.g. "minecraft:chest")
+        if let Some(m) = self.models.get(&base_id) {
+            return Some(m);
+        }
+
+        // Also try stripped short name (e.g. "chest")
+        self.models.get(&parsed.name)
     }
 
     pub fn len(&self) -> usize {
@@ -381,4 +487,72 @@ mod tests {
             panic!("Expected String attribute data");
         }
     }
+
+    #[test]
+    fn test_smart_blockstate_lookup() {
+        let mut db = BakedModelDatabase::new();
+
+        let dummy_model = |state: &str| BakedModel {
+            block_state: state.to_string(),
+            elements: Vec::new(),
+            obj_faces: Vec::new(),
+            faces: [
+                BakedFace::default(),
+                BakedFace::default(),
+                BakedFace::default(),
+                BakedFace::default(),
+                BakedFace::default(),
+                BakedFace::default(),
+            ],
+            is_cube: false,
+            is_opaque: false,
+            is_emissive: false,
+            emissive_level: 0.0,
+        };
+
+        db.insert(
+            "minecraft:oak_stairs[facing=east,half=bottom,shape=straight]".to_string(),
+            dummy_model("minecraft:oak_stairs[facing=east,half=bottom,shape=straight]"),
+        );
+        db.insert(
+            "minecraft:smooth_stone_slab[type=bottom]".to_string(),
+            dummy_model("minecraft:smooth_stone_slab[type=bottom]"),
+        );
+        db.insert(
+            "minecraft:chest".to_string(),
+            dummy_model("minecraft:chest"),
+        );
+        db.insert(
+            "minecraft:red_bed[facing=north,part=foot]".to_string(),
+            dummy_model("minecraft:red_bed[facing=north,part=foot]"),
+        );
+
+        // Tier 1: Exact match
+        assert!(db.get("minecraft:chest").is_some());
+        assert!(db.get("minecraft:smooth_stone_slab[type=bottom]").is_some());
+
+        // Tier 2: Stripping non-geometric properties (waterlogged, occupied)
+        let stairs_query = "minecraft:oak_stairs[facing=east,half=bottom,shape=straight,waterlogged=false]";
+        let slab_query = "minecraft:smooth_stone_slab[type=bottom,waterlogged=false]";
+        let bed_query = "minecraft:red_bed[facing=north,occupied=false,part=foot]";
+
+        let stairs_found = db.get(stairs_query);
+        assert!(stairs_found.is_some(), "Stairs with waterlogged=false must match");
+        assert_eq!(stairs_found.unwrap().block_state, "minecraft:oak_stairs[facing=east,half=bottom,shape=straight]");
+
+        let slab_found = db.get(slab_query);
+        assert!(slab_found.is_some(), "Slab with waterlogged=false must match");
+        assert_eq!(slab_found.unwrap().block_state, "minecraft:smooth_stone_slab[type=bottom]");
+
+        let bed_found = db.get(bed_query);
+        assert!(bed_found.is_some(), "Bed with occupied=false must match");
+        assert_eq!(bed_found.unwrap().block_state, "minecraft:red_bed[facing=north,part=foot]");
+
+        // Tier 3/4: Fallback for chest with state properties to base chest model
+        let chest_query = "minecraft:chest[facing=south,type=single,waterlogged=false]";
+        let chest_found = db.get(chest_query);
+        assert!(chest_found.is_some(), "Chest with properties must fallback to base chest model");
+        assert_eq!(chest_found.unwrap().block_state, "minecraft:chest");
+    }
 }
+

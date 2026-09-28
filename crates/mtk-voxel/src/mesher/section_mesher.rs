@@ -395,172 +395,223 @@ impl SectionMesher {
                     let blockstate = BlockState::parse(state_str);
                     let is_emissive = blockstate.as_ref().map(is_block_emissive).unwrap_or(false);
 
-                    for dir in Direction::ALL {
-                        let offset = dir.offset();
-                        let npx = (px as i32 + offset.x) as usize;
-                        let npy = (py as i32 + offset.y) as usize;
-                        let npz = (pz as i32 + offset.z) as usize;
-
-                        let npal_idx = padded.padded_voxels[padded_index(npx, npy, npz)] as usize;
-                        let n_meta = if npal_idx < palette_metas.len() {
-                            Some(&*palette_metas[npal_idx])
+                    let get_padded_neighbor_state = |target_pos: IVec3| -> Option<&str> {
+                        let rel_x = target_pos.x - block_pos.x + px as i32;
+                        let rel_y = target_pos.y - block_pos.y + py as i32;
+                        let rel_z = target_pos.z - block_pos.z + pz as i32;
+                        if (0..18).contains(&rel_x) && (0..18).contains(&rel_y) && (0..18).contains(&rel_z) {
+                            Some(padded.get_padded_state(rel_x as usize, rel_y as usize, rel_z as usize))
                         } else {
                             None
-                        };
-
-                        let neighbor_pos = block_pos + offset;
-
-                        // Check occlusion visibility
-                        if !culler.should_render_face(
-                            meta,
-                            n_meta,
-                            dir,
-                            None,
-                            Some(block_pos),
-                            Some(neighbor_pos),
-                        ) {
-                            continue;
                         }
+                    };
 
-                        // Calculate 4-corner AO
-                        let ao_levels = if config.enable_ao && !is_emissive {
-                            calculate_face_ao(dir, |dx, dy, dz| {
-                                let sx = (px as i32 + dx) as usize;
-                                let sy = (py as i32 + dy) as usize;
-                                let sz = (pz as i32 + dz) as usize;
-                                if sx < 18 && sy < 18 && sz < 18 {
-                                    is_opaque_fn(sx, sy, sz)
+                    if let Some(baked) = baked_opt {
+                        for el in &baked.elements {
+                            for face in el.faces.values() {
+                                // Check cullface
+                                let should_render = if let Some(cull_dir) = face.cullface {
+                                    let offset = cull_dir.offset();
+                                    let npx = (px as i32 + offset.x) as usize;
+                                    let npy = (py as i32 + offset.y) as usize;
+                                    let npz = (pz as i32 + offset.z) as usize;
+
+                                    let npal_idx = padded.padded_voxels[padded_index(npx, npy, npz)] as usize;
+                                    let n_meta = if npal_idx < palette_metas.len() {
+                                        Some(&*palette_metas[npal_idx])
+                                    } else {
+                                        None
+                                    };
+                                    let neighbor_pos = block_pos + offset;
+
+                                    culler.should_render_face(
+                                        meta,
+                                        n_meta,
+                                        cull_dir,
+                                        None,
+                                        Some(block_pos),
+                                        Some(neighbor_pos),
+                                    )
                                 } else {
-                                    false
+                                    // Internal or non-boundary face: never culled by adjacent block occlusion
+                                    true
+                                };
+
+                                if !should_render {
+                                    continue;
                                 }
-                            })
-                        } else {
-                            [3, 3, 3, 3]
-                        };
 
-                        let get_padded_neighbor_state = |target_pos: IVec3| -> Option<&str> {
-                            let rel_x = target_pos.x - block_pos.x + px as i32;
-                            let rel_y = target_pos.y - block_pos.y + py as i32;
-                            let rel_z = target_pos.z - block_pos.z + pz as i32;
-                            if (0..18).contains(&rel_x) && (0..18).contains(&rel_y) && (0..18).contains(&rel_z) {
-                                Some(padded.get_padded_state(rel_x as usize, rel_y as usize, rel_z as usize))
-                            } else {
-                                None
-                            }
-                        };
+                                let dir = face.direction;
 
-                        if let Some(baked) = baked_opt {
-                            for el in &baked.elements {
-                                if let Some(face) = el.faces.get(&dir) {
-                                    let base_loc = if !face.texture.is_empty() {
-                                        mtk_resource::ResourceLocation::parse(&face.texture).ok()
-                                    } else {
-                                        None
-                                    };
+                                // Calculate 4-corner AO for face.direction
+                                let ao_levels = if config.enable_ao && !is_emissive {
+                                    calculate_face_ao(dir, |dx, dy, dz| {
+                                        let sx = (px as i32 + dx) as usize;
+                                        let sy = (py as i32 + dy) as usize;
+                                        let sz = (pz as i32 + dz) as usize;
+                                        if sx < 18 && sy < 18 && sz < 18 {
+                                            is_opaque_fn(sx, sy, sz)
+                                        } else {
+                                            false
+                                        }
+                                    })
+                                } else {
+                                    [3, 3, 3, 3]
+                                };
 
-                                    let resolved_loc = if let Some(solver) = &config.ctm_solver {
-                                        solver.resolve_face(
-                                            state_str,
-                                            dir,
-                                            block_pos,
-                                            base_loc.as_ref(),
-                                            None,
-                                            get_padded_neighbor_state,
-                                        )
-                                    } else {
-                                        None
-                                    };
+                                let base_loc = if !face.texture.is_empty() {
+                                    mtk_resource::ResourceLocation::parse(&face.texture).ok()
+                                } else {
+                                    None
+                                };
 
-                                    let final_loc = resolved_loc.as_ref().or(base_loc.as_ref());
+                                let resolved_loc = if let Some(solver) = &config.ctm_solver {
+                                    solver.resolve_face(
+                                        state_str,
+                                        dir,
+                                        block_pos,
+                                        base_loc.as_ref(),
+                                        None,
+                                        get_padded_neighbor_state,
+                                    )
+                                } else {
+                                    None
+                                };
 
-                                    let (final_tex_key, override_uvs, mat_slot, chunk_id, tex_id) =
-                                        if let Some(atlas) = &config.atlas_address_map {
-                                            let resolved = if let Some(ref loc) = final_loc {
-                                                MaterialResolver::resolve(
-                                                    &loc.as_string(),
-                                                    config.custom_aliases.as_deref(),
-                                                    atlas,
-                                                )
-                                                .or_else(|| atlas.lookup(loc).map(|sp| ((*loc).clone(), sp)))
-                                            } else {
-                                                None
-                                            }
-                                            .or_else(|| {
-                                                MaterialResolver::resolve(
-                                                    &face.texture,
-                                                    config.custom_aliases.as_deref(),
-                                                    atlas,
-                                                )
-                                            });
+                                let final_loc = resolved_loc.as_ref().or(base_loc.as_ref());
 
-                                            if let Some((res_loc, atlas_loc)) = resolved {
-                                                let u_min = atlas_loc.frame_0_uv_bounds[0];
-                                                let v_min = atlas_loc.frame_0_uv_bounds[1];
-                                                let u_span = atlas_loc.frame_0_uv_bounds[2] - u_min;
-                                                let v_span = atlas_loc.frame_0_uv_bounds[3] - v_min;
-                                                let remapped = [
-                                                    glam::Vec2::new(
-                                                        u_min + face.uvs[0].x * u_span,
-                                                        v_min + face.uvs[0].y * v_span,
-                                                    ),
-                                                    glam::Vec2::new(
-                                                        u_min + face.uvs[1].x * u_span,
-                                                        v_min + face.uvs[1].y * v_span,
-                                                    ),
-                                                    glam::Vec2::new(
-                                                        u_min + face.uvs[2].x * u_span,
-                                                        v_min + face.uvs[2].y * v_span,
-                                                    ),
-                                                    glam::Vec2::new(
-                                                        u_min + face.uvs[3].x * u_span,
-                                                        v_min + face.uvs[3].y * v_span,
-                                                    ),
-                                                ];
-                                                (
-                                                    res_loc.as_string(),
-                                                    Some(remapped),
-                                                    atlas_loc.chunk_id,
-                                                    atlas_loc.chunk_id as i32,
-                                                    atlas_loc.texture_id,
-                                                )
-                                            } else {
-                                                (face.texture.clone(), None, 0, 0, 0)
-                                            }
+                                let (final_tex_key, override_uvs, mat_slot, chunk_id, tex_id) =
+                                    if let Some(atlas) = &config.atlas_address_map {
+                                        let resolved = if let Some(ref loc) = final_loc {
+                                            MaterialResolver::resolve(
+                                                &loc.as_string(),
+                                                config.custom_aliases.as_deref(),
+                                                atlas,
+                                            )
+                                            .or_else(|| atlas.lookup(loc).map(|sp| ((*loc).clone(), sp)))
+                                        } else {
+                                            None
+                                        }
+                                        .or_else(|| {
+                                            MaterialResolver::resolve(
+                                                &face.texture,
+                                                config.custom_aliases.as_deref(),
+                                                atlas,
+                                            )
+                                        });
+
+                                        if let Some((res_loc, atlas_loc)) = resolved {
+                                            let u_min = atlas_loc.frame_0_uv_bounds[0];
+                                            let v_min = atlas_loc.frame_0_uv_bounds[1];
+                                            let u_span = atlas_loc.frame_0_uv_bounds[2] - u_min;
+                                            let v_span = atlas_loc.frame_0_uv_bounds[3] - v_min;
+                                            let remapped = [
+                                                glam::Vec2::new(
+                                                    u_min + face.uvs[0].x * u_span,
+                                                    v_min + face.uvs[0].y * v_span,
+                                                ),
+                                                glam::Vec2::new(
+                                                    u_min + face.uvs[1].x * u_span,
+                                                    v_min + face.uvs[1].y * v_span,
+                                                ),
+                                                glam::Vec2::new(
+                                                    u_min + face.uvs[2].x * u_span,
+                                                    v_min + face.uvs[2].y * v_span,
+                                                ),
+                                                glam::Vec2::new(
+                                                    u_min + face.uvs[3].x * u_span,
+                                                    v_min + face.uvs[3].y * v_span,
+                                                ),
+                                            ];
+                                            (
+                                                res_loc.as_string(),
+                                                Some(remapped),
+                                                atlas_loc.chunk_id,
+                                                atlas_loc.chunk_id as i32,
+                                                atlas_loc.texture_id,
+                                            )
                                         } else {
                                             (face.texture.clone(), None, 0, 0, 0)
-                                        };
+                                        }
+                                    } else {
+                                        (face.texture.clone(), None, 0, 0, 0)
+                                    };
 
-                                    let clean_block = mtk_resource::extract_block_name(state_str);
-                                    let (tint_data, tint_color, colormap_uv) = compute_face_tint(
-                                        &final_tex_key,
-                                        clean_block,
-                                        face.tint_index,
-                                        config.biome_resolver.as_deref(),
-                                    );
+                                let clean_block = mtk_resource::extract_block_name(state_str);
+                                let (tint_data, tint_color, colormap_uv) = compute_face_tint(
+                                    &final_tex_key,
+                                    clean_block,
+                                    face.tint_index,
+                                    config.biome_resolver.as_deref(),
+                                );
 
-                                    emit_baked_face(
-                                        &mut mesh,
-                                        face,
-                                        wx,
-                                        wy,
-                                        wz,
-                                        ao_levels,
-                                        config,
-                                        override_uvs,
-                                        mat_slot,
-                                        &mut collector,
-                                        final_tex_key,
-                                        chunk_id,
-                                        tex_id,
-                                        tint_data,
-                                        tint_color,
-                                        colormap_uv,
-                                        block_pos,
-                                        dir,
-                                    );
-                                }
+                                emit_baked_face(
+                                    &mut mesh,
+                                    face,
+                                    wx,
+                                    wy,
+                                    wz,
+                                    ao_levels,
+                                    config,
+                                    override_uvs,
+                                    mat_slot,
+                                    &mut collector,
+                                    final_tex_key,
+                                    chunk_id,
+                                    tex_id,
+                                    tint_data,
+                                    tint_color,
+                                    colormap_uv,
+                                    block_pos,
+                                    dir,
+                                );
                             }
-                        } else {
+                        }
+                    } else {
+                        // Standard unit cube meshing
+                        for dir in Direction::ALL {
+                            let offset = dir.offset();
+                            let npx = (px as i32 + offset.x) as usize;
+                            let npy = (py as i32 + offset.y) as usize;
+                            let npz = (pz as i32 + offset.z) as usize;
+
+                            let npal_idx = padded.padded_voxels[padded_index(npx, npy, npz)] as usize;
+                            let n_meta = if npal_idx < palette_metas.len() {
+                                Some(&*palette_metas[npal_idx])
+                            } else {
+                                None
+                            };
+
+                            let neighbor_pos = block_pos + offset;
+
+                            // Check occlusion visibility
+                            if !culler.should_render_face(
+                                meta,
+                                n_meta,
+                                dir,
+                                None,
+                                Some(block_pos),
+                                Some(neighbor_pos),
+                            ) {
+                                continue;
+                            }
+
+                            // Calculate 4-corner AO
+                            let ao_levels = if config.enable_ao && !is_emissive {
+                                calculate_face_ao(dir, |dx, dy, dz| {
+                                    let sx = (px as i32 + dx) as usize;
+                                    let sy = (py as i32 + dy) as usize;
+                                    let sz = (pz as i32 + dz) as usize;
+                                    if sx < 18 && sy < 18 && sz < 18 {
+                                        is_opaque_fn(sx, sy, sz)
+                                    } else {
+                                        false
+                                    }
+                                })
+                            } else {
+                                [3, 3, 3, 3]
+                            };
+
                             let clean_block = mtk_resource::extract_block_name(state_str)
                                 .strip_prefix("minecraft:")
                                 .unwrap_or(mtk_resource::extract_block_name(state_str));

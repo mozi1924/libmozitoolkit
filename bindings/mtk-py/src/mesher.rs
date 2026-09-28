@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use pyo3::prelude::*;
@@ -53,17 +52,9 @@ impl PySectionMesher {
             .map(|coord| storage.inner.get_section_padded_array(coord))
             .collect();
 
-        let arc_map = model_db.map(|db| {
-            Arc::new(
-                db.inner
-                    .models
-                    .iter()
-                    .map(|(k, v)| (k.clone(), Arc::new(v.clone())))
-                    .collect::<HashMap<String, Arc<BakedModel>>>(),
-            )
-        });
+        let model_db_opt = model_db.map(|db| db.inner.clone());
         let model_lookup = move |state: &str| -> Option<Arc<BakedModel>> {
-            arc_map.as_ref().and_then(|map| map.get(state).cloned())
+            model_db_opt.as_ref().and_then(|db| db.get(state).cloned().map(Arc::new))
         };
 
         let results = SectionMesher::mesh_sections_parallel(
@@ -122,17 +113,9 @@ impl PySectionMesher {
             .map(|coord| storage.inner.get_section_padded_array(coord))
             .collect();
 
-        let arc_map = model_db.map(|db| {
-            Arc::new(
-                db.inner
-                    .models
-                    .iter()
-                    .map(|(k, v)| (k.clone(), Arc::new(v.clone())))
-                    .collect::<HashMap<String, Arc<BakedModel>>>(),
-            )
-        });
+        let model_db_opt = model_db.map(|db| db.inner.clone());
         let model_lookup = move |state: &str| -> Option<Arc<BakedModel>> {
-            arc_map.as_ref().and_then(|map| map.get(state).cloned())
+            model_db_opt.as_ref().and_then(|db| db.get(state).cloned().map(Arc::new))
         };
 
         let results = SectionMesher::mesh_sections_parallel(
@@ -177,17 +160,9 @@ impl PySectionMesher {
         let default_culler = FaceCuller::default();
         let cul = culler.map(|c| &c.inner).unwrap_or(&default_culler);
 
-        let arc_map = model_db.map(|db| {
-            Arc::new(
-                db.inner
-                    .models
-                    .iter()
-                    .map(|(k, v)| (k.clone(), Arc::new(v.clone())))
-                    .collect::<HashMap<String, Arc<BakedModel>>>(),
-            )
-        });
+        let model_db_opt = model_db.map(|db| db.inner.clone());
         let model_lookup = move |state: &str| -> Option<Arc<BakedModel>> {
-            arc_map.as_ref().and_then(|map| map.get(state).cloned())
+            model_db_opt.as_ref().and_then(|db| db.get(state).cloned().map(Arc::new))
         };
 
         let results = DeltaMesher::rebuild_dirty_sections(
