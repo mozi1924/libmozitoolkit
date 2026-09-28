@@ -3,12 +3,14 @@
 //! Exposes `libmtk` data structures and high-performance algorithms to Python via PyO3.
 
 pub mod cull;
+pub mod extrude;
 pub mod material;
 pub mod mesh;
 pub mod mesher;
 pub mod model;
 pub mod protocol;
 pub mod resource;
+pub mod subdivide;
 pub mod sync;
 pub mod texture;
 pub mod uv;
@@ -91,10 +93,10 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyAttributeDomain>()?;
     m.add_class::<PyMeshData>()?;
     m.add_function(wrap_pyfunction!(process_mesh, m)?)?;
-    m.add_function(wrap_pyfunction!(mesh::calculate_face_target_grid, m)?)?;
-    m.add_function(wrap_pyfunction!(mesh::calculate_pixel_grid_cut_factors, m)?)?;
-    m.add_function(wrap_pyfunction!(mesh::slice_face_by_pixel_grid, m)?)?;
-    m.add_function(wrap_pyfunction!(mesh::adaptive_pixel_split_mesh, m)?)?;
+    m.add_function(wrap_pyfunction!(subdivide::calculate_face_target_grid, m)?)?;
+    m.add_function(wrap_pyfunction!(subdivide::calculate_pixel_grid_cut_factors, m)?)?;
+    m.add_function(wrap_pyfunction!(subdivide::slice_face_by_pixel_grid, m)?)?;
+    m.add_function(wrap_pyfunction!(subdivide::adaptive_pixel_split_mesh, m)?)?;
 
     // 2. Culling
     m.add_class::<PyFaceCuller>()?;
@@ -160,9 +162,9 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(uv::get_fluid_side_uvs, m)?)?;
     m.add_function(wrap_pyfunction!(uv::repair_extruded_side_uv, m)?)?;
     m.add_function(wrap_pyfunction!(uv::generate_random_extrude_heights, m)?)?;
-    m.add_function(wrap_pyfunction!(mesh::process_mesh_extrude_repair, m)?)?;
-    m.add_function(wrap_pyfunction!(mesh::process_flat_mesh_extrude_repair, m)?)?;
-    m.add_function(wrap_pyfunction!(mesh::process_random_extrude_mesh, m)?)?;
+    m.add_function(wrap_pyfunction!(extrude::process_mesh_extrude_repair, m)?)?;
+    m.add_function(wrap_pyfunction!(extrude::process_flat_mesh_extrude_repair, m)?)?;
+    m.add_function(wrap_pyfunction!(extrude::process_random_extrude_mesh, m)?)?;
 
     // 10. Metadata
     m.add_function(wrap_pyfunction!(version, m)?)?;

@@ -9,6 +9,7 @@ pub mod extrude;
 pub mod extrude_mesh;
 pub mod geometry;
 pub mod mesh;
+pub mod polygon;
 pub mod subdivide;
 pub mod uv;
 
@@ -29,6 +30,7 @@ pub use extrude_mesh::{
 };
 pub use geometry::{mc_local_to_centered_z_up, mc_world_to_z_up, Aabb2d, Aabb3d, Quad};
 pub use mesh::MeshData;
+pub use polygon::FlatPolygonMesh;
 pub use subdivide::{
     adaptive_pixel_split_mesh, calculate_face_target_grid, interpolate_bilinear_2d,
     interpolate_bilinear_3d, interpolate_bilinear_4d, weld_mesh_vertices,

@@ -75,6 +75,62 @@ impl MeshData {
         self.face_materials.len()
     }
 
+    /// Number of quad faces recorded.
+    #[inline]
+    pub fn quad_count(&self) -> usize {
+        if let Some(ref quads) = self.quad_indices {
+            quads.len() / 4
+        } else {
+            self.indices.len() / 6
+        }
+    }
+
+    /// Quad polygon vertex indices `[v0, v1, v2, v3, ...]` (4 u32 per quad).
+    ///
+    /// If `quad_indices` is present, returns a clone.
+    /// Otherwise, reconstructs quad face polygons by topologically pairing adjacent triangle pairs.
+    pub fn reconstruct_quad_indices(&self) -> Vec<u32> {
+        if let Some(ref quads) = self.quad_indices {
+            return quads.clone();
+        }
+        let quad_count = self.indices.len() / 6;
+        let mut quads = Vec::with_capacity(quad_count * 4);
+        for q in 0..quad_count {
+            let base = q * 6;
+            let t1 = [
+                self.indices[base],
+                self.indices[base + 1],
+                self.indices[base + 2],
+            ];
+            let t2 = [
+                self.indices[base + 3],
+                self.indices[base + 4],
+                self.indices[base + 5],
+            ];
+
+            // Identify the unique non-shared vertex of triangle 1 (O1)
+            let mut o1_idx = 0;
+            for i in 0..3 {
+                if !t2.contains(&t1[i]) {
+                    o1_idx = i;
+                    break;
+                }
+            }
+            let o1 = t1[o1_idx];
+            let d1 = t1[(o1_idx + 2) % 3]; // predecessor in t1
+            let d2 = t1[(o1_idx + 1) % 3]; // successor in t1
+
+            // Identify the unique non-shared vertex of triangle 2 (O2)
+            let o2 = t2.iter().copied().find(|v| !t1.contains(v)).unwrap_or(d2);
+
+            quads.push(d1);
+            quads.push(o1);
+            quads.push(d2);
+            quads.push(o2);
+        }
+        quads
+    }
+
     /// Checks if the mesh data buffer is empty.
     #[inline]
     pub fn is_empty(&self) -> bool {

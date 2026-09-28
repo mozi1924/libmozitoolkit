@@ -33,7 +33,7 @@ bindings/
 
 #### 核心导出模块与 API 概览
 
-##### 1. 几何与网格 (`mtk.mesh`)
+##### 1. 几何、细分与挤出算子 (`mesh`, `extrude`, `subdivide`)
 - `PyMeshData`:
   - `positions_memoryview(py)`: 零拷贝返回 `[N, 3]` f32 顶点坐标缓冲。
   - `normals_memoryview(py)`: 零拷贝返回 `[N, 3]` f32 法线缓冲。
