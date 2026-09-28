@@ -30,6 +30,7 @@ pub struct AtlasSpriteLocation {
     pub is_animated: bool,
     #[serde(default)]
     pub sprite_kind: SpriteKind,
+    #[serde(default)]
     pub texture_id: u32,
     /// Normalized UV bounds: `[u_min, v_min, u_max, v_max]` in [0.0..1.0] atlas space (Frame 0 or static frame).
     pub uv_bounds: [f32; 4],
@@ -43,11 +44,13 @@ pub struct AtlasSpriteLocation {
     #[serde(default)]
     pub frame_uv_step: [f32; 2],
     /// Physical pixel rectangle on the atlas chunk for Frame 0: `[x, y, width, height]`.
+    #[serde(default)]
     pub pixel_rect: [u32; 4],
     /// Physical pixel rectangle on the atlas chunk for the entire animation strip: `[x, y, width, height]`.
     #[serde(default)]
     pub strip_pixel_rect: [u32; 4],
     /// Single-frame physical resolution: `[frame_width, frame_height]`.
+    #[serde(default)]
     pub frame_size: [u32; 2],
     /// Total animation frames.
     pub frame_count: u32,
@@ -106,6 +109,7 @@ impl AtlasChunkMeta {
 /// Authoritative mapping table holding all sprite locations and chunk descriptors.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct AtlasAddressMap {
+    #[serde(default)]
     pub chunks: Vec<AtlasChunkMeta>,
     /// Static atlas sprites (100% texture coverage, Frame 0 for animated sprites).
     pub sprites: HashMap<ResourceLocation, AtlasSpriteLocation>,

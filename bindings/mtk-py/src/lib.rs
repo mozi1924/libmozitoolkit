@@ -213,15 +213,20 @@ mod tests {
             assert_eq!(storage.get_block(0, 0, 0), "minecraft:stone");
             assert_eq!(storage.dirty_section_count(), 1);
 
-            let config = PyMesherConfig::new(true, true, true, None);
-            let mesh = PySectionMesher::mesh_world(&storage, Some(&config), None).unwrap();
+            let config = PyMesherConfig::default();
+            let mesh = PySectionMesher::mesh_world(&storage, Some(&config), None, None).unwrap();
             assert!(!mesh.is_empty());
-            assert_eq!(mesh.vertex_count(), 24); // 6 faces * 4 verts for isolated block
+            assert_eq!(mesh.vertex_count(), 8); // 8 vertices for welded unit cube
 
-            let dict = PySectionMesher::mesh_sections_split(py, &storage, Some(&config), None).unwrap();
+            let mut unwelded_config = PyMesherConfig::default();
+            unwelded_config.inner.weld_vertices = false;
+            let unwelded_mesh = PySectionMesher::mesh_world(&storage, Some(&unwelded_config), None, None).unwrap();
+            assert_eq!(unwelded_mesh.vertex_count(), 24); // 6 faces * 4 verts for isolated unwelded block
+
+            let dict = PySectionMesher::mesh_sections_split(py, &storage, Some(&config), None, None).unwrap();
             assert_eq!(dict.len(), 1);
 
-            let rebuilt = PySectionMesher::rebuild_dirty_sections(py, &mut storage, Some(&config), None).unwrap();
+            let rebuilt = PySectionMesher::rebuild_dirty_sections(py, &mut storage, Some(&config), None, None).unwrap();
             assert_eq!(rebuilt.len(), 1);
             assert_eq!(storage.dirty_section_count(), 0);
         });
@@ -245,7 +250,7 @@ mod tests {
             assert_eq!(dict.get_item("type").unwrap().unwrap().extract::<String>().unwrap(), "SELECTION_INFO");
 
             // Test session
-            let session = PyLiveSyncSession::new(None, None);
+            let session = PyLiveSyncSession::new(None, None, None, true);
             let events = session.poll_events(py).unwrap();
             assert_eq!(events.len(), 0);
         });
@@ -274,12 +279,28 @@ mod tests {
 
             let mapping_json = r#"{
                 "version": 1,
+                "chunks": [
+                    {
+                        "chunk_id": 0,
+                        "category": "blocks",
+                        "is_animated": false,
+                        "category_chunk_index": 1,
+                        "width": 1024,
+                        "height": 1024,
+                        "has_normal": false,
+                        "has_specular": false,
+                        "has_overlay": false
+                    }
+                ],
                 "sprites": {
                     "minecraft:block/stone": {
                         "chunk_id": 0,
+                        "texture_id": 0,
                         "uv_bounds": [0.0, 0.0, 0.5, 0.5],
                         "frame_0_uv_bounds": [0.0, 0.0, 0.5, 0.5],
                         "local_uv_bounds": [0.0, 0.0, 1.0, 1.0],
+                        "pixel_rect": [0, 0, 16, 16],
+                        "frame_size": [16, 16],
                         "is_animated": false,
                         "frame_count": 1,
                         "has_normal": false,
@@ -378,7 +399,7 @@ mod tests {
         let v1 = 5.8 / 16.0;
         let uvs = vec![[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
 
-        let (u_cuts, v_cuts) = mesh::calculate_pixel_grid_cut_factors(uvs, 16, 16, 1.0, 64);
+        let (u_cuts, v_cuts) = subdivide::calculate_pixel_grid_cut_factors(uvs, 16, 16, 1.0, 64);
         assert_eq!(u_cuts.len(), 5);
         assert_eq!(v_cuts.len(), 5);
     }
@@ -397,7 +418,7 @@ mod tests {
             [0.5, 1.0],
             [0.0, 0.5],
         ];
-        let (pos, out_uvs, faces, params) = mesh::slice_face_by_pixel_grid(positions, uvs, 16, 16, 1.0, 64);
+        let (pos, out_uvs, faces, params) = subdivide::slice_face_by_pixel_grid(positions, uvs, 16, 16, 1.0, 64);
         assert!(!faces.is_empty());
         assert_eq!(pos.len(), out_uvs.len());
         assert_eq!(pos.len(), params.len());

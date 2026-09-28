@@ -10,8 +10,6 @@ description = "Python bindings for libmozitoolkit using PyO3."
 [lib]
 name = "libmtk_py"
 crate-type = ["cdylib", "rlib"]
-test = false
-doctest = false
 
 [dependencies]
 libmtk = { workspace = true }
@@ -28,7 +26,7 @@ serde_json = { workspace = true }
 pyo3 = { workspace = true, features = ["abi3-py311"] }
 
 [features]
-default = ["zip", "extension-module"]
+default = ["zip"]
 extension-module = ["pyo3/extension-module"]
 zip = ["mtk-resource/zip"]
 

@@ -330,6 +330,15 @@ pub struct PyMesherConfig {
     pub(crate) num_threads: Option<usize>,
 }
 
+impl Default for PyMesherConfig {
+    fn default() -> Self {
+        Self {
+            inner: MesherConfig::default(),
+            num_threads: None,
+        }
+    }
+}
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
