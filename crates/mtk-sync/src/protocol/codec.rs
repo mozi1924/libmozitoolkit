@@ -23,7 +23,7 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
     }
 
     let version = data[2];
-    if version != PROTOCOL_VERSION {
+    if !is_supported_protocol_version(version) {
         return Err(ProtocolError::UnsupportedVersion(version));
     }
 

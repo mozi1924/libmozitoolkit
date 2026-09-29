@@ -100,12 +100,44 @@ fn test_section_manifest_codec() {
 #[test]
 fn test_client_request_encoders() {
     let full_req = encode_full_sync_request();
-    assert_eq!(full_req, vec![0x4D, 0x43, 0x01, 0x80]);
+    assert_eq!(full_req, vec![0x4D, 0x43, 0x02, 0x80]);
 
     let config_req = encode_sync_config(1, 60, true);
-    assert_eq!(config_req, vec![0x4D, 0x43, 0x01, 0x82, 1, 60, 1]);
+    assert_eq!(config_req, vec![0x4D, 0x43, 0x02, 0x82, 1, 60, 1]);
 
     let repair_reqs = encode_repair_requests(&[IVec3::new(0, 1, 2), IVec3::new(3, 4, 5)], 64);
     assert_eq!(repair_reqs.len(), 1);
-    assert_eq!(repair_reqs[0][0..4], [0x4D, 0x43, 0x01, 0x81]);
+    assert_eq!(repair_reqs[0][0..4], [0x4D, 0x43, 0x02, 0x81]);
+}
+
+#[test]
+fn test_protocol_version_compatibility() {
+    let make_pkt = |ver: u8| -> Vec<u8> {
+        let mut data = vec![0x4D, 0x43, ver, 0x01];
+        data.extend_from_slice(&(0i32).to_le_bytes());
+        data.extend_from_slice(&(64i32).to_le_bytes());
+        data.extend_from_slice(&(0i32).to_le_bytes());
+        data.extend_from_slice(&(16i32).to_le_bytes());
+        data.extend_from_slice(&(16i32).to_le_bytes());
+        data.extend_from_slice(&(16i32).to_le_bytes());
+        data
+    };
+
+    // v1 is supported for backward compatibility
+    assert!(decode_packet(&make_pkt(0x01)).is_ok());
+
+    // v2 is the canonical active protocol version from Yefira Mod
+    assert!(decode_packet(&make_pkt(0x02)).is_ok());
+
+    // v3 is unsupported
+    match decode_packet(&make_pkt(0x03)) {
+        Err(ProtocolError::UnsupportedVersion(3)) => {}
+        other => panic!("Expected UnsupportedVersion(3), got {:?}", other),
+    }
+
+    // v0 is unsupported
+    match decode_packet(&make_pkt(0x00)) {
+        Err(ProtocolError::UnsupportedVersion(0)) => {}
+        other => panic!("Expected UnsupportedVersion(0), got {:?}", other),
+    }
 }

@@ -212,6 +212,10 @@ pub struct Quad {
 负责与 Minecraft 伴随插件/模组的原生 WebSocket 双向流式通信、二进制协议编解码与 Live Sync 会话生命周期管理。
 
 ### 7.1 二进制协议编解码 (`mtk_sync::protocol`)
+- `PROTOCOL_MAGIC`: 固定魔数头部 `[0x4D, 0x43]` (`"MC"`)。
+- `PROTOCOL_VERSION`: 规范协议主版本号 `0x02`（对齐 Yefira 2.0 规范）。
+- `MIN_SUPPORTED_PROTOCOL_VERSION` (`0x01`) / `MAX_SUPPORTED_PROTOCOL_VERSION` (`0x02`): 支持的双向协议版本边界。
+- `is_supported_protocol_version(version: u8) -> bool`: 校验入站数据包版本兼容性。
 - `decode_packet(data: &[u8]) -> Result<Packet, ProtocolError>`: 极速解析二进制小端序数据包。
 - `encode_full_sync_request()`, `encode_repair_requests(...)`, `encode_sync_config(...)`。
 - `Packet`: 强类型数据包枚举（`SelectionInfo`, `FullSnapshot`, `DeltaUpdate`, `SectionManifest`, `StreamBegin`, `StreamEnd` 等）。

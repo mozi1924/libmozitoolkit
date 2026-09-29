@@ -16,5 +16,7 @@ pub use events::SyncEvent;
 pub use session::LiveSyncSession;
 pub use protocol::{
     decode_packet, encode_full_sync_request, encode_repair_requests, encode_sync_config,
-    DeltaChange, ManifestSectionEntry, Packet, PacketType, ProtocolError, StreamStatus,
+    is_supported_protocol_version, DeltaChange, ManifestSectionEntry, Packet, PacketType,
+    ProtocolError, StreamStatus, MAX_SUPPORTED_PROTOCOL_VERSION, MIN_SUPPORTED_PROTOCOL_VERSION,
+    PROTOCOL_MAGIC, PROTOCOL_VERSION,
 };

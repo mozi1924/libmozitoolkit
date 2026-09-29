@@ -4,8 +4,18 @@ use serde::{Deserialize, Serialize};
 /// Protocol magic header bytes: 'M' (0x4D), 'C' (0x43).
 pub const PROTOCOL_MAGIC: [u8; 2] = [0x4D, 0x43];
 
-/// Protocol version number (Version 1).
-pub const PROTOCOL_VERSION: u8 = 0x01;
+/// Canonical protocol version number (Version 2, aligned with Yefira Mod).
+pub const PROTOCOL_VERSION: u8 = 0x02;
+
+/// Minimum and maximum supported protocol versions for backward & forward compatibility.
+pub const MIN_SUPPORTED_PROTOCOL_VERSION: u8 = 0x01;
+pub const MAX_SUPPORTED_PROTOCOL_VERSION: u8 = 0x02;
+
+/// Checks whether the given protocol version byte is supported.
+#[inline]
+pub fn is_supported_protocol_version(version: u8) -> bool {
+    (MIN_SUPPORTED_PROTOCOL_VERSION..=MAX_SUPPORTED_PROTOCOL_VERSION).contains(&version)
+}
 
 /// Packet Type IDs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
