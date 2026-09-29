@@ -41,52 +41,6 @@ pub struct MeshCullResult {
     pub mesh: MeshData,
 }
 
-/// Quantizes a 3D point into an integer cell key for spatial hashing.
-#[inline]
-fn quantize_point(p: [f32; 3], inv_tol: f32) -> [i32; 3] {
-    [
-        (p[0] * inv_tol).round() as i32,
-        (p[1] * inv_tol).round() as i32,
-        (p[2] * inv_tol).round() as i32,
-    ]
-}
-
-/// Quantizes a normal vector into 6 orthogonal cardinal directions or discretized direction key.
-#[inline]
-fn quantize_normal(n: [f32; 3]) -> [i8; 3] {
-    [
-        (n[0] * 10.0).round() as i8,
-        (n[1] * 10.0).round() as i8,
-        (n[2] * 10.0).round() as i8,
-    ]
-}
-
-/// Checks if two sets of polygon vertices are geometrically identical within tolerance squared.
-#[inline]
-fn are_faces_geometrically_identical(
-    verts_a: &[[f32; 3]],
-    verts_b: &[[f32; 3]],
-    tol_sq: f32,
-) -> bool {
-    if verts_a.len() != verts_b.len() {
-        return false;
-    }
-    for va in verts_a {
-        let mut found = false;
-        for vb in verts_b {
-            let d2 = (va[0] - vb[0]).powi(2) + (va[1] - vb[1]).powi(2) + (va[2] - vb[2]).powi(2);
-            if d2 <= tol_sq {
-                found = true;
-                break;
-            }
-        }
-        if !found {
-            return false;
-        }
-    }
-    true
-}
-
 /// Copies a single element from src AttributeData to dst AttributeData at index.
 fn copy_attribute_element(src: &AttributeData, dst: &mut AttributeData, idx: usize) {
     match (src, dst) {
@@ -171,17 +125,16 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
     let face_count = mesh.indices.len() / poly_step;
 
     let tol = if config.tolerance > 0.0 { config.tolerance } else { 1e-3 };
-    let tol_sq = tol * tol;
     let inv_tol = 1.0 / tol;
 
-    // Map: quantized center -> list of (face_idx, quantized_normal, raw_center, raw_vertices)
-    let mut spatial_buckets: HashMap<[i32; 3], Vec<(usize, [i8; 3], [f32; 3], Vec<[f32; 3]>)>> = HashMap::new();
+    // Canonical Plane Map: [quantized_nx, quantized_ny, quantized_nz, quantized_d] -> list of faces
+    let mut plane_buckets: HashMap<[i32; 4], Vec<(usize, glam::Vec3, glam::Vec3, Vec<glam::Vec3>)>> = HashMap::new();
     let mut faces_to_cull: BTreeSet<usize> = BTreeSet::new();
 
     for face_idx in 0..face_count {
         let base = face_idx * poly_step;
-        let mut center = [0.0f32; 3];
-        let mut normal = [0.0f32; 3];
+        let mut center = glam::Vec3::ZERO;
+        let mut normal = glam::Vec3::ZERO;
 
         let num_verts = if is_quad_mesh { 4 } else { 3 };
         let vert_indices = if is_quad_mesh {
@@ -201,72 +154,146 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
 
         let mut face_verts = Vec::with_capacity(num_verts);
         for &vi in &vert_indices {
-            let p = mesh.positions.get(vi).copied().unwrap_or([0.0; 3]);
+            let p_raw = mesh.positions.get(vi).copied().unwrap_or([0.0; 3]);
+            let p = glam::Vec3::new(p_raw[0], p_raw[1], p_raw[2]);
             face_verts.push(p);
-            center[0] += p[0];
-            center[1] += p[1];
-            center[2] += p[2];
+            center += p;
 
-            let n = mesh.normals.get(vi).copied().unwrap_or([0.0, 0.0, 1.0]);
-            normal[0] += n[0];
-            normal[1] += n[1];
-            normal[2] += n[2];
+            let n_raw = mesh.normals.get(vi).copied().unwrap_or([0.0, 0.0, 1.0]);
+            normal += glam::Vec3::new(n_raw[0], n_raw[1], n_raw[2]);
         }
 
         let inv_n = 1.0 / (num_verts as f32);
-        center[0] *= inv_n;
-        center[1] *= inv_n;
-        center[2] *= inv_n;
+        center *= inv_n;
+        normal *= inv_n;
+        let norm_len = normal.length();
+        if norm_len > 1e-5 {
+            normal /= norm_len;
+        } else if face_verts.len() >= 3 {
+            let e1 = face_verts[1] - face_verts[0];
+            let e2 = face_verts[2] - face_verts[0];
+            normal = e1.cross(e2).normalize_or_zero();
+            if normal.length_squared() < 1e-5 {
+                normal = glam::Vec3::Z;
+            }
+        } else {
+            normal = glam::Vec3::Z;
+        }
 
-        normal[0] *= inv_n;
-        normal[1] *= inv_n;
-        normal[2] *= inv_n;
+        let d = -normal.dot(center);
 
-        let center_key = quantize_point(center, inv_tol);
-        let normal_key = quantize_normal(normal);
+        // Canonical plane: enforce normal has non-negative leading component
+        let (c_norm, c_d) = if normal.x < -1e-4
+            || (normal.x.abs() <= 1e-4 && normal.y < -1e-4)
+            || (normal.x.abs() <= 1e-4 && normal.y.abs() <= 1e-4 && normal.z < -1e-4)
+        {
+            (-normal, -d)
+        } else {
+            (normal, d)
+        };
 
-        'search: for dx in -1..=1 {
-            for dy in -1..=1 {
-                for dz in -1..=1 {
-                    let neighbor_key = [center_key[0] + dx, center_key[1] + dy, center_key[2] + dz];
-                    if let Some(neighbors) = spatial_buckets.get(&neighbor_key) {
-                        for (other_idx, other_norm, other_center, other_verts) in neighbors {
-                            if faces_to_cull.contains(other_idx) {
-                                continue;
+        let plane_key = [
+            (c_norm.x * 10.0).round() as i32,
+            (c_norm.y * 10.0).round() as i32,
+            (c_norm.z * 10.0).round() as i32,
+            (c_d * inv_tol).round() as i32,
+        ];
+
+        'search: for delta_d in -1..=1 {
+            let search_key = [plane_key[0], plane_key[1], plane_key[2], plane_key[3] + delta_d];
+            if let Some(neighbors) = plane_buckets.get(&search_key) {
+                for (other_idx, other_norm, other_center, other_verts) in neighbors {
+                    if faces_to_cull.contains(other_idx) {
+                        continue;
+                    }
+
+                    let dot = normal.dot(*other_norm);
+                    let is_same_dir = dot > 0.99;
+                    let is_opp_dir = dot < -0.99;
+                    if !is_same_dir && !is_opp_dir {
+                        continue;
+                    }
+
+                    // Precise distance check to plane
+                    let plane_dist = ((center - *other_center).dot(normal)).abs();
+                    if plane_dist > tol {
+                        continue;
+                    }
+
+                    // Compute 2D tangent basis (u_axis, v_axis)
+                    let up = if normal.y.abs() > 0.9 { glam::Vec3::Z } else { glam::Vec3::Y };
+                    let mut u_axis = up.cross(normal);
+                    let u_len = u_axis.length();
+                    if u_len < 1e-5 {
+                        u_axis = glam::Vec3::X;
+                    } else {
+                        u_axis /= u_len;
+                    }
+                    let v_axis = normal.cross(u_axis).normalize();
+
+                    // Project face_verts to (u, v)
+                    let (mut u_min_a, mut u_max_a) = (f32::INFINITY, f32::NEG_INFINITY);
+                    let (mut v_min_a, mut v_max_a) = (f32::INFINITY, f32::NEG_INFINITY);
+                    for v in &face_verts {
+                        let u = v.dot(u_axis);
+                        let vc = v.dot(v_axis);
+                        u_min_a = u_min_a.min(u);
+                        u_max_a = u_max_a.max(u);
+                        v_min_a = v_min_a.min(vc);
+                        v_max_a = v_max_a.max(vc);
+                    }
+                    let area_a = (u_max_a - u_min_a) * (v_max_a - v_min_a);
+                    if area_a <= 1e-6 {
+                        continue;
+                    }
+
+                    // Project other_verts to (u, v)
+                    let (mut u_min_b, mut u_max_b) = (f32::INFINITY, f32::NEG_INFINITY);
+                    let (mut v_min_b, mut v_max_b) = (f32::INFINITY, f32::NEG_INFINITY);
+                    for v in other_verts {
+                        let u = v.dot(u_axis);
+                        let vc = v.dot(v_axis);
+                        u_min_b = u_min_b.min(u);
+                        u_max_b = u_max_b.max(u);
+                        v_min_b = v_min_b.min(vc);
+                        v_max_b = v_max_b.max(vc);
+                    }
+                    let area_b = (u_max_b - u_min_b) * (v_max_b - v_min_b);
+                    if area_b <= 1e-6 {
+                        continue;
+                    }
+
+                    let inter_u_min = u_min_a.max(u_min_b);
+                    let inter_u_max = u_max_a.min(u_max_b);
+                    let inter_v_min = v_min_a.max(v_min_b);
+                    let inter_v_max = v_max_a.min(v_max_b);
+
+                    if inter_u_max > inter_u_min + tol && inter_v_max > inter_v_min + tol {
+                        let inter_area = (inter_u_max - inter_u_min) * (inter_v_max - inter_v_min);
+                        let is_exact = (u_min_a - u_min_b).abs() <= tol
+                            && (u_max_a - u_max_b).abs() <= tol
+                            && (v_min_a - v_min_b).abs() <= tol
+                            && (v_max_a - v_max_b).abs() <= tol;
+
+                        if is_exact {
+                            if config.cull_duplicates && is_same_dir {
+                                faces_to_cull.insert(face_idx);
+                                break 'search;
+                            } else if config.cull_coplanar_opposite && is_opp_dir {
+                                faces_to_cull.insert(face_idx);
+                                faces_to_cull.insert(*other_idx);
+                                break 'search;
                             }
-
-                            // Precise distance check within tolerance
-                            let dist_sq = (center[0] - other_center[0]).powi(2)
-                                + (center[1] - other_center[1]).powi(2)
-                                + (center[2] - other_center[2]).powi(2);
-                            if dist_sq > tol_sq {
-                                continue;
+                        } else if inter_area >= area_a * 0.99 - tol {
+                            // Face A is completely covered by other face B
+                            if (config.cull_duplicates && is_same_dir) || (config.cull_coplanar_opposite && is_opp_dir) {
+                                faces_to_cull.insert(face_idx);
+                                break 'search;
                             }
-
-                            // Check opposite normals: n1 + n2 ~= 0
-                            let is_opposite = (normal_key[0] + other_norm[0]).abs() <= 1
-                                && (normal_key[1] + other_norm[1]).abs() <= 1
-                                && (normal_key[2] + other_norm[2]).abs() <= 1;
-
-                            if config.cull_coplanar_opposite && is_opposite {
-                                if are_faces_geometrically_identical(&face_verts, other_verts, tol_sq) {
-                                    // Both contacting faces are culled (interior contact)
-                                    faces_to_cull.insert(face_idx);
-                                    faces_to_cull.insert(*other_idx);
-                                    break 'search;
-                                }
-                            }
-
-                            // Check identical duplicate faces: n1 - n2 ~= 0
-                            let is_duplicate = (normal_key[0] - other_norm[0]).abs() <= 1
-                                && (normal_key[1] - other_norm[1]).abs() <= 1
-                                && (normal_key[2] - other_norm[2]).abs() <= 1;
-
-                            if config.cull_duplicates && is_duplicate {
-                                if are_faces_geometrically_identical(&face_verts, other_verts, tol_sq) {
-                                    faces_to_cull.insert(face_idx);
-                                    break 'search;
-                                }
+                        } else if inter_area >= area_b * 0.99 - tol {
+                            // Other face B is completely covered by Face A
+                            if (config.cull_duplicates && is_same_dir) || (config.cull_coplanar_opposite && is_opp_dir) {
+                                faces_to_cull.insert(*other_idx);
                             }
                         }
                     }
@@ -274,10 +301,10 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
             }
         }
 
-        spatial_buckets
-            .entry(center_key)
+        plane_buckets
+            .entry(plane_key)
             .or_default()
-            .push((face_idx, normal_key, center, face_verts));
+            .push((face_idx, normal, center, face_verts));
     }
 
     if faces_to_cull.is_empty() {

@@ -166,7 +166,7 @@ impl BakedModel {
         }
 
         let mut to_remove: std::collections::HashSet<(usize, Direction)> = std::collections::HashSet::new();
-        let tol_sq = 1e-3f32 * 1e-3f32;
+        let tol = 1e-3f32;
 
         for i in 0..face_list.len() {
             if to_remove.contains(&(face_list[i].0, face_list[i].1)) {
@@ -180,38 +180,92 @@ impl BakedModel {
                 }
                 let (el_b, dir_b, verts_b, norm_b, center_b) = &face_list[j];
 
-                if center_a.distance_squared(*center_b) > tol_sq {
+                let dot = norm_a.dot(*norm_b);
+                let is_same_dir = dot > 0.99;
+                let is_opp_dir = dot < -0.99;
+                if !is_same_dir && !is_opp_dir {
                     continue;
                 }
 
-                // Check vertex geometry match
-                let mut matched = true;
-                for va in verts_a {
-                    let mut found = false;
-                    for vb in verts_b {
-                        if va.distance_squared(*vb) <= tol_sq {
-                            found = true;
+                // Check coplanar distance
+                let plane_dist = ((center_b - center_a).dot(*norm_a)).abs();
+                if plane_dist > tol {
+                    continue;
+                }
+
+                // Compute 2D tangent basis (u_axis, v_axis)
+                let up = if norm_a.y.abs() > 0.9 { Vec3::Z } else { Vec3::Y };
+                let mut u_axis = up.cross(*norm_a);
+                let u_len = u_axis.length();
+                if u_len < 1e-5 {
+                    u_axis = Vec3::X;
+                } else {
+                    u_axis /= u_len;
+                }
+                let v_axis = norm_a.cross(u_axis).normalize();
+
+                // Project verts_a to 2D
+                let (mut u_min_a, mut u_max_a) = (f32::INFINITY, f32::NEG_INFINITY);
+                let (mut v_min_a, mut v_max_a) = (f32::INFINITY, f32::NEG_INFINITY);
+                for v in verts_a {
+                    let u = v.dot(u_axis);
+                    let vc = v.dot(v_axis);
+                    u_min_a = u_min_a.min(u);
+                    u_max_a = u_max_a.max(u);
+                    v_min_a = v_min_a.min(vc);
+                    v_max_a = v_max_a.max(vc);
+                }
+                let area_a = (u_max_a - u_min_a) * (v_max_a - v_min_a);
+                if area_a <= 1e-6 {
+                    continue;
+                }
+
+                // Project verts_b to 2D
+                let (mut u_min_b, mut u_max_b) = (f32::INFINITY, f32::NEG_INFINITY);
+                let (mut v_min_b, mut v_max_b) = (f32::INFINITY, f32::NEG_INFINITY);
+                for v in verts_b {
+                    let u = v.dot(u_axis);
+                    let vc = v.dot(v_axis);
+                    u_min_b = u_min_b.min(u);
+                    u_max_b = u_max_b.max(u);
+                    v_min_b = v_min_b.min(vc);
+                    v_max_b = v_max_b.max(vc);
+                }
+                let area_b = (u_max_b - u_min_b) * (v_max_b - v_min_b);
+                if area_b <= 1e-6 {
+                    continue;
+                }
+
+                let inter_u_min = u_min_a.max(u_min_b);
+                let inter_u_max = u_max_a.min(u_max_b);
+                let inter_v_min = v_min_a.max(v_min_b);
+                let inter_v_max = v_max_a.min(v_max_b);
+
+                if inter_u_max > inter_u_min + tol && inter_v_max > inter_v_min + tol {
+                    let inter_area = (inter_u_max - inter_u_min) * (inter_v_max - inter_v_min);
+                    let is_exact = (u_min_a - u_min_b).abs() <= tol
+                        && (u_max_a - u_max_b).abs() <= tol
+                        && (v_min_a - v_min_b).abs() <= tol
+                        && (v_max_a - v_max_b).abs() <= tol;
+
+                    if is_exact {
+                        if is_same_dir {
+                            // Exact duplicate face: remove B
+                            to_remove.insert((*el_b, *dir_b));
+                        } else if is_opp_dir {
+                            // Back-to-back contacting faces: remove both
+                            to_remove.insert((*el_a, *dir_a));
+                            to_remove.insert((*el_b, *dir_b));
                             break;
                         }
-                    }
-                    if !found {
-                        matched = false;
+                    } else if inter_area >= area_b * 0.99 - tol {
+                        // Face B is completely covered/contained within Face A
+                        to_remove.insert((*el_b, *dir_b));
+                    } else if inter_area >= area_a * 0.99 - tol {
+                        // Face A is completely covered/contained within Face B
+                        to_remove.insert((*el_a, *dir_a));
                         break;
                     }
-                }
-                if !matched {
-                    continue;
-                }
-
-                let dot = norm_a.dot(*norm_b);
-                if dot > 0.99 {
-                    // Duplicate face facing same direction: cull the duplicate
-                    to_remove.insert((*el_b, *dir_b));
-                } else if dot < -0.99 {
-                    // Contacting interior face facing opposite direction: cull both
-                    to_remove.insert((*el_a, *dir_a));
-                    to_remove.insert((*el_b, *dir_b));
-                    break;
                 }
             }
         }
@@ -223,8 +277,8 @@ impl BakedModel {
                     el.faces.remove(&dir);
                 }
             }
-            self.rebuild_face_buckets();
         }
+        self.rebuild_face_buckets();
 
         culled_count
     }
@@ -574,6 +628,16 @@ impl BakedModelDatabase {
 
     pub fn insert(&mut self, state: String, model: BakedModel) {
         self.models.insert(state, model);
+    }
+
+    /// Eliminates overlapping, duplicate, and interior coplanar contacting faces
+    /// across all baked models in the database, returning total faces removed.
+    pub fn deduplicate_all(&mut self) -> usize {
+        let mut total = 0;
+        for model in self.models.values_mut() {
+            total += model.deduplicate_faces();
+        }
+        total
     }
 
     /// Remaps all baked models in the database to atlas coordinates using a lookup closure.

@@ -343,6 +343,7 @@ pub fn prebake_all_models(
     for (state_str, baked) in baked_pairs {
         db.insert(state_str, baked);
     }
+    db.deduplicate_all();
 
     Ok(db)
 }

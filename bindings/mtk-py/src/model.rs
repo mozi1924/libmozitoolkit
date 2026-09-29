@@ -87,19 +87,8 @@ impl PyBakedModelDatabase {
 
     /// Eliminates overlapping, duplicate, and interior contacting faces across all models in the database.
     pub fn deduplicate_all(&mut self) -> usize {
-        let mut total = 0;
-        if let Some(db) = Arc::get_mut(&mut self.inner) {
-            for model in db.models.values_mut() {
-                total += model.deduplicate_faces();
-            }
-        } else {
-            let mut db = (*self.inner).clone();
-            for model in db.models.values_mut() {
-                total += model.deduplicate_faces();
-            }
-            self.inner = Arc::new(db);
-        }
-        total
+        let db = Arc::make_mut(&mut self.inner);
+        db.deduplicate_all()
     }
 }
 
