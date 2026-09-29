@@ -662,6 +662,20 @@ impl PyMeshData {
         self.inner.weld_spatial_vertices(tolerance);
     }
 
+    /// Culls duplicate overlapping faces and contacting interior coplanar faces from this mesh.
+    ///
+    /// Eliminates DCC viewport and render-time Z-fighting artifacts while preserving custom attributes.
+    #[pyo3(signature = (tolerance=1e-3, cull_opposite=true, cull_duplicates=true))]
+    pub fn cull_faces(&self, tolerance: f32, cull_opposite: bool, cull_duplicates: bool) -> PyMeshData {
+        let config = mtk_cull::MeshCullConfig {
+            tolerance,
+            cull_coplanar_opposite: cull_opposite,
+            cull_duplicates,
+        };
+        let res = mtk_cull::cull_mesh_faces(&self.inner, &config);
+        PyMeshData { inner: res.mesh }
+    }
+
     /// Material slot per face.
     pub fn get_face_materials<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
         PyList::new(py, &self.inner.face_materials).expect("failed to create list")

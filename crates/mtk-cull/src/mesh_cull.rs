@@ -61,6 +61,99 @@ fn quantize_normal(n: [f32; 3]) -> [i8; 3] {
     ]
 }
 
+/// Checks if two sets of polygon vertices are geometrically identical within tolerance squared.
+#[inline]
+fn are_faces_geometrically_identical(
+    verts_a: &[[f32; 3]],
+    verts_b: &[[f32; 3]],
+    tol_sq: f32,
+) -> bool {
+    if verts_a.len() != verts_b.len() {
+        return false;
+    }
+    for va in verts_a {
+        let mut found = false;
+        for vb in verts_b {
+            let d2 = (va[0] - vb[0]).powi(2) + (va[1] - vb[1]).powi(2) + (va[2] - vb[2]).powi(2);
+            if d2 <= tol_sq {
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            return false;
+        }
+    }
+    true
+}
+
+/// Copies a single element from src AttributeData to dst AttributeData at index.
+fn copy_attribute_element(src: &AttributeData, dst: &mut AttributeData, idx: usize) {
+    match (src, dst) {
+        (AttributeData::Float(s), AttributeData::Float(d)) => {
+            if let Some(&v) = s.get(idx) {
+                d.push(v);
+            }
+        }
+        (AttributeData::Float2(s), AttributeData::Float2(d)) => {
+            if let Some(&v) = s.get(idx) {
+                d.push(v);
+            }
+        }
+        (AttributeData::Float3(s), AttributeData::Float3(d)) => {
+            if let Some(&v) = s.get(idx) {
+                d.push(v);
+            }
+        }
+        (AttributeData::Float4(s), AttributeData::Float4(d)) => {
+            if let Some(&v) = s.get(idx) {
+                d.push(v);
+            }
+        }
+        (AttributeData::Int8(s), AttributeData::Int8(d)) => {
+            if let Some(&v) = s.get(idx) {
+                d.push(v);
+            }
+        }
+        (AttributeData::Int16(s), AttributeData::Int16(d)) => {
+            if let Some(&v) = s.get(idx) {
+                d.push(v);
+            }
+        }
+        (AttributeData::Int32(s), AttributeData::Int32(d)) => {
+            if let Some(&v) = s.get(idx) {
+                d.push(v);
+            }
+        }
+        (AttributeData::UInt8(s), AttributeData::UInt8(d)) => {
+            if let Some(&v) = s.get(idx) {
+                d.push(v);
+            }
+        }
+        (AttributeData::UInt16(s), AttributeData::UInt16(d)) => {
+            if let Some(&v) = s.get(idx) {
+                d.push(v);
+            }
+        }
+        (AttributeData::UInt32(s), AttributeData::UInt32(d)) => {
+            if let Some(&v) = s.get(idx) {
+                d.push(v);
+            }
+        }
+        (AttributeData::String(s), AttributeData::String(d)) => {
+            if let Some(v) = s.get(idx) {
+                d.push(v.clone());
+            }
+        }
+        (AttributeData::Bool(s), AttributeData::Bool(d)) => {
+            if let Some(&v) = s.get(idx) {
+                d.push(v);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// Performs face culling on a `MeshData` buffer.
 ///
 /// Operates on quads (6 indices per quad) or triangles (3 indices per tri).
@@ -81,8 +174,8 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
     let tol_sq = tol * tol;
     let inv_tol = 1.0 / tol;
 
-    // Map: quantized center -> list of (face_idx, quantized_normal, raw_center)
-    let mut spatial_buckets: HashMap<[i32; 3], Vec<(usize, [i8; 3], [f32; 3])>> = HashMap::new();
+    // Map: quantized center -> list of (face_idx, quantized_normal, raw_center, raw_vertices)
+    let mut spatial_buckets: HashMap<[i32; 3], Vec<(usize, [i8; 3], [f32; 3], Vec<[f32; 3]>)>> = HashMap::new();
     let mut faces_to_cull: BTreeSet<usize> = BTreeSet::new();
 
     for face_idx in 0..face_count {
@@ -106,8 +199,10 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
             ]
         };
 
+        let mut face_verts = Vec::with_capacity(num_verts);
         for &vi in &vert_indices {
             let p = mesh.positions.get(vi).copied().unwrap_or([0.0; 3]);
+            face_verts.push(p);
             center[0] += p[0];
             center[1] += p[1];
             center[2] += p[2];
@@ -135,8 +230,8 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
                 for dz in -1..=1 {
                     let neighbor_key = [center_key[0] + dx, center_key[1] + dy, center_key[2] + dz];
                     if let Some(neighbors) = spatial_buckets.get(&neighbor_key) {
-                        for &(other_idx, other_norm, other_center) in neighbors {
-                            if faces_to_cull.contains(&other_idx) {
+                        for (other_idx, other_norm, other_center, other_verts) in neighbors {
+                            if faces_to_cull.contains(other_idx) {
                                 continue;
                             }
 
@@ -154,20 +249,24 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
                                 && (normal_key[2] + other_norm[2]).abs() <= 1;
 
                             if config.cull_coplanar_opposite && is_opposite {
-                                // Both contacting faces are culled (interior contact)
-                                faces_to_cull.insert(face_idx);
-                                faces_to_cull.insert(other_idx);
-                                break 'search;
+                                if are_faces_geometrically_identical(&face_verts, other_verts, tol_sq) {
+                                    // Both contacting faces are culled (interior contact)
+                                    faces_to_cull.insert(face_idx);
+                                    faces_to_cull.insert(*other_idx);
+                                    break 'search;
+                                }
                             }
 
-                            // Check identical duplicate faces
+                            // Check identical duplicate faces: n1 - n2 ~= 0
                             let is_duplicate = (normal_key[0] - other_norm[0]).abs() <= 1
                                 && (normal_key[1] - other_norm[1]).abs() <= 1
                                 && (normal_key[2] - other_norm[2]).abs() <= 1;
 
                             if config.cull_duplicates && is_duplicate {
-                                faces_to_cull.insert(face_idx);
-                                break 'search;
+                                if are_faces_geometrically_identical(&face_verts, other_verts, tol_sq) {
+                                    faces_to_cull.insert(face_idx);
+                                    break 'search;
+                                }
                             }
                         }
                     }
@@ -175,7 +274,10 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
             }
         }
 
-        spatial_buckets.entry(center_key).or_default().push((face_idx, normal_key, center));
+        spatial_buckets
+            .entry(center_key)
+            .or_default()
+            .push((face_idx, normal_key, center, face_verts));
     }
 
     if faces_to_cull.is_empty() {
@@ -218,7 +320,21 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
         });
     }
 
+    // Copy Mesh-domain attributes directly
+    for (name, attr) in &mesh.custom_attributes {
+        if attr.domain == mtk_core::attributes::AttributeDomain::Mesh {
+            if let Some(out_attr) = out.custom_attributes.get_mut(name) {
+                out_attr.data = attr.data.clone();
+            }
+        }
+    }
+
     let mut remaining_faces = 0;
+    let mut out_quad_indices = if is_quad_mesh || mesh.quad_indices.is_some() {
+        Some(Vec::new())
+    } else {
+        None
+    };
 
     for face_idx in 0..face_count {
         if faces_to_cull.contains(&face_idx) {
@@ -227,6 +343,7 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
 
         remaining_faces += 1;
         let base = face_idx * poly_step;
+        let quad_start_v = out.positions.len() as u32;
 
         for step in 0..poly_step {
             let orig_idx = mesh.indices[base + step] as usize;
@@ -243,7 +360,30 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
                 col_out.push(col_in.get(orig_idx).copied().unwrap_or([1.0, 1.0, 1.0, 1.0]));
             }
 
+            // Copy Point and Corner domain attributes
+            for (name, in_attr) in &mesh.custom_attributes {
+                if in_attr.domain == mtk_core::attributes::AttributeDomain::Point {
+                    if let Some(out_attr) = out.custom_attributes.get_mut(name) {
+                        copy_attribute_element(&in_attr.data, &mut out_attr.data, orig_idx);
+                    }
+                } else if in_attr.domain == mtk_core::attributes::AttributeDomain::Corner {
+                    if let Some(out_attr) = out.custom_attributes.get_mut(name) {
+                        copy_attribute_element(&in_attr.data, &mut out_attr.data, base + step);
+                    }
+                }
+            }
+
             out.indices.push(new_v_idx);
+        }
+
+        // Quad indices maintenance: 4 corner vertex indices
+        if is_quad_mesh {
+            if let Some(ref mut q_indices) = out_quad_indices {
+                q_indices.push(quad_start_v);
+                q_indices.push(quad_start_v + 1);
+                q_indices.push(quad_start_v + 2);
+                q_indices.push(quad_start_v + 5);
+            }
         }
 
         if let Some(&mat_id) = mesh.face_materials.get(face_idx) {
@@ -252,7 +392,18 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
         if let Some(&tint_idx) = mesh.face_tint_indices.get(face_idx) {
             out.face_tint_indices.push(tint_idx);
         }
+
+        // Copy Face domain attributes
+        for (name, in_attr) in &mesh.custom_attributes {
+            if in_attr.domain == mtk_core::attributes::AttributeDomain::Face {
+                if let Some(out_attr) = out.custom_attributes.get_mut(name) {
+                    copy_attribute_element(&in_attr.data, &mut out_attr.data, face_idx);
+                }
+            }
+        }
     }
+
+    out.quad_indices = out_quad_indices;
 
     MeshCullResult {
         initial_faces: face_count,
@@ -337,5 +488,56 @@ mod tests {
         assert_eq!(res.initial_faces, 2);
         assert_eq!(res.culled_faces, 2, "Faces across quantization boundary must be detected and culled!");
         assert_eq!(res.remaining_faces, 0);
+    }
+
+    #[test]
+    fn test_cull_duplicate_faces_preserving_attributes() {
+        let mut mesh = MeshData::new();
+        // Quad 1: Facing +Z
+        mesh.positions.extend_from_slice(&[
+            [-1.0, -1.0, 0.0],
+            [1.0, -1.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [-1.0, 1.0, 0.0],
+        ]);
+        mesh.normals.extend_from_slice(&[[0.0, 0.0, 1.0]; 4]);
+        mesh.uvs.extend_from_slice(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]);
+        mesh.indices.extend_from_slice(&[0, 1, 2, 0, 2, 3]);
+        mesh.face_materials.push(10);
+        mesh.face_tint_indices.push(-1);
+
+        // Quad 2: Identical duplicate face at same position facing +Z
+        mesh.positions.extend_from_slice(&[
+            [-1.0, -1.0, 0.0],
+            [1.0, -1.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [-1.0, 1.0, 0.0],
+        ]);
+        mesh.normals.extend_from_slice(&[[0.0, 0.0, 1.0]; 4]);
+        mesh.uvs.extend_from_slice(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]);
+        mesh.indices.extend_from_slice(&[4, 5, 6, 4, 6, 7]);
+        mesh.face_materials.push(20);
+        mesh.face_tint_indices.push(-1);
+
+        mesh.add_custom_attribute(MeshAttribute::new(
+            "test_attr",
+            mtk_core::attributes::AttributeDomain::Face,
+            AttributeData::String(vec!["face_0".to_string(), "face_1".to_string()]),
+        ));
+
+        let res = cull_mesh_faces(&mesh, &MeshCullConfig::default());
+        assert_eq!(res.initial_faces, 2);
+        assert_eq!(res.culled_faces, 1, "Duplicate face must be culled to eliminate Z-fighting");
+        assert_eq!(res.remaining_faces, 1);
+        assert_eq!(res.mesh.face_materials, vec![10]);
+
+        // Verify custom attributes preserved
+        let attr = res.mesh.custom_attributes.get("test_attr").expect("test_attr must exist");
+        if let AttributeData::String(ref vals) = attr.data {
+            assert_eq!(vals.len(), 1);
+            assert_eq!(vals[0], "face_0");
+        } else {
+            panic!("Expected String attribute data");
+        }
     }
 }

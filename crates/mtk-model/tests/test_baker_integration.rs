@@ -344,5 +344,164 @@ fn test_baked_model_six_direction_bucketing() {
     assert_eq!(deserialized.unculled_faces.len(), 1);
 }
 
+#[test]
+fn test_bedrock_culling_metadata_distinct_from_bed() {
+    let mut baker = mtk_model::ModelBaker::new();
+
+    // Bedrock should bake as a standard 16x16x16 cube
+    let cube_loader = |_: &str| {
+        let json = r##"{
+            "textures": { "all": "minecraft:block/bedrock" },
+            "elements": [
+                {
+                    "from": [0, 0, 0],
+                    "to": [16, 16, 16],
+                    "faces": {
+                        "down":  { "texture": "#all", "cullface": "down" },
+                        "up":    { "texture": "#all", "cullface": "up" },
+                        "north": { "texture": "#all", "cullface": "north" },
+                        "south": { "texture": "#all", "cullface": "south" },
+                        "west":  { "texture": "#all", "cullface": "west" },
+                        "east":  { "texture": "#all", "cullface": "east" }
+                    }
+                }
+            ]
+        }"##;
+        serde_json::from_str::<BlockModelJson>(json).ok()
+    };
+
+    let bedrock = baker
+        .bake_blockstate("minecraft:bedrock", None, cube_loader)
+        .expect("Should bake bedrock");
+
+    assert!(bedrock.is_cube, "Bedrock must be recognized as a cube");
+    assert!(bedrock.is_opaque, "Bedrock must be recognized as opaque");
+
+    let cull_meta = bedrock.cull_meta.as_ref().expect("Bedrock must have cull_meta");
+    assert_eq!(
+        cull_meta.category,
+        mtk_cull::CullCategory::SolidOpaque,
+        "Bedrock category must be SolidOpaque, NOT GlassTranslucent or PartialShape"
+    );
+    assert!(cull_meta.is_full_cube, "Bedrock must be full cube in cull meta");
+    assert!(cull_meta.is_opaque, "Bedrock must be opaque in cull meta");
+    assert_eq!(
+        cull_meta.full_face_mask,
+        mtk_core::direction::DirMask::ALL,
+        "Bedrock full_face_mask must cover all 6 faces"
+    );
+
+    // Conversely, verify red bed is NOT SolidOpaque
+    let empty_loader = |_: &str| None;
+    let bed = baker
+        .bake_blockstate("minecraft:red_bed[facing=north,part=foot]", None, empty_loader)
+        .expect("Should bake red bed");
+
+    assert!(!bed.is_cube, "Bed must NOT be a full cube");
+    assert!(!bed.is_opaque, "Bed must NOT be opaque");
+    let bed_cull_meta = bed.cull_meta.as_ref().expect("Bed must have cull_meta");
+    assert_ne!(
+        bed_cull_meta.category,
+        mtk_cull::CullCategory::SolidOpaque,
+        "Bed category must NOT be SolidOpaque"
+    );
+}
+
+#[test]
+fn test_baker_deoverlapping_duplicate_faces() {
+    let mut baker = mtk_model::ModelBaker::new();
+
+    // Model with 2 identical overlapping north faces (causes Z-fighting in DCC if unhandled)
+    let loader = |_: &str| {
+        let json = r##"{
+            "textures": { "tex": "minecraft:block/stone" },
+            "elements": [
+                {
+                    "from": [0, 0, 0],
+                    "to": [16, 16, 16],
+                    "faces": {
+                        "north": { "texture": "#tex", "cullface": "north" }
+                    }
+                },
+                {
+                    "from": [0, 0, 0],
+                    "to": [16, 16, 16],
+                    "faces": {
+                        "north": { "texture": "#tex", "cullface": "north" }
+                    }
+                }
+            ]
+        }"##;
+        serde_json::from_str::<mtk_model::BlockModelJson>(json).ok()
+    };
+
+    let mut baked = baker
+        .bake_blockstate("minecraft:stone", None, loader)
+        .expect("Should bake test model");
+
+    // When exclude_hidden_volume (de-overlapping) is false, both identical faces exist
+    let raw_mesh = baked.to_mesh(false);
+    assert_eq!(raw_mesh.triangle_count(), 4, "Raw unclipped mesh should have 2 quads (4 triangles)");
+
+    // When exclude_hidden_volume is true, duplicate face must be eliminated to prevent DCC Z-fighting
+    let clean_mesh = baked.to_mesh(true);
+    assert_eq!(clean_mesh.triangle_count(), 2, "Clean mesh must have exactly 1 quad (2 triangles) with duplicate eliminated");
+
+    // Also verify deduplicate_faces on BakedModel structure directly
+    let removed = baked.deduplicate_faces();
+    assert_eq!(removed, 1, "deduplicate_faces must report 1 removed duplicate face");
+    let after_mesh = baked.to_mesh(false);
+    assert_eq!(after_mesh.triangle_count(), 2, "After deduplicate_faces, raw mesh must also have 1 quad");
+}
+
+#[test]
+fn test_baker_coplanar_opposite_contact_faces() {
+    let mut baker = mtk_model::ModelBaker::new();
+
+    // Two stacked elements touching at y=8
+    let loader = |_: &str| {
+        let json = r##"{
+            "textures": { "tex": "minecraft:block/oak_planks" },
+            "elements": [
+                {
+                    "from": [0, 0, 0],
+                    "to": [16, 8, 16],
+                    "faces": {
+                        "down": { "texture": "#tex", "cullface": "down" },
+                        "up":   { "texture": "#tex" }
+                    }
+                },
+                {
+                    "from": [0, 8, 0],
+                    "to": [16, 16, 16],
+                    "faces": {
+                        "down": { "texture": "#tex" },
+                        "up":   { "texture": "#tex", "cullface": "up" }
+                    }
+                }
+            ]
+        }"##;
+        serde_json::from_str::<mtk_model::BlockModelJson>(json).ok()
+    };
+
+    let mut baked = baker
+        .bake_blockstate("minecraft:oak_slab", None, loader)
+        .expect("Should bake slab");
+
+    // Raw mesh has 4 faces (8 triangles)
+    let raw_mesh = baked.to_mesh(false);
+    assert_eq!(raw_mesh.triangle_count(), 8);
+
+    // Clean mesh should eliminate the interior touching faces at y=8, leaving only external down and up
+    let clean_mesh = baked.to_mesh(true);
+    assert_eq!(clean_mesh.triangle_count(), 4, "Interior contacting faces at y=8 must be culled (leaving 2 outer quads)");
+
+    // Also verify BakedModel deduplicate_faces
+    let removed = baked.deduplicate_faces();
+    assert_eq!(removed, 2, "Both contacting interior faces must be removed");
+    let after_mesh = baked.to_mesh(false);
+    assert_eq!(after_mesh.triangle_count(), 4);
+}
+
 
 

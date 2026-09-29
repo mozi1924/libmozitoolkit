@@ -40,6 +40,9 @@ bindings/
   - `uvs_memoryview(py)`: 零拷贝返回 `[N, 2]` f32 主 UV 缓冲。
   - `indices_memoryview(py)`: 零拷贝返回 `[M]` u32 三角形/多边形索引。
   - `face_materials_memoryview(py)`: 逐面材质插槽 ID。
+  - `cull_faces(cull_duplicates=True, cull_coplanar_opposite=False, tolerance=1e-4) -> PyMeshData`: 执行空间遮挡与叠面剔除，无缝保留所有自定义属性与 Quad 拓扑。
+- `PyBakedModelDatabase`:
+  - `deduplicate_all() -> int`: 批量对数据库中所有烘焙模型执行 Element 面去重与内部接触面剔除，返回消除的总面数。
 - **高阶 Data-In Data-Out 算子**：
   - `process_flat_mesh_extrude_repair(...)`:
     使用扁平连续 1D 缓冲区（`positions`, `loop_vertices`, `loop_uvs`, `face_loop_starts`, `face_loop_totals`, `face_materials`）进行极致性能的批量挤出修复，彻底消除 Python 列表嵌套开销，完美适配 Blender `foreach_get` 与 NumPy 数组。

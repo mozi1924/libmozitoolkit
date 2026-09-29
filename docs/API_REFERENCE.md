@@ -110,12 +110,17 @@ pub struct Quad {
 
 ### 2.1 核心类型与函数
 - `BlockCullMeta`: 方块剔除元数据（包含各方向的不透明度、剔除分类、遮挡矩形等）。
-- `CullCategory`: `Opaque`, `Transparent`, `Leaves`, `Glass`, `Fluid`, `Custom`。
+- `CullCategory`: `SolidOpaque`, `GlassTranslucent`, `WaterFluid`, `LavaFluid`, `Leaves`, `NoCulling`。精准区分实心不透明体（如基岩、石块）与半透明/非立方体。
 - `FaceCuller`: 邻域面剔除判定器。
 - `subtract_rect(subject: Aabb2d, clip: Aabb2d) -> SmallVec<[Aabb2d; 4]>`: 2D 矩形差集切分。
 - `subtract_rect_multi(subject: Aabb2d, clips: &[Aabb2d]) -> Vec<Aabb2d>`: 多矩形连续差集切分。
 - `should_skip_rendering(curr_cat: CullCategory, neighbor_cat: CullCategory, ...) -> bool`: 原版渲染跳过规则。
-- `cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResult`: 对外部导入的静态网格执行 6 向空间微观遮挡剔除。
+- `MeshCullConfig`: 网格剔除与叠面消除配置项：
+  - `tolerance: f32`: 空间几何重合与共面判定容差（默认 1e-4）。
+  - `cull_duplicates: bool`: 是否消除几何位置完全重叠且法线同向的重复面（Duplicate Faces，默认 true）。
+  - `cull_coplanar_opposite: bool`: 是否消除背靠背共面贴合的内部接触面（Contact Faces，默认 false）。
+  - `preserve_quads: bool`: 是否在剔除后重构并保留 Quad 拓扑与 `quad_indices`（默认 true）。
+- `cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResult`: 对网格执行精确微观遮挡与叠面剔除，无缝保留所有 `Face` / `Point` / `Corner` / `Mesh` 自定义属性与 Quad 拓扑。
 
 ---
 
@@ -126,10 +131,20 @@ pub struct Quad {
 ### 3.1 核心类型与函数
 - `BlockState`: 解析 `minecraft:oak_stairs[facing=east,half=bottom,shape=straight]` 为状态名与键值对 Map。
 - `BlockModelJson`: 反序列化 Minecraft 原版 Model JSON 结构（`parent`, `textures`, `elements`, `display`）。
-- `ModelBaker`: 模型烘焙器，负责递归解析父模型引用、继承纹理变量、根据 UV 旋转和 Element 构建 `BakedModel`。
+- `ModelBaker`: 模型烘焙器，负责递归解析父模型引用、继承纹理变量、根据 UV 旋转和 Element 构建 `BakedModel`。精准维护非立方体及不透明方块词缀白名单与精确守卫（如对 `bed` 进行精确/后缀匹配，避免误伤 `bedrock`）。
 - `BakedFace`: 模型四边形面描述，包含局部坐标顶点 (`vertices`)、原版 UV (`uvs`)、法线 (`normal`)、纹理标识符 (`texture`)、tint 索引 (`tint_index`) 与剔除方向 (`cullface`)。Phase 2 新增预计算图集字段 `atlas_uvs: Option<[Vec2; 4]>`、`atlas_chunk_id: Option<u16>`、`atlas_texture_id: Option<u32>` 及 `remap_to_atlas_bounds(...)` 离线坐标烘焙能力。
-- `BakedModel`: 包含预计算好的 6 向四边形列表 (`Quad` + `FaceAttributes`) 与未指定 cullface 的自由面、原始方块要素元素 (`BakedElement`) 以及预烘焙的面遮挡剔除元数据 (`cull_meta: Option<BlockCullMeta>`)。Phase 3 新增 6 向分桶字段 `culled_faces: [Vec<BakedFace>; 6]`（按 6 个主方向聚合需遮挡剔除的外表面）与 `unculled_faces: Vec<BakedFace>`（无需邻居遮挡检查的内部/交叉面）。提供 `rebuild_face_buckets()`、`get_face_buckets()` 以及 `remap_to_atlas_with(...)` 离线批量预映射。
+- `ModelMeshOptions`: 网格化提取配置结构体：
+  - `clip_hidden_volume: bool`: 裁剪内部隐藏体素包围盒。
+  - `cull_duplicates: bool`: 自动消除几何同向重合面（杜绝 DCC 视口/渲染器 Z-fighting 闪烁）。
+  - `cull_coplanar_opposite: bool`: 剔除模型内部背靠背贴合的无用接触面。
+  - `tolerance: f32`: 几何判定容差。
+- `BakedModel`: 包含预计算好的 6 向四边形列表 (`Quad` + `FaceAttributes`) 与未指定 cullface 的自由面、原始方块要素元素 (`BakedElement`) 以及预烘焙的面遮挡剔除元数据 (`cull_meta: Option<BlockCullMeta>`)。
+  - `deduplicate_faces(&mut self) -> usize`: 在 Element 面粒度直接消除同向重合面与反向贴合面，并自动重构 6 向分桶。
+  - `to_mesh_with_options(&self, options: &ModelMeshOptions) -> MeshData`: 带叠面消除与隐藏体裁剪的网格导出。
+  - `to_mesh_with_textures(...)`: 批量导出带完整面属性与叠面消除的网格。
+  - 提供 6 向分桶字段 `culled_faces: [Vec<BakedFace>; 6]` 与 `unculled_faces: Vec<BakedFace>`，支持 `rebuild_face_buckets()`、`get_face_buckets()` 以及 `remap_to_atlas_with(...)` 离线批量预映射。
 - `BakedModelDatabase`: 烘焙模型数据库容器，支持快速序列化与反序列化（bincode 二进制高速流，内置 V0/V1/V2/V3 多版本向后兼容回退与自动面分桶重建）。
+  - `db.deduplicate_all() -> usize`: 批量对数据库中所有模型执行面去重与内部接触面剔除。
   - `db.remap_to_atlas_with(lookup_fn)`: 离线对数据库中所有模型面（含分桶面）批量注入图集 UV 与 Chunk/Texture ID。
   - `db.get(state: &str) -> Option<&BakedModel>`:
     多级智能 BlockState 寻址匹配引擎：

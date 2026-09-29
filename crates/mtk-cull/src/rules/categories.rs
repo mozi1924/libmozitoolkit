@@ -279,6 +279,7 @@ pub const PARTIAL_SHAPE_SUFFIXES: &[&str] = &[
 
 /// Exact names identifying partial non-full blocks.
 pub const PARTIAL_SHAPE_EXACT_NAMES: &[&str] = &[
+    "bed",
     "piston_head",
     "moving_piston",
     "iron_bars",

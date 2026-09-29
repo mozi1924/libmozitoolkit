@@ -78,6 +78,30 @@ pub struct BakedElement {
     pub faces: HashMap<Direction, BakedFace>,
 }
 
+/// Options for configuring mesh generation and face de-overlapping from baked models.
+#[derive(Debug, Clone)]
+pub struct ModelMeshOptions {
+    /// Whether to clip faces occluded by interior element geometry via 2D boolean difference.
+    pub clip_hidden_volume: bool,
+    /// Whether to cull duplicate overlapping faces with the same normal (eliminating Z-fighting).
+    pub cull_duplicates: bool,
+    /// Whether to cull contacting interior faces with opposite normals.
+    pub cull_coplanar_opposite: bool,
+    /// Numerical tolerance for geometric equality.
+    pub tolerance: f32,
+}
+
+impl Default for ModelMeshOptions {
+    fn default() -> Self {
+        Self {
+            clip_hidden_volume: true,
+            cull_duplicates: true,
+            cull_coplanar_opposite: true,
+            tolerance: 1e-3,
+        }
+    }
+}
+
 /// Fully baked model containing all elements, directional faces summary, and metadata.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BakedModel {
@@ -122,6 +146,87 @@ impl BakedModel {
         }
         self.culled_faces = culled;
         self.unculled_faces = unculled;
+    }
+
+    /// Eliminates overlapping, duplicate, and interior coplanar contacting faces from the model's elements.
+    ///
+    /// Automatically rebuilds `culled_faces` and `unculled_faces` buckets.
+    /// Returns the number of removed faces.
+    pub fn deduplicate_faces(&mut self) -> usize {
+        if self.elements.len() <= 1 && self.elements.first().map(|e| e.faces.len()).unwrap_or(0) <= 6 {
+            return 0;
+        }
+
+        let mut face_list: Vec<(usize, Direction, [Vec3; 4], Vec3, Vec3)> = Vec::new();
+        for (el_idx, el) in self.elements.iter().enumerate() {
+            for (&dir, f) in &el.faces {
+                let center = (f.vertices[0] + f.vertices[1] + f.vertices[2] + f.vertices[3]) * 0.25;
+                face_list.push((el_idx, dir, f.vertices, f.normal, center));
+            }
+        }
+
+        let mut to_remove: std::collections::HashSet<(usize, Direction)> = std::collections::HashSet::new();
+        let tol_sq = 1e-3f32 * 1e-3f32;
+
+        for i in 0..face_list.len() {
+            if to_remove.contains(&(face_list[i].0, face_list[i].1)) {
+                continue;
+            }
+            let (el_a, dir_a, verts_a, norm_a, center_a) = &face_list[i];
+
+            for j in (i + 1)..face_list.len() {
+                if to_remove.contains(&(face_list[j].0, face_list[j].1)) {
+                    continue;
+                }
+                let (el_b, dir_b, verts_b, norm_b, center_b) = &face_list[j];
+
+                if center_a.distance_squared(*center_b) > tol_sq {
+                    continue;
+                }
+
+                // Check vertex geometry match
+                let mut matched = true;
+                for va in verts_a {
+                    let mut found = false;
+                    for vb in verts_b {
+                        if va.distance_squared(*vb) <= tol_sq {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if !found {
+                        matched = false;
+                        break;
+                    }
+                }
+                if !matched {
+                    continue;
+                }
+
+                let dot = norm_a.dot(*norm_b);
+                if dot > 0.99 {
+                    // Duplicate face facing same direction: cull the duplicate
+                    to_remove.insert((*el_b, *dir_b));
+                } else if dot < -0.99 {
+                    // Contacting interior face facing opposite direction: cull both
+                    to_remove.insert((*el_a, *dir_a));
+                    to_remove.insert((*el_b, *dir_b));
+                    break;
+                }
+            }
+        }
+
+        let culled_count = to_remove.len();
+        if culled_count > 0 {
+            for (el_idx, dir) in to_remove {
+                if let Some(el) = self.elements.get_mut(el_idx) {
+                    el.faces.remove(&dir);
+                }
+            }
+            self.rebuild_face_buckets();
+        }
+
+        culled_count
     }
 
     /// Returns references to face buckets. If `culled_faces` and `unculled_faces` are empty
@@ -227,15 +332,16 @@ impl BakedModel {
         self.to_mesh_with_textures(exclude_hidden_volume).0
     }
 
-    /// Converts geometry into a `MeshData` buffer along with the ordered list of unique texture names.
-    pub fn to_mesh_with_textures(&self, exclude_hidden_volume: bool) -> (MeshData, Vec<String>) {
+    /// Converts geometry into a `MeshData` buffer along with the ordered list of unique texture names,
+    /// using specified `ModelMeshOptions` for clipping and de-overlapping.
+    pub fn to_mesh_with_options(&self, options: &ModelMeshOptions) -> (MeshData, Vec<String>) {
         let mut mesh = MeshData::new();
         let mut texture_to_slot: HashMap<String, u16> = HashMap::new();
         let mut texture_list: Vec<String> = Vec::new();
 
         // Prepare bounding boxes for hidden volume clipping from actual transformed vertices
         let mut element_bounds = Vec::new();
-        if exclude_hidden_volume && self.elements.len() > 1 {
+        if options.clip_hidden_volume && self.elements.len() > 1 {
             for el in &self.elements {
                 let mut min_pos = Vec3::splat(f32::INFINITY);
                 let mut max_pos = Vec3::splat(f32::NEG_INFINITY);
@@ -278,7 +384,7 @@ impl BakedModel {
                         id
                     });
 
-                let pieces = if exclude_hidden_volume && !other_bounds.is_empty() {
+                let pieces = if options.clip_hidden_volume && !other_bounds.is_empty() {
                     clip_face_excluding_hidden_volume(
                         &face.vertices,
                         &face.uvs,
@@ -420,7 +526,30 @@ impl BakedModel {
             mesh.populate_standard_face_attributes(&face_attributes_list);
         }
 
+        // 3. De-overlapping and Duplicate/Opposite Face Culling (prevents DCC renderer Z-fighting)
+        if (options.cull_duplicates || options.cull_coplanar_opposite) && mesh.face_count() > 0 {
+            let cull_cfg = mtk_cull::MeshCullConfig {
+                tolerance: options.tolerance,
+                cull_coplanar_opposite: options.cull_coplanar_opposite,
+                cull_duplicates: options.cull_duplicates,
+            };
+            mesh = mtk_cull::cull_mesh_faces(&mesh, &cull_cfg).mesh;
+        }
+
         (mesh, texture_list)
+    }
+
+    /// Converts geometry into a `MeshData` buffer along with the ordered list of unique texture names.
+    ///
+    /// If `exclude_hidden_volume` is true, clips internal volume overlaps and culls duplicate/opposite faces.
+    pub fn to_mesh_with_textures(&self, exclude_hidden_volume: bool) -> (MeshData, Vec<String>) {
+        let options = ModelMeshOptions {
+            clip_hidden_volume: exclude_hidden_volume,
+            cull_duplicates: exclude_hidden_volume,
+            cull_coplanar_opposite: exclude_hidden_volume,
+            tolerance: 1e-3,
+        };
+        self.to_mesh_with_options(&options)
     }
 
     /// Converts the baked model into standard Wavefront OBJ text.

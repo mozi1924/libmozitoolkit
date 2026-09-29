@@ -323,7 +323,14 @@ impl ModelBaker {
         let is_double_slab = short_name.ends_with("_slab")
             && blockstate.properties.get("type").map(|s| s.as_str()) == Some("double");
 
-        let is_known_non_cube = KNOWN_NON_CUBES.iter().any(|&w| short_name.contains(w)) && !is_double_slab;
+        // Bedrock is always a full opaque cube; beds are named "bed" or end with "_bed" (e.g. "red_bed").
+        let is_bed = short_name == "bed" || short_name.ends_with("_bed");
+        let is_known_non_cube = !is_double_slab
+            && short_name != "bedrock"
+            && (is_bed
+                || KNOWN_NON_CUBES
+                    .iter()
+                    .any(|&w| if w == "bed" { false } else { short_name.contains(w) }));
 
         let is_cube = !is_known_non_cube
             && !baked_elements.is_empty()
@@ -331,7 +338,11 @@ impl ModelBaker {
                 el.from_pos == [0.0, 0.0, 0.0] && el.to_pos == [16.0, 16.0, 16.0]
             });
 
-        let is_opaque = !NON_OPAQUE_SUBSTRINGS.iter().any(|&w| short_name.contains(w));
+        let is_opaque = short_name == "bedrock"
+            || (!is_bed
+                && !NON_OPAQUE_SUBSTRINGS
+                    .iter()
+                    .any(|&w| if w == "bed" { false } else { short_name.contains(w) }));
 
         let emissive = is_block_emissive(&blockstate);
 
