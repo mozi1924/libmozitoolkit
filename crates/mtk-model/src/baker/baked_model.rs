@@ -20,6 +20,35 @@ pub struct BakedFace {
     pub vertices: [Vec3; 4],
     pub uvs: [Vec2; 4],
     pub normal: Vec3,
+    #[serde(default)]
+    pub atlas_uvs: Option<[Vec2; 4]>,
+    #[serde(default)]
+    pub atlas_chunk_id: Option<u16>,
+    #[serde(default)]
+    pub atlas_texture_id: Option<u32>,
+}
+
+impl BakedFace {
+    /// Remaps this face's local UVs to absolute Atlas UV coordinates given frame 0 UV bounds.
+    pub fn remap_to_atlas_bounds(
+        &mut self,
+        frame_0_uv_bounds: [f32; 4],
+        chunk_id: u16,
+        texture_id: u32,
+    ) {
+        let u_min = frame_0_uv_bounds[0];
+        let v_min = frame_0_uv_bounds[1];
+        let u_span = frame_0_uv_bounds[2] - u_min;
+        let v_span = frame_0_uv_bounds[3] - v_min;
+        self.atlas_uvs = Some([
+            Vec2::new(u_min + self.uvs[0].x * u_span, v_min + (1.0 - self.uvs[0].y) * v_span),
+            Vec2::new(u_min + self.uvs[1].x * u_span, v_min + (1.0 - self.uvs[1].y) * v_span),
+            Vec2::new(u_min + self.uvs[2].x * u_span, v_min + (1.0 - self.uvs[2].y) * v_span),
+            Vec2::new(u_min + self.uvs[3].x * u_span, v_min + (1.0 - self.uvs[3].y) * v_span),
+        ]);
+        self.atlas_chunk_id = Some(chunk_id);
+        self.atlas_texture_id = Some(texture_id);
+    }
 }
 
 impl Default for BakedFace {
@@ -34,6 +63,9 @@ impl Default for BakedFace {
             vertices: [Vec3::ZERO; 4],
             uvs: [Vec2::ZERO; 4],
             normal: Vec3::Y,
+            atlas_uvs: None,
+            atlas_chunk_id: None,
+            atlas_texture_id: None,
         }
     }
 }
@@ -58,12 +90,133 @@ pub struct BakedModel {
     pub is_opaque: bool,
     pub is_emissive: bool,
     pub emissive_level: f32,
+    #[serde(default)]
+    pub cull_meta: Option<mtk_cull::BlockCullMeta>,
+    #[serde(default)]
+    pub culled_faces: [Vec<BakedFace>; 6],
+    #[serde(default)]
+    pub unculled_faces: Vec<BakedFace>,
 }
 
 impl BakedModel {
+    /// Rebuilds `culled_faces` (indexed by cull direction) and `unculled_faces` from `elements`.
+    /// Automatically filters out standalone overlay decal faces (`_overlay`, `side_overlay`).
+    pub fn rebuild_face_buckets(&mut self) {
+        let mut culled: [Vec<BakedFace>; 6] = Default::default();
+        let mut unculled = Vec::new();
+
+        for el in &self.elements {
+            for face in el.faces.values() {
+                if face.texture.ends_with("_overlay")
+                    || face.texture.ends_with("_OVERLAY")
+                    || face.texture.contains("side_overlay")
+                {
+                    continue;
+                }
+                if let Some(cull_dir) = face.cullface {
+                    culled[cull_dir.to_index()].push(face.clone());
+                } else {
+                    unculled.push(face.clone());
+                }
+            }
+        }
+        self.culled_faces = culled;
+        self.unculled_faces = unculled;
+    }
+
+    /// Returns references to face buckets. If `culled_faces` and `unculled_faces` are empty
+    /// but `elements` is non-empty (e.g. manually constructed in tests), computes them on the fly.
+    pub fn get_face_buckets(&self) -> ([Vec<BakedFace>; 6], Vec<BakedFace>) {
+        if self.culled_faces.iter().any(|v| !v.is_empty()) || !self.unculled_faces.is_empty() {
+            return (self.culled_faces.clone(), self.unculled_faces.clone());
+        }
+        let mut culled: [Vec<BakedFace>; 6] = Default::default();
+        let mut unculled = Vec::new();
+        for el in &self.elements {
+            for face in el.faces.values() {
+                if face.texture.ends_with("_overlay")
+                    || face.texture.ends_with("_OVERLAY")
+                    || face.texture.contains("side_overlay")
+                {
+                    continue;
+                }
+                if let Some(cull_dir) = face.cullface {
+                    culled[cull_dir.to_index()].push(face.clone());
+                } else {
+                    unculled.push(face.clone());
+                }
+            }
+        }
+        (culled, unculled)
+    }
+
+    /// Returns pre-baked culling metadata, or dynamically computes it if missing.
+    pub fn get_or_compute_cull_meta(&self) -> mtk_cull::BlockCullMeta {
+        if let Some(ref meta) = self.cull_meta {
+            return meta.clone();
+        }
+        let mut quads: Vec<([Vec3; 4], Direction)> = Vec::new();
+        if !self.elements.is_empty() {
+            for elem in &self.elements {
+                for (&dir, face) in &elem.faces {
+                    quads.push((face.vertices, dir));
+                }
+            }
+        } else if self.is_cube {
+            for dir in Direction::ALL {
+                quads.push((self.faces[dir.to_index()].vertices, dir));
+            }
+        }
+        let quads_slice = if quads.is_empty() { None } else { Some(quads.as_slice()) };
+        mtk_cull::compute_block_cull_meta(&self.block_state, quads_slice, Some(self.is_opaque))
+    }
+
     /// Returns the standard face for a given direction (from 6-face summary).
     pub fn get_face(&self, dir: Direction) -> &BakedFace {
         &self.faces[dir.to_index()]
+    }
+
+    /// Remaps all elements, faces, and OBJ faces in this model to atlas coordinates using a lookup closure.
+    pub fn remap_to_atlas_with<F>(&mut self, mut lookup_fn: F)
+    where
+        F: FnMut(&str) -> Option<([f32; 4], u16, u32)>,
+    {
+        for elem in &mut self.elements {
+            for face in elem.faces.values_mut() {
+                if let Some((bounds, chunk_id, tex_id)) = lookup_fn(&face.texture) {
+                    face.remap_to_atlas_bounds(bounds, chunk_id, tex_id);
+                }
+            }
+        }
+        for bucket in &mut self.culled_faces {
+            for face in bucket {
+                if let Some((bounds, chunk_id, tex_id)) = lookup_fn(&face.texture) {
+                    face.remap_to_atlas_bounds(bounds, chunk_id, tex_id);
+                }
+            }
+        }
+        for face in &mut self.unculled_faces {
+            if let Some((bounds, chunk_id, tex_id)) = lookup_fn(&face.texture) {
+                face.remap_to_atlas_bounds(bounds, chunk_id, tex_id);
+            }
+        }
+        for face in &mut self.faces {
+            if let Some((bounds, chunk_id, tex_id)) = lookup_fn(&face.texture) {
+                face.remap_to_atlas_bounds(bounds, chunk_id, tex_id);
+            }
+        }
+        for obj_face in &mut self.obj_faces {
+            if let Some((bounds, _chunk_id, _tex_id)) = lookup_fn(&obj_face.texture) {
+                let u_min = bounds[0];
+                let v_min = bounds[1];
+                let u_span = bounds[2] - u_min;
+                let v_span = bounds[3] - v_min;
+                for uv in &mut obj_face.uvs {
+                    uv.x = u_min + uv.x * u_span;
+                    uv.y = v_min + (1.0 - uv.y) * v_span;
+                }
+            }
+        }
     }
 
     /// Converts the baked model geometry into a platform-agnostic, contiguous `MeshData` buffer.
@@ -155,10 +308,14 @@ impl BakedModel {
 
                     for i in 0..4 {
                         let v = piece.vertices[i];
-                        let uv = piece.uvs[i];
                         mesh.positions.push([v.x, v.y, v.z]);
                         mesh.normals.push(norm);
-                        mesh.uvs.push([uv.x, 1.0 - uv.y]);
+                        if let Some(ref atlas_uvs) = face.atlas_uvs {
+                            mesh.uvs.push([atlas_uvs[i].x, atlas_uvs[i].y]);
+                        } else {
+                            let uv = piece.uvs[i];
+                            mesh.uvs.push([uv.x, 1.0 - uv.y]);
+                        }
                     }
 
                     // Triangulate CCW quad: 0-1-2 and 0-2-3
@@ -180,8 +337,8 @@ impl BakedModel {
                         emission,
                         is_overlay: false,
                         uv_mode: 0,
-                        atlas_chunk_id: None,
-                        atlas_texture_id: None,
+                        atlas_chunk_id: face.atlas_chunk_id.map(|c| c as u32),
+                        atlas_texture_id: face.atlas_texture_id,
                         uv_transform: uv_trans,
                         uv_rotation: face.uv_rot,
                         face_dir: face.direction.to_index() as u8,
@@ -288,6 +445,16 @@ impl BakedModelDatabase {
 
     pub fn insert(&mut self, state: String, model: BakedModel) {
         self.models.insert(state, model);
+    }
+
+    /// Remaps all baked models in the database to atlas coordinates using a lookup closure.
+    pub fn remap_to_atlas_with<F>(&mut self, mut lookup_fn: F)
+    where
+        F: FnMut(&str) -> Option<([f32; 4], u16, u32)>,
+    {
+        for model in self.models.values_mut() {
+            model.remap_to_atlas_with(&mut lookup_fn);
+        }
     }
 
     /// Resolves a baked model using multi-tiered smart BlockState resolution:
@@ -501,7 +668,212 @@ impl BakedModelDatabase {
 
     #[cfg(feature = "std")]
     pub fn from_bincode(bytes: &[u8]) -> Result<Self, bincode::Error> {
-        let models: HashMap<String, BakedModel> = bincode::deserialize(bytes)?;
+        if let Ok(mut models) = bincode::deserialize::<HashMap<String, BakedModel>>(bytes) {
+            for bm in models.values_mut() {
+                if bm.culled_faces.iter().all(|v| v.is_empty()) && bm.unculled_faces.is_empty() && !bm.elements.is_empty() {
+                    bm.rebuild_face_buckets();
+                }
+            }
+            return Ok(Self { models });
+        }
+
+        #[derive(Deserialize)]
+        struct LegacyModelV2 {
+            block_state: String,
+            elements: Vec<BakedElement>,
+            #[serde(default)]
+            obj_faces: Vec<crate::obj::BakedObjFace>,
+            faces: [BakedFace; 6],
+            is_cube: bool,
+            is_opaque: bool,
+            is_emissive: bool,
+            emissive_level: f32,
+            cull_meta: Option<mtk_cull::BlockCullMeta>,
+        }
+
+        if let Ok(legacy_v2) = bincode::deserialize::<HashMap<String, LegacyModelV2>>(bytes) {
+            let mut models = HashMap::with_capacity(legacy_v2.len());
+            for (st, lm) in legacy_v2 {
+                let mut bm = BakedModel {
+                    block_state: lm.block_state,
+                    elements: lm.elements,
+                    obj_faces: lm.obj_faces,
+                    faces: lm.faces,
+                    is_cube: lm.is_cube,
+                    is_opaque: lm.is_opaque,
+                    is_emissive: lm.is_emissive,
+                    emissive_level: lm.emissive_level,
+                    cull_meta: lm.cull_meta,
+                    culled_faces: Default::default(),
+                    unculled_faces: Default::default(),
+                };
+                if bm.cull_meta.is_none() {
+                    bm.cull_meta = Some(bm.get_or_compute_cull_meta());
+                }
+                bm.rebuild_face_buckets();
+                models.insert(st, bm);
+            }
+            return Ok(Self { models });
+        }
+
+        #[derive(Clone, Deserialize)]
+        struct LegacyFaceV0 {
+            direction: Direction,
+            texture: String,
+            uv_rot: f32,
+            uv_bounds: [f32; 4],
+            tint_index: i16,
+            cullface: Option<Direction>,
+            vertices: [Vec3; 4],
+            uvs: [Vec2; 4],
+            normal: Vec3,
+        }
+
+        #[derive(Deserialize)]
+        struct LegacyElementV0 {
+            from_pos: [f32; 3],
+            to_pos: [f32; 3],
+            faces: HashMap<Direction, LegacyFaceV0>,
+        }
+
+        #[derive(Deserialize)]
+        struct LegacyModelV0 {
+            block_state: String,
+            elements: Vec<LegacyElementV0>,
+            #[serde(default)]
+            obj_faces: Vec<crate::obj::BakedObjFace>,
+            faces: [LegacyFaceV0; 6],
+            is_cube: bool,
+            is_opaque: bool,
+            is_emissive: bool,
+            emissive_level: f32,
+        }
+
+        #[derive(Deserialize)]
+        struct LegacyModelV1 {
+            block_state: String,
+            elements: Vec<LegacyElementV0>,
+            #[serde(default)]
+            obj_faces: Vec<crate::obj::BakedObjFace>,
+            faces: [LegacyFaceV0; 6],
+            is_cube: bool,
+            is_opaque: bool,
+            is_emissive: bool,
+            emissive_level: f32,
+            cull_meta: Option<mtk_cull::BlockCullMeta>,
+        }
+
+        let convert_face = |f: LegacyFaceV0| BakedFace {
+            direction: f.direction,
+            texture: f.texture,
+            uv_rot: f.uv_rot,
+            uv_bounds: f.uv_bounds,
+            tint_index: f.tint_index,
+            cullface: f.cullface,
+            vertices: f.vertices,
+            uvs: f.uvs,
+            normal: f.normal,
+            atlas_uvs: None,
+            atlas_chunk_id: None,
+            atlas_texture_id: None,
+        };
+
+        if let Ok(legacy_v1) = bincode::deserialize::<HashMap<String, LegacyModelV1>>(bytes) {
+            let mut models = HashMap::with_capacity(legacy_v1.len());
+            for (st, lm) in legacy_v1 {
+                let elements = lm
+                    .elements
+                    .into_iter()
+                    .map(|el| BakedElement {
+                        from_pos: el.from_pos,
+                        to_pos: el.to_pos,
+                        faces: el
+                            .faces
+                            .into_iter()
+                            .map(|(d, f)| (d, convert_face(f)))
+                            .collect(),
+                    })
+                    .collect();
+                let faces = [
+                    convert_face(lm.faces[0].clone()),
+                    convert_face(lm.faces[1].clone()),
+                    convert_face(lm.faces[2].clone()),
+                    convert_face(lm.faces[3].clone()),
+                    convert_face(lm.faces[4].clone()),
+                    convert_face(lm.faces[5].clone()),
+                ];
+                let mut bm = BakedModel {
+                    block_state: lm.block_state,
+                    elements,
+                    obj_faces: lm.obj_faces,
+                    faces,
+                    is_cube: lm.is_cube,
+                    is_opaque: lm.is_opaque,
+                    is_emissive: lm.is_emissive,
+                    emissive_level: lm.emissive_level,
+                    cull_meta: lm.cull_meta,
+                    culled_faces: Default::default(),
+                    unculled_faces: Default::default(),
+                };
+                if bm.cull_meta.is_none() {
+                    bm.cull_meta = Some(bm.get_or_compute_cull_meta());
+                }
+                bm.rebuild_face_buckets();
+                models.insert(st, bm);
+            }
+            return Ok(Self { models });
+        }
+
+        if let Ok(legacy_v0) = bincode::deserialize::<HashMap<String, LegacyModelV0>>(bytes) {
+            let mut models = HashMap::with_capacity(legacy_v0.len());
+            for (st, lm) in legacy_v0 {
+                let elements = lm
+                    .elements
+                    .into_iter()
+                    .map(|el| BakedElement {
+                        from_pos: el.from_pos,
+                        to_pos: el.to_pos,
+                        faces: el
+                            .faces
+                            .into_iter()
+                            .map(|(d, f)| (d, convert_face(f)))
+                            .collect(),
+                    })
+                    .collect();
+                let faces = [
+                    convert_face(lm.faces[0].clone()),
+                    convert_face(lm.faces[1].clone()),
+                    convert_face(lm.faces[2].clone()),
+                    convert_face(lm.faces[3].clone()),
+                    convert_face(lm.faces[4].clone()),
+                    convert_face(lm.faces[5].clone()),
+                ];
+                let mut bm = BakedModel {
+                    block_state: lm.block_state,
+                    elements,
+                    obj_faces: lm.obj_faces,
+                    faces,
+                    is_cube: lm.is_cube,
+                    is_opaque: lm.is_opaque,
+                    is_emissive: lm.is_emissive,
+                    emissive_level: lm.emissive_level,
+                    cull_meta: None,
+                    culled_faces: Default::default(),
+                    unculled_faces: Default::default(),
+                };
+                bm.cull_meta = Some(bm.get_or_compute_cull_meta());
+                bm.rebuild_face_buckets();
+                models.insert(st, bm);
+            }
+            return Ok(Self { models });
+        }
+
+        let mut models: HashMap<String, BakedModel> = bincode::deserialize(bytes)?;
+        for bm in models.values_mut() {
+            if bm.culled_faces.iter().all(|v| v.is_empty()) && bm.unculled_faces.is_empty() && !bm.elements.is_empty() {
+                bm.rebuild_face_buckets();
+            }
+        }
         Ok(Self { models })
     }
 }
@@ -555,6 +927,9 @@ mod tests {
             is_opaque: true,
             is_emissive: false,
             emissive_level: 0.0,
+            cull_meta: None,
+            culled_faces: Default::default(),
+            unculled_faces: Default::default(),
         };
 
         let mesh = model.to_mesh(false);
@@ -599,6 +974,9 @@ mod tests {
             is_opaque: false,
             is_emissive: false,
             emissive_level: 0.0,
+            cull_meta: None,
+            culled_faces: Default::default(),
+            unculled_faces: Default::default(),
         };
 
         db.insert(

@@ -11,9 +11,10 @@ use std::path::Path;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use mtk_material::BiomeResolver;
+use mtk_material::{BiomeResolver, MaterialResolver};
 use mtk_model::{BakedModelDatabase, BlockModelJson, BlockStateDefinition, ModelBaker};
 use mtk_resource::{AtlasCategory, ResourceLocation, ResourcePackStack};
+use mtk_texture::atlas::AtlasAddressMap;
 use mtk_texture::{AtlasBuilder, AtlasBuilderConfig, StandaloneBuilder, StandaloneConfig};
 
 use crate::MtkError;
@@ -120,6 +121,7 @@ pub fn precompile_all_assets(
     let mut chunk_count = 0;
     let mut sa_count = 0;
     let mut baked_count = 0;
+    let mut baked_atlas_opt = None;
 
     // 1. Atlas Baking & File Persistence (Multi-Category)
     if config.compile_atlas {
@@ -184,6 +186,7 @@ pub fn precompile_all_assets(
                 fs::write(atlas_dir.join(format!("{}_overlay.png", stem)), overlay_bytes)?;
             }
         }
+        baked_atlas_opt = Some(baked_atlas);
     }
 
     // 2. Standalone Baking
@@ -194,9 +197,10 @@ pub fn precompile_all_assets(
         sa_count = sa_res.texture_count;
     }
 
-    // 3. Full-Scale Model Baking & Bincode Persistence
+    // 3. Full-Scale Model Baking & Bincode Persistence (with Atlas UV Pre-baking)
     if config.compile_models {
-        let model_db = prebake_all_models(stack)?;
+        let atlas_map = baked_atlas_opt.as_ref().map(|a| &a.address_map);
+        let model_db = prebake_all_models(stack, atlas_map)?;
         baked_count = model_db.len();
         let bin_bytes = model_db.to_bincode()?;
         fs::write(models_dir.join("models.bin"), bin_bytes)?;
@@ -235,6 +239,7 @@ pub fn precompile_all_assets(
 /// Prebakes all blockstates discovered across all active resource packs in the stack.
 pub fn prebake_all_models(
     stack: &ResourcePackStack,
+    atlas_map: Option<&AtlasAddressMap>,
 ) -> Result<BakedModelDatabase, MtkError> {
     let blockstate_locs = stack.list_all_blockstate_locations();
 
@@ -298,7 +303,13 @@ pub fn prebake_all_models(
             let mut local_baker = ModelBaker::new();
             let mut pairs = Vec::new();
             for state_str in states {
-                if let Ok(baked) = local_baker.bake_blockstate(&state_str, Some(def), |id| get_model(id)) {
+                if let Ok(mut baked) = local_baker.bake_blockstate(&state_str, Some(def), |id| get_model(id)) {
+                    if let Some(atlas) = atlas_map {
+                        baked.remap_to_atlas_with(|tex| {
+                            MaterialResolver::resolve(tex, None, atlas)
+                                .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
+                        });
+                    }
                     pairs.push((state_str, baked));
                 }
             }
@@ -314,7 +325,13 @@ pub fn prebake_all_models(
             let mut local_baker = ModelBaker::new();
             let mut pairs = Vec::new();
             for state_str in states {
-                if let Ok(baked) = local_baker.bake_blockstate(&state_str, Some(def), |id| get_model(id)) {
+                if let Ok(mut baked) = local_baker.bake_blockstate(&state_str, Some(def), |id| get_model(id)) {
+                    if let Some(atlas) = atlas_map {
+                        baked.remap_to_atlas_with(|tex| {
+                            MaterialResolver::resolve(tex, None, atlas)
+                                .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
+                        });
+                    }
                     pairs.push((state_str, baked));
                 }
             }

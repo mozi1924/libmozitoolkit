@@ -243,6 +243,7 @@ impl ModelBaker {
                         vertices: baked_geom.positions,
                         uvs: baked_geom.uvs,
                         normal,
+                        ..Default::default()
                     };
 
                     let idx = baked_geom.direction.to_index();
@@ -306,6 +307,7 @@ impl ModelBaker {
                     vertices: [Vec3::ZERO; 4],
                     uvs: [Vec2::ZERO; 4],
                     normal: dir.normal(),
+                    ..Default::default()
                 };
             }
         }
@@ -326,7 +328,22 @@ impl ModelBaker {
 
         let emissive = is_block_emissive(&blockstate);
 
-        let baked_model = BakedModel {
+        let mut quads: Vec<([glam::Vec3; 4], Direction)> = Vec::new();
+        if !baked_elements.is_empty() {
+            for elem in &baked_elements {
+                for (&dir, face) in &elem.faces {
+                    quads.push((face.vertices, dir));
+                }
+            }
+        } else if is_cube {
+            for dir in Direction::ALL {
+                quads.push((final_six_faces[dir.to_index()].vertices, dir));
+            }
+        }
+        let quads_slice = if quads.is_empty() { None } else { Some(quads.as_slice()) };
+        let cull_meta = mtk_cull::compute_block_cull_meta(&canonical_str, quads_slice, Some(is_opaque));
+
+        let mut baked_model = BakedModel {
             block_state: canonical_str.clone(),
             elements: baked_elements,
             obj_faces: Vec::new(),
@@ -335,7 +352,11 @@ impl ModelBaker {
             is_opaque,
             is_emissive: emissive,
             emissive_level: if emissive { 1.0 } else { 0.0 },
+            cull_meta: Some(cull_meta),
+            culled_faces: Default::default(),
+            unculled_faces: Default::default(),
         };
+        baked_model.rebuild_face_buckets();
 
         self.bake_cache.insert(canonical_str, baked_model.clone());
         Ok(baked_model)
@@ -393,6 +414,7 @@ impl ModelBaker {
                     vertices: v4,
                     uvs: u4,
                     normal: matching.normal,
+                    ..Default::default()
                 };
             } else if let Some(first) = baked_obj_faces.first() {
                 let mut v4 = [Vec3::ZERO; 4];
@@ -410,6 +432,7 @@ impl ModelBaker {
                     vertices: v4,
                     uvs: u4,
                     normal: dir.normal(),
+                    ..Default::default()
                 };
             } else {
                 six_faces[idx] = BakedFace {
@@ -427,8 +450,9 @@ impl ModelBaker {
             properties: std::collections::BTreeMap::new(),
         });
         let emissive = is_block_emissive(&blockstate);
+        let cull_meta = mtk_cull::compute_block_cull_meta(block_state, None, Some(false));
 
-        Ok(BakedModel {
+        let mut baked_model = BakedModel {
             block_state: block_state.to_string(),
             elements: Vec::new(),
             obj_faces: baked_obj_faces,
@@ -437,7 +461,12 @@ impl ModelBaker {
             is_opaque: false,
             is_emissive: emissive,
             emissive_level: if emissive { 1.0 } else { 0.0 },
-        })
+            cull_meta: Some(cull_meta),
+            culled_faces: Default::default(),
+            unculled_faces: Default::default(),
+        };
+        baked_model.rebuild_face_buckets();
+        Ok(baked_model)
     }
 
     /// Calculates a conservative default thread count for parallel operations.

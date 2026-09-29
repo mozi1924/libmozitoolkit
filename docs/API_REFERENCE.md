@@ -127,8 +127,10 @@ pub struct Quad {
 - `BlockState`: 解析 `minecraft:oak_stairs[facing=east,half=bottom,shape=straight]` 为状态名与键值对 Map。
 - `BlockModelJson`: 反序列化 Minecraft 原版 Model JSON 结构（`parent`, `textures`, `elements`, `display`）。
 - `ModelBaker`: 模型烘焙器，负责递归解析父模型引用、继承纹理变量、根据 UV 旋转和 Element 构建 `BakedModel`。
-- `BakedModel`: 包含预计算好的 6 向四边形列表 (`Quad` + `FaceAttributes`) 与未指定 cullface 的自由面，以及原始方块要素元素 (`BakedElement`)。
-- `BakedModelDatabase`: 烘焙模型数据库容器，支持快速序列化与反序列化（bincode 二进制高速流）。
+- `BakedFace`: 模型四边形面描述，包含局部坐标顶点 (`vertices`)、原版 UV (`uvs`)、法线 (`normal`)、纹理标识符 (`texture`)、tint 索引 (`tint_index`) 与剔除方向 (`cullface`)。Phase 2 新增预计算图集字段 `atlas_uvs: Option<[Vec2; 4]>`、`atlas_chunk_id: Option<u16>`、`atlas_texture_id: Option<u32>` 及 `remap_to_atlas_bounds(...)` 离线坐标烘焙能力。
+- `BakedModel`: 包含预计算好的 6 向四边形列表 (`Quad` + `FaceAttributes`) 与未指定 cullface 的自由面、原始方块要素元素 (`BakedElement`) 以及预烘焙的面遮挡剔除元数据 (`cull_meta: Option<BlockCullMeta>`)。Phase 3 新增 6 向分桶字段 `culled_faces: [Vec<BakedFace>; 6]`（按 6 个主方向聚合需遮挡剔除的外表面）与 `unculled_faces: Vec<BakedFace>`（无需邻居遮挡检查的内部/交叉面）。提供 `rebuild_face_buckets()`、`get_face_buckets()` 以及 `remap_to_atlas_with(...)` 离线批量预映射。
+- `BakedModelDatabase`: 烘焙模型数据库容器，支持快速序列化与反序列化（bincode 二进制高速流，内置 V0/V1/V2/V3 多版本向后兼容回退与自动面分桶重建）。
+  - `db.remap_to_atlas_with(lookup_fn)`: 离线对数据库中所有模型面（含分桶面）批量注入图集 UV 与 Chunk/Texture ID。
   - `db.get(state: &str) -> Option<&BakedModel>`:
     多级智能 BlockState 寻址匹配引擎：
     - **Tier 1 (Exact Match)**: 极速精确哈希查询（针对纯净模型定义键）。
@@ -201,6 +203,8 @@ pub struct Quad {
 - `SectionMesher`:
   - 输入：`PaddedVoxelArray`, `ModelBaker`, `MesherConfig`（配置 `z_up_coordinates: bool` 标准化输出、`origin_centered: bool` 底部中心原点对齐、`weld_vertices: bool` 空间顶点焊接、`selection_bounds: Option<([i32; 3], [i32; 3])>` 包围盒对齐、`atlas: Option<Arc<AtlasAddressMap>>` 图集寻址、`biome_resolver: Option<Arc<BiomeResolver>>` 生物群系调色板着色与 `custom_aliases` 别名映射）。
   - 输出：`MeshData`（包含 `mtk_source_texture_key`、`mtk_material_slot`、`mtk_atlas_chunk_id`、`mtk_uv_tiling_transform`、`mtk_biome_tint_data` 等 15 项标准面属性）。自动剔除多 Element 模型中的冗余 Overlay Decal 面（如草方块侧面叠加层），由前端着色器单面多重采样无缝合成，杜绝共面发黑与 Z-fighting。
+  - **Palette 级预解析加速 (Phase 2)**：在遍历 4,096 体素前构建 `palette_meshing_data`，将模型面/单面方块的材质槽、纹理别名、图集 UV 映射及生物群系着色预先解算至 Palette 级别（单区块仅执行 10~50 次），消除了内部热循环中重复的字符串分配、哈希查找与 UV 矩形变换。
+  - **6 向分桶与快速通道 (Phase 3)**：将模型面划分为 6 个主方向分桶 (`culled_faces: [Vec; 6]`) 与免剔除分桶 (`unculled_faces`)。热循环中若邻居方块不透明，1 次判定即可直接跳过该方向的所有面；对于免剔除的植被/交叉模型（草、花、火把等），完全跳过邻居采样与遮挡判定直接发射几何。
 - `DeltaMesher`: 增量网格化器，针对单点方块破坏/放置与脏区块，快速并行重构局部几何面。
 - `calculate_face_ao(neighbors: &[bool; 8]) -> [f32; 4]`: 原版 4 顶点平滑 AO 遮蔽因子计算。
 - `FluidType`, `calculate_fluid_corner_heights`: 水/岩浆流体网格与流向计算。
@@ -257,7 +261,9 @@ pub struct Quad {
 负责一键将资源包无头预编译为运行时持久化高速缓存。
 
 - `precompile_all_assets(pack_stack, output_dir, config) -> Result<PrecompileResult, MtkError>`:
-  执行全量资源包预烘焙，包含多类别图集烘焙、Companion Overlay 输出、Standalone PBR 结构整理、多线程模型烘焙以及 `biome_mapping.json` 导出。
+  执行全量资源包预烘焙，包含多类别图集烘焙、Companion Overlay 输出、Standalone PBR 结构整理、多线程模型烘焙（自动串联图集寻址表注入 Atlas UV 预解算）以及 `biome_mapping.json` 导出。
+- `prebake_all_models(stack, atlas_map: Option<&AtlasAddressMap>) -> Result<BakedModelDatabase, ...>`:
+  全量烘焙资源包中的模型，若传入图集映射表，则在烘焙期自动完成图集 UV 与 Chunk/Texture ID 预解算并注入 `BakedModel`。
 - `CacheManifest`: 记录缓存版本号 (`ASSET_CACHE_FORMAT_VERSION`)、哈希指纹、时间戳与清单。
 
 ---

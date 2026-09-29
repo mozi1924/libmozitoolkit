@@ -196,6 +196,9 @@ fn test_grass_block_meshing_no_duplicate_overlay_faces() {
         is_opaque: true,
         is_emissive: false,
         emissive_level: 0.0,
+        cull_meta: None,
+        culled_faces: Default::default(),
+        unculled_faces: Default::default(),
     });
 
     let config = MesherConfig {

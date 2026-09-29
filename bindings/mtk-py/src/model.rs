@@ -66,6 +66,24 @@ impl PyBakedModelDatabase {
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         Ok(Self { inner: Arc::new(inner) })
     }
+
+    /// Remaps all models in the database to the specified atlas coordinates.
+    pub fn remap_to_atlas(&mut self, atlas: &crate::texture::PyBakedAtlas) {
+        let atlas_map = &atlas.inner.address_map;
+        if let Some(db) = Arc::get_mut(&mut self.inner) {
+            db.remap_to_atlas_with(|tex| {
+                mtk_material::MaterialResolver::resolve(tex, None, atlas_map)
+                    .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
+            });
+        } else {
+            let mut db = (*self.inner).clone();
+            db.remap_to_atlas_with(|tex| {
+                mtk_material::MaterialResolver::resolve(tex, None, atlas_map)
+                    .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
+            });
+            self.inner = Arc::new(db);
+        }
+    }
 }
 
 /// Headless Minecraft Model Baker for BlockStates and custom models.
@@ -92,13 +110,16 @@ impl PyModelBaker {
     /// Prebakes ALL blockstates discovered across the entire resource pack stack in parallel.
     ///
     /// Automatically releases Python GIL during multi-threaded baking.
+    #[pyo3(signature = (stack, atlas=None))]
     pub fn bake_all(
         &self,
         py: Python<'_>,
         stack: &PyResourcePackStack,
+        atlas: Option<&crate::texture::PyBakedAtlas>,
     ) -> PyResult<PyBakedModelDatabase> {
+        let atlas_map = atlas.map(|a| &a.inner.address_map);
         let db = py
-            .allow_threads(|| libmtk::prebake_all_models(&stack.inner))
+            .allow_threads(|| libmtk::prebake_all_models(&stack.inner, atlas_map))
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
         Ok(PyBakedModelDatabase { inner: Arc::new(db) })
