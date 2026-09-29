@@ -199,6 +199,8 @@ pub const PARTIAL_SHAPE_SUFFIXES: &[&str] = &[
 
 /// Exact names identifying partial non-full blocks.
 pub const PARTIAL_SHAPE_EXACT_NAMES: &[&str] = &[
+    "piston_head",
+    "moving_piston",
     "iron_bars",
     "glass_pane",
     "chest",
@@ -513,6 +515,7 @@ pub fn compute_block_cull_meta(
         && (is_pane
             || name_low.ends_with("_slab")
             || name_low.ends_with("_stairs")
+            || (name_low.contains("piston") && (props.get("extended").map(|s| s.as_str()) == Some("true") || name_low.contains("head")))
             || is_non_full_or_partial_block(&name_low));
 
     let (category, is_full_cube, is_opaque, cull_group, face_shapes, full_face_mask, empty_face_mask) = if is_air {

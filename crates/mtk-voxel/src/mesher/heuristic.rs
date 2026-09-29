@@ -38,6 +38,15 @@ pub fn get_unit_cube_texture_candidates(clean_block: &str, dir: Direction) -> Ve
         } else {
             candidates.push("block/mycelium_side".to_string());
         }
+    } else if clean_block == "wall_torch" {
+        candidates.push("block/torch".to_string());
+    } else if clean_block == "soul_wall_torch" {
+        candidates.push("block/soul_torch".to_string());
+    } else if clean_block == "redstone_wall_torch" {
+        candidates.push("block/redstone_torch".to_string());
+    } else if clean_block == "piston_head" || clean_block == "moving_piston" {
+        candidates.push("block/piston_top".to_string());
+        candidates.push("block/piston_side".to_string());
     } else if clean_block.contains("log")
         || clean_block.contains("wood")
         || clean_block.contains("pillar")

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use glam::{Vec2, Vec3};
 use mtk_core::direction::Direction;
@@ -307,6 +307,12 @@ impl BakedModelDatabase {
         };
 
         let base_id = parsed.block_id();
+        let canon_str = parsed.to_canonical_string();
+
+        // Tier 1.5: Canonical match (handles whitespace and property ordering)
+        if let Some(model) = self.models.get(&canon_str) {
+            return Some(model);
+        }
 
         // Tier 2: Strip known non-geometric properties that never affect block model geometry in vanilla
         const NON_GEOMETRIC_PROPS: &[&str] = &[
@@ -344,54 +350,130 @@ impl BakedModelDatabase {
             }
         }
 
-        // Tier 3: Compatibility match - find the variant whose properties are a subset of the query
-        let prefix = format!("{}[", base_id);
-        let mut best_model: Option<&BakedModel> = None;
-        let mut best_score = -1i32;
+        // Helper closure to find the best compatible variant for a given base_id and property map
+        let find_best_variant = |target_base_id: &str, target_props: &BTreeMap<String, String>| -> Option<&BakedModel> {
+            let prefix = format!("{}[", target_base_id);
+            let mut best_model: Option<&BakedModel> = None;
+            let mut best_score = -999999i32;
 
-        for (key, model) in &self.models {
-            if key == &base_id {
-                if best_score < 0 {
-                    best_model = Some(model);
-                    best_score = 0;
+            for (key, model) in &self.models {
+                if key == target_base_id {
+                    let score = if target_props.is_empty() { 1000 } else { 0 };
+                    if score > best_score {
+                        best_score = score;
+                        best_model = Some(model);
+                    }
+                    continue;
                 }
-                continue;
-            }
 
-            if key.starts_with(&prefix) && key.ends_with(']') {
-                let cand_props_str = &key[prefix.len()..key.len() - 1];
-                let mut matches = true;
-                let mut score = 0i32;
-
-                for pair in cand_props_str.split(',') {
-                    if let Some((k, v)) = pair.split_once('=') {
-                        let k = k.trim();
-                        let v = v.trim();
-                        if let Some(query_v) = parsed.properties.get(k) {
-                            if query_v != v {
-                                matches = false;
-                                break;
-                            }
-                            score += 1;
-                        } else {
-                            matches = false;
-                            break;
+                if key.starts_with(&prefix) && key.ends_with(']') {
+                    let cand_props_str = &key[prefix.len()..key.len() - 1];
+                    let mut cand_props: HashMap<&str, &str> = HashMap::new();
+                    for pair in cand_props_str.split(',') {
+                        if let Some((k, v)) = pair.split_once('=') {
+                            cand_props.insert(k.trim(), v.trim());
                         }
                     }
-                }
 
-                if matches && score > best_score {
-                    best_score = score;
-                    best_model = Some(model);
+                    // Compatibility check:
+                    // Any property specified in target_props MUST match candidate's value if candidate defines it
+                    let mut compatible = true;
+                    let mut matched_keys = 0i32;
+                    for (k, v) in target_props {
+                        if let Some(&cand_v) = cand_props.get(k.as_str()) {
+                            if cand_v != v.as_str() {
+                                compatible = false;
+                                break;
+                            }
+                            matched_keys += 1;
+                        }
+                    }
+
+                    if !compatible {
+                        continue;
+                    }
+
+                    let mut score = matched_keys * 100;
+                    if cand_props.len() == target_props.len() {
+                        score += 1000;
+                    }
+
+                    // Score candidate properties that were NOT specified in the query:
+                    // Prefer canonical vanilla default values!
+                    for (cand_k, cand_v) in &cand_props {
+                        if !target_props.contains_key(*cand_k) {
+                            if matches!(
+                                *cand_v,
+                                "false" | "0" | "none" | "straight" | "bottom" | "lower" | "single"
+                                    | "foot" | "normal" | "side" | "y" | "north"
+                            ) {
+                                score += 10;
+                            } else if matches!(
+                                *cand_v,
+                                "true" | "1" | "top" | "upper" | "head" | "inner" | "outer" | "double"
+                                    | "x" | "z" | "south" | "east" | "west"
+                            ) {
+                                score -= 10;
+                            }
+                        }
+                    }
+
+                    if score > best_score {
+                        best_score = score;
+                        best_model = Some(model);
+                    }
+                }
+            }
+
+            best_model
+        };
+
+        // Tier 3: Cross-category block mappings for directional variants
+        // If torch has a horizontal facing (north/south/east/west), it is a wall torch
+        if let Some(facing) = filtered_props.get("facing").map(|s| s.as_str()) {
+            if matches!(facing, "north" | "south" | "east" | "west") {
+                let wall_id = match parsed.name.as_str() {
+                    "torch" => Some(format!("{}:wall_torch", parsed.namespace)),
+                    "soul_torch" => Some(format!("{}:soul_wall_torch", parsed.namespace)),
+                    "redstone_torch" => Some(format!("{}:redstone_wall_torch", parsed.namespace)),
+                    _ => None,
+                };
+                if let Some(wid) = wall_id {
+                    if let Some(m) = find_best_variant(&wid, &filtered_props) {
+                        return Some(m);
+                    }
                 }
             }
         }
 
-        if best_model.is_some() {
-            return best_model;
+        // Tier 3.5: Compatibility match on base_id with filtered_props
+        if let Some(m) = find_best_variant(&base_id, &filtered_props) {
+            return Some(m);
         }
 
-        // Tier 4: Base block ID fallback (e.g. "minecraft:chest")
+        // Also try stripped short name (e.g. without "minecraft:" namespace)
+        if base_id != parsed.name {
+            if let Some(m) = find_best_variant(&parsed.name, &filtered_props) {
+                return Some(m);
+            }
+        }
+
+        // Check wall_torch -> torch if facing is up or not found
+        let standing_id = match parsed.name.as_str() {
+            "wall_torch" => Some(format!("{}:torch", parsed.namespace)),
+            "soul_wall_torch" => Some(format!("{}:soul_torch", parsed.namespace)),
+            "redstone_wall_torch" => Some(format!("{}:redstone_torch", parsed.namespace)),
+            _ => None,
+        };
+        if let Some(sid) = standing_id {
+            let mut standing_props = filtered_props.clone();
+            standing_props.remove("facing");
+            if let Some(m) = find_best_variant(&sid, &standing_props) {
+                return Some(m);
+            }
+        }
+
+        // Tier 5: Base block ID fallback (e.g. "minecraft:chest")
         if let Some(m) = self.models.get(&base_id) {
             return Some(m);
         }
