@@ -622,6 +622,25 @@ impl VoxelStorage {
             self.size_x = size_x;
             self.size_y = size_y;
             self.size_z = size_z;
+        } else {
+            let cur_max_x = self.min_x + self.size_x;
+            let cur_max_y = self.min_y + self.size_y;
+            let cur_max_z = self.min_z + self.size_z;
+
+            let new_min_x = self.min_x.min(start_x);
+            let new_min_y = self.min_y.min(start_y);
+            let new_min_z = self.min_z.min(start_z);
+
+            let new_max_x = cur_max_x.max(start_x + size_x);
+            let new_max_y = cur_max_y.max(start_y + size_y);
+            let new_max_z = cur_max_z.max(start_z + size_z);
+
+            self.min_x = new_min_x;
+            self.min_y = new_min_y;
+            self.min_z = new_min_z;
+            self.size_x = new_max_x - new_min_x;
+            self.size_y = new_max_y - new_min_y;
+            self.size_z = new_max_z - new_min_z;
         }
 
         let total_blocks = (size_x * size_y * size_z) as usize;

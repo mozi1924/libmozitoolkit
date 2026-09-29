@@ -171,7 +171,87 @@ pub const NON_OCCLUDING_NAMES: &[&str] = &[
     "light",
     "structure_void",
     "bubble_column",
+    "kelp",
+    "kelp_plant",
+    "seagrass",
+    "tall_seagrass",
+    "sea_pickle",
+    "sugar_cane",
+    "bamboo",
+    "bamboo_sapling",
+    "cactus",
+    "nether_wart",
+    "crimson_roots",
+    "warped_roots",
+    "hanging_roots",
+    "nether_sprouts",
+    "spore_blossom",
+    "small_dripleaf",
+    "big_dripleaf",
+    "big_dripleaf_stem",
+    "lily_pad",
+    "pink_petals",
+    "wildflowers",
+    "leaf_litter",
+    "torchflower",
+    "torchflower_crop",
+    "pitcher_plant",
+    "pitcher_crop",
+    "cave_vines",
+    "cave_vines_plant",
+    "twisting_vines",
+    "twisting_vines_plant",
+    "weeping_vines",
+    "weeping_vines_plant",
+    "glow_lichen",
+    "sculk_vein",
+    "frogspawn",
+    "turtle_egg",
+    "sniffer_egg",
+    "cobweb",
 ];
+
+/// Check if block identifier is non-occluding vegetation, decoration, or plant.
+pub fn is_non_occluding_block(name_low: &str) -> bool {
+    if NON_OCCLUDING_NAMES.contains(&name_low) {
+        return true;
+    }
+    if name_low.ends_with("_flower")
+        || name_low.ends_with("_sapling")
+        || name_low.ends_with("_torch")
+        || name_low.ends_with("_lantern")
+        || name_low.ends_with("_plant")
+        || name_low.ends_with("_bush")
+        || (name_low.ends_with("_roots") && name_low != "mangrove_roots")
+        || name_low.ends_with("_vines")
+        || name_low.ends_with("_sprouts")
+        || name_low.ends_with("_petals")
+        || name_low.ends_with("_lichen")
+        || name_low.ends_with("_crop")
+        || name_low.ends_with("_egg")
+    {
+        return true;
+    }
+    if name_low.contains("grass") && !name_low.contains("grass_block") {
+        return true;
+    }
+    if name_low.contains("fern")
+        || name_low.contains("dripleaf")
+        || name_low.contains("kelp")
+        || name_low.contains("seagrass")
+        || name_low.contains("litter")
+        || name_low == "sugar_cane"
+        || (name_low.starts_with("bamboo") && !name_low.contains("block") && !name_low.contains("planks"))
+        || name_low == "lily_pad"
+        || name_low == "spore_blossom"
+        || name_low == "sea_pickle"
+        || name_low == "cobweb"
+        || (name_low.contains("coral") && !name_low.contains("block"))
+    {
+        return true;
+    }
+    false
+}
 
 /// Suffixes identifying partial non-full blocks.
 pub const PARTIAL_SHAPE_SUFFIXES: &[&str] = &[
@@ -259,7 +339,7 @@ pub const PARTIAL_SHAPE_EXACT_NAMES: &[&str] = &[
 /// Check if block identifier is a non-full or partial block.
 pub fn is_non_full_or_partial_block(name_low: &str) -> bool {
     if PARTIAL_SHAPE_EXACT_NAMES.contains(&name_low)
-        || NON_OCCLUDING_NAMES.contains(&name_low)
+        || is_non_occluding_block(name_low)
     {
         return true;
     }
@@ -293,11 +373,18 @@ pub fn parse_block_name_and_props(state_str: &str) -> (String, BTreeMap<String, 
                     .and_then(|v| v.as_str())
                     .unwrap_or("air");
 
+                let mut props = BTreeMap::new();
+                if let Some(opaque_val) = val.get("opaque").and_then(|v| v.as_i64()) {
+                    props.insert("__opaque".to_string(), opaque_val.to_string());
+                }
+                if let Some(type_val) = val.get("type").and_then(|v| v.as_i64()) {
+                    props.insert("__type".to_string(), type_val.to_string());
+                }
+
                 if let Some(open) = raw_state.find('[') {
                     if let Some(close) = raw_state.rfind(']') {
                         let base = &raw_state[..open];
                         let name = base.split(':').next_back().unwrap_or(base).to_string();
-                        let mut props = BTreeMap::new();
                         for item in raw_state[open + 1..close].split(',') {
                             if let Some((k, v)) = item.split_once('=') {
                                 props.insert(k.trim().to_string(), v.trim().to_string());
@@ -307,7 +394,7 @@ pub fn parse_block_name_and_props(state_str: &str) -> (String, BTreeMap<String, 
                     }
                 }
                 let name = raw_state.split(':').next_back().unwrap_or(raw_state).to_string();
-                return (name, BTreeMap::new());
+                return (name, props);
             }
         }
     }
@@ -473,11 +560,17 @@ pub fn compute_block_cull_meta(
     let (name, props) = parse_block_name_and_props(state_str);
     let name_low = name.to_ascii_lowercase();
 
+    let json_opaque = props.get("__opaque").and_then(|v| v.parse::<i64>().ok()).map(|v| v != 0);
+    let effective_opaque_hint = is_opaque_hint.or(json_opaque);
+    let json_type = props.get("__type").and_then(|v| v.parse::<i64>().ok());
+
     let is_waterlogged = props.get("waterlogged").map(|s| s.as_str()) == Some("true")
         || matches!(
             name_low.as_str(),
-            "seagrass" | "tall_seagrass" | "kelp" | "kelp_plant"
-        );
+            "seagrass" | "tall_seagrass" | "kelp" | "kelp_plant" | "sea_pickle"
+        )
+        || name_low.contains("seagrass")
+        || name_low.contains("kelp");
     let is_air = state_str.is_empty()
         || AIR_NAMES.iter().any(|&n| name_low == n)
         || name_low.ends_with("air");
@@ -488,6 +581,7 @@ pub fn compute_block_cull_meta(
     let is_leaves = !is_air
         && (LEAVES_NAMES.iter().any(|&n| name_low == n)
             || name_low.ends_with("_leaves")
+            || name_low.ends_with("leaves")
             || name_low == "mangrove_roots");
 
     let is_pane = name_low.ends_with("_pane")
@@ -501,13 +595,7 @@ pub fn compute_block_cull_meta(
             || (name_low.ends_with("glass") && !is_pane)
             || name_low.ends_with("ice"));
     let is_non_occluding = !is_air
-        && (NON_OCCLUDING_NAMES.iter().any(|&n| name_low == n)
-            || name_low.ends_with("_flower")
-            || name_low.ends_with("_sapling")
-            || name_low.ends_with("_torch")
-            || name_low.ends_with("_lantern")
-            || name_low.ends_with("_plant")
-            || name_low.ends_with("_bush"));
+        && (json_type == Some(1) || json_type == Some(4) || is_non_occluding_block(&name_low));
     let is_double_slab =
         name_low.ends_with("_slab") && props.get("type").map(|s| s.as_str()) == Some("double");
     let is_non_full = !is_air
@@ -564,7 +652,7 @@ pub fn compute_block_cull_meta(
             "leaves".to_string(),
             <[Vec<Aabb2d>; 6]>::default(),
             DirMask::empty(),
-            DirMask::empty(),
+            DirMask::ALL,
         )
     } else if is_non_occluding {
         (
@@ -589,22 +677,34 @@ pub fn compute_block_cull_meta(
             })
         });
 
-        let is_opaque = is_opaque_hint.unwrap_or(is_full_cube);
+        let is_opaque = effective_opaque_hint.unwrap_or(is_full_cube);
 
         if is_full_cube {
-            let mut face_shapes: [Vec<Aabb2d>; 6] = Default::default();
-            for dir in Direction::ALL {
-                face_shapes[dir.to_index()] = alloc::vec![FULL_FACE_RECT];
+            if is_opaque {
+                let mut face_shapes: [Vec<Aabb2d>; 6] = Default::default();
+                for dir in Direction::ALL {
+                    face_shapes[dir.to_index()] = alloc::vec![FULL_FACE_RECT];
+                }
+                (
+                    CullCategory::SolidOpaque,
+                    true,
+                    true,
+                    "solid".to_string(),
+                    face_shapes,
+                    DirMask::ALL,
+                    DirMask::empty(),
+                )
+            } else {
+                (
+                    CullCategory::GlassTranslucent,
+                    true,
+                    false,
+                    name_low.clone(),
+                    <[Vec<Aabb2d>; 6]>::default(),
+                    DirMask::empty(),
+                    DirMask::ALL,
+                )
             }
-            (
-                CullCategory::SolidOpaque,
-                true,
-                is_opaque,
-                "solid".to_string(),
-                face_shapes,
-                DirMask::ALL,
-                DirMask::empty(),
-            )
         } else {
             let mut face_shapes: [Vec<Aabb2d>; 6] = Default::default();
             for (verts, dir) in quads {
@@ -618,14 +718,18 @@ pub fn compute_block_cull_meta(
             for dir in Direction::ALL {
                 let dir_shapes = &face_shapes[dir.to_index()];
                 if dir_shapes.iter().any(|s| is_full_rect(s, EPS)) {
-                    full_face_mask |= dir.mask();
+                    if is_opaque {
+                        full_face_mask |= dir.mask();
+                    } else {
+                        empty_face_mask |= dir.mask();
+                    }
                 } else if dir_shapes.is_empty() {
                     empty_face_mask |= dir.mask();
                 }
             }
             (
                 CullCategory::PartialShape,
-                is_full_cube,
+                false,
                 is_opaque,
                 "partial".to_string(),
                 face_shapes,
@@ -655,19 +759,32 @@ pub fn compute_block_cull_meta(
             empty_face_mask,
         )
     } else {
-        let mut face_shapes: [Vec<Aabb2d>; 6] = Default::default();
-        for dir in Direction::ALL {
-            face_shapes[dir.to_index()] = alloc::vec![FULL_FACE_RECT];
+        let is_opaque = effective_opaque_hint.unwrap_or(true);
+        if is_opaque {
+            let mut face_shapes: [Vec<Aabb2d>; 6] = Default::default();
+            for dir in Direction::ALL {
+                face_shapes[dir.to_index()] = alloc::vec![FULL_FACE_RECT];
+            }
+            (
+                CullCategory::SolidOpaque,
+                true,
+                true,
+                "solid".to_string(),
+                face_shapes,
+                DirMask::ALL,
+                DirMask::empty(),
+            )
+        } else {
+            (
+                CullCategory::GlassTranslucent,
+                true,
+                false,
+                name_low.clone(),
+                <[Vec<Aabb2d>; 6]>::default(),
+                DirMask::empty(),
+                DirMask::ALL,
+            )
         }
-        (
-            CullCategory::SolidOpaque,
-            true,
-            is_opaque_hint.unwrap_or(true),
-            "solid".to_string(),
-            face_shapes,
-            DirMask::ALL,
-            DirMask::empty(),
-        )
     };
 
     BlockCullMeta {

@@ -100,3 +100,26 @@ fn test_manifest_metadata_export_import() {
     assert_eq!(restored.section_crc_map.get(&IVec3::new(0, 0, 0)), world.section_crc_map.get(&IVec3::new(0, 0, 0)));
 }
 
+#[test]
+fn test_section_snapshot_dynamic_bounds_expansion() {
+    let mut world = VoxelStorage::new();
+    // Initially bounds are 0
+    assert_eq!(world.get_bounds(), (0, 0, 0, 0, 0, 0));
+
+    let palette = vec!["minecraft:air".to_string(), "minecraft:stone".to_string()];
+    let mut grid = vec![0u16; 4096];
+    grid[0] = 1;
+
+    // Snapshot 1 at (0, 0, 0)
+    world.set_section_snapshot(0, 0, 0, 0, 0, 0, 16, 16, 16, &palette, &grid, None, None);
+    assert_eq!(world.get_bounds(), (0, 0, 0, 16, 16, 16));
+
+    // Snapshot 2 at (1, 0, 0)
+    world.set_section_snapshot(1, 0, 0, 16, 0, 0, 16, 16, 16, &palette, &grid, None, None);
+    // Bounds must automatically expand to cover both sections [0..32, 0..16, 0..16]
+    assert_eq!(world.get_bounds(), (0, 0, 0, 32, 16, 16));
+    assert!(world.contains(0, 0, 0));
+    assert!(world.contains(20, 5, 5));
+}
+
+

@@ -40,19 +40,40 @@ impl SectionMesher {
         let mut mesh = MeshData::with_capacity(1024, 1536, 512);
         let mut collector = FaceAttributesCollector::with_capacity(512);
 
-        // Pre-resolve palette metadata
-        let palette_metas: Vec<Arc<BlockCullMeta>> = padded
-            .palette
-            .iter()
-            .map(|st| culler.get_meta(st, None, None))
-            .collect();
-
-        // Pre-resolve baked models
+        // Pre-resolve baked models FIRST
         let mut palette_models: Vec<Option<Arc<BakedModel>>> =
             Vec::with_capacity(padded.palette.len());
         for st in &padded.palette {
             palette_models.push(get_baked_model(st));
         }
+
+        // Pre-resolve palette metadata using baked models
+        let palette_metas: Vec<Arc<BlockCullMeta>> = padded
+            .palette
+            .iter()
+            .zip(palette_models.iter())
+            .map(|(st, model_opt)| {
+                if let Some(model) = model_opt {
+                    let mut quads: Vec<([Vec3; 4], Direction)> = Vec::new();
+                    if !model.elements.is_empty() {
+                        for elem in &model.elements {
+                            for (&dir, face) in &elem.faces {
+                                quads.push((face.vertices, dir));
+                            }
+                        }
+                    } else if model.is_cube {
+                        for dir in Direction::ALL {
+                            quads.push((model.faces[dir.to_index()].vertices, dir));
+                        }
+                    }
+                    let quads_slice = if quads.is_empty() { None } else { Some(quads.as_slice()) };
+                    let is_opaque_hint = Some(model.is_opaque);
+                    culler.get_meta(st, quads_slice, is_opaque_hint)
+                } else {
+                    culler.get_meta(st, None, None)
+                }
+            })
+            .collect();
 
         let world_offset_x = (padded.coord.x * 16) as f32;
         let world_offset_y = (padded.coord.y * 16) as f32;

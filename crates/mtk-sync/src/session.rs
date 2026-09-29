@@ -219,6 +219,30 @@ impl LiveSyncSession {
         }
     }
 
+    /// Dispatches a raw packet into the session pipeline synchronously (useful for testing or direct ingestion).
+    pub fn process_packet_direct(
+        &self,
+        packet: Packet,
+        section_mesh_cache: &mut HashMap<IVec3, MeshData>,
+        stream_total_sections: &mut usize,
+        stream_received_sections: &mut usize,
+    ) {
+        let mut config = self.config.clone();
+        Self::handle_packet(
+            packet,
+            &self.storage,
+            &self.event_sender,
+            &mut config,
+            &self.culler,
+            &self.model_db,
+            self.unified_mesh,
+            section_mesh_cache,
+            &self.current_stream_id,
+            stream_total_sections,
+            stream_received_sections,
+        );
+    }
+
     fn event_worker_loop(
         msg_receiver: Receiver<ClientMessage>,
         storage: Arc<RwLock<VoxelStorage>>,
@@ -231,6 +255,8 @@ impl LiveSyncSession {
         running: Arc<AtomicBool>,
     ) {
         let mut section_mesh_cache: HashMap<IVec3, MeshData> = HashMap::new();
+        let mut stream_total_sections: usize = 0;
+        let mut stream_received_sections: usize = 0;
 
         while running.load(Ordering::Relaxed) {
             match msg_receiver.recv_timeout(std::time::Duration::from_millis(100)) {
@@ -252,6 +278,8 @@ impl LiveSyncSession {
                         unified_mesh,
                         &mut section_mesh_cache,
                         &stream_id_atomic,
+                        &mut stream_total_sections,
+                        &mut stream_received_sections,
                     );
                 }
                 Err(crossbeam_channel::RecvTimeoutError::Timeout) => continue,
@@ -260,7 +288,7 @@ impl LiveSyncSession {
         }
     }
 
-    fn handle_packet(
+    pub fn handle_packet(
         packet: Packet,
         storage: &Arc<RwLock<VoxelStorage>>,
         event_sender: &Sender<SyncEvent>,
@@ -270,6 +298,8 @@ impl LiveSyncSession {
         unified_mesh: bool,
         section_mesh_cache: &mut HashMap<IVec3, MeshData>,
         stream_id_atomic: &Arc<AtomicU32>,
+        stream_total_sections: &mut usize,
+        stream_received_sections: &mut usize,
     ) {
         let model_lookup = |state: &str| -> Option<Arc<BakedModel>> {
             model_db.as_ref().and_then(|db| db.get(state).cloned().map(Arc::new))
@@ -469,11 +499,9 @@ impl LiveSyncSession {
                 biome_palette,
                 biome_indices,
             } => {
-                let padded = {
+                // Ingest into VoxelStorage
+                {
                     let mut st = storage.write().unwrap();
-                    if st.size_x > 0 && !st.contains(start_pos.x, start_pos.y, start_pos.z) {
-                        return;
-                    }
                     st.set_section_snapshot(
                         sec_coord.x,
                         sec_coord.y,
@@ -489,25 +517,38 @@ impl LiveSyncSession {
                         biome_palette.as_deref(),
                         biome_indices.as_deref(),
                     );
-                    if config.origin_centered && config.selection_bounds.is_none() {
-                        let (min_x, min_y, min_z, sz_x, sz_y, sz_z) = st.get_bounds();
-                        if sz_x > 0 && sz_y > 0 && sz_z > 0 {
-                            config.selection_bounds = Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]));
-                        }
-                    }
-                    st.get_section_padded_array(sec_coord)
-                };
-
-                let mesh = SectionMesher::mesh_section(&padded, culler, &model_lookup, config);
-                if mesh.is_empty() {
-                    section_mesh_cache.remove(&sec_coord);
-                } else {
-                    section_mesh_cache.insert(sec_coord, mesh.clone());
                 }
 
-                if unified_mesh {
-                    // If receiving an out-of-stream section repair, emit unified mesh immediately
-                    if stream_id_atomic.load(Ordering::SeqCst) == 0 {
+                let is_streaming = stream_id_atomic.load(Ordering::SeqCst) != 0;
+                if is_streaming {
+                    *stream_received_sections += 1;
+                    let _ = event_sender.send(SyncEvent::StreamProgress {
+                        current: *stream_received_sections,
+                        total: *stream_total_sections,
+                        message: format!("Receiving chunk ({}/{})", *stream_received_sections, *stream_total_sections),
+                    });
+                    // Two-phase streaming: wait for StreamEnd so all neighboring sections are present in memory.
+                } else {
+                    // Out-of-stream single-section update or repair
+                    let padded = {
+                        let st = storage.read().unwrap();
+                        if config.origin_centered && config.selection_bounds.is_none() {
+                            let (min_x, min_y, min_z, sz_x, sz_y, sz_z) = st.get_bounds();
+                            if sz_x > 0 && sz_y > 0 && sz_z > 0 {
+                                config.selection_bounds = Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]));
+                            }
+                        }
+                        st.get_section_padded_array(sec_coord)
+                    };
+
+                    let mesh = SectionMesher::mesh_section(&padded, culler, &model_lookup, config);
+                    if mesh.is_empty() {
+                        section_mesh_cache.remove(&sec_coord);
+                    } else {
+                        section_mesh_cache.insert(sec_coord, mesh.clone());
+                    }
+
+                    if unified_mesh {
                         let mut world_mesh = MeshData::new();
                         for m in section_mesh_cache.values() {
                             world_mesh.append_mesh(m);
@@ -516,12 +557,12 @@ impl LiveSyncSession {
                             world_mesh.weld_spatial_vertices(1e-4);
                         }
                         let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
+                    } else {
+                        let _ = event_sender.send(SyncEvent::SectionMeshReady {
+                            coord: sec_coord,
+                            mesh,
+                        });
                     }
-                } else {
-                    let _ = event_sender.send(SyncEvent::SectionMeshReady {
-                        coord: sec_coord,
-                        mesh,
-                    });
                 }
             }
 
@@ -606,19 +647,59 @@ impl LiveSyncSession {
                 flags: _,
             } => {
                 stream_id_atomic.store(stream_id, Ordering::SeqCst);
+                *stream_total_sections = total_sections as usize;
+                *stream_received_sections = 0;
                 let _ = event_sender.send(SyncEvent::StreamProgress {
                     current: 0,
-                    total: total_sections as usize,
-                    message: format!("Receiving {} chunks...", total_sections),
+                    total: *stream_total_sections,
+                    message: format!("Receiving {} chunks...", *stream_total_sections),
                 });
             }
 
             Packet::StreamEnd {
                 stream_id,
-                sent_sections,
+                sent_sections: _,
                 status: _,
             } => {
                 stream_id_atomic.store(0, Ordering::SeqCst);
+
+                // Phase 2 (BUILD): Build all sections with complete neighbor data in memory
+                let (bounds, padded_sections) = {
+                    let st = storage.read().unwrap();
+                    let b = st.get_bounds();
+                    let non_empty = st.get_all_non_empty_sections();
+                    let padded: Vec<_> = non_empty
+                        .iter()
+                        .map(|&c| st.get_section_padded_array(c))
+                        .collect();
+                    (b, padded)
+                };
+
+                if config.origin_centered {
+                    let (min_x, min_y, min_z, sz_x, sz_y, sz_z) = bounds;
+                    if sz_x > 0 && sz_y > 0 && sz_z > 0 {
+                        config.selection_bounds = Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]));
+                    }
+                }
+
+                section_mesh_cache.clear();
+                let total = padded_sections.len();
+
+                if total > 0 {
+                    if let Ok(results) = SectionMesher::mesh_sections_parallel(
+                        &padded_sections,
+                        culler,
+                        &model_lookup,
+                        config,
+                        None,
+                    ) {
+                        for (coord, mesh) in results {
+                            if !mesh.is_empty() {
+                                section_mesh_cache.insert(coord, mesh);
+                            }
+                        }
+                    }
+                }
 
                 if unified_mesh {
                     let mut world_mesh = MeshData::new();
@@ -629,11 +710,20 @@ impl LiveSyncSession {
                         world_mesh.weld_spatial_vertices(1e-4);
                     }
                     let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
+                } else {
+                    for (i, (coord, mesh)) in section_mesh_cache.iter().enumerate() {
+                        let _ = event_sender.send(SyncEvent::SectionMeshReady { coord: *coord, mesh: mesh.clone() });
+                        let _ = event_sender.send(SyncEvent::StreamProgress {
+                            current: i + 1,
+                            total,
+                            message: format!("Meshed chunk ({}/{})", i + 1, total),
+                        });
+                    }
                 }
 
                 let _ = event_sender.send(SyncEvent::StreamFinished {
                     stream_id,
-                    built_sections: sent_sections as usize,
+                    built_sections: total,
                 });
             }
 

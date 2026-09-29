@@ -31,3 +31,111 @@ fn test_sync_session_packet_flow() {
     assert_eq!(world_mesh.indices.len(), 36);  // 6 faces * 2 tris * 3 indices
     assert_eq!(world_mesh.uvs.len(), 24);      // 6 faces * 4 corner UVs
 }
+
+#[test]
+fn test_two_phase_streaming_cross_chunk_culling_and_welding() {
+    use std::collections::HashMap;
+    use glam::IVec3;
+    use mtk_sync::protocol::packet::Packet;
+    use mtk_sync::SyncEvent;
+
+    let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None, true);
+    let mut cache = HashMap::new();
+    let mut total_sec = 0;
+    let mut rec_sec = 0;
+
+    // Stream 2 sections:
+    // Section (0, 0, 0) has stone at (15, 0, 0).
+    // Section (1, 0, 0) has stone at (16, 0, 0).
+    // These two stone blocks touch across chunk boundary x=15 and x=16!
+
+    // Step 1: StreamBegin
+    session.process_packet_direct(
+        Packet::StreamBegin {
+            stream_id: 42,
+            total_sections: 2,
+            flags: 0,
+        },
+        &mut cache,
+        &mut total_sec,
+        &mut rec_sec,
+    );
+
+    // Step 2: SectionSnapshot (0, 0, 0)
+    let palette_a = vec!["minecraft:air".to_string(), "minecraft:stone".to_string()];
+    let mut grid_a = vec![0u16; 4096];
+    // Block at (15, 0, 0): index is 15 in this chunk
+    // In block_index(x, y, z): x * 256 + y * 16 + z
+    grid_a[15 * 256] = 1;
+    session.process_packet_direct(
+        Packet::SectionSnapshot {
+            sec_coord: IVec3::new(0, 0, 0),
+            start_pos: IVec3::new(0, 0, 0),
+            size: IVec3::new(16, 16, 16),
+            palette: palette_a,
+            grid_indices: grid_a,
+            biome_palette: None,
+            biome_indices: None,
+        },
+        &mut cache,
+        &mut total_sec,
+        &mut rec_sec,
+    );
+
+    // During streaming, cache should be empty (no premature meshing!)
+    assert!(cache.is_empty());
+
+    // Step 3: SectionSnapshot (1, 0, 0)
+    let palette_b = vec!["minecraft:air".to_string(), "minecraft:stone".to_string()];
+    let mut grid_b = vec![0u16; 4096];
+    // Block at (16, 0, 0): relative x=0 in section (1,0,0) -> index = 0
+    grid_b[0] = 1;
+    session.process_packet_direct(
+        Packet::SectionSnapshot {
+            sec_coord: IVec3::new(1, 0, 0),
+            start_pos: IVec3::new(16, 0, 0),
+            size: IVec3::new(16, 16, 16),
+            palette: palette_b,
+            grid_indices: grid_b,
+            biome_palette: None,
+            biome_indices: None,
+        },
+        &mut cache,
+        &mut total_sec,
+        &mut rec_sec,
+    );
+
+    assert!(cache.is_empty());
+
+    // Step 4: StreamEnd
+    session.process_packet_direct(
+        Packet::StreamEnd {
+            stream_id: 42,
+            sent_sections: 2,
+            status: mtk_sync::protocol::constants::StreamStatus::Success,
+        },
+        &mut cache,
+        &mut total_sec,
+        &mut rec_sec,
+    );
+
+    // Meshing should now have completed!
+    let events = session.poll_events();
+    let world_mesh_event = events.iter().find_map(|e| match e {
+        SyncEvent::WorldMeshReady { mesh } => Some(mesh),
+        _ => None,
+    });
+
+    assert!(world_mesh_event.is_some(), "WorldMeshReady event must be emitted on StreamEnd");
+    let mesh = world_mesh_event.unwrap();
+
+    // Two touching unit cubes:
+    // Faces: 6 + 6 - 2 (culled shared boundary face) = 10 faces!
+    // Each face has 4 corner UVs -> 10 * 4 = 40 UVs
+    // Each face has 2 triangles -> 10 * 6 = 60 indices
+    // Vertices: 8 + 8 - 4 (welded shared vertices on x=16 plane) = 12 vertices!
+    assert_eq!(mesh.uvs.len(), 40, "Expected 10 faces (40 loop UVs), found {}", mesh.uvs.len());
+    assert_eq!(mesh.indices.len(), 60, "Expected 60 triangle indices, found {}", mesh.indices.len());
+    assert_eq!(mesh.positions.len(), 12, "Expected 12 welded spatial vertices across chunk seam, found {}", mesh.positions.len());
+}
+

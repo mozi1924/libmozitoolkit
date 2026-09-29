@@ -429,3 +429,60 @@ fn test_culler_cache_eviction() {
     culler.get_meta("minecraft:emerald_block", None, None);
     assert_eq!(culler.cache_len(), 8192);
 }
+
+#[test]
+fn test_vegetation_and_transparent_culling() {
+    let culler = FaceCuller::default();
+
+    // 1. Kelp and Seagrass
+    let kelp = culler.get_meta("minecraft:kelp[age=0]", None, None);
+    let seagrass = culler.get_meta("minecraft:seagrass", None, None);
+    let stone = culler.get_meta("minecraft:stone", None, None);
+    let water = culler.get_meta("minecraft:water[level=0]", None, None);
+
+    assert_eq!(kelp.category, CullCategory::NonOccluding);
+    assert_eq!(seagrass.category, CullCategory::NonOccluding);
+    assert!(kelp.is_waterlogged);
+    assert!(seagrass.is_waterlogged);
+    assert!(!kelp.has_full_face(Direction::Up));
+    assert!(!kelp.has_full_face(Direction::Down));
+
+    // Stone underneath kelp (direction Up from stone towards kelp): stone top face must RENDER
+    assert!(culler.should_render_face(&stone, Some(&kelp), Direction::Up, None, None, None));
+    // Stone underneath seagrass: stone top face must RENDER
+    assert!(culler.should_render_face(&stone, Some(&seagrass), Direction::Up, None, None, None));
+
+    // Water against waterlogged kelp: water boundary face skips rendering (culls) to avoid inner split walls
+    assert!(!culler.should_render_face(&water, Some(&kelp), Direction::Down, None, None, None));
+
+    // 2. Leaf litter
+    let leaf_litter = culler.get_meta("minecraft:leaf_litter", None, None);
+    assert_eq!(leaf_litter.category, CullCategory::NonOccluding);
+    let dirt = culler.get_meta("minecraft:dirt", None, None);
+    // Dirt underneath leaf litter must render its top face
+    assert!(culler.should_render_face(&dirt, Some(&leaf_litter), Direction::Up, None, None, None));
+
+    // 3. Leaves touching solid log
+    let leaves = culler.get_meta("minecraft:oak_leaves", None, None);
+    let log = culler.get_meta("minecraft:oak_log[axis=y]", None, None);
+    assert_eq!(leaves.category, CullCategory::CutoutLeaves);
+    assert!(leaves.has_empty_face(Direction::West));
+    // Log facing leaves on East: log face must RENDER
+    assert!(culler.should_render_face(&log, Some(&leaves), Direction::East, None, None, None));
+    // Leaves facing solid log on West: leaves face against solid wall is CULLED
+    assert!(!culler.should_render_face(&leaves, Some(&log), Direction::West, None, None, None));
+
+    // 4. JSON metadata from Yefira
+    let json_plant = culler.get_meta(r#"{"state":"minecraft:custom_flower","type":1,"opaque":0}"#, None, None);
+    assert_eq!(json_plant.category, CullCategory::NonOccluding);
+    assert!(!json_plant.is_opaque);
+    assert!(!json_plant.has_full_face(Direction::Down));
+    assert!(culler.should_render_face(&stone, Some(&json_plant), Direction::Up, None, None, None));
+
+    // 5. Block with opaque=0 hint does not cull neighbor
+    let transparent_cube = culler.get_meta("minecraft:translucent_cube", None, Some(false));
+    assert!(!transparent_cube.is_opaque);
+    assert!(!transparent_cube.has_full_face(Direction::West));
+    assert!(culler.should_render_face(&stone, Some(&transparent_cube), Direction::East, None, None, None));
+}
+
