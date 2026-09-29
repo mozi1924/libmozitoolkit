@@ -31,8 +31,8 @@
 use std::collections::HashMap;
 use serde_json::Value;
 use crate::parser::blockstate::BlockState;
-use crate::parser::model_json::{BlockModelJson, ElementJson, FaceJson, TextureValue};
-use super::evaluator::{entity_uv_to_faces, eval_miex_condition, eval_miex_num, eval_miex_string};
+use crate::parser::model_json::{BlockModelJson, BuiltinTransform, ElementJson, FaceJson, RotationJson, TextureValue};
+use super::evaluator::{entity_uv_to_faces, eval_miex_arithmetic, eval_miex_condition, eval_miex_num, eval_miex_string};
 
 /// Embedded static raw JSON strings from upstream MiEx `base_resource_pack`.
 pub const MIEX_BED_JSON: &str = include_str!("../../assets/builtins/blockstates/bed.json");
@@ -99,6 +99,7 @@ impl MiExModelLoader {
                 &mut vars_num,
                 &mut textures,
                 &mut elements,
+                None,
             );
         }
 
@@ -117,10 +118,19 @@ impl MiExModelLoader {
         vars_num: &mut HashMap<String, f32>,
         textures: &mut HashMap<String, TextureValue>,
         elements: &mut Vec<ElementJson>,
+        curr_transform: Option<&BuiltinTransform>,
     ) {
         if let Some(arr) = node.as_array() {
             for item in arr {
-                Self::process_handler_node(item, blockstate, vars_str, vars_num, textures, elements);
+                Self::process_handler_node(
+                    item,
+                    blockstate,
+                    vars_str,
+                    vars_num,
+                    textures,
+                    elements,
+                    curr_transform,
+                );
             }
             return;
         }
@@ -141,6 +151,48 @@ impl MiExModelLoader {
             }
         }
 
+        // 2.5 Compute active transform
+        let active_transform = if let Some(t_val) = node.get("transform") {
+            let mut rot = [0.0f32; 3];
+            let mut pivot = [8.0f32; 3];
+            if let Some(arr) = t_val.get("rotate").and_then(|v| v.as_array()) {
+                for (i, v) in arr.iter().take(3).enumerate() {
+                    rot[i] = if let Some(n) = v.as_f64() {
+                        n as f32
+                    } else if let Some(s) = v.as_str() {
+                        eval_miex_num(s, vars_num)
+                    } else {
+                        0.0
+                    };
+                }
+            }
+            if let Some(arr) = t_val.get("pivot").and_then(|v| v.as_array()) {
+                for (i, v) in arr.iter().take(3).enumerate() {
+                    pivot[i] = if let Some(n) = v.as_f64() {
+                        n as f32
+                    } else if let Some(s) = v.as_str() {
+                        eval_miex_num(s, vars_num)
+                    } else {
+                        8.0
+                    };
+                }
+            }
+            if let Some(parent_t) = curr_transform {
+                Some(BuiltinTransform {
+                    rotate: [
+                        parent_t.rotate[0] + rot[0],
+                        parent_t.rotate[1] + rot[1],
+                        parent_t.rotate[2] + rot[2],
+                    ],
+                    pivot,
+                })
+            } else {
+                Some(BuiltinTransform { rotate: rot, pivot })
+            }
+        } else {
+            curr_transform.cloned()
+        };
+
         // 3. Extract textures
         if let Some(tex_obj) = node.get("textures").and_then(|v| v.as_object()) {
             for (k, v) in tex_obj {
@@ -157,7 +209,9 @@ impl MiExModelLoader {
         // 4. Extract elements
         if let Some(elems_val) = node.get("elements").and_then(|v| v.as_array()) {
             for elem_val in elems_val {
-                if let Some(elem) = Self::parse_element_node(elem_val, vars_num) {
+                if let Some(elem) =
+                    Self::parse_element_node(elem_val, vars_num, active_transform.as_ref())
+                {
                     elements.push(elem);
                 }
             }
@@ -165,7 +219,15 @@ impl MiExModelLoader {
 
         // 5. Recurse children
         if let Some(children) = node.get("children") {
-            Self::process_handler_node(children, blockstate, vars_str, vars_num, textures, elements);
+            Self::process_handler_node(
+                children,
+                blockstate,
+                vars_str,
+                vars_num,
+                textures,
+                elements,
+                active_transform.as_ref(),
+            );
         }
     }
 
@@ -179,13 +241,43 @@ impl MiExModelLoader {
             let var_name = lhs.trim().to_string();
             let expr = rhs.trim();
 
-            // Check if string expression or numeric
-            if expr.starts_with('\'') || expr.contains("thisBlock.") || expr.contains('+') && expr.contains('\'') {
+            // Boolean expressions without ternary
+            if (expr.contains(".contains(")
+                || expr.contains(".endsWith(")
+                || expr.contains("==")
+                || expr.contains("!=")
+                || expr.contains("||")
+                || expr.contains("&&"))
+                && !expr.contains('?')
+            {
+                let b = eval_miex_condition(expr, vars_str, blockstate);
+                vars_str.insert(
+                    var_name.clone(),
+                    if b { "true".to_string() } else { "false".to_string() },
+                );
+            } else if expr.contains('?') {
                 let evaluated = eval_miex_string(expr, vars_str, blockstate);
-                vars_str.insert(var_name, evaluated);
+                if let Some(num) = eval_miex_arithmetic(&evaluated, vars_num, vars_str, blockstate) {
+                    vars_num.insert(var_name.clone(), num);
+                    vars_str.insert(var_name.clone(), num.to_string());
+                } else if let Ok(n) = evaluated.parse::<f32>() {
+                    vars_num.insert(var_name.clone(), n);
+                    vars_str.insert(var_name.clone(), evaluated);
+                } else {
+                    vars_str.insert(var_name.clone(), evaluated);
+                }
+            } else if let Some(num) = eval_miex_arithmetic(expr, vars_num, vars_str, blockstate) {
+                vars_num.insert(var_name.clone(), num);
+                vars_str.insert(var_name.clone(), num.to_string());
+            } else if expr.starts_with('\'')
+                || expr.contains("thisBlock.")
+                || (expr.contains('+') && expr.contains('\''))
+            {
+                let evaluated = eval_miex_string(expr, vars_str, blockstate);
+                vars_str.insert(var_name.clone(), evaluated);
             } else if let Ok(n) = expr.parse::<f32>() {
                 vars_num.insert(var_name.clone(), n);
-                vars_str.insert(var_name, n.to_string());
+                vars_str.insert(var_name.clone(), n.to_string());
             } else {
                 let s = eval_miex_string(expr, vars_str, blockstate);
                 if let Ok(n) = s.parse::<f32>() {
@@ -196,7 +288,11 @@ impl MiExModelLoader {
         }
     }
 
-    fn parse_element_node(val: &Value, vars_num: &HashMap<String, f32>) -> Option<ElementJson> {
+    fn parse_element_node(
+        val: &Value,
+        vars_num: &HashMap<String, f32>,
+        active_transform: Option<&BuiltinTransform>,
+    ) -> Option<ElementJson> {
         let from_val = val.get("from")?.as_array()?;
         let to_val = val.get("to")?.as_array()?;
 
@@ -277,10 +373,38 @@ impl MiExModelLoader {
             HashMap::new()
         };
 
+        let elem_rotation = if let Some(rot_obj) = val.get("rotation") {
+            let origin_arr = rot_obj.get("origin").and_then(|v| v.as_array());
+            let origin = if let Some(arr) = origin_arr {
+                [
+                    arr.first().and_then(|v| v.as_f64()).unwrap_or(8.0) as f32,
+                    arr.get(1).and_then(|v| v.as_f64()).unwrap_or(8.0) as f32,
+                    arr.get(2).and_then(|v| v.as_f64()).unwrap_or(8.0) as f32,
+                ]
+            } else {
+                [8.0, 8.0, 8.0]
+            };
+            let axis = rot_obj
+                .get("axis")
+                .and_then(|v| v.as_str())
+                .unwrap_or("y")
+                .to_string();
+            let angle = rot_obj.get("angle").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+            Some(RotationJson {
+                origin,
+                axis,
+                angle,
+                rescale: None,
+            })
+        } else {
+            None
+        };
+
         Some(ElementJson {
             from,
             to,
-            rotation: None,
+            rotation: elem_rotation,
+            transform: active_transform.cloned(),
             shade: Some(true),
             faces,
         })
@@ -293,12 +417,61 @@ mod tests {
 
     #[test]
     fn test_load_chest() {
-        let bs = BlockState::parse("minecraft:chest[facing=north,type=single]").unwrap();
-        let model = MiExModelLoader::load_for_blockstate(&bs);
-        assert!(model.is_some(), "Chest model should be loaded");
-        let model = model.unwrap();
-        let elems = model.elements.unwrap_or_default();
-        println!("Chest elements count: {}", elems.len());
-        assert!(!elems.is_empty(), "Chest elements should not be empty");
+        let bs_north = BlockState::parse("minecraft:chest[facing=north,type=single]").unwrap();
+        let model_north = MiExModelLoader::load_for_blockstate(&bs_north).expect("Chest north should load");
+        let elems_north = model_north.elements.unwrap_or_default();
+        assert!(!elems_north.is_empty());
+        let t_north = elems_north[0].transform.as_ref().expect("Transform should be present");
+        assert_eq!(t_north.rotate[1], 0.0);
+
+        let bs_south = BlockState::parse("minecraft:chest[facing=south,type=single]").unwrap();
+        let model_south = MiExModelLoader::load_for_blockstate(&bs_south).expect("Chest south should load");
+        let elems_south = model_south.elements.unwrap_or_default();
+        let t_south = elems_south[0].transform.as_ref().expect("Transform should be present");
+        assert_eq!(t_south.rotate[1], 180.0, "South chest should rotate 180 deg");
+
+        let bs_east = BlockState::parse("minecraft:chest[facing=east,type=single]").unwrap();
+        let model_east = MiExModelLoader::load_for_blockstate(&bs_east).expect("Chest east should load");
+        let elems_east = model_east.elements.unwrap();
+        let t_east = elems_east[0].transform.as_ref().unwrap();
+        assert_eq!(t_east.rotate[1], 90.0, "East chest should rotate 90 deg");
+    }
+
+    #[test]
+    fn test_skull_floor_vs_wall() {
+        let bs_floor = BlockState::parse("minecraft:skeleton_skull[rotation=0]").unwrap();
+        let model_floor = MiExModelLoader::load_for_blockstate(&bs_floor).expect("Floor skull should load");
+        let elems_floor = model_floor.elements.unwrap();
+        assert_eq!(elems_floor[0].from, [4.0, 0.0, 4.0], "Floor skull must start at Y=0");
+
+        let bs_wall = BlockState::parse("minecraft:skeleton_wall_skull[facing=north]").unwrap();
+        let model_wall = MiExModelLoader::load_for_blockstate(&bs_wall).expect("Wall skull should load");
+        let elems_wall = model_wall.elements.unwrap();
+        assert_eq!(elems_wall[0].from, [4.0, 4.0, 0.0], "Wall skull must start at Y=4, Z=0");
+    }
+
+    #[test]
+    fn test_dragon_and_piglin_heads() {
+        let bs_dragon = BlockState::parse("minecraft:dragon_head[rotation=0]").unwrap();
+        let model_dragon = MiExModelLoader::load_for_blockstate(&bs_dragon).expect("Dragon head should load");
+        let elems_dragon = model_dragon.elements.unwrap();
+        assert_eq!(elems_dragon.len(), 7, "Dragon head should have 7 elements");
+        let tex_dragon = model_dragon.textures.unwrap();
+        assert_eq!(
+            tex_dragon.get("texture").unwrap().as_str(),
+            "minecraft:entity/enderdragon/dragon"
+        );
+
+        let bs_piglin = BlockState::parse("minecraft:piglin_head[rotation=4]").unwrap();
+        let model_piglin = MiExModelLoader::load_for_blockstate(&bs_piglin).expect("Piglin head should load");
+        let elems_piglin = model_piglin.elements.unwrap();
+        assert_eq!(elems_piglin.len(), 6, "Piglin head should have 6 elements");
+        let tex_piglin = model_piglin.textures.unwrap();
+        assert_eq!(
+            tex_piglin.get("texture").unwrap().as_str(),
+            "minecraft:entity/piglin/piglin"
+        );
+        let t_piglin = elems_piglin[0].transform.as_ref().unwrap();
+        assert_eq!(t_piglin.rotate[1], 270.0, "Rotation 4 should be 270 deg (22.5*4 + 180)");
     }
 }

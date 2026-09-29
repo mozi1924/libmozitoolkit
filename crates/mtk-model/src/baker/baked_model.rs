@@ -523,12 +523,19 @@ impl BakedModelDatabase {
             let mut best_model: Option<&BakedModel> = None;
             let mut best_score = -999999i32;
 
+            let mut relaxed_best_model: Option<&BakedModel> = None;
+            let mut relaxed_best_score = -999999i32;
+
             for (key, model) in &self.models {
                 if key == target_base_id {
                     let score = if target_props.is_empty() { 1000 } else { 0 };
                     if score > best_score {
                         best_score = score;
                         best_model = Some(model);
+                    }
+                    if score > relaxed_best_score {
+                        relaxed_best_score = score;
+                        relaxed_best_model = Some(model);
                     }
                     continue;
                 }
@@ -546,53 +553,62 @@ impl BakedModelDatabase {
                     // Any property specified in target_props MUST match candidate's value if candidate defines it
                     let mut compatible = true;
                     let mut matched_keys = 0i32;
+                    let mut relaxed_score = 0i32;
+
                     for (k, v) in target_props {
                         if let Some(&cand_v) = cand_props.get(k.as_str()) {
-                            if cand_v != v.as_str() {
+                            if cand_v == v.as_str() {
+                                matched_keys += 1;
+                                relaxed_score += if k == "facing" || k == "axis" { 500 } else { 100 };
+                            } else {
                                 compatible = false;
-                                break;
-                            }
-                            matched_keys += 1;
-                        }
-                    }
-
-                    if !compatible {
-                        continue;
-                    }
-
-                    let mut score = matched_keys * 100;
-                    if cand_props.len() == target_props.len() {
-                        score += 1000;
-                    }
-
-                    // Score candidate properties that were NOT specified in the query:
-                    // Prefer canonical vanilla default values!
-                    for (cand_k, cand_v) in &cand_props {
-                        if !target_props.contains_key(*cand_k) {
-                            if matches!(
-                                *cand_v,
-                                "false" | "0" | "none" | "straight" | "bottom" | "lower" | "single"
-                                    | "foot" | "normal" | "side" | "y" | "north"
-                            ) {
-                                score += 10;
-                            } else if matches!(
-                                *cand_v,
-                                "true" | "1" | "top" | "upper" | "head" | "inner" | "outer" | "double"
-                                    | "x" | "z" | "south" | "east" | "west"
-                            ) {
-                                score -= 10;
+                                if k == "facing" || k == "axis" {
+                                    relaxed_score -= 300;
+                                }
                             }
                         }
                     }
 
-                    if score > best_score {
-                        best_score = score;
-                        best_model = Some(model);
+                    if compatible {
+                        let mut score = matched_keys * 100;
+                        if cand_props.len() == target_props.len() {
+                            score += 1000;
+                        }
+
+                        // Score candidate properties that were NOT specified in the query:
+                        // Prefer canonical vanilla default values!
+                        for (cand_k, cand_v) in &cand_props {
+                            if !target_props.contains_key(*cand_k) {
+                                if matches!(
+                                    *cand_v,
+                                    "false" | "0" | "none" | "straight" | "bottom" | "lower" | "single"
+                                        | "foot" | "normal" | "side" | "y" | "north"
+                                ) {
+                                    score += 10;
+                                } else if matches!(
+                                    *cand_v,
+                                    "true" | "1" | "top" | "upper" | "head" | "inner" | "outer" | "double"
+                                        | "x" | "z" | "south" | "east" | "west"
+                                ) {
+                                    score -= 10;
+                                }
+                            }
+                        }
+
+                        if score > best_score {
+                            best_score = score;
+                            best_model = Some(model);
+                        }
+                    }
+
+                    if relaxed_score > relaxed_best_score {
+                        relaxed_best_score = relaxed_score;
+                        relaxed_best_model = Some(model);
                     }
                 }
             }
 
-            best_model
+            best_model.or(relaxed_best_model)
         };
 
         // Tier 3: Cross-category block mappings for directional variants
@@ -1022,6 +1038,15 @@ mod tests {
         let chest_found = db.get(chest_query);
         assert!(chest_found.is_some(), "Chest with properties must fallback to base chest model");
         assert_eq!(chest_found.unwrap().block_state, "minecraft:chest");
+
+        // Relaxed fallback: flower_amount=1 falling back to closest variant
+        db.insert(
+            "minecraft:wildflowers[flower_amount=2]".to_string(),
+            dummy_model("minecraft:wildflowers[flower_amount=2]"),
+        );
+        let wf_found = db.get("minecraft:wildflowers[flower_amount=1]");
+        assert!(wf_found.is_some(), "Wildflowers flower_amount=1 must fallback to closest variant");
+        assert_eq!(wf_found.unwrap().block_state, "minecraft:wildflowers[flower_amount=2]");
     }
 }
 

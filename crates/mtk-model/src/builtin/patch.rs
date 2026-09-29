@@ -55,6 +55,7 @@ pub fn apply_bell_patches(model_id: &str, model: &mut BlockModelJson) -> bool {
         from: [5.0, 6.0, 5.0],
         to: [11.0, 13.0, 11.0],
         rotation: None,
+        transform: None,
         shade: Some(true),
         faces: {
             let mut f = HashMap::new();
@@ -72,6 +73,7 @@ pub fn apply_bell_patches(model_id: &str, model: &mut BlockModelJson) -> bool {
         from: [4.0, 4.0, 4.0],
         to: [12.0, 6.0, 12.0],
         rotation: None,
+        transform: None,
         shade: Some(true),
         faces: {
             let mut f = HashMap::new();

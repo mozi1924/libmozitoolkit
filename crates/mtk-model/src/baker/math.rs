@@ -1,7 +1,7 @@
 use glam::{Mat3, Vec2, Vec3};
 use mtk_core::direction::Direction;
 
-use crate::model_json::RotationJson;
+use crate::model_json::{BuiltinTransform, RotationJson};
 
 /// Canonical vertex extents for standard cube faces according to Minecraft FaceInfo.
 pub fn get_face_canonical_vertex(
@@ -161,6 +161,46 @@ pub fn rotate_point(p: Vec3, rot_x: f32, rot_y: f32) -> Vec3 {
         let rad = (-rot_y).to_radians();
         let (s, c) = rad.sin_cos();
         v = Vec3::new(v.x * c + v.z * s, v.y, -v.x * s + v.z * c);
+    }
+
+    v + origin
+}
+
+/// Rotates a point in 3D around an arbitrary pivot point in [0..16] space using Euler angles (X then Y then Z in degrees).
+pub fn rotate_point_3d_with_pivot(
+    p: Vec3,
+    rot_x: f32,
+    rot_y: f32,
+    rot_z: f32,
+    pivot: [f32; 3],
+) -> Vec3 {
+    let origin = Vec3::new(pivot[0] / 16.0, pivot[1] / 16.0, pivot[2] / 16.0);
+    let mut v = p - origin;
+
+    // Follow MiEx rotate order: X then Y then Z
+    if rot_x != 0.0 {
+        let rad = rot_x.to_radians();
+        let (s, c) = rad.sin_cos();
+        let new_y = v.z * s + v.y * c;
+        let new_z = v.z * c - v.y * s;
+        v.y = new_y;
+        v.z = new_z;
+    }
+    if rot_y != 0.0 {
+        let rad = rot_y.to_radians();
+        let (s, c) = rad.sin_cos();
+        let new_x = v.x * c - v.z * s;
+        let new_z = v.x * s + v.z * c;
+        v.x = new_x;
+        v.z = new_z;
+    }
+    if rot_z != 0.0 {
+        let rad = rot_z.to_radians();
+        let (s, c) = rad.sin_cos();
+        let new_x = v.x * c - v.y * s;
+        let new_y = v.x * s + v.y * c;
+        v.x = new_x;
+        v.y = new_y;
     }
 
     v + origin
@@ -329,6 +369,7 @@ pub fn bake_face_exact(
     rot_x: f32,
     rot_y: f32,
     elem_rotation: Option<&RotationJson>,
+    builtin_transform: Option<&BuiltinTransform>,
     uvlock: bool,
     uv_base: f32,
 ) -> BakedFaceGeometry {
@@ -353,6 +394,9 @@ pub fn bake_face_exact(
         if let Some(rot) = elem_rotation {
             p = rotate_element_point(p, rot);
         }
+        if let Some(bt) = builtin_transform {
+            p = rotate_point_3d_with_pivot(p, bt.rotate[0], bt.rotate[1], bt.rotate[2], bt.pivot);
+        }
         if rot_x != 0.0 || rot_y != 0.0 {
             p = rotate_point(p, rot_x, rot_y);
         }
@@ -370,7 +414,7 @@ pub fn bake_face_exact(
     let final_dir = calculate_facing(&transformed_positions);
 
     // 5. Recalculate winding
-    if elem_rotation.is_none() {
+    if elem_rotation.is_none() && builtin_transform.is_none() {
         recalculate_winding(&mut transformed_positions, &mut transformed_uvs, final_dir);
     }
 
@@ -433,6 +477,7 @@ mod tests {
                 0.0,
                 0.0,
                 0.0,
+                None,
                 None,
                 false,
                 16.0,

@@ -222,12 +222,19 @@ impl ModelBaker {
                         variant.rot_x,
                         variant.rot_y,
                         elem_rot,
+                        elem.transform.as_ref(),
                         variant.uvlock,
                         uv_base,
                     );
 
                     let rotated_cullface = cullface_dir
-                        .map(|cd| rotate_direction(cd, variant.rot_x, variant.rot_y));
+                        .map(|cd| {
+                            let mut d = rotate_direction(cd, variant.rot_x, variant.rot_y);
+                            if let Some(bt) = elem.transform.as_ref() {
+                                d = rotate_direction(d, bt.rotate[0], bt.rotate[1]);
+                            }
+                            d
+                        });
 
                     let v1 = baked_geom.positions[1] - baked_geom.positions[0];
                     let v2 = baked_geom.positions[2] - baked_geom.positions[0];

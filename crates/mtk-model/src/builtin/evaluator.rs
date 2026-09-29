@@ -224,6 +224,19 @@ pub fn eval_miex_string(
         }
     }
 
+    // Arithmetic expressions without string literals
+    if !trimmed.contains('\'')
+        && (trimmed.contains('+')
+            || trimmed.contains('-')
+            || trimmed.contains('*')
+            || trimmed.contains('/'))
+    {
+        let empty_num_vars = HashMap::new();
+        if let Some(val) = eval_miex_arithmetic(trimmed, &empty_num_vars, vars, blockstate) {
+            return val.to_string();
+        }
+    }
+
     // String concatenation with '+'
     // Check if contains '+' outside quotes/parens
     let mut plus_parts = Vec::new();
@@ -450,28 +463,123 @@ fn eval_miex_operand(
     eval_miex_string(trimmed, vars, blockstate)
 }
 
-/// Evaluates numerical expressions, e.g. `"-12.0 * scale + offsetX"`.
+/// Evaluates numerical expressions, e.g. `"-12.0 * scale + offsetX"` or `"22.5 * thisBlock.state.rotation + 180.0"`.
 pub fn eval_miex_num(expr: &str, vars: &HashMap<String, f32>) -> f32 {
-    let trimmed = expr.trim();
-    if let Ok(val) = trimmed.parse::<f32>() {
-        return val;
+    let dummy_bs = BlockState::default();
+    let empty_str_vars = HashMap::new();
+    eval_miex_arithmetic(expr, vars, &empty_str_vars, &dummy_bs).unwrap_or(0.0)
+}
+
+/// Robust arithmetic evaluator handling +, -, *, /, parentheses, property lookups, and variables.
+pub fn eval_miex_arithmetic(
+    expr: &str,
+    vars_num: &HashMap<String, f32>,
+    vars_str: &HashMap<String, String>,
+    blockstate: &BlockState,
+) -> Option<f32> {
+    let mut trimmed = expr.trim();
+    // Strip balanced parentheses
+    while trimmed.starts_with('(') && trimmed.ends_with(')') {
+        let mut depth = 0;
+        let mut all_enclosed = true;
+        for (i, c) in trimmed.char_indices() {
+            if c == '(' {
+                depth += 1;
+            } else if c == ')' {
+                depth -= 1;
+                if depth == 0 && i < trimmed.len() - 1 {
+                    all_enclosed = false;
+                    break;
+                }
+            }
+        }
+        if all_enclosed {
+            trimmed = trimmed[1..trimmed.len() - 1].trim();
+        } else {
+            break;
+        }
     }
 
-    if let Some(&val) = vars.get(trimmed) {
-        return val;
+    if let Ok(v) = trimmed.parse::<f32>() {
+        return Some(v);
     }
 
-    // Simple addition / subtraction
-    if trimmed.contains('+') {
-        let parts: Vec<&str> = trimmed.split('+').collect();
-        return parts.iter().map(|p| eval_miex_num(p, vars)).sum();
+    if let Some(&v) = vars_num.get(trimmed) {
+        return Some(v);
+    }
+    if let Some(s) = vars_str.get(trimmed) {
+        if let Ok(v) = s.parse::<f32>() {
+            return Some(v);
+        }
     }
 
-    // Simple multiplication
-    if trimmed.contains('*') {
-        let parts: Vec<&str> = trimmed.split('*').collect();
-        return parts.iter().fold(1.0f32, |acc, p| acc * eval_miex_num(p, vars));
+    if let Some(prop) = trimmed.strip_prefix("thisBlock.state.") {
+        if let Some(val_str) = blockstate.properties.get(prop.trim()) {
+            if let Ok(v) = val_str.parse::<f32>() {
+                return Some(v);
+            }
+        }
     }
 
-    0.0
+    // Check addition and subtraction (+ and - outside parens, right to left)
+    let mut depth = 0;
+    let mut add_sub_pos = None;
+    let mut op_char = '+';
+    for (i, c) in trimmed.char_indices() {
+        if c == '(' {
+            depth += 1;
+        } else if c == ')' {
+            depth -= 1;
+        } else if depth == 0 && (c == '+' || c == '-') && i > 0 {
+            let prev = trimmed[..i].trim_end();
+            if !prev.is_empty()
+                && !prev.ends_with('*')
+                && !prev.ends_with('/')
+                && !prev.ends_with('+')
+                && !prev.ends_with('-')
+            {
+                add_sub_pos = Some(i);
+                op_char = c;
+            }
+        }
+    }
+
+    if let Some(pos) = add_sub_pos {
+        let left = &trimmed[..pos];
+        let right = &trimmed[pos + 1..];
+        let l = eval_miex_arithmetic(left, vars_num, vars_str, blockstate)?;
+        let r = eval_miex_arithmetic(right, vars_num, vars_str, blockstate)?;
+        return Some(if op_char == '+' { l + r } else { l - r });
+    }
+
+    // Check multiplication and division (* and / outside parens)
+    let mut mul_div_pos = None;
+    let mut md_char = '*';
+    let mut depth = 0;
+    for (i, c) in trimmed.char_indices() {
+        if c == '(' {
+            depth += 1;
+        } else if c == ')' {
+            depth -= 1;
+        } else if depth == 0 && (c == '*' || c == '/') {
+            mul_div_pos = Some(i);
+            md_char = c;
+        }
+    }
+
+    if let Some(pos) = mul_div_pos {
+        let left = &trimmed[..pos];
+        let right = &trimmed[pos + 1..];
+        let l = eval_miex_arithmetic(left, vars_num, vars_str, blockstate)?;
+        let r = eval_miex_arithmetic(right, vars_num, vars_str, blockstate)?;
+        return Some(if md_char == '*' {
+            l * r
+        } else if r != 0.0 {
+            l / r
+        } else {
+            0.0
+        });
+    }
+
+    None
 }

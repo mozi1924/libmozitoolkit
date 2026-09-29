@@ -38,7 +38,7 @@ impl PyResourcePackStack {
         }
         let pack_name = name.unwrap_or(path);
         let pack = DirectoryPack::new(pack_name, p);
-        self.inner.push_pack(Box::new(pack));
+        self.inner.append_pack(Box::new(pack));
         Ok(true)
     }
 
@@ -55,7 +55,7 @@ impl PyResourcePackStack {
             }
             let pack = ZipPack::from_file(path, p)
                 .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-            self.inner.push_pack(Box::new(pack));
+            self.inner.append_pack(Box::new(pack));
             Ok(true)
         }
         #[cfg(not(feature = "zip"))]

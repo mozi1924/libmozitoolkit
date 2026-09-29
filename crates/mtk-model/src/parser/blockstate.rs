@@ -8,7 +8,7 @@ use crate::error::ModelError;
 
 /// Parsed Minecraft BlockState representation.
 /// Separates namespace, block identifier, and sorted key-value properties.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct BlockState {
     /// Namespace (defaults to "minecraft" if omitted).
     pub namespace: String,
@@ -220,12 +220,17 @@ impl VariantEntry {
 pub enum MultipartCondition {
     /// OR condition: any item in the list matching satisfies the rule.
     Or {
-        #[serde(rename = "OR")]
-        or: Vec<HashMap<String, String>>,
+        #[serde(alias = "or", rename = "OR")]
+        or: Vec<MultipartCondition>,
+    },
+    /// AND condition: all items in the list matching satisfies the rule.
+    And {
+        #[serde(alias = "and", rename = "AND")]
+        and: Vec<MultipartCondition>,
     },
     /// Flat dictionary: ALL keys must match (AND condition).
-    /// Values can contain pipe characters for multiple choices (e.g. "north|south").
-    And(HashMap<String, String>),
+    /// Values can be boolean, integer, or pipe-separated multiple choices (e.g. "north|south").
+    Properties(HashMap<String, serde_json::Value>),
 }
 
 /// Multipart rule definition containing an optional condition and model to apply.
@@ -260,6 +265,23 @@ impl BlockStateDefinition {
 
         if let Some(ref variants) = self.variants {
             if !variants.is_empty() {
+                if variants.len() == 1 && variants.contains_key("") {
+                    if let Some(expanded) = Self::expand_known_entity_states(base_id) {
+                        for st in expanded {
+                            if let Ok(bs) = BlockState::parse(&st) {
+                                let canon = bs.to_canonical_string();
+                                if seen.insert(canon.clone()) {
+                                    results.push(canon);
+                                }
+                            }
+                        }
+                        if seen.insert(base_id.to_string()) {
+                            results.push(base_id.to_string());
+                        }
+                        return results;
+                    }
+                }
+
                 for key in variants.keys() {
                     let state_str = if key.is_empty() {
                         base_id.to_string()
@@ -285,34 +307,18 @@ impl BlockStateDefinition {
 
                 for rule in multipart {
                     if let Some(ref when) = rule.when {
-                        match when {
-                            MultipartCondition::And(map) => {
-                                for (k, v) in map {
-                                    let set = prop_values.entry(k.clone()).or_default();
-                                    for item in v.split('|') {
-                                        set.insert(item.trim().to_string());
-                                    }
-                                }
-                            }
-                            MultipartCondition::Or { or } => {
-                                for map in or {
-                                    for (k, v) in map {
-                                        let set = prop_values.entry(k.clone()).or_default();
-                                        for item in v.split('|') {
-                                            set.insert(item.trim().to_string());
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        Self::extract_condition_prop_values(when, &mut prop_values);
                     }
                 }
 
                 // If boolean properties only had true or false, expand to both
-                for (_, vals) in prop_values.iter_mut() {
+                for (k, vals) in prop_values.iter_mut() {
                     if vals.contains("true") || vals.contains("false") {
                         vals.insert("true".to_string());
                         vals.insert("false".to_string());
+                    }
+                    if k == "flower_amount" || k == "flowers" || k == "pickles" || k == "candles" {
+                        vals.insert("1".to_string());
                     }
                 }
 
@@ -368,8 +374,132 @@ impl BlockStateDefinition {
             }
         }
 
-        results.push(base_id.to_string());
+        if seen.insert(base_id.to_string()) {
+            results.push(base_id.to_string());
+        }
         results
+    }
+
+    fn extract_condition_prop_values(
+        condition: &MultipartCondition,
+        prop_values: &mut BTreeMap<String, BTreeSet<String>>,
+    ) {
+        match condition {
+            MultipartCondition::Or { or } => {
+                for sub in or {
+                    Self::extract_condition_prop_values(sub, prop_values);
+                }
+            }
+            MultipartCondition::And { and } => {
+                for sub in and {
+                    Self::extract_condition_prop_values(sub, prop_values);
+                }
+            }
+            MultipartCondition::Properties(map) => {
+                for (k, val) in map {
+                    let set = prop_values.entry(k.clone()).or_default();
+                    match val {
+                        serde_json::Value::Bool(b) => {
+                            set.insert(b.to_string());
+                        }
+                        serde_json::Value::Number(n) => {
+                            set.insert(n.to_string());
+                        }
+                        serde_json::Value::String(s) => {
+                            for item in s.split('|') {
+                                set.insert(item.trim().to_string());
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    fn expand_known_entity_states(base_id: &str) -> Option<Vec<String>> {
+        let short_name = base_id.strip_prefix("minecraft:").unwrap_or(base_id);
+
+        if short_name == "chest" || short_name == "trapped_chest" || short_name.ends_with("_chest") {
+            if short_name == "chest_boat" || short_name.ends_with("_chest_boat") {
+                return None;
+            }
+            let mut list = Vec::new();
+            let facings = ["north", "south", "east", "west"];
+            if short_name == "ender_chest" {
+                for f in facings {
+                    list.push(format!("{}[facing={}]", base_id, f));
+                }
+            } else {
+                let types = ["single", "left", "right"];
+                for f in facings {
+                    for t in types {
+                        list.push(format!("{}[facing={},type={}]", base_id, f, t));
+                    }
+                }
+            }
+            return Some(list);
+        }
+
+        if short_name.ends_with("_head") || short_name.ends_with("_skull") {
+            let mut list = Vec::new();
+            if short_name.contains("_wall_") {
+                for f in ["north", "south", "east", "west"] {
+                    list.push(format!("{}[facing={}]", base_id, f));
+                }
+            } else {
+                for r in 0..16 {
+                    list.push(format!("{}[rotation={}]", base_id, r));
+                }
+            }
+            return Some(list);
+        }
+
+        if short_name == "shulker_box" || short_name.ends_with("_shulker_box") {
+            let mut list = Vec::new();
+            for f in ["down", "up", "north", "south", "west", "east"] {
+                list.push(format!("{}[facing={}]", base_id, f));
+            }
+            return Some(list);
+        }
+
+        if short_name.ends_with("_banner") {
+            let mut list = Vec::new();
+            if short_name.contains("_wall_") {
+                for f in ["north", "south", "east", "west"] {
+                    list.push(format!("{}[facing={}]", base_id, f));
+                }
+            } else {
+                for r in 0..16 {
+                    list.push(format!("{}[rotation={}]", base_id, r));
+                }
+            }
+            return Some(list);
+        }
+
+        if short_name.ends_with("_sign") || short_name.contains("hanging_sign") {
+            let mut list = Vec::new();
+            if short_name.contains("_wall_") {
+                for f in ["north", "south", "east", "west"] {
+                    list.push(format!("{}[facing={}]", base_id, f));
+                }
+            } else {
+                for r in 0..16 {
+                    list.push(format!("{}[rotation={}]", base_id, r));
+                }
+            }
+            return Some(list);
+        }
+
+        if short_name == "decorated_pot" {
+            let mut list = Vec::new();
+            for f in ["north", "south", "east", "west"] {
+                list.push(format!("{}[facing={}]", base_id, f));
+            }
+            return Some(list);
+        }
+
+        None
     }
 }
 
@@ -435,24 +565,43 @@ impl BlockStateResolver {
     ) -> bool {
         match condition {
             MultipartCondition::Or { or } => {
-                or.iter().any(|sub_cond| Self::match_and_dict(sub_cond, props))
+                or.iter().any(|sub_cond| Self::evaluate_condition(sub_cond, props))
             }
-            MultipartCondition::And(dict) => Self::match_and_dict(dict, props),
-        }
-    }
-
-    fn match_and_dict(dict: &HashMap<String, String>, props: &BTreeMap<String, String>) -> bool {
-        for (k, expected_v) in dict {
-            let actual_v = props.get(k.as_str()).map(|s| s.as_str()).unwrap_or("");
-            // Handle pipe-separated multiple possible values: "north|south"
-            let matched = expected_v
-                .split('|')
-                .any(|option| option.trim().eq_ignore_ascii_case(actual_v));
-            if !matched {
-                return false;
+            MultipartCondition::And { and } => {
+                and.iter().all(|sub_cond| Self::evaluate_condition(sub_cond, props))
+            }
+            MultipartCondition::Properties(dict) => {
+                for (k, expected_val) in dict {
+                    let mut actual_v = props.get(k.as_str()).map(|s| s.as_str());
+                    if actual_v.is_none() {
+                        if k == "flower_amount" {
+                            actual_v = props.get("flowers").map(|s| s.as_str());
+                        } else if k == "flowers" {
+                            actual_v = props.get("flower_amount").map(|s| s.as_str());
+                        }
+                    }
+                    let actual = actual_v.unwrap_or("");
+                    let matched = match expected_val {
+                        serde_json::Value::Bool(b) => {
+                            let expected_str = if *b { "true" } else { "false" };
+                            expected_str.eq_ignore_ascii_case(actual)
+                        }
+                        serde_json::Value::Number(num) => {
+                            let num_str = num.to_string();
+                            num_str.eq_ignore_ascii_case(actual)
+                        }
+                        serde_json::Value::String(s) => {
+                            s.split('|').any(|option| option.trim().eq_ignore_ascii_case(actual))
+                        }
+                        _ => false,
+                    };
+                    if !matched {
+                        return false;
+                    }
+                }
+                true
             }
         }
-        true
     }
 
     fn match_variants(
@@ -679,5 +828,83 @@ mod tests {
         assert_eq!(matches[1].model_id, "minecraft:block/oak_fence_side");
         assert!(matches[1].uvlock);
         assert_eq!(matches[2].rot_y, 90.0);
+    }
+
+    #[test]
+    fn test_resolve_chiseled_bookshelf_and_condition() {
+        let json_data = r#"{
+            "multipart": [
+                {
+                    "apply": { "model": "minecraft:block/chiseled_bookshelf", "y": 180 },
+                    "when": { "facing": "south" }
+                },
+                {
+                    "apply": { "model": "minecraft:block/chiseled_bookshelf_occupied_slot_top_left", "y": 180 },
+                    "when": {
+                        "AND": [
+                            { "facing": "south" },
+                            { "slot_0_occupied": "true" }
+                        ]
+                    }
+                },
+                {
+                    "apply": { "model": "minecraft:block/chiseled_bookshelf_empty_slot_top_left", "y": 180 },
+                    "when": {
+                        "AND": [
+                            { "facing": "south" },
+                            { "slot_0_occupied": "false" }
+                        ]
+                    }
+                }
+            ]
+        }"#;
+        let def: BlockStateDefinition = serde_json::from_str(json_data).unwrap();
+        let bs_occupied = BlockState::parse("minecraft:chiseled_bookshelf[facing=south,slot_0_occupied=true]").unwrap();
+        let matches_occ = BlockStateResolver::resolve(&def, &bs_occupied);
+        assert_eq!(matches_occ.len(), 2);
+        assert_eq!(matches_occ[0].model_id, "minecraft:block/chiseled_bookshelf");
+        assert_eq!(matches_occ[1].model_id, "minecraft:block/chiseled_bookshelf_occupied_slot_top_left");
+
+        let bs_empty = BlockState::parse("minecraft:chiseled_bookshelf[facing=south,slot_0_occupied=false]").unwrap();
+        let matches_emp = BlockStateResolver::resolve(&def, &bs_empty);
+        assert_eq!(matches_emp.len(), 2);
+        assert_eq!(matches_emp[0].model_id, "minecraft:block/chiseled_bookshelf");
+        assert_eq!(matches_emp[1].model_id, "minecraft:block/chiseled_bookshelf_empty_slot_top_left");
+    }
+
+    #[test]
+    fn test_resolve_wildflowers_flower_amount_and_flowers_alias() {
+        let json_data = r#"{
+            "multipart": [
+                {
+                    "apply": { "model": "minecraft:block/wildflowers_1" },
+                    "when": { "facing": "north" }
+                },
+                {
+                    "apply": { "model": "minecraft:block/wildflowers_2" },
+                    "when": { "facing": "north", "flower_amount": "2|3|4" }
+                }
+            ]
+        }"#;
+        let def: BlockStateDefinition = serde_json::from_str(json_data).unwrap();
+        
+        // 1 flower -> only wildflowers_1
+        let bs1 = BlockState::parse("minecraft:wildflowers[facing=north,flower_amount=1]").unwrap();
+        let m1 = BlockStateResolver::resolve(&def, &bs1);
+        assert_eq!(m1.len(), 1);
+        assert_eq!(m1[0].model_id, "minecraft:block/wildflowers_1");
+
+        // 2 flowers -> wildflowers_1 and wildflowers_2
+        let bs2 = BlockState::parse("minecraft:wildflowers[facing=north,flower_amount=2]").unwrap();
+        let m2 = BlockStateResolver::resolve(&def, &bs2);
+        assert_eq!(m2.len(), 2);
+        assert_eq!(m2[0].model_id, "minecraft:block/wildflowers_1");
+        assert_eq!(m2[1].model_id, "minecraft:block/wildflowers_2");
+
+        // Backward compatibility alias: "flowers=2" matches "flower_amount: 2|3|4"
+        let bs_alias = BlockState::parse("minecraft:wildflowers[facing=north,flowers=2]").unwrap();
+        let m_alias = BlockStateResolver::resolve(&def, &bs_alias);
+        assert_eq!(m_alias.len(), 2);
+        assert_eq!(m_alias[1].model_id, "minecraft:block/wildflowers_2");
     }
 }

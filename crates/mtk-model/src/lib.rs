@@ -15,7 +15,7 @@ pub use culling::{clip_face_excluding_hidden_volume, ClippedQuadPiece};
 pub use error::ModelError;
 pub use parser::{
     mesh_to_obj_string, BakedObjFace, BlockModelJson, BlockState, BlockStateDefinition,
-    BlockStateResolver, ElementJson, FaceJson, ModObjLoader, MultipartCondition, MultipartRule,
+    BlockStateResolver, BuiltinTransform, ElementJson, FaceJson, ModObjLoader, MultipartCondition, MultipartRule,
     ObjRawFace, ResolvedBlockModel, ResolvedElement, ResolvedFace, RotationJson, TextureValue,
     VariantEntry, VariantMatch, VariantModel, WavefrontObjParser,
 };

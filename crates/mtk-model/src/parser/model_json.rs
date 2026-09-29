@@ -115,6 +115,7 @@ impl BlockModelJson {
                     from: elem.from,
                     to: elem.to,
                     rotation: elem.rotation,
+                    transform: elem.transform,
                     shade: elem.shade.unwrap_or(true),
                     faces: res_faces,
                 });
@@ -194,6 +195,7 @@ pub struct ResolvedElement {
     pub from: [f32; 3],
     pub to: [f32; 3],
     pub rotation: Option<RotationJson>,
+    pub transform: Option<BuiltinTransform>,
     pub shade: bool,
     pub faces: HashMap<String, ResolvedFace>,
 }
@@ -233,6 +235,24 @@ impl TextureValue {
     }
 }
 
+/// Optional 3D transformation for elements (e.g. from MiEx builtin models).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BuiltinTransform {
+    /// Euler rotation angles [rx, ry, rz] in degrees.
+    pub rotate: [f32; 3],
+    /// Pivot origin in [0, 16] space, default [8.0, 8.0, 8.0].
+    pub pivot: [f32; 3],
+}
+
+impl Default for BuiltinTransform {
+    fn default() -> Self {
+        Self {
+            rotate: [0.0, 0.0, 0.0],
+            pivot: [8.0, 8.0, 8.0],
+        }
+    }
+}
+
 /// 3D box element within a model definition.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ElementJson {
@@ -245,6 +265,10 @@ pub struct ElementJson {
     /// Optional local element rotation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rotation: Option<RotationJson>,
+
+    /// Optional 3D transformation (from builtin MiEx models).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<BuiltinTransform>,
 
     /// Whether to render shadows/shading on this element.
     #[serde(default, skip_serializing_if = "Option::is_none")]
