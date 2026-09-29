@@ -156,7 +156,7 @@ impl LiveSyncSession {
         }
 
         let mut config = self.config.clone();
-        if config.origin_centered && config.selection_bounds.is_none() {
+        if config.origin_centered {
             let (min_x, min_y, min_z, sz_x, sz_y, sz_z) = st.get_bounds();
             if sz_x > 0 && sz_y > 0 && sz_z > 0 {
                 config.selection_bounds = Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]));
@@ -223,7 +223,7 @@ impl LiveSyncSession {
         msg_receiver: Receiver<ClientMessage>,
         storage: Arc<RwLock<VoxelStorage>>,
         event_sender: Sender<SyncEvent>,
-        config: MesherConfig,
+        mut config: MesherConfig,
         culler: FaceCuller,
         model_db: Option<Arc<BakedModelDatabase>>,
         unified_mesh: bool,
@@ -246,7 +246,7 @@ impl LiveSyncSession {
                         packet,
                         &storage,
                         &event_sender,
-                        &config,
+                        &mut config,
                         &culler,
                         &model_db,
                         unified_mesh,
@@ -264,7 +264,7 @@ impl LiveSyncSession {
         packet: Packet,
         storage: &Arc<RwLock<VoxelStorage>>,
         event_sender: &Sender<SyncEvent>,
-        config: &MesherConfig,
+        config: &mut MesherConfig,
         culler: &FaceCuller,
         model_db: &Option<Arc<BakedModelDatabase>>,
         unified_mesh: bool,
@@ -277,10 +277,57 @@ impl LiveSyncSession {
 
         match packet {
             Packet::SelectionInfo { min_pos, size } => {
-                {
+                let bounds_changed = {
                     let mut st = storage.write().unwrap();
-                    st.set_bounds(min_pos.x, min_pos.y, min_pos.z, size.x, size.y, size.z);
+                    st.set_bounds(min_pos.x, min_pos.y, min_pos.z, size.x, size.y, size.z)
+                };
+                let new_bounds = Some(([min_pos.x, min_pos.y, min_pos.z], [size.x, size.y, size.z]));
+                let bounds_differ = config.selection_bounds != new_bounds;
+                if config.origin_centered {
+                    config.selection_bounds = new_bounds;
                 }
+
+                if bounds_changed || bounds_differ {
+                    section_mesh_cache.clear();
+                    // If storage already has sections, rebuild all of them so world mesh reflects new origin/bounds
+                    let non_empty = {
+                        let st = storage.read().unwrap();
+                        st.get_all_non_empty_sections()
+                    };
+                    if !non_empty.is_empty() {
+                        let padded_sections: Vec<_> = {
+                            let st = storage.read().unwrap();
+                            non_empty
+                                .iter()
+                                .map(|&coord| st.get_section_padded_array(coord))
+                                .collect()
+                        };
+                        if let Ok(results) = SectionMesher::mesh_sections_parallel(
+                            &padded_sections,
+                            culler,
+                            &model_lookup,
+                            config,
+                            None,
+                        ) {
+                            for (coord, mesh) in results {
+                                if !mesh.is_empty() {
+                                    section_mesh_cache.insert(coord, mesh);
+                                }
+                            }
+                            if unified_mesh {
+                                let mut world_mesh = MeshData::new();
+                                for mesh in section_mesh_cache.values() {
+                                    world_mesh.append_mesh(mesh);
+                                }
+                                if config.weld_vertices {
+                                    world_mesh.weld_spatial_vertices(1e-4);
+                                }
+                                let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
+                            }
+                        }
+                    }
+                }
+
                 // Preemptive stream invalidation
                 stream_id_atomic.fetch_add(1, Ordering::SeqCst);
                 let _ = event_sender.send(SyncEvent::SelectionUpdated { min_pos, size });
@@ -369,16 +416,15 @@ impl LiveSyncSession {
 
                 section_mesh_cache.clear();
 
-                let mut mesher_config = config.clone();
-                if mesher_config.origin_centered && mesher_config.selection_bounds.is_none() {
-                    mesher_config.selection_bounds = Some(([min_pos.x, min_pos.y, min_pos.z], [size.x, size.y, size.z]));
+                if config.origin_centered {
+                    config.selection_bounds = Some(([min_pos.x, min_pos.y, min_pos.z], [size.x, size.y, size.z]));
                 }
 
                 if let Ok(results) = SectionMesher::mesh_sections_parallel(
                     &padded_sections,
                     culler,
                     &model_lookup,
-                    &mesher_config,
+                    config,
                     None,
                 ) {
                     for (coord, mesh) in results {
@@ -392,7 +438,7 @@ impl LiveSyncSession {
                         for mesh in section_mesh_cache.values() {
                             world_mesh.append_mesh(mesh);
                         }
-                        if mesher_config.weld_vertices {
+                        if config.weld_vertices {
                             world_mesh.weld_spatial_vertices(1e-4);
                         }
                         let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
@@ -443,6 +489,12 @@ impl LiveSyncSession {
                         biome_palette.as_deref(),
                         biome_indices.as_deref(),
                     );
+                    if config.origin_centered && config.selection_bounds.is_none() {
+                        let (min_x, min_y, min_z, sz_x, sz_y, sz_z) = st.get_bounds();
+                        if sz_x > 0 && sz_y > 0 && sz_z > 0 {
+                            config.selection_bounds = Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]));
+                        }
+                    }
                     st.get_section_padded_array(sec_coord)
                 };
 
@@ -486,6 +538,12 @@ impl LiveSyncSession {
                 let rebuilt_meshes = {
                     let mut st = storage.write().unwrap();
                     st.apply_delta_update(min_pos.x, min_pos.y, min_pos.z, &borrowed_changes);
+                    if config.origin_centered && config.selection_bounds.is_none() {
+                        let (min_x, min_y, min_z, sz_x, sz_y, sz_z) = st.get_bounds();
+                        if sz_x > 0 && sz_y > 0 && sz_z > 0 {
+                            config.selection_bounds = Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]));
+                        }
+                    }
                     DeltaMesher::rebuild_dirty_sections(&mut st, culler, &model_lookup, config)
                 };
 
