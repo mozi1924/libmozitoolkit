@@ -13,7 +13,7 @@ use mtk_voxel::mesher::{DeltaMesher, SectionMesher};
 use mtk_voxel::storage::VoxelStorage;
 use mtk_voxel::types::MesherConfig;
 
-use crate::client::{ClientMessage, SyncClient};
+use crate::client::{ClientCommand, ClientMessage, SyncClient};
 use crate::events::SyncEvent;
 use crate::protocol::*;
 
@@ -38,6 +38,7 @@ pub struct LiveSyncSession {
     worker_handle: Option<JoinHandle<()>>,
 
     current_stream_id: Arc<AtomicU32>,
+    sync_requested: Arc<AtomicBool>,
 }
 
 impl LiveSyncSession {
@@ -61,6 +62,7 @@ impl LiveSyncSession {
             worker_running: Arc::new(AtomicBool::new(false)),
             worker_handle: None,
             current_stream_id: Arc::new(AtomicU32::new(0)),
+            sync_requested: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -102,12 +104,16 @@ impl LiveSyncSession {
         let model_db_clone = self.model_db.clone();
         let unified_mesh = self.unified_mesh;
         let stream_id_clone = self.current_stream_id.clone();
+        let sync_requested_clone = self.sync_requested.clone();
+        self.sync_requested.store(false, Ordering::SeqCst);
         let worker_running = Arc::new(AtomicBool::new(true));
         self.worker_running = worker_running.clone();
 
+        let cmd_sender = client.get_cmd_sender();
         let handle = thread::spawn(move || {
             Self::event_worker_loop(
                 msg_receiver,
+                cmd_sender,
                 storage_clone,
                 event_sender_clone,
                 config_clone,
@@ -115,6 +121,7 @@ impl LiveSyncSession {
                 model_db_clone,
                 unified_mesh,
                 stream_id_clone,
+                sync_requested_clone,
                 worker_running,
             );
         });
@@ -191,6 +198,7 @@ impl LiveSyncSession {
 
     /// Sends a Full Sync Request (0x80) to Minecraft server.
     pub fn send_full_sync_request(&self) -> Result<(), String> {
+        self.sync_requested.store(true, Ordering::SeqCst);
         if let Some(ref client) = self.client {
             client.send_packet(encode_full_sync_request())
         } else {
@@ -200,6 +208,7 @@ impl LiveSyncSession {
 
     /// Sends Section Repair Requests (0x81) to Minecraft server.
     pub fn send_repair_request(&self, sections: &[IVec3]) -> Result<(), String> {
+        self.sync_requested.store(true, Ordering::SeqCst);
         if let Some(ref client) = self.client {
             for packet in encode_repair_requests(sections, 64) {
                 client.send_packet(packet)?;
@@ -240,11 +249,14 @@ impl LiveSyncSession {
             &self.current_stream_id,
             stream_total_sections,
             stream_received_sections,
+            None,
+            &self.sync_requested,
         );
     }
 
     fn event_worker_loop(
         msg_receiver: Receiver<ClientMessage>,
+        cmd_sender: Sender<ClientCommand>,
         storage: Arc<RwLock<VoxelStorage>>,
         event_sender: Sender<SyncEvent>,
         mut config: MesherConfig,
@@ -252,6 +264,7 @@ impl LiveSyncSession {
         model_db: Option<Arc<BakedModelDatabase>>,
         unified_mesh: bool,
         stream_id_atomic: Arc<AtomicU32>,
+        sync_requested: Arc<AtomicBool>,
         running: Arc<AtomicBool>,
     ) {
         let mut section_mesh_cache: HashMap<IVec3, MeshData> = HashMap::new();
@@ -280,6 +293,8 @@ impl LiveSyncSession {
                         &stream_id_atomic,
                         &mut stream_total_sections,
                         &mut stream_received_sections,
+                        Some(&cmd_sender),
+                        &sync_requested,
                     );
                 }
                 Err(crossbeam_channel::RecvTimeoutError::Timeout) => continue,
@@ -300,6 +315,8 @@ impl LiveSyncSession {
         stream_id_atomic: &Arc<AtomicU32>,
         stream_total_sections: &mut usize,
         stream_received_sections: &mut usize,
+        cmd_sender: Option<&Sender<ClientCommand>>,
+        sync_requested: &Arc<AtomicBool>,
     ) {
         let model_lookup = |state: &str| -> Option<Arc<BakedModel>> {
             model_db.as_ref().and_then(|db| db.get(state).cloned().map(Arc::new))
@@ -318,6 +335,7 @@ impl LiveSyncSession {
                 }
 
                 if bounds_changed || bounds_differ {
+                    sync_requested.store(false, Ordering::SeqCst);
                     section_mesh_cache.clear();
                     // If storage already has sections, rebuild all of them so world mesh reflects new origin/bounds
                     let non_empty = {
@@ -358,8 +376,8 @@ impl LiveSyncSession {
                     }
                 }
 
-                // Preemptive stream invalidation
-                stream_id_atomic.fetch_add(1, Ordering::SeqCst);
+                // Invalidate any previous stream state on selection change
+                stream_id_atomic.store(0, Ordering::SeqCst);
                 let _ = event_sender.send(SyncEvent::SelectionUpdated { min_pos, size });
             }
 
@@ -623,9 +641,11 @@ impl LiveSyncSession {
                     .map(|s| (s.coord.x, s.coord.y, s.coord.z, s.crc32))
                     .collect();
 
-                let mismatched = {
+                let (mismatched, is_storage_empty) = {
                     let mut st = storage.write().unwrap();
-                    st.validate_manifest(&raw_entries, None)
+                    let mismatches = st.validate_manifest(&raw_entries, None);
+                    let empty = st.get_all_non_empty_sections().is_empty();
+                    (mismatches, empty)
                 };
 
                 if mismatched.is_empty() {
@@ -638,6 +658,22 @@ impl LiveSyncSession {
                         is_verified: false,
                         message: format!("Detected {} out-of-sync sections", mismatched.len()),
                     });
+
+                    // Automatically request synchronization according to live sync protocol contract
+                    let is_streaming = stream_id_atomic.load(Ordering::SeqCst) != 0;
+                    if let Some(sender) = cmd_sender {
+                        if !is_streaming && !sync_requested.load(Ordering::SeqCst) {
+                            if is_storage_empty || mismatched.len() > 64 || mismatched.len() == raw_entries.len() {
+                                let _ = sender.send(ClientCommand::Send(encode_full_sync_request()));
+                                sync_requested.store(true, Ordering::SeqCst);
+                            } else {
+                                for packet in encode_repair_requests(&mismatched, 64) {
+                                    let _ = sender.send(ClientCommand::Send(packet));
+                                }
+                                sync_requested.store(true, Ordering::SeqCst);
+                            }
+                        }
+                    }
                 }
             }
 
@@ -647,6 +683,7 @@ impl LiveSyncSession {
                 flags: _,
             } => {
                 stream_id_atomic.store(stream_id, Ordering::SeqCst);
+                sync_requested.store(false, Ordering::SeqCst);
                 *stream_total_sections = total_sections as usize;
                 *stream_received_sections = 0;
                 let _ = event_sender.send(SyncEvent::StreamProgress {
@@ -662,6 +699,7 @@ impl LiveSyncSession {
                 status: _,
             } => {
                 stream_id_atomic.store(0, Ordering::SeqCst);
+                sync_requested.store(false, Ordering::SeqCst);
 
                 // Phase 2 (BUILD): Build all sections with complete neighbor data in memory
                 let (bounds, padded_sections) = {

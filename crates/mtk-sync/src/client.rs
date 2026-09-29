@@ -76,6 +76,11 @@ impl SyncClient {
             .map_err(|e| e.to_string())
     }
 
+    /// Returns a cloned command sender to allow worker threads to send commands to the server.
+    pub fn get_cmd_sender(&self) -> Sender<ClientCommand> {
+        self.cmd_sender.clone()
+    }
+
     /// Stops the client thread cleanly.
     pub fn stop(&mut self) {
         self.running.store(false, Ordering::SeqCst);

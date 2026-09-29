@@ -139,3 +139,62 @@ fn test_two_phase_streaming_cross_chunk_culling_and_welding() {
     assert_eq!(mesh.positions.len(), 12, "Expected 12 welded spatial vertices across chunk seam, found {}", mesh.positions.len());
 }
 
+#[test]
+fn test_auto_sync_request_on_manifest_mismatch() {
+    use std::collections::HashMap;
+    use std::sync::atomic::{AtomicBool, AtomicU32};
+    use std::sync::Arc;
+    use glam::IVec3;
+    use mtk_sync::client::ClientCommand;
+    use mtk_sync::protocol::constants::PacketType;
+    use mtk_sync::protocol::packet::{ManifestSectionEntry, Packet};
+    use mtk_sync::{LiveSyncSession, SyncEvent};
+    use mtk_voxel::types::MesherConfig;
+
+    let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None, true);
+    let (cmd_sender, cmd_receiver) = crossbeam_channel::unbounded::<ClientCommand>();
+    let (event_sender, _event_receiver) = crossbeam_channel::unbounded::<SyncEvent>();
+    let sync_requested = Arc::new(AtomicBool::new(false));
+    let stream_id = Arc::new(AtomicU32::new(0));
+    let mut cache = HashMap::new();
+    let mut total_sec = 0;
+    let mut rec_sec = 0;
+    let mut config = MesherConfig::default();
+
+    // 1. Cold start / empty storage: manifest with 1 non-empty section
+    let manifest_packet = Packet::SectionManifest {
+        seq_id: 1,
+        sections: vec![ManifestSectionEntry {
+            coord: IVec3::new(0, 0, 0),
+            crc32: 0xDEADBEEF,
+        }],
+    };
+
+    LiveSyncSession::handle_packet(
+        manifest_packet,
+        &session.storage,
+        &event_sender,
+        &mut config,
+        &session.culler,
+        &session.model_db,
+        session.unified_mesh,
+        &mut cache,
+        &stream_id,
+        &mut total_sec,
+        &mut rec_sec,
+        Some(&cmd_sender),
+        &sync_requested,
+    );
+
+    // Should have sent ReqFullSync (0x80)
+    let cmd = cmd_receiver.try_recv().expect("Should have sent a command to server");
+    match cmd {
+        ClientCommand::Send(bytes) => {
+            assert_eq!(bytes[2], 0x02, "Version should be 2");
+            assert_eq!(bytes[3], PacketType::ReqFullSync as u8, "Packet type should be ReqFullSync (0x80)");
+        }
+        _ => panic!("Expected ClientCommand::Send"),
+    }
+    assert!(sync_requested.load(std::sync::atomic::Ordering::SeqCst), "sync_requested flag should be set");
+}
+
