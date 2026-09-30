@@ -40,11 +40,30 @@ pub fn compute_face_tint(
             }
         };
         (packed_data, final_col, colormap_uv_3)
-    } else if tint_index >= 0 {
-        let packed_data = [1.0, 1.0, 1.0, 1.0]; // default grass tint
-        (packed_data, default_pal.grass_linear(), colormap_uv_3)
     } else {
-        let packed_data = [1.0, 1.0, 0.0, 0.0]; // no tint
-        (packed_data, [1.0, 1.0, 1.0, 1.0], colormap_uv_3)
+        // Fallback when no biome_resolver is supplied:
+        // Use SSOT classify_tint_category to deduce category instead of blindly assuming grass!
+        let t_idx = if tint_index >= 0 { Some(tint_index as i32) } else { None };
+        let cat = mtk_material::classify_tint_category(texture_key, Some(block_name), t_idx);
+        if cat != "none" {
+            let (tt, tw, col) = match cat {
+                "grass" => (mtk_material::TINT_TYPE_GRASS, 1.0, default_pal.grass_linear()),
+                "foliage" => (mtk_material::TINT_TYPE_FOLIAGE, 1.0, default_pal.foliage_linear()),
+                "dry_foliage" => (mtk_material::TINT_TYPE_DRY_FOLIAGE, 1.0, default_pal.dry_foliage_linear()),
+                "water" => (mtk_material::TINT_TYPE_WATER, 1.0, default_pal.water_linear()),
+                "hardcoded" => {
+                    let hc = mtk_material::get_hardcoded_tint(texture_key)
+                        .or_else(|| mtk_material::get_hardcoded_tint(block_name))
+                        .unwrap_or([1.0, 1.0, 1.0, 1.0]);
+                    (mtk_material::TINT_TYPE_HARDCODED, 1.0, hc)
+                }
+                _ => (mtk_material::TINT_TYPE_NONE, 0.0, [1.0, 1.0, 1.0, 1.0]),
+            };
+            let packed_data = [1.0, 1.0, tw, tt as f32];
+            (packed_data, col, colormap_uv_3)
+        } else {
+            let packed_data = [1.0, 1.0, 0.0, 0.0]; // no tint
+            (packed_data, [1.0, 1.0, 1.0, 1.0], colormap_uv_3)
+        }
     }
 }
