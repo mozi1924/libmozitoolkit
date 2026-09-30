@@ -133,7 +133,7 @@ impl PyPrecompileResult {
 ///
 /// Releases Python GIL during multi-threaded baking.
 #[pyfunction]
-#[pyo3(signature = (stack, cache_dir, atlas_category="blocks", max_atlas_width=4096, max_atlas_height=4096, compile_atlas=true, compile_standalone=true, compile_models=true))]
+#[pyo3(signature = (stack, cache_dir, atlas_category="blocks", max_atlas_width=4096, max_atlas_height=4096, compile_atlas=true, compile_standalone=true, compile_models=true, num_threads=None))]
 pub fn precompile_all_assets<'py>(
     py: Python<'py>,
     stack: &PyResourcePackStack,
@@ -144,6 +144,7 @@ pub fn precompile_all_assets<'py>(
     compile_atlas: bool,
     compile_standalone: bool,
     compile_models: bool,
+    num_threads: Option<usize>,
 ) -> PyResult<PyPrecompileResult> {
     let cfg = libmtk::PrecompileConfig {
         max_atlas_width,
@@ -152,6 +153,7 @@ pub fn precompile_all_assets<'py>(
         compile_atlas,
         compile_standalone,
         compile_models,
+        num_threads,
     };
 
     let res = py

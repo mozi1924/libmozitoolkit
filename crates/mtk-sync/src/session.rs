@@ -183,10 +183,8 @@ impl LiveSyncSession {
             &config,
             None,
         ) {
-            let mut merged = MeshData::new();
-            for (_coord, m) in results {
-                merged.append_mesh(&m);
-            }
+            let section_meshes: Vec<_> = results.into_iter().map(|(_, m)| m).collect();
+            let mut merged = MeshData::merge_all(&section_meshes);
             if config.weld_vertices {
                 merged.weld_spatial_vertices(1e-4);
             }
@@ -363,10 +361,8 @@ impl LiveSyncSession {
                                 }
                             }
                             if unified_mesh {
-                                let mut world_mesh = MeshData::new();
-                                for mesh in section_mesh_cache.values() {
-                                    world_mesh.append_mesh(mesh);
-                                }
+                                let meshes: Vec<_> = section_mesh_cache.values().cloned().collect();
+                                let mut world_mesh = MeshData::merge_all(&meshes);
                                 if config.weld_vertices {
                                     world_mesh.weld_spatial_vertices(1e-4);
                                 }

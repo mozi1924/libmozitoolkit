@@ -44,6 +44,9 @@ pub enum MtkError {
 
     #[error("Bincode error: {0}")]
     Bincode(#[from] bincode::Error),
+
+    #[error("Thread pool error: {0}")]
+    ThreadPool(String),
 }
 
 pub use mtk_resource::{

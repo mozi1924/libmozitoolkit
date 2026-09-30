@@ -296,6 +296,117 @@ impl PyMeshData {
         }
     }
 
+    /// Read-only memoryview of expanded per-loop UV coordinates (`float32 * 2` per loop)
+    /// aligned directly with Blender's polygon loops.
+    pub fn loop_uvs_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+        let is_quad = self.inner.quad_indices.is_some()
+            || (!self.inner.indices.is_empty()
+                && self.inner.indices.len() % 6 == 0
+                && self.inner.face_materials.len() == self.inner.indices.len() / 6);
+
+        let loop_uvs: Vec<f32> = py.allow_threads(|| {
+            if is_quad {
+                let quads = self.inner.reconstruct_quad_indices();
+                let mut uvs = Vec::with_capacity(quads.len() * 2);
+                for &v_idx in &quads {
+                    if let Some(uv) = self.inner.uvs.get(v_idx as usize) {
+                        uvs.push(uv[0]);
+                        uvs.push(uv[1]);
+                    } else {
+                        uvs.push(0.0);
+                        uvs.push(0.0);
+                    }
+                }
+                uvs
+            } else if !self.inner.indices.is_empty() {
+                let mut uvs = Vec::with_capacity(self.inner.indices.len() * 2);
+                for &v_idx in &self.inner.indices {
+                    if let Some(uv) = self.inner.uvs.get(v_idx as usize) {
+                        uvs.push(uv[0]);
+                        uvs.push(uv[1]);
+                    } else {
+                        uvs.push(0.0);
+                        uvs.push(0.0);
+                    }
+                }
+                uvs
+            } else {
+                let mut uvs = Vec::with_capacity(self.inner.uvs.len() * 2);
+                for uv in &self.inner.uvs {
+                    uvs.push(uv[0]);
+                    uvs.push(uv[1]);
+                }
+                uvs
+            }
+        });
+
+        let byte_slice = unsafe {
+            std::slice::from_raw_parts(
+                loop_uvs.as_ptr() as *const u8,
+                loop_uvs.len() * std::mem::size_of::<f32>(),
+            )
+        };
+        let bytes = PyBytes::new(py, byte_slice);
+        PyMemoryView::from(&bytes)
+    }
+
+    /// Read-only memoryview of polygon loop start offsets (`int32` per polygon) for Blender direct topology injection.
+    pub fn loop_starts_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+        let is_quad = self.inner.quad_indices.is_some()
+            || (!self.inner.indices.is_empty()
+                && self.inner.indices.len() % 6 == 0
+                && self.inner.face_materials.len() == self.inner.indices.len() / 6);
+        let count = if is_quad {
+            if let Some(ref quads) = self.inner.quad_indices {
+                quads.len() / 4
+            } else {
+                self.inner.indices.len() / 6
+            }
+        } else {
+            self.inner.indices.len() / 3
+        };
+        let step = if is_quad { 4i32 } else { 3i32 };
+        let mut starts: Vec<i32> = Vec::with_capacity(count);
+        for i in 0..count {
+            starts.push(i as i32 * step);
+        }
+        let byte_slice = unsafe {
+            std::slice::from_raw_parts(
+                starts.as_ptr() as *const u8,
+                starts.len() * std::mem::size_of::<i32>(),
+            )
+        };
+        let bytes = PyBytes::new(py, byte_slice);
+        PyMemoryView::from(&bytes)
+    }
+
+    /// Read-only memoryview of polygon loop totals (`int32` per polygon: 4 for quads, 3 for triangles).
+    pub fn loop_totals_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+        let is_quad = self.inner.quad_indices.is_some()
+            || (!self.inner.indices.is_empty()
+                && self.inner.indices.len() % 6 == 0
+                && self.inner.face_materials.len() == self.inner.indices.len() / 6);
+        let count = if is_quad {
+            if let Some(ref quads) = self.inner.quad_indices {
+                quads.len() / 4
+            } else {
+                self.inner.indices.len() / 6
+            }
+        } else {
+            self.inner.indices.len() / 3
+        };
+        let val = if is_quad { 4i32 } else { 3i32 };
+        let totals = vec![val; count];
+        let byte_slice = unsafe {
+            std::slice::from_raw_parts(
+                totals.as_ptr() as *const u8,
+                totals.len() * std::mem::size_of::<i32>(),
+            )
+        };
+        let bytes = PyBytes::new(py, byte_slice);
+        PyMemoryView::from(&bytes)
+    }
+
     /// Read-only memoryview of face material slots (`uint16` per face).
     pub fn face_materials_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
         let byte_slice = unsafe {

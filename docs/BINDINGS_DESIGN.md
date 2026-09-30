@@ -38,7 +38,11 @@ bindings/
   - `positions_memoryview(py)`: 零拷贝返回 `[N, 3]` f32 顶点坐标缓冲。
   - `normals_memoryview(py)`: 零拷贝返回 `[N, 3]` f32 法线缓冲。
   - `uvs_memoryview(py)`: 零拷贝返回 `[N, 2]` f32 主 UV 缓冲。
+  - `loop_uvs_memoryview(py)`: 零拷贝返回 `[L, 2]` f32 角隅 Loop 域 UV 缓冲，彻底杜绝 Python 逐角隅数组组装开销。
+  - `loop_starts_memoryview(py)`: 零拷贝返回 `[F]` i32 Blender Polygon `loop_start` 偏移缓冲。
+  - `loop_totals_memoryview(py)`: 零拷贝返回 `[F]` i32 Blender Polygon `loop_total` 顶点数缓冲（Quad 为 4）。
   - `indices_memoryview(py)`: 零拷贝返回 `[M]` u32 三角形/多边形索引。
+  - `quad_indices_memoryview(py)`: 零拷贝返回 `[Q, 4]` u32 四边形顶角索引缓冲。
   - `face_materials_memoryview(py)`: 逐面材质插槽 ID。
   - `cull_faces(cull_duplicates=True, cull_coplanar_opposite=False, tolerance=1e-4) -> PyMeshData`: 执行空间遮挡与叠面剔除，无缝保留所有自定义属性与 Quad 拓扑。
 - `PyBakedModelDatabase`:
@@ -66,14 +70,13 @@ bindings/
 ##### 3. 体素与实时同步 (`mtk.voxel` & `mtk.sync`)
 - `VoxelStorage`: 稀疏体素世界存储，纳秒级快照更新与选区包围盒裁剪。
 - `SectionMesher`:
-  - `mesh_world(storage, config)`: 多线程并行世界网格化。
-  - `MesherConfig(enable_ao=True, mesh_fluids=True, z_up_coordinates=True, atlas=None, biome_resolver=None, custom_aliases=None)`: 标准化 3D 几何坐标系与图集材质寻址/生物群系着色配置。
+  - `mesh_world(storage, config)`: 多线程并行世界网格化（支持 `num_threads` 指定并发工作线程数）。
+  - `MesherConfig(enable_ao=True, mesh_fluids=True, z_up_coordinates=True, atlas=None, biome_resolver=None, custom_aliases=None, num_threads=None)`: 标准化 3D 几何坐标系与图集材质寻址/生物群系着色配置。
 - `LiveSyncSession`: 原生 WebSocket 后台协同管道。
 
 #### Blender Python 极速灌入范式示例
 
 ```python
-import numpy as np
 import bpy
 import libmtk_py as mtk
 
@@ -82,25 +85,32 @@ storage = mtk.VoxelStorage()
 storage.set_bounds(0, 0, 0, 16, 16, 16)
 storage.set_block(0, 0, 0, "minecraft:stone")
 
-# 2. 生成标准右手 Z-Up 网格
-config = mtk.MesherConfig(enable_ao=True, mesh_fluids=True, z_up_coordinates=True)
+# 2. 生成标准右手 Z-Up 网格 (指定 Rayon 多线程加速)
+config = mtk.MesherConfig(enable_ao=True, mesh_fluids=True, z_up_coordinates=True, num_threads=8)
 mesh_data = mtk.SectionMesher.mesh_world(storage, config)
 
-# 3. 极速灌入 Blender Mesh (零拷贝 Buffer Protocol)
+# 3. 极速零拷贝灌入 Blender Mesh (保留 Quad 拓扑与 Loop UV)
 v_count = mesh_data.vertex_count
-t_count = mesh_data.triangle_count
+q_count = mesh_data.quad_count
 if v_count > 0:
     b_mesh = bpy.data.meshes.new(name="MtkWorld")
+    b_mesh.clear_geometry()
     b_mesh.vertices.add(v_count)
-    b_mesh.loops.add(t_count * 3)
-    b_mesh.polygons.add(t_count)
+    b_mesh.loops.add(q_count * 4)
+    b_mesh.polygons.add(q_count)
 
-    # 纳秒级 foreach_set 批量灌入
-    b_mesh.vertices.foreach_set("co", np.frombuffer(mesh_data.positions_memoryview(), dtype=np.float32))
-    b_mesh.loops.foreach_set("vertex_index", np.frombuffer(mesh_data.indices_memoryview(), dtype=np.uint32))
-    b_mesh.polygons.foreach_set("loop_start", np.arange(0, t_count * 3, 3, dtype=np.int32))
-    b_mesh.polygons.foreach_set("loop_total", np.full(t_count, 3, dtype=np.int32))
-    b_mesh.update()
+    # 纳秒级 foreach_set 零拷贝灌入 (cast 类型视图)
+    b_mesh.vertices.foreach_set("co", mesh_data.positions_memoryview().cast("f"))
+    b_mesh.loops.foreach_set("vertex_index", mesh_data.quad_indices_memoryview().cast("i"))
+    b_mesh.polygons.foreach_set("loop_start", mesh_data.loop_starts_memoryview().cast("i"))
+    b_mesh.polygons.foreach_set("loop_total", mesh_data.loop_totals_memoryview().cast("i"))
+
+    # 毫秒级 Loop UV 与材质插槽注入
+    uv_layer = b_mesh.uv_layers.new(name="UVMap")
+    uv_layer.data.foreach_set("uv", mesh_data.loop_uvs_memoryview().cast("f"))
+    b_mesh.polygons.foreach_set("material_index", mesh_data.face_materials_memoryview().cast("H"))
+
+    b_mesh.update(calc_edges=True)
 ```
 
 ---

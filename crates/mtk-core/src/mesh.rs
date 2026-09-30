@@ -209,9 +209,8 @@ impl MeshData {
         self.indices.push(base_idx + 2);
         self.indices.push(base_idx + 3);
 
-        if let Some(ref mut quads) = self.quad_indices {
-            quads.extend_from_slice(&[base_idx, base_idx + 1, base_idx + 2, base_idx + 3]);
-        }
+        let quads = self.quad_indices.get_or_insert_with(Vec::new);
+        quads.extend_from_slice(&[base_idx, base_idx + 1, base_idx + 2, base_idx + 3]);
 
         self.face_materials.push(attributes.material_slot);
         self.face_tint_indices.push(attributes.tint_index);
@@ -276,6 +275,58 @@ impl MeshData {
         }
     }
 
+    /// Efficiently merges multiple `MeshData` buffers into a single unified `MeshData`,
+    /// pre-allocating exact capacities upfront to eliminate vector reallocations.
+    pub fn merge_all(meshes: &[MeshData]) -> Self {
+        if meshes.is_empty() {
+            return Self::new();
+        }
+        if meshes.len() == 1 {
+            return meshes[0].clone();
+        }
+
+        let mut total_verts = 0;
+        let mut total_indices = 0;
+        let mut total_quads = 0;
+        let mut total_faces = 0;
+        let mut has_sec_uvs = false;
+        let mut has_colors = false;
+
+        for m in meshes {
+            total_verts += m.positions.len();
+            total_indices += m.indices.len();
+            if let Some(ref q) = m.quad_indices {
+                total_quads += q.len();
+            }
+            total_faces += m.face_materials.len();
+            if m.secondary_uvs.is_some() {
+                has_sec_uvs = true;
+            }
+            if m.colors.is_some() {
+                has_colors = true;
+            }
+        }
+
+        let mut merged = Self {
+            positions: Vec::with_capacity(total_verts),
+            normals: Vec::with_capacity(total_verts),
+            uvs: Vec::with_capacity(total_verts),
+            secondary_uvs: if has_sec_uvs { Some(Vec::with_capacity(total_verts)) } else { None },
+            colors: if has_colors { Some(Vec::with_capacity(total_verts)) } else { None },
+            indices: Vec::with_capacity(total_indices),
+            quad_indices: if total_quads > 0 { Some(Vec::with_capacity(total_quads)) } else { None },
+            face_materials: Vec::with_capacity(total_faces),
+            face_tint_indices: Vec::with_capacity(total_faces),
+            custom_attributes: HashMap::new(),
+        };
+
+        for m in meshes {
+            merged.append_mesh(m);
+        }
+
+        merged
+    }
+
     /// Welds co-located vertices within `tolerance` distance into shared topology,
     /// remapping indices while preserving per-corner loop UVs and colors.
     pub fn weld_spatial_vertices(&mut self, tolerance: f32) {
@@ -310,17 +361,37 @@ impl MeshData {
         }
 
         // Remap triangle/polygon indices
-        for idx in &mut self.indices {
-            if let Some(&new_i) = remap.get(*idx as usize) {
-                *idx = new_i;
+        #[cfg(feature = "parallel")]
+        {
+            use rayon::prelude::*;
+            self.indices.par_iter_mut().for_each(|idx| {
+                if let Some(&new_i) = remap.get(*idx as usize) {
+                    *idx = new_i;
+                }
+            });
+
+            if let Some(ref mut quads) = self.quad_indices {
+                quads.par_iter_mut().for_each(|idx| {
+                    if let Some(&new_i) = remap.get(*idx as usize) {
+                        *idx = new_i;
+                    }
+                });
             }
         }
 
-        // Remap quad indices if present
-        if let Some(ref mut quads) = self.quad_indices {
-            for idx in quads {
+        #[cfg(not(feature = "parallel"))]
+        {
+            for idx in &mut self.indices {
                 if let Some(&new_i) = remap.get(*idx as usize) {
                     *idx = new_i;
+                }
+            }
+
+            if let Some(ref mut quads) = self.quad_indices {
+                for idx in quads {
+                    if let Some(&new_i) = remap.get(*idx as usize) {
+                        *idx = new_i;
+                    }
                 }
             }
         }

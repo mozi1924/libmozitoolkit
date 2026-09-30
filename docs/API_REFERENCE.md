@@ -27,9 +27,10 @@ pub struct MeshData {
 ```
 **主要方法**：
 - `MeshData::new()` / `MeshData::with_capacity(...)`
+- `MeshData::merge_all(meshes: &[MeshData]) -> Self`: 批量合并网格集合，单次预计算所有顶点、索引、Quad 与自定义属性容量，彻底消除渐进式内存重分配。
 - `mesh.append_quad(&Quad, &FaceAttributes)`: 追加一个四边形（自动剖分为 2 个 CCW 三角形并维护四边形循环顶角）
 - `mesh.append_mesh(&MeshData)`: 合并另一个网格数据
-- `mesh.weld_spatial_vertices(tolerance: f32)`: 空间距离顶点去重焊接（保持三角索引与 Quad 索引映射，Per-Corner UV/AO 保留）
+- `mesh.weld_spatial_vertices(tolerance: f32)`: 空间距离顶点去重焊接（Rayon 并行重映射三角与 Quad 索引，Per-Corner UV/AO 保留）
 - `mesh.vertex_count()`, `mesh.triangle_count()`, `mesh.face_count()`, `mesh.is_empty()`, `mesh.clear()`
 
 #### `Quad` (通用四边形基元)
@@ -275,8 +276,11 @@ pub struct Quad {
 
 负责一键将资源包无头预编译为运行时持久化高速缓存。
 
+- `PrecompileConfig`:
+  - `export_standalone: bool`: 是否导出单体 PBR 贴图。
+  - `num_threads: Option<usize>`: Rayon 线程池大小配置（`None` 为系统全部可用核心）。
 - `precompile_all_assets(pack_stack, output_dir, config) -> Result<PrecompileResult, MtkError>`:
-  执行全量资源包预烘焙，包含多类别图集烘焙、Companion Overlay 输出、Standalone PBR 结构整理、多线程模型烘焙（自动串联图集寻址表注入 Atlas UV 预解算）以及 `biome_mapping.json` 导出。
+  执行全量资源包预烘焙，包含多类别图集烘焙、Rayon 并行 Atlas Chunk PNG 编码与落盘、Companion Overlay 输出、Standalone PBR 结构整理、多线程模型烘焙（自动串联图集寻址表注入 Atlas UV 预解算）以及 `biome_mapping.json` 导出。
 - `prebake_all_models(stack, atlas_map: Option<&AtlasAddressMap>) -> Result<BakedModelDatabase, ...>`:
   全量烘焙资源包中的模型，若传入图集映射表，则在烘焙期自动完成图集 UV 与 Chunk/Texture ID 预解算并注入 `BakedModel`。
 - `CacheManifest`: 记录缓存版本号 (`ASSET_CACHE_FORMAT_VERSION`)、哈希指纹、时间戳与清单。

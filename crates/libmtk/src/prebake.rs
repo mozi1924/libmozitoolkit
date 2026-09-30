@@ -31,6 +31,7 @@ pub struct PrecompileConfig {
     pub compile_atlas: bool,
     pub compile_standalone: bool,
     pub compile_models: bool,
+    pub num_threads: Option<usize>,
 }
 
 impl Default for PrecompileConfig {
@@ -42,6 +43,7 @@ impl Default for PrecompileConfig {
             compile_atlas: true,
             compile_standalone: true,
             compile_models: true,
+            num_threads: None,
         }
     }
 }
@@ -91,6 +93,17 @@ pub fn precompile_all_assets(
     config: &PrecompileConfig,
 ) -> Result<PrecompileResult, MtkError> {
     let base_path = cache_dir.as_ref();
+    mtk_core::constants::concurrency::execute_parallel(config.num_threads, || {
+        precompile_all_assets_inner(stack, base_path, config)
+    })
+    .map_err(MtkError::ThreadPool)?
+}
+
+fn precompile_all_assets_inner(
+    stack: &ResourcePackStack,
+    base_path: &Path,
+    config: &PrecompileConfig,
+) -> Result<PrecompileResult, MtkError> {
     let atlas_dir = base_path.join("atlas");
     let standalone_dir = base_path.join("standalone");
     let models_dir = base_path.join("models");
@@ -166,26 +179,55 @@ pub fn precompile_all_assets(
         let mapping_json = baked_atlas.address_map.to_json()?;
         fs::write(atlas_dir.join("atlas_mapping.json"), mapping_json)?;
 
-        for chunk in &baked_atlas.chunks {
-            let stem = chunk.file_stem();
-            let albedo_bytes = chunk.albedo.to_png_bytes()?;
-            fs::write(atlas_dir.join(format!("{}.png", stem)), albedo_bytes)?;
+        #[cfg(feature = "parallel")]
+        {
+            baked_atlas.chunks.par_iter().try_for_each(|chunk| -> Result<(), MtkError> {
+                let stem = chunk.file_stem();
+                let albedo_bytes = chunk.albedo.to_png_bytes()?;
+                fs::write(atlas_dir.join(format!("{}.png", stem)), albedo_bytes)?;
 
-            if let Some(ref normal) = chunk.normal {
-                let normal_bytes = normal.to_png_bytes()?;
-                fs::write(atlas_dir.join(format!("{}_n.png", stem)), normal_bytes)?;
-            }
+                if let Some(ref normal) = chunk.normal {
+                    let normal_bytes = normal.to_png_bytes()?;
+                    fs::write(atlas_dir.join(format!("{}_n.png", stem)), normal_bytes)?;
+                }
 
-            if let Some(ref specular) = chunk.specular {
-                let spec_bytes = specular.to_png_bytes()?;
-                fs::write(atlas_dir.join(format!("{}_s.png", stem)), spec_bytes)?;
-            }
+                if let Some(ref specular) = chunk.specular {
+                    let spec_bytes = specular.to_png_bytes()?;
+                    fs::write(atlas_dir.join(format!("{}_s.png", stem)), spec_bytes)?;
+                }
 
-            if let Some(ref overlay) = chunk.overlay {
-                let overlay_bytes = overlay.to_png_bytes()?;
-                fs::write(atlas_dir.join(format!("{}_overlay.png", stem)), overlay_bytes)?;
+                if let Some(ref overlay) = chunk.overlay {
+                    let overlay_bytes = overlay.to_png_bytes()?;
+                    fs::write(atlas_dir.join(format!("{}_overlay.png", stem)), overlay_bytes)?;
+                }
+                Ok(())
+            })?;
+        }
+
+        #[cfg(not(feature = "parallel"))]
+        {
+            for chunk in &baked_atlas.chunks {
+                let stem = chunk.file_stem();
+                let albedo_bytes = chunk.albedo.to_png_bytes()?;
+                fs::write(atlas_dir.join(format!("{}.png", stem)), albedo_bytes)?;
+
+                if let Some(ref normal) = chunk.normal {
+                    let normal_bytes = normal.to_png_bytes()?;
+                    fs::write(atlas_dir.join(format!("{}_n.png", stem)), normal_bytes)?;
+                }
+
+                if let Some(ref specular) = chunk.specular {
+                    let spec_bytes = specular.to_png_bytes()?;
+                    fs::write(atlas_dir.join(format!("{}_s.png", stem)), spec_bytes)?;
+                }
+
+                if let Some(ref overlay) = chunk.overlay {
+                    let overlay_bytes = overlay.to_png_bytes()?;
+                    fs::write(atlas_dir.join(format!("{}_overlay.png", stem)), overlay_bytes)?;
+                }
             }
         }
+
         baked_atlas_opt = Some(baked_atlas);
     }
 

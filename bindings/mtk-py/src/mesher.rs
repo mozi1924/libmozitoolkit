@@ -68,10 +68,8 @@ impl PySectionMesher {
             )
             .map_err(|e| e.to_string())?;
 
-            let mut merged = mtk_core::mesh::MeshData::new();
-            for (_coord, mesh) in results {
-                merged.append_mesh(&mesh);
-            }
+            let section_meshes: Vec<_> = results.into_iter().map(|(_, m)| m).collect();
+            let mut merged = mtk_core::mesh::MeshData::merge_all(&section_meshes);
 
             if cfg.weld_vertices {
                 merged.weld_spatial_vertices(1e-4);
