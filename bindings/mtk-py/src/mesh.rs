@@ -304,6 +304,31 @@ impl PyMeshData {
                 && self.inner.indices.len() % 6 == 0
                 && self.inner.face_materials.len() == self.inner.indices.len() / 6);
 
+        let total_loops = if is_quad {
+            if let Some(ref quads) = self.inner.quad_indices {
+                quads.len()
+            } else {
+                (self.inner.indices.len() / 6) * 4
+            }
+        } else {
+            self.inner.indices.len()
+        };
+
+        // When self.inner.uvs already stores per-corner (loop) UVs (e.g. from SectionMesher,
+        // append_quad, or where spatial welding preserved corner UVs), its length matches total_loops.
+        // Return a zero-copy memoryview directly over uvs_flat() without re-indexing!
+        if self.inner.uvs.len() == total_loops {
+            let uvs_flat = self.inner.uvs_flat();
+            let byte_slice = unsafe {
+                std::slice::from_raw_parts(
+                    uvs_flat.as_ptr() as *const u8,
+                    uvs_flat.len() * std::mem::size_of::<f32>(),
+                )
+            };
+            let bytes = PyBytes::new(py, byte_slice);
+            return PyMemoryView::from(&bytes);
+        }
+
         let loop_uvs: Vec<f32> = py.allow_threads(|| {
             if is_quad {
                 let quads = self.inner.reconstruct_quad_indices();
