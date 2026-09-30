@@ -282,6 +282,7 @@ impl PyAtlasBuilder {
     #[pyo3(signature = (stack, category="blocks"))]
     pub fn build(
         &self,
+        py: Python<'_>,
         stack: &PyResourcePackStack,
         category: &str,
     ) -> PyResult<PyBakedAtlas> {
@@ -299,8 +300,8 @@ impl PyAtlasBuilder {
         };
 
         let builder = AtlasBuilder::new(self.config.clone());
-        let baked = builder
-            .build_category(&stack.inner, &cat)
+        let baked = py
+            .allow_threads(|| builder.build_category(&stack.inner, &cat))
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
         Ok(PyBakedAtlas { inner: baked })
@@ -355,12 +356,13 @@ impl PyStandaloneBuilder {
     #[pyo3(signature = (stack, output_dir))]
     pub fn build(
         &self,
+        py: Python<'_>,
         stack: &PyResourcePackStack,
         output_dir: &str,
     ) -> PyResult<PyStandaloneResult> {
         let builder = StandaloneBuilder::new(self.config.clone());
-        let res = builder
-            .build_to_dir(&stack.inner, output_dir)
+        let res = py
+            .allow_threads(|| builder.build_to_dir(&stack.inner, output_dir))
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
         Ok(PyStandaloneResult {
@@ -404,6 +406,7 @@ pub fn is_face_transparent_f32(
 #[pyfunction]
 #[pyo3(signature = (faces_uvs, width, height, pixels, mode="CENTER", threshold=0.01, invert_y=false))]
 pub fn batch_analyze_transparent_faces_f32(
+    py: Python<'_>,
     faces_uvs: Vec<Vec<(f32, f32)>>,
     width: u32,
     height: u32,
@@ -417,20 +420,23 @@ pub fn batch_analyze_transparent_faces_f32(
         .map(|uvs| uvs.iter().map(|(u, v)| glam::Vec2::new(*u, *v)).collect())
         .collect();
     let sample_mode = mtk_texture::SampleMode::from_str(mode);
-    mtk_texture::batch_analyze_transparent_faces_f32(
-        &faces_vecs,
-        width,
-        height,
-        &pixels,
-        sample_mode,
-        threshold,
-        invert_y,
-    )
+    py.allow_threads(|| {
+        mtk_texture::batch_analyze_transparent_faces_f32(
+            &faces_vecs,
+            width,
+            height,
+            &pixels,
+            sample_mode,
+            threshold,
+            invert_y,
+        )
+    })
 }
 
 #[pyfunction]
 #[pyo3(signature = (faces_uvs, width, height, pixels, mode="CENTER", threshold=0.01, invert_y=false))]
 pub fn batch_analyze_transparent_faces_u8(
+    py: Python<'_>,
     faces_uvs: Vec<Vec<(f32, f32)>>,
     width: u32,
     height: u32,
@@ -444,14 +450,16 @@ pub fn batch_analyze_transparent_faces_u8(
         .map(|uvs| uvs.iter().map(|(u, v)| glam::Vec2::new(*u, *v)).collect())
         .collect();
     let sample_mode = mtk_texture::SampleMode::from_str(mode);
-    mtk_texture::batch_analyze_transparent_faces_u8(
-        &faces_vecs,
-        width,
-        height,
-        &pixels,
-        sample_mode,
-        threshold,
-        invert_y,
-    )
+    py.allow_threads(|| {
+        mtk_texture::batch_analyze_transparent_faces_u8(
+            &faces_vecs,
+            width,
+            height,
+            &pixels,
+            sample_mode,
+            threshold,
+            invert_y,
+        )
+    })
 }
 

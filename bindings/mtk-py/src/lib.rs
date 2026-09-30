@@ -55,7 +55,7 @@ pub fn process_mesh<'py>(
     };
 
     let addr_map = atlas.map(|a| &a.inner.address_map);
-    let output = libmtk::process_mesh(&mesh.inner, &material_names, addr_map, &cfg);
+    let output = py.allow_threads(|| libmtk::process_mesh(&mesh.inner, &material_names, addr_map, &cfg));
 
     // Build material metadata list
     let mat_list = pyo3::types::PyList::empty(py);
@@ -214,13 +214,13 @@ mod tests {
             assert_eq!(storage.dirty_section_count(), 1);
 
             let config = PyMesherConfig::default();
-            let mesh = PySectionMesher::mesh_world(&storage, Some(&config), None, None).unwrap();
+            let mesh = PySectionMesher::mesh_world(py, &storage, Some(&config), None, None).unwrap();
             assert!(!mesh.is_empty());
             assert_eq!(mesh.vertex_count(), 8); // 8 vertices for welded unit cube
 
             let mut unwelded_config = PyMesherConfig::default();
             unwelded_config.inner.weld_vertices = false;
-            let unwelded_mesh = PySectionMesher::mesh_world(&storage, Some(&unwelded_config), None, None).unwrap();
+            let unwelded_mesh = PySectionMesher::mesh_world(py, &storage, Some(&unwelded_config), None, None).unwrap();
             assert_eq!(unwelded_mesh.vertex_count(), 24); // 6 faces * 4 verts for isolated unwelded block
 
             let dict = PySectionMesher::mesh_sections_split(py, &storage, Some(&config), None, None).unwrap();
@@ -406,22 +406,25 @@ mod tests {
 
     #[test]
     fn test_python_slice_face_by_pixel_grid() {
-        let positions = vec![
-            [-1.0, -1.0, 0.0],
-            [1.0, -1.0, 0.0],
-            [1.0, 1.0, 0.0],
-            [-1.0, 1.0, 0.0],
-        ];
-        let uvs = vec![
-            [0.5, 0.0],
-            [1.0, 0.5],
-            [0.5, 1.0],
-            [0.0, 0.5],
-        ];
-        let (pos, out_uvs, faces, params) = subdivide::slice_face_by_pixel_grid(positions, uvs, 16, 16, 1.0, 64);
-        assert!(!faces.is_empty());
-        assert_eq!(pos.len(), out_uvs.len());
-        assert_eq!(pos.len(), params.len());
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let positions = vec![
+                [-1.0, -1.0, 0.0],
+                [1.0, -1.0, 0.0],
+                [1.0, 1.0, 0.0],
+                [-1.0, 1.0, 0.0],
+            ];
+            let uvs = vec![
+                [0.5, 0.0],
+                [1.0, 0.5],
+                [0.5, 1.0],
+                [0.0, 0.5],
+            ];
+            let (pos, out_uvs, faces, params) = subdivide::slice_face_by_pixel_grid(py, positions, uvs, 16, 16, 1.0, 64);
+            assert!(!faces.is_empty());
+            assert_eq!(pos.len(), out_uvs.len());
+            assert_eq!(pos.len(), params.len());
+        });
     }
 }
 

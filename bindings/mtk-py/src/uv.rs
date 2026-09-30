@@ -151,6 +151,7 @@ pub fn repair_quad_fluid_uv(
 #[pyfunction]
 #[pyo3(signature = (verts_flat, uvs_flat, normals_flat=None, force=false, min_slope_threshold=0.005))]
 pub fn batch_repair_fluid_uv(
+    py: Python<'_>,
     verts_flat: Vec<f32>,
     mut uvs_flat: Vec<f32>,
     normals_flat: Option<Vec<f32>>,
@@ -158,7 +159,9 @@ pub fn batch_repair_fluid_uv(
     min_slope_threshold: f32,
 ) -> (usize, Vec<f32>) {
     let n_slice = normals_flat.as_deref();
-    let count = uv::batch_repair_fluid_uv(&verts_flat, &mut uvs_flat, n_slice, force, min_slope_threshold);
+    let count = py.allow_threads(|| {
+        uv::batch_repair_fluid_uv(&verts_flat, &mut uvs_flat, n_slice, force, min_slope_threshold)
+    });
     (count, uvs_flat)
 }
 

@@ -21,6 +21,7 @@ use pyo3::prelude::*;
     smart_side_faces=None
 ))]
 pub fn process_mesh_extrude_repair(
+    py: Python<'_>,
     positions: Vec<[f32; 3]>,
     face_vertices: Vec<Vec<u32>>,
     face_uvs: Vec<Vec<[f32; 2]>>,
@@ -62,7 +63,7 @@ pub fn process_mesh_extrude_repair(
         },
     };
 
-    let out = mtk_core::extrude_mesh::process_mesh_extrude_repair(&input);
+    let out = py.allow_threads(|| mtk_core::extrude_mesh::process_mesh_extrude_repair(&input));
     (
         out.modified_face_uvs,
         out.modified_face_materials,
@@ -91,6 +92,7 @@ pub fn process_mesh_extrude_repair(
     smart_side_faces=None
 ))]
 pub fn process_flat_mesh_extrude_repair(
+    py: Python<'_>,
     positions: Vec<f32>,
     loop_vertices: Vec<u32>,
     loop_uvs: Vec<f32>,
@@ -134,13 +136,15 @@ pub fn process_flat_mesh_extrude_repair(
         only_collapsed,
     };
 
-    let out = mtk_core::extrude_mesh::process_flat_mesh_extrude_repair(
-        &flat_mesh,
-        &selected_faces,
-        &pixel_steps,
-        &config,
-        smart_side_faces.as_deref(),
-    );
+    let out = py.allow_threads(|| {
+        mtk_core::extrude_mesh::process_flat_mesh_extrude_repair(
+            &flat_mesh,
+            &selected_faces,
+            &pixel_steps,
+            &config,
+            smart_side_faces.as_deref(),
+        )
+    });
 
     (
         out.modified_face_uvs,
@@ -171,6 +175,7 @@ pub fn process_flat_mesh_extrude_repair(
     crease_val=1.0
 ))]
 pub fn process_random_extrude_mesh(
+    py: Python<'_>,
     positions: Vec<[f32; 3]>,
     face_vertices: Vec<Vec<u32>>,
     face_uvs: Vec<Vec<[f32; 2]>>,
@@ -224,7 +229,7 @@ pub fn process_random_extrude_mesh(
         crease_val,
     };
 
-    let out = mtk_core::extrude_mesh::process_random_extrude_mesh(&input);
+    let out = py.allow_threads(|| mtk_core::extrude_mesh::process_random_extrude_mesh(&input));
     (
         out.new_positions,
         out.new_face_vertices,

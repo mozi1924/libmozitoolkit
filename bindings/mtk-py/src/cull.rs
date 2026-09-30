@@ -83,7 +83,7 @@ pub fn cull_mesh_faces<'py>(
         cull_duplicates,
     };
 
-    let result = mtk_cull::cull_mesh_faces(&mesh.inner, &cfg);
+    let result = py.allow_threads(|| mtk_cull::cull_mesh_faces(&mesh.inner, &cfg));
 
     let stats_dict = pyo3::types::PyDict::new(py);
     stats_dict.set_item("initial_faces", result.initial_faces)?;

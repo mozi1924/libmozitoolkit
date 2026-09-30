@@ -24,6 +24,7 @@ impl PySectionMesher {
     #[staticmethod]
     #[pyo3(signature = (storage, config=None, culler=None, model_db=None))]
     pub fn mesh_world(
+        py: Python<'_>,
         storage: &PyVoxelStorage,
         config: Option<&PyMesherConfig>,
         culler: Option<&PyFaceCuller>,
@@ -57,25 +58,30 @@ impl PySectionMesher {
             model_db_opt.as_ref().and_then(|db| db.get(state).cloned().map(Arc::new))
         };
 
-        let results = SectionMesher::mesh_sections_parallel(
-            &padded_sections,
-            cul,
-            model_lookup,
-            &cfg,
-            num_threads,
-        )
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        let merged_mesh = py.allow_threads(|| -> Result<mtk_core::mesh::MeshData, String> {
+            let results = SectionMesher::mesh_sections_parallel(
+                &padded_sections,
+                cul,
+                model_lookup,
+                &cfg,
+                num_threads,
+            )
+            .map_err(|e| e.to_string())?;
 
-        let mut merged = PyMeshData::new();
-        for (_coord, mesh) in results {
-            merged.inner.append_mesh(&mesh);
-        }
+            let mut merged = mtk_core::mesh::MeshData::new();
+            for (_coord, mesh) in results {
+                merged.append_mesh(&mesh);
+            }
 
-        if cfg.weld_vertices {
-            merged.inner.weld_spatial_vertices(1e-4);
-        }
+            if cfg.weld_vertices {
+                merged.weld_spatial_vertices(1e-4);
+            }
 
-        Ok(merged)
+            Ok(merged)
+        })
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e))?;
+
+        Ok(PyMeshData { inner: merged_mesh })
     }
 
     /// Meshes all non-empty sections and returns a dictionary mapping `(sx, sy, sz)` to `MeshData`.
@@ -118,13 +124,15 @@ impl PySectionMesher {
             model_db_opt.as_ref().and_then(|db| db.get(state).cloned().map(Arc::new))
         };
 
-        let results = SectionMesher::mesh_sections_parallel(
-            &padded_sections,
-            cul,
-            model_lookup,
-            &cfg,
-            num_threads,
-        )
+        let results = py.allow_threads(|| {
+            SectionMesher::mesh_sections_parallel(
+                &padded_sections,
+                cul,
+                model_lookup,
+                &cfg,
+                num_threads,
+            )
+        })
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
         for (coord, mesh) in results {
@@ -165,12 +173,14 @@ impl PySectionMesher {
             model_db_opt.as_ref().and_then(|db| db.get(state).cloned().map(Arc::new))
         };
 
-        let results = DeltaMesher::rebuild_dirty_sections(
-            &mut storage.inner,
-            cul,
-            model_lookup,
-            &cfg,
-        );
+        let results = py.allow_threads(|| {
+            DeltaMesher::rebuild_dirty_sections(
+                &mut storage.inner,
+                cul,
+                model_lookup,
+                &cfg,
+            )
+        });
 
         let dict = PyDict::new(py);
         for (coord, mesh) in results {

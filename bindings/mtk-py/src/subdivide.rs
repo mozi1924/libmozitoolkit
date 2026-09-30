@@ -51,6 +51,7 @@ pub fn calculate_pixel_grid_cut_factors(
 #[pyfunction]
 #[pyo3(signature = (positions, uvs, tex_w, tex_h, pixels_per_face=1.0, max_subdivisions=64))]
 pub fn slice_face_by_pixel_grid(
+    py: Python<'_>,
     positions: Vec<[f32; 3]>,
     uvs: Vec<[f32; 2]>,
     tex_w: u32,
@@ -63,14 +64,16 @@ pub fn slice_face_by_pixel_grid(
     Vec<Vec<u32>>,
     Vec<[f32; 2]>,
 ) {
-    let res = mtk_core::subdivide::slice_face_by_pixel_grid(
-        &positions,
-        &uvs,
-        tex_w,
-        tex_h,
-        pixels_per_face,
-        max_subdivisions,
-    );
+    let res = py.allow_threads(|| {
+        mtk_core::subdivide::slice_face_by_pixel_grid(
+            &positions,
+            &uvs,
+            tex_w,
+            tex_h,
+            pixels_per_face,
+            max_subdivisions,
+        )
+    });
     (res.positions, res.uvs, res.faces, res.param_coords)
 }
 
@@ -78,6 +81,7 @@ pub fn slice_face_by_pixel_grid(
 #[pyfunction]
 #[pyo3(signature = (mesh, face_resolutions=None, default_resolution=(16, 16), pixels_per_face=1.0, max_subdivisions=64, weld_dist=1e-4))]
 pub fn adaptive_pixel_split_mesh(
+    py: Python<'_>,
     mesh: &PyMeshData,
     face_resolutions: Option<Vec<Option<(u32, u32)>>>,
     default_resolution: (u32, u32),
@@ -87,13 +91,15 @@ pub fn adaptive_pixel_split_mesh(
 ) -> PyMeshData {
     let empty_vec = Vec::new();
     let res_slice = face_resolutions.as_deref().unwrap_or(&empty_vec);
-    let output_mesh = mtk_core::subdivide::adaptive_pixel_split_mesh(
-        &mesh.inner,
-        res_slice,
-        default_resolution,
-        pixels_per_face,
-        max_subdivisions,
-        weld_dist,
-    );
+    let output_mesh = py.allow_threads(|| {
+        mtk_core::subdivide::adaptive_pixel_split_mesh(
+            &mesh.inner,
+            res_slice,
+            default_resolution,
+            pixels_per_face,
+            max_subdivisions,
+            weld_dist,
+        )
+    });
     PyMeshData { inner: output_mesh }
 }

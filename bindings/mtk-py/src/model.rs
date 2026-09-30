@@ -68,27 +68,29 @@ impl PyBakedModelDatabase {
     }
 
     /// Remaps all models in the database to the specified atlas coordinates.
-    pub fn remap_to_atlas(&mut self, atlas: &crate::texture::PyBakedAtlas) {
+    pub fn remap_to_atlas(&mut self, py: Python<'_>, atlas: &crate::texture::PyBakedAtlas) {
         let atlas_map = &atlas.inner.address_map;
-        if let Some(db) = Arc::get_mut(&mut self.inner) {
-            db.remap_to_atlas_with(|tex| {
-                mtk_material::MaterialResolver::resolve(tex, None, atlas_map)
-                    .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
-            });
-        } else {
-            let mut db = (*self.inner).clone();
-            db.remap_to_atlas_with(|tex| {
-                mtk_material::MaterialResolver::resolve(tex, None, atlas_map)
-                    .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
-            });
-            self.inner = Arc::new(db);
-        }
+        py.allow_threads(|| {
+            if let Some(db) = Arc::get_mut(&mut self.inner) {
+                db.remap_to_atlas_with(|tex| {
+                    mtk_material::MaterialResolver::resolve(tex, None, atlas_map)
+                        .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
+                });
+            } else {
+                let mut db = (*self.inner).clone();
+                db.remap_to_atlas_with(|tex| {
+                    mtk_material::MaterialResolver::resolve(tex, None, atlas_map)
+                        .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
+                });
+                self.inner = Arc::new(db);
+            }
+        });
     }
 
     /// Eliminates overlapping, duplicate, and interior contacting faces across all models in the database.
-    pub fn deduplicate_all(&mut self) -> usize {
+    pub fn deduplicate_all(&mut self, py: Python<'_>) -> usize {
         let db = Arc::make_mut(&mut self.inner);
-        db.deduplicate_all()
+        py.allow_threads(|| db.deduplicate_all())
     }
 }
 
@@ -140,6 +142,7 @@ impl PyModelBaker {
     #[pyo3(signature = (stack, state_str, clip_hidden=true))]
     pub fn bake_blockstate(
         &mut self,
+        py: Python<'_>,
         stack: &PyResourcePackStack,
         state_str: &str,
         clip_hidden: bool,
@@ -147,25 +150,30 @@ impl PyModelBaker {
         let bs = BlockState::parse(state_str)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
-        let bs_def = {
-            let bs_path = format!("assets/{}/blockstates/{}.json", bs.namespace, bs.name);
-            stack.inner.open_asset_raw(&bs_path).and_then(|bytes| {
-                serde_json::from_slice::<BlockStateDefinition>(&bytes).ok()
-            })
-        };
+        let (mesh, textures) = py.allow_threads(|| -> Result<(mtk_core::mesh::MeshData, Vec<String>), String> {
+            let bs_def = {
+                let bs_path = format!("assets/{}/blockstates/{}.json", bs.namespace, bs.name);
+                stack.inner.open_asset_raw(&bs_path).and_then(|bytes| {
+                    serde_json::from_slice::<BlockStateDefinition>(&bytes).ok()
+                })
+            };
 
-        let baked = self
-            .inner
-            .bake_blockstate(state_str, bs_def.as_ref(), |model_id| {
-                if let Some(bytes) = stack.inner.open_model_raw(model_id) {
-                    serde_json::from_slice::<BlockModelJson>(&bytes).ok()
-                } else {
-                    None
-                }
-            })
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+            let baked = self
+                .inner
+                .bake_blockstate(state_str, bs_def.as_ref(), |model_id| {
+                    if let Some(bytes) = stack.inner.open_model_raw(model_id) {
+                        serde_json::from_slice::<BlockModelJson>(&bytes).ok()
+                    } else {
+                        None
+                    }
+                })
+                .map_err(|e| e.to_string())?;
 
-        let (mesh, textures) = baked.to_mesh_with_textures(clip_hidden);
+            let (mesh, textures) = baked.to_mesh_with_textures(clip_hidden);
+            Ok((mesh, textures))
+        })
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e))?;
+
         Ok((PyMeshData { inner: mesh }, textures))
     }
 }
