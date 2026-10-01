@@ -493,6 +493,11 @@ impl VoxelStorage {
         if let Some(b) = self.biome_map.get(&IVec3::new(x, y, z)) {
             return b;
         }
+        for dy in [1, -1, 2, -2, 4, -4, 8, -8, 16, -16] {
+            if let Some(b) = self.biome_map.get(&IVec3::new(x, y + dy, z)) {
+                return b;
+            }
+        }
         if let Some(ref pb) = self.primary_biome {
             return pb;
         }
@@ -530,12 +535,33 @@ impl VoxelStorage {
         let sec_wy = coord.y * 16;
         let sec_wz = coord.z * 16;
 
-        sec.build_padded_array(|lx, ly, lz| {
+        let mut padded = sec.build_padded_array(|lx, ly, lz| {
             let wx = sec_wx + lx;
             let wy = sec_wy + ly;
             let wz = sec_wz + lz;
             self.get_block(wx, wy, wz).to_string()
-        })
+        });
+
+        if !padded.is_empty && (!self.biome_map.is_empty() || self.primary_biome.is_some()) {
+            let mut biome_cols = Vec::with_capacity(256);
+            let mid_y = sec_wy + 8;
+            for lx in 0..16 {
+                let wx = sec_wx + lx;
+                for lz in 0..16 {
+                    let wz = sec_wz + lz;
+                    let col = crate::biome::get_smoothed_column_biome(
+                        |bx, y, bz| self.get_biome(bx, y, bz).to_string(),
+                        wx,
+                        mid_y,
+                        wz,
+                    );
+                    biome_cols.push(col);
+                }
+            }
+            padded.biome_data = Some(biome_cols);
+        }
+
+        padded
     }
 
     /// Computes and caches CRC32 for a single section.

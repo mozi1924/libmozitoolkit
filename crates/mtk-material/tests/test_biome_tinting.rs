@@ -69,10 +69,99 @@ fn test_biome_resolver_seeded_and_tint_info() {
     assert_eq!(spruce_info.tint_type, TINT_TYPE_HARDCODED);
     assert!(spruce_info.is_hardcoded);
     assert!(spruce_info.hardcoded_color.is_some());
+    assert_eq!(spruce_info.hardcoded_hex.as_deref(), Some("#619961"));
 
     // grass_block_side has overlay
     assert_eq!(
         resolver.get_overlay_texture("grass_block_side"),
         Some("grass_block_side_overlay")
     );
+}
+
+#[test]
+fn test_grass_block_dirt_untinted_and_negative_tint_index() {
+    let resolver = BiomeResolver::new();
+
+    // Bottom dirt face of grass block with tint_index = -1 must NOT be tinted
+    let dirt_info = resolver.get_tint_info("dirt", Some("grass_block"), Some(-1));
+    assert_eq!(dirt_info.tint_type, TINT_TYPE_NONE);
+    assert_eq!(dirt_info.tint_weight, 0.0);
+    assert_eq!(dirt_info.tint_category, "none");
+
+    // Face with explicit negative tint_index is always untinted
+    assert_eq!(classify_tint_category("dirt", Some("grass_block"), Some(-1)), "none");
+    assert_eq!(classify_tint_category("grass_block_top", Some("grass_block"), Some(-1)), "none");
+    assert_eq!(classify_tint_category("oak_leaves", Some("oak_leaves"), Some(-1)), "none");
+
+    // Multi-layer flora: pink petals (layer 0 = petals untinted, layer 1 = stem grass)
+    assert_eq!(classify_tint_category("pink_petals", Some("pink_petals"), Some(0)), "none");
+    assert_eq!(classify_tint_category("pink_petals_stem", Some("pink_petals"), Some(1)), "grass");
+    assert_eq!(classify_tint_category("pink_petals", Some("pink_petals"), Some(-1)), "none");
+}
+
+#[test]
+fn test_unit_cube_tint_index() {
+    use mtk_core::direction::Direction;
+
+    // Grass block: Up is 0, Down (dirt) and sides are -1
+    assert_eq!(mtk_material::get_unit_cube_tint_index("grass_block", Direction::Up), 0);
+    assert_eq!(mtk_material::get_unit_cube_tint_index("grass_block", Direction::Down), -1);
+    assert_eq!(mtk_material::get_unit_cube_tint_index("grass_block", Direction::North), -1);
+
+    // Leaves: All directions are 0
+    assert_eq!(mtk_material::get_unit_cube_tint_index("oak_leaves", Direction::Up), 0);
+    assert_eq!(mtk_material::get_unit_cube_tint_index("oak_leaves", Direction::Down), 0);
+
+    // Untinted blocks: -1
+    assert_eq!(mtk_material::get_unit_cube_tint_index("dirt", Direction::Up), -1);
+    assert_eq!(mtk_material::get_unit_cube_tint_index("stone", Direction::Up), -1);
+    assert_eq!(mtk_material::get_unit_cube_tint_index("dead_bush", Direction::Up), -1);
+}
+
+#[test]
+fn test_biome_resolver_model_inheritance() {
+    use serde_json::json;
+    use std::collections::HashMap;
+
+    let mut resolver = BiomeResolver::new();
+    let mut models = HashMap::new();
+
+    // Parent model defining textures and elements
+    models.insert(
+        "block/parent_leaves".to_string(),
+        json!({
+            "textures": {
+                "all": "custom_oak_leaves"
+            },
+            "elements": [
+                {
+                    "faces": {
+                        "all": {
+                            "texture": "#all",
+                            "tintindex": 0
+                        }
+                    }
+                }
+            ]
+        }),
+    );
+
+    // Child model inheriting from parent_leaves
+    models.insert(
+        "block/oak_leaves".to_string(),
+        json!({
+            "parent": "block/parent_leaves",
+            "textures": {
+                "all": "05m_oak_leaves_cube"
+            }
+        }),
+    );
+
+    resolver.set_models(models);
+
+    // Child should inherit elements and resolve custom texture as foliage
+    let info = resolver.get_tint_info("05m_oak_leaves_cube", Some("oak_leaves"), Some(0));
+    assert_eq!(info.tint_type, TINT_TYPE_FOLIAGE);
+    assert_eq!(info.tint_category, "foliage");
+    assert_eq!(info.tint_weight, 1.0);
 }

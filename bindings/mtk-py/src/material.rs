@@ -256,13 +256,32 @@ pub struct PyBiomeResolver {
     pub(crate) inner: mtk_material::BiomeResolver,
 }
 
+fn py_dict_to_json_hashmap(py: Python<'_>, dict: &Bound<'_, pyo3::types::PyDict>) -> PyResult<HashMap<String, serde_json::Value>> {
+    let json_module = py.import("json")?;
+    let json_str: String = json_module.call_method1("dumps", (dict,))?.extract()?;
+    let map: HashMap<String, serde_json::Value> = serde_json::from_str(&json_str)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+    Ok(map)
+}
+
 #[pymethods]
 impl PyBiomeResolver {
     #[new]
-    pub fn new() -> Self {
-        Self {
-            inner: mtk_material::BiomeResolver::new(),
+    #[pyo3(signature = (models=None))]
+    pub fn new(py: Python<'_>, models: Option<Bound<'_, pyo3::types::PyDict>>) -> PyResult<Self> {
+        let mut inner = mtk_material::BiomeResolver::new();
+        if let Some(m) = models {
+            let map = py_dict_to_json_hashmap(py, &m)?;
+            inner.set_models(map);
         }
+        Ok(Self { inner })
+    }
+
+    /// Set loaded block models dictionary.
+    pub fn set_models(&mut self, py: Python<'_>, models: Bound<'_, pyo3::types::PyDict>) -> PyResult<()> {
+        let map = py_dict_to_json_hashmap(py, &models)?;
+        self.inner.set_models(map);
+        Ok(())
     }
 
     /// Load BiomeResolver from a JSON string.
@@ -333,8 +352,13 @@ impl PyBiomeResolver {
         dict.set_item("overlay_texture", info.overlay_texture)?;
         dict.set_item("is_hardcoded", info.is_hardcoded)?;
         dict.set_item("hardcoded_color", info.hardcoded_color)?;
+        dict.set_item("hardcoded_hex", info.hardcoded_hex)?;
+        dict.set_item("default_tint_weight", info.tint_weight)?;
+        dict.set_item("default_base_tint_weight", info.base_tint_weight)?;
+        dict.set_item("default_overlay_tint_weight", info.overlay_tint_weight)?;
         Ok(dict.into())
     }
+
 
     /// Compute batch mesh attributes in parallel across all faces.
     #[pyo3(signature = (
@@ -581,3 +605,41 @@ pub fn compute_biome_tint_attributes(
     dict.set_item("colormap_uvs", res.colormap_uvs)?;
     Ok(dict.into())
 }
+
+/// Classify a texture stem and/or block name into an authoritative tint category:
+/// "grass", "foliage", "dry_foliage", "water", "hardcoded", or "none".
+#[pyfunction]
+#[pyo3(signature = (clean_stem, block_name=None, tint_index=None))]
+pub fn classify_tint_category(
+    clean_stem: &str,
+    block_name: Option<&str>,
+    tint_index: Option<i32>,
+) -> &'static str {
+    mtk_material::classify_tint_category(clean_stem, block_name, tint_index)
+}
+
+/// Compute a smooth blended Linear RGBA color across multiple weighted biomes.
+#[pyfunction]
+#[pyo3(signature = (biome_weights, tint_type="grass"))]
+pub fn blend_biome_colors(
+    biome_weights: Vec<(String, f32)>,
+    tint_type: &str,
+) -> [f32; 4] {
+    let weights_ref: Vec<(&str, f32)> = biome_weights.iter().map(|(s, w)| (s.as_str(), *w)).collect();
+    mtk_material::blend_biome_colors(&weights_ref, tint_type)
+}
+
+/// Sample an sRGB color [r, g, b] from 2D colormap image bytes using canonical Minecraft coordinates.
+#[pyfunction]
+#[pyo3(signature = (image_pixels, width, height, temperature, downfall, channels=4))]
+pub fn sample_colormap_pixel(
+    image_pixels: &[u8],
+    width: u32,
+    height: u32,
+    temperature: f32,
+    downfall: f32,
+    channels: usize,
+) -> [f32; 3] {
+    mtk_material::sample_colormap_pixel(image_pixels, width, height, temperature, downfall, channels)
+}
+

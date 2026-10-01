@@ -221,3 +221,36 @@ pub fn blend_biome_colors(biome_weights: &[(&str, f32)], channel: &str) -> [f32;
         [1.0, 1.0, 1.0, 1.0]
     }
 }
+
+/// Sample an sRGB color [r, g, b] from 2D colormap image bytes using canonical Minecraft coordinates:
+/// i = (1.0 - temp) * 255
+/// j = (1.0 - (downfall * temp)) * 255
+pub fn sample_colormap_pixel(
+    image_pixels: &[u8],
+    width: u32,
+    height: u32,
+    temperature: f32,
+    downfall: f32,
+    channels: usize,
+) -> [f32; 3] {
+    if width == 0 || height == 0 || image_pixels.is_empty() || channels < 3 {
+        return [1.0, 1.0, 1.0];
+    }
+    let temp = temperature.clamp(0.0, 1.0);
+    let hum = downfall.clamp(0.0, 1.0);
+    let adj_downfall = hum * temp;
+    let i = ((1.0 - temp) * (width as f32 - 1.0)).round().clamp(0.0, width as f32 - 1.0) as usize;
+    let j = ((1.0 - adj_downfall) * (height as f32 - 1.0)).round().clamp(0.0, height as f32 - 1.0) as usize;
+
+    let idx = (j * width as usize + i) * channels;
+    if idx + 2 < image_pixels.len() {
+        [
+            image_pixels[idx] as f32 / 255.0,
+            image_pixels[idx + 1] as f32 / 255.0,
+            image_pixels[idx + 2] as f32 / 255.0,
+        ]
+    } else {
+        [1.0, 1.0, 1.0]
+    }
+}
+

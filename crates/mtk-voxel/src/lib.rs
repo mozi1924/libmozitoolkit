@@ -12,8 +12,10 @@ pub mod source;
 pub mod storage;
 pub mod types;
 
-// Top-level re-exports
-pub use biome::{get_biome_meta, get_colormap_uv, get_smoothed_biome_data, BiomeMeta};
+pub use biome::{
+    get_biome_meta, get_colormap_uv, get_smoothed_biome_data, get_smoothed_column_biome,
+    BiomeMeta, SmoothedBiomeColumn,
+};
 pub use fluid::{
     calculate_corner_average, calculate_fluid_corner_heights, calculate_fluid_flow_vector,
     emit_fluid_geometry, get_fluid_base_height, get_fluid_side_uvs, get_fluid_top_uvs,

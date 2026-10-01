@@ -215,15 +215,18 @@ pub struct Quad {
 ### 6.2 存储与网格化器
 - `VoxelStorage`: 3D 稀疏世界体素容器（实现 `VoxelReader` 与 `VoxelWriter`），支持包围盒动态裁剪、局部区块快照 `set_section_snapshot`、CRC32 清单比对 `validate_manifest` 与 `ingest_source` 快速灌流。
 - `SectionStorage`: 紧凑的高性能 16x16x16 方块状态 ID 存储。
-- `PaddedVoxelArray`: 带有 1 格外边框 (18x18x18) 的体素采样窗口。
+- `PaddedVoxelArray`: 带有 1 格外边框 (18x18x18) 的体素采样窗口。新增 `biome_data: Option<Vec<SmoothedBiomeColumn>>` 字段携带 256 列 (16x16) 平滑生物群系数据。
+- `SmoothedBiomeColumn` / `get_smoothed_column_biome`:
+  基于原版 5x5 (R=2) 反距离权重核的平滑生物群系柱数据结构与解算函数，平滑计算草方块色彩 (`grass_color`)、树叶色彩 (`foliage_color`)、干枯树叶色彩 (`dry_foliage_color`)、水体色彩 (`water_color`) 与 Colormap 三角形采样 UV (`colormap_uv`)。
 - `SectionMesher`:
   - 输入：`PaddedVoxelArray`, `ModelBaker`, `MesherConfig`（配置 `z_up_coordinates: bool` 标准化输出、`origin_centered: bool` 底部中心原点对齐、`weld_vertices: bool` 空间顶点焊接、`selection_bounds: Option<([i32; 3], [i32; 3])>` 包围盒对齐、`atlas: Option<Arc<AtlasAddressMap>>` 图集寻址、`biome_resolver: Option<Arc<BiomeResolver>>` 生物群系调色板着色与 `custom_aliases` 别名映射）。
   - 输出：`MeshData`（包含 `mtk_source_texture_key`、`mtk_material_slot`、`mtk_atlas_chunk_id`、`mtk_uv_tiling_transform`、`mtk_biome_tint_data` 等 15 项标准面属性）。自动剔除多 Element 模型中的冗余 Overlay Decal 面（如草方块侧面叠加层），由前端着色器单面多重采样无缝合成，杜绝共面发黑与 Z-fighting。
+  - **生物群系平滑过渡 (Biome Transition Smoothing)**：在发射网格面时，针对染色面动态索引柱级 `SmoothedBiomeColumn`，将平滑后的调色板颜色与 Colormap UV 注入面属性，使视口中生物群系交界处呈现原版无缝柔和渐变。
   - **Palette 级预解析加速 (Phase 2)**：在遍历 4,096 体素前构建 `palette_meshing_data`，将模型面/单面方块的材质槽、纹理别名、图集 UV 映射及生物群系着色预先解算至 Palette 级别（单区块仅执行 10~50 次），消除了内部热循环中重复的字符串分配、哈希查找与 UV 矩形变换。
   - **6 向分桶与快速通道 (Phase 3)**：将模型面划分为 6 个主方向分桶 (`culled_faces: [Vec; 6]`) 与免剔除分桶 (`unculled_faces`)。热循环中若邻居方块不透明，1 次判定即可直接跳过该方向的所有面；对于免剔除的植被/交叉模型（草、花、火把等），完全跳过邻居采样与遮挡判定直接发射几何。
 - `DeltaMesher`: 增量网格化器，针对单点方块破坏/放置与脏区块，快速并行重构局部几何面。
 - `calculate_face_ao(neighbors: &[bool; 8]) -> [f32; 4]`: 原版 4 顶点平滑 AO 遮蔽因子计算。
-- `FluidType`, `calculate_fluid_corner_heights`: 水/岩浆流体网格与流向计算。
+- `FluidType`, `calculate_fluid_corner_heights`: 水/岩浆流体网格与流向计算（流体面同步注入平滑水体色彩与 Colormap UV）。
 
 ---
 
@@ -255,20 +258,29 @@ pub struct Quad {
 
 ### 7.1 核心类型与函数
 - `CANONICAL_BIOMES`: 内置包含 66 种 Minecraft 26.2 官方生物群系调色板常数（`PLAINS`, `DESERT`, `SWAMP`, `CHERRY_GROVE` 等）。
+- `BLOCK_TINT_REGISTRY`: 原版权威方块染色分层注册表（覆盖 35+ 种方块，精确支持多层植被如粉红花簇/野花的花瓣与茎叶分层染色）。
+- `HARDCODED_BLOCK_TINTS`: 独立于生物群系的固定色方块表（云杉树叶、白桦树叶、睡莲、西瓜茎、南瓜茎、红石线等）。
+- `classify_tint_category(clean_stem, block_name, tint_index) -> &'static str`:
+  权威染色语义分类器（返回 `"grass"`, `"foliage"`, `"dry_foliage"`, `"water"`, `"hardcoded"`, `"none"`）。严格遵循原版规范：`tint_index < 0` 永不染色；优先依据 `BLOCK_TINT_REGISTRY` 与 `tint_index` 进行精确图层语义解析；未知模型 `ti >= 0` 回退至 `"none"`。
+- `get_unit_cube_tint_index(clean_block, dir) -> i16`: 单元立方体网格化面染色索引确定（草方块顶面为 0，底面泥土与侧面为 -1；树叶/草本全向为 0；非染色方块全向为 -1）。
 - `BiomePalette`:
   - 属性：`id`, `name`, `temperature`, `humidity`, `grass_hex`, `foliage_hex`, `dry_foliage_hex`, `water_hex` 等。
   - 方法：`grass_linear()`, `foliage_linear()`, `water_linear()`, `colormap_uv()`。
 - `BiomeResolver`:
   - 扫描资源包模型 JSON 发现 `tintindex` 与伴随贴图图层。
+  - 支持 `set_models(models)` 动态注入方块模型并递归解析 `parent` 继承树合并材质贴图与 elements。
   - 支持 `to_json()`, `from_json()`, `from_file(path)` 极速加载预烘焙的 `biome_mapping.json`。
 - `compute_mesh_biome_attributes` / `compute_mesh_biome_attributes_custom`:
   利用 Rayon 多线程对网格面纹理键进行并行分析，生成打包的 Tint 颜色与 Colormap UV 属性。
+- `sample_colormap_pixel(pixels, width, height, temp, hum, channels) -> [f32; 3]`:
+  标准原版 256x256 三角形 Colormap 像素采样算法。
 - 色彩空间转换函数：
   - `srgb_to_linear(c) -> c` / `linear_to_srgb(c) -> c`
   - `get_colormap_uv(temperature, humidity) -> [f32; 2]`
   - `hex_to_linear_rgba(hex) -> [f32; 4]`
 - `MaterialResolver`: 数据驱动的通用材质与贴图匹配器。
 - `remap_mesh_multi_uvs_parallel`: 并行输出 Atlas UV 与 Local/Standalone [0, 1] UV 及逐面路由通道。
+
 
 ---
 

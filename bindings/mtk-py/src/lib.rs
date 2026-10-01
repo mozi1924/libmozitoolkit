@@ -20,8 +20,8 @@ use pyo3::prelude::*;
 
 pub use cull::PyFaceCuller;
 pub use material::{
-    compute_biome_tint_attributes, get_all_biomes, get_biome_meta, PyBiomeResolver,
-    PyGridAtlasSpec, PyMaterialResolver,
+    blend_biome_colors, classify_tint_category, compute_biome_tint_attributes, get_all_biomes,
+    get_biome_meta, sample_colormap_pixel, PyBiomeResolver, PyGridAtlasSpec, PyMaterialResolver,
 };
 pub use mesh::{PyAttributeDomain, PyMeshData};
 pub use mesher::PySectionMesher;
@@ -134,6 +134,9 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMaterialResolver>()?;
     m.add_class::<PyBiomeResolver>()?;
     m.add_function(wrap_pyfunction!(compute_biome_tint_attributes, m)?)?;
+    m.add_function(wrap_pyfunction!(classify_tint_category, m)?)?;
+    m.add_function(wrap_pyfunction!(blend_biome_colors, m)?)?;
+    m.add_function(wrap_pyfunction!(sample_colormap_pixel, m)?)?;
     m.add_function(wrap_pyfunction!(get_biome_meta, m)?)?;
     m.add_function(wrap_pyfunction!(get_all_biomes, m)?)?;
     m.add_function(wrap_pyfunction!(material::get_colormap_uv, m)?)?;

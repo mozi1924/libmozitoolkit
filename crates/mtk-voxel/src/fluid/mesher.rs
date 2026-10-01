@@ -335,6 +335,8 @@ pub fn emit_fluid_geometry<F>(
     config: &MesherConfig,
     material_slot: u16,
     mut collector: Option<&mut crate::mesher::FaceAttributesCollector>,
+    tint_color: Option<[f32; 4]>,
+    colormap_uv: Option<[f32; 3]>,
 ) -> usize
 where
     F: FnMut(i32, i32, i32) -> String,
@@ -434,8 +436,12 @@ where
             .push(if fluid_type == FluidType::Water { 0 } else { -1 });
 
         if let Some(ref mut col) = collector {
-            let (tint_data, tint_color, colormap_uv) = if fluid_type == FluidType::Water {
-                ([1.0, 1.0, 1.0, 3.0], [0.24, 0.44, 0.99, 1.0], [0.8, 0.4, 0.0])
+            let (f_tint_data, f_tint_color, f_colormap_uv) = if fluid_type == FluidType::Water {
+                (
+                    [1.0, 1.0, 1.0, 3.0],
+                    tint_color.unwrap_or([0.24, 0.44, 0.99, 1.0]),
+                    colormap_uv.unwrap_or([0.8, 0.4, 0.0]),
+                )
             } else {
                 ([1.0, 1.0, 0.0, 0.0], [1.0, 1.0, 1.0, 1.0], [0.8, 0.4, 0.0])
             };
@@ -448,9 +454,9 @@ where
                 [1.0, 1.0, 0.0, 0.0],
                 0.0,
                 0,
-                tint_data,
-                tint_color,
-                colormap_uv,
+                f_tint_data,
+                f_tint_color,
+                f_colormap_uv,
                 glam::IVec3::new(x, y, z),
                 dir_code,
             );

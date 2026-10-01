@@ -217,5 +217,105 @@ fn test_grass_block_meshing_no_duplicate_overlay_faces() {
     assert_eq!(mesh.face_count(), 6, "Must emit exactly 6 faces, not 10 faces!");
     assert_eq!(mesh.triangle_count(), 12);
     assert_eq!(mesh.vertex_count(), 24);
+
+    // Verify tint data attributes
+    let tint_data_attr = mesh.get_custom_attribute("mtk_biome_tint_data").expect("Must have mtk_biome_tint_data");
+    let tint_data = match &tint_data_attr.data {
+        mtk_core::attributes::AttributeData::Float4(v) => v,
+        _ => panic!("Expected Float4"),
+    };
+    assert_eq!(tint_data.len(), 6);
+
+    let dir_attr = mesh.get_custom_attribute("mtk_face_dir").expect("Must have mtk_face_dir");
+    let dirs = match &dir_attr.data {
+        mtk_core::attributes::AttributeData::UInt8(v) => v,
+        _ => panic!("Expected UInt8"),
+    };
+
+    for i in 0..6 {
+        let dir = dirs[i];
+        let td = tint_data[i];
+        if dir == Direction::Up.to_index() as u8 {
+            // Up face: top grass, tinted
+            assert_eq!(td[0], 1.0, "Top face base_weight must be 1.0");
+            assert_eq!(td[1], 1.0, "Top face overlay_weight must be 1.0");
+            assert_eq!(td[2], 1.0, "Top face tint_weight must be 1.0");
+            assert_eq!(td[3], 1.0, "Top face tint_type must be 1 (GRASS)");
+        } else if dir == Direction::Down.to_index() as u8 {
+            // Down face: dirt, untinted
+            assert_eq!(td[2], 0.0, "Dirt bottom face tint_weight must be 0.0 (untinted!)");
+        } else {
+            // Side faces: grass_block_side, base untinted, overlay tinted
+            assert_eq!(td[0], 0.0, "Side face base_weight must be 0.0 (dirt base untinted)");
+            assert_eq!(td[1], 1.0, "Side face overlay_weight must be 1.0 (grass overlay tinted)");
+            assert_eq!(td[2], 1.0, "Side face tint_weight must be 1.0 (tint enabled)");
+            assert_eq!(td[3], 1.0, "Side face tint_type must be 1 (GRASS)");
+        }
+    }
+}
+
+#[test]
+fn test_biome_transition_smoothing() {
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+    // Left half (x in 0..8): plains, Right half (x in 8..16): desert
+    for x in 0..16 {
+        for z in 0..16 {
+            let biome = if x < 8 { "minecraft:plains" } else { "minecraft:desert" };
+            world.set_block(x, 0, z, "minecraft:grass_block", Some(biome));
+        }
+    }
+
+    let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
+    assert!(padded.biome_data.is_some(), "Padded array must contain smoothed biome data");
+
+    let biome_cols = padded.biome_data.as_ref().unwrap();
+    assert_eq!(biome_cols.len(), 256);
+
+    let plains_pal = mtk_material::get_biome_palette("plains");
+    let desert_pal = mtk_material::get_biome_palette("desert");
+
+    // Deep in plains (x = 0, z = 8)
+    let col_plains = &biome_cols[0 * 16 + 8];
+    // Deep in desert (x = 15, z = 8)
+    let col_desert = &biome_cols[15 * 16 + 8];
+    // On the transition boundary (x = 7, z = 8 and x = 8, z = 8)
+    let col_trans_7 = &biome_cols[7 * 16 + 8];
+    let col_trans_8 = &biome_cols[8 * 16 + 8];
+
+    // Colormap UVs must smoothly transition
+    let _plains_uv = plains_pal.colormap_uv();
+    let _desert_uv = desert_pal.colormap_uv();
+
+    assert!(col_plains.colormap_uv[0] > col_desert.colormap_uv[0]);
+    assert!(col_trans_7.colormap_uv[0] <= col_plains.colormap_uv[0] + 1e-4);
+    assert!(col_trans_7.colormap_uv[0] >= col_trans_8.colormap_uv[0] - 1e-4);
+    assert!(col_trans_8.colormap_uv[0] >= col_desert.colormap_uv[0] - 1e-4);
+
+    // Mesh the section and verify mtk_colormap_uv and mtk_biome_tint_color
+    let culler = FaceCuller::default();
+    let config = MesherConfig::default();
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+
+    let cm_attr = mesh.get_custom_attribute("mtk_colormap_uv").expect("Must have mtk_colormap_uv");
+    let cm_uvs = match &cm_attr.data {
+        mtk_core::attributes::AttributeData::Float3(v) => v,
+        _ => panic!("Expected Float3"),
+    };
+    assert!(!cm_uvs.is_empty());
+
+    let color_attr = mesh.get_custom_attribute("mtk_biome_tint_color").expect("Must have mtk_biome_tint_color");
+    let colors = match &color_attr.data {
+        mtk_core::attributes::AttributeData::Float4(v) => v,
+        _ => panic!("Expected Float4"),
+    };
+    assert!(!colors.is_empty());
+
+    // Verify there are multiple distinct intermediate values in mtk_colormap_uv across the transition!
+    let mut distinct_u = std::collections::HashSet::new();
+    for uv in cm_uvs {
+        distinct_u.insert((uv[0] * 100.0).round() as i32);
+    }
+    assert!(distinct_u.len() > 2, "Transition zone must produce continuous blended gradient values, not a binary step!");
 }
 

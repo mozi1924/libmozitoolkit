@@ -249,6 +249,7 @@ impl SectionStorage {
             palette,
             padded_voxels: padded,
             is_empty: self.is_empty(),
+            biome_data: None,
         }
     }
 }
@@ -265,6 +266,9 @@ pub struct PaddedVoxelArray {
     pub padded_voxels: Vec<u16>,
     /// Whether the core section contains only air.
     pub is_empty: bool,
+    /// Precomputed smoothed biome columns (lx * 16 + lz in 0..256), if available.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub biome_data: Option<Vec<crate::biome::SmoothedBiomeColumn>>,
 }
 
 impl PaddedVoxelArray {

@@ -12,11 +12,12 @@ pub mod types;
 pub use biome::{
     blend_biome_colors, classify_tint_category, compute_mesh_biome_attributes,
     compute_mesh_biome_attributes_custom, get_biome_palette, get_colormap_uv,
-    get_hardcoded_tint, hex_to_linear_rgba, hex_to_srgb, linear_to_srgb,
+    get_hardcoded_tint, get_hardcoded_tint_hex, get_unit_cube_tint_index,
+    hex_to_linear_rgba, hex_to_srgb, linear_to_srgb, sample_colormap_pixel,
     srgb_to_linear, BiomePalette, BiomeResolver, CustomBiomeSettings,
-    MeshBiomeAttributesResult, TintInfo, CANONICAL_BIOMES, HARDCODED_BLOCK_TINTS,
-    TINT_TYPE_DRY_FOLIAGE, TINT_TYPE_FOLIAGE, TINT_TYPE_GRASS, TINT_TYPE_HARDCODED,
-    TINT_TYPE_NONE, TINT_TYPE_WATER,
+    MeshBiomeAttributesResult, TintInfo, BLOCK_TINT_REGISTRY, CANONICAL_BIOMES,
+    HARDCODED_BLOCK_TINTS, TINT_TYPE_DRY_FOLIAGE, TINT_TYPE_FOLIAGE,
+    TINT_TYPE_GRASS, TINT_TYPE_HARDCODED, TINT_TYPE_NONE, TINT_TYPE_WATER,
 };
 pub use error::MaterialError;
 pub use remap::batch::{remap_mesh_multi_uvs_parallel, remap_mesh_uvs_parallel};

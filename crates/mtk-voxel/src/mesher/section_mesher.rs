@@ -263,11 +263,7 @@ impl SectionMesher {
                                 (format!("minecraft:block/{}", clean_sub), None, 0, 0, 0)
                             };
 
-                        let tint_idx = if (clean_sub == "grass_block" || clean_sub == "grass") && dir == Direction::Up {
-                            0
-                        } else {
-                            -1
-                        };
+                        let tint_idx = mtk_material::get_unit_cube_tint_index(clean_sub, dir);
                         let (tint_data, tint_color, colormap_uv) = compute_face_tint(
                             &final_tex_key,
                             clean_block,
@@ -352,6 +348,18 @@ impl SectionMesher {
                             }
                         };
 
+                        let col_idx = lx * 16 + lz;
+                        let (fluid_col, fluid_uv) = if let Some(ref biome_cols) = padded.biome_data {
+                            if col_idx < biome_cols.len() {
+                                let col = &biome_cols[col_idx];
+                                (Some(col.water_color), Some([col.colormap_uv[0], col.colormap_uv[1], 0.0]))
+                            } else {
+                                (None, None)
+                            }
+                        } else {
+                            (None, None)
+                        };
+
                         emit_fluid_geometry(
                             &mut mesh,
                             block_pos.x,
@@ -366,6 +374,8 @@ impl SectionMesher {
                             config,
                             0,
                             Some(&mut collector),
+                            fluid_col,
+                            fluid_uv,
                         );
 
                         // If it's pure fluid and not waterlogged, don't generate solid cube mesh
@@ -522,6 +532,27 @@ impl SectionMesher {
                                     )
                                 };
 
+                            let (final_tint_color, final_colormap_uv) = if let Some(ref biome_cols) = padded.biome_data {
+                                let col_idx = lx * 16 + lz;
+                                if col_idx < biome_cols.len() && tint_data[2] > 0.0 {
+                                    let col = &biome_cols[col_idx];
+                                    let uv = [col.colormap_uv[0], col.colormap_uv[1], 0.0];
+                                    let c = match tint_data[3] as u8 {
+                                        mtk_material::TINT_TYPE_GRASS => col.grass_color,
+                                        mtk_material::TINT_TYPE_FOLIAGE => col.foliage_color,
+                                        mtk_material::TINT_TYPE_DRY_FOLIAGE => col.dry_foliage_color,
+                                        mtk_material::TINT_TYPE_WATER => col.water_color,
+                                        mtk_material::TINT_TYPE_HARDCODED => tint_color,
+                                        _ => tint_color,
+                                    };
+                                    (c, uv)
+                                } else {
+                                    (tint_color, colormap_uv)
+                                }
+                            } else {
+                                (tint_color, colormap_uv)
+                            };
+
                             emit_baked_face(
                                 &mut mesh,
                                 face,
@@ -537,8 +568,8 @@ impl SectionMesher {
                                 chunk_id,
                                 tex_id,
                                 tint_data,
-                                tint_color,
-                                colormap_uv,
+                                final_tint_color,
+                                final_colormap_uv,
                                 block_pos,
                                 face_dir,
                             );
@@ -732,6 +763,27 @@ impl SectionMesher {
                                     )
                                 };
 
+                            let (final_tint_color, final_colormap_uv) = if let Some(ref biome_cols) = padded.biome_data {
+                                let col_idx = lx * 16 + lz;
+                                if col_idx < biome_cols.len() && tint_data[2] > 0.0 {
+                                    let col = &biome_cols[col_idx];
+                                    let uv = [col.colormap_uv[0], col.colormap_uv[1], 0.0];
+                                    let c = match tint_data[3] as u8 {
+                                        mtk_material::TINT_TYPE_GRASS => col.grass_color,
+                                        mtk_material::TINT_TYPE_FOLIAGE => col.foliage_color,
+                                        mtk_material::TINT_TYPE_DRY_FOLIAGE => col.dry_foliage_color,
+                                        mtk_material::TINT_TYPE_WATER => col.water_color,
+                                        mtk_material::TINT_TYPE_HARDCODED => tint_color,
+                                        _ => tint_color,
+                                    };
+                                    (c, uv)
+                                } else {
+                                    (tint_color, colormap_uv)
+                                }
+                            } else {
+                                (tint_color, colormap_uv)
+                            };
+
                             emit_unit_cube_face(
                                 &mut mesh,
                                 dir,
@@ -747,8 +799,8 @@ impl SectionMesher {
                                 chunk_id,
                                 tex_id,
                                 tint_data,
-                                tint_color,
-                                colormap_uv,
+                                final_tint_color,
+                                final_colormap_uv,
                                 block_pos,
                             );
                         }

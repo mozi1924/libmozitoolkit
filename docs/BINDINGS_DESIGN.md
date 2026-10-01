@@ -60,12 +60,19 @@ bindings/
 
 ##### 2. 材质与生物群系 (`mtk.material`)
 - `PyBiomeResolver`:
+  - `BiomeResolver(models=None)`: 可选传入原始模型字典构建解析器。
+  - `set_models(models)`: 动态注入方块模型字典并递归解析 parent 继承树。
+  - `get_tint_info(texture_name, block_name=None, tint_index=None)`: 返回包含 `tint_type`, `tint_category`, `tint_weight`, `base_tint_weight`, `overlay_tint_weight`, `hardcoded_hex`, `is_hardcoded` 等完整元数据的字典。
   - `from_file(path)`: 从预编译的 `biome_mapping.json` 极速载入映射。
   - `to_json()` / `from_json(json_str)`: 序列化支持。
+- `classify_tint_category(clean_stem, block_name=None, tint_index=None) -> str`: 权威染色语义分类器。
+- `blend_biome_colors(biome_weights, tint_type="grass") -> [f32; 4]`: 多群系平滑线性色彩过渡混合。
+- `sample_colormap_pixel(image_bytes, width, height, temp, hum, channels=4) -> [f32; 3]`: 原版 256x256 三角形 Colormap 像素采样。
 - `compute_biome_tint_attributes(...)`: Rayon 多线程批量计算网格面的 Tint 颜色与 Colormap UV 属性。
 - `get_biome_meta(name)` / `get_all_biomes()`: 查询 66 原版生物群系规范参数（温度、湿度、草方块/树叶/水体颜色）。
 - `srgb_to_linear(color)` / `linear_to_srgb(color)` / `get_colormap_uv(temp, humidity)`: 线性色彩空间数学。
 - `MaterialResolver`: 材质别名解算与多通道 UV 重映射 (`remap_mesh_multi_uvs_parallel`)。
+
 
 ##### 3. 体素与实时同步 (`mtk.voxel` & `mtk.sync`)
 - `VoxelStorage`: 稀疏体素世界存储，纳秒级快照更新与选区包围盒裁剪。
