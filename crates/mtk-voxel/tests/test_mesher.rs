@@ -319,3 +319,62 @@ fn test_biome_transition_smoothing() {
     assert!(distinct_u.len() > 2, "Transition zone must produce continuous blended gradient values, not a binary step!");
 }
 
+#[test]
+fn test_selection_boundary_no_color_bleeding() {
+    let mut world = VoxelStorage::new();
+    // Selection with non-zero world coordinates
+    let min_x = 100;
+    let min_y = 64;
+    let min_z = 200;
+    let size_x = 16;
+    let size_y = 16;
+    let size_z = 16;
+
+    world.set_bounds(min_x, min_y, min_z, size_x, size_y, size_z);
+
+    // Populate every block in the selection with desert biome
+    for x in 0..16 {
+        for z in 0..16 {
+            world.set_block(
+                min_x + x,
+                min_y,
+                min_z + z,
+                "minecraft:grass_block",
+                Some("minecraft:desert"),
+            );
+        }
+    }
+
+    let sec_coord = IVec3::new(min_x >> 4, min_y >> 4, min_z >> 4);
+    let padded = world.get_section_padded_array(sec_coord);
+    assert!(padded.biome_data.is_some());
+
+    let biome_cols = padded.biome_data.as_ref().unwrap();
+    let desert_pal = mtk_material::get_biome_palette("desert");
+    let desert_uv = desert_pal.colormap_uv();
+    let desert_grass = desert_pal.grass_linear();
+
+    // Verify all 256 columns, especially boundary columns, have ZERO bleeding into default Plains
+    for lx in 0..16 {
+        for lz in 0..16 {
+            let col = &biome_cols[lx * 16 + lz];
+            assert!(
+                (col.colormap_uv[0] - desert_uv[0]).abs() < 1e-4,
+                "Col ({}, {}) colormap_uv[0] was {}, expected desert {}",
+                lx, lz, col.colormap_uv[0], desert_uv[0]
+            );
+            assert!(
+                (col.colormap_uv[1] - desert_uv[1]).abs() < 1e-4,
+                "Col ({}, {}) colormap_uv[1] was {}, expected desert {}",
+                lx, lz, col.colormap_uv[1], desert_uv[1]
+            );
+            assert!(
+                (col.grass_color[0] - desert_grass[0]).abs() < 1e-4,
+                "Col ({}, {}) grass_color was contaminated by bleeding",
+                lx, lz
+            );
+        }
+    }
+}
+
+

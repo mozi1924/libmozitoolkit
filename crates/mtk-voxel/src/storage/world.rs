@@ -49,6 +49,8 @@ pub struct VoxelStorage {
     pub sections: HashMap<IVec3, SectionStorage>,
     /// Global biome map by block coordinate `(x, y, z)`.
     pub biome_map: HashMap<IVec3, String>,
+    /// 2D column biome cache for fast lookup independent of elevation differences.
+    pub biome_column_map: HashMap<[i32; 2], String>,
     /// Default primary biome when unspecified.
     pub primary_biome: Option<String>,
     /// Set of section coordinates that have been modified and require remeshing.
@@ -73,6 +75,7 @@ impl Clone for VoxelStorage {
             size_z: self.size_z,
             sections: self.sections.clone(),
             biome_map: self.biome_map.clone(),
+            biome_column_map: self.biome_column_map.clone(),
             primary_biome: self.primary_biome.clone(),
             dirty_sections: self.dirty_sections.clone(),
             known_empty_sections: self.known_empty_sections.clone(),
@@ -93,6 +96,7 @@ impl Default for VoxelStorage {
             size_z: 0,
             sections: HashMap::new(),
             biome_map: HashMap::new(),
+            biome_column_map: HashMap::new(),
             primary_biome: None,
             dirty_sections: HashSet::new(),
             known_empty_sections: HashSet::new(),
@@ -130,6 +134,7 @@ impl VoxelStorage {
     pub fn clear(&mut self) {
         self.sections.clear();
         self.biome_map.clear();
+        self.biome_column_map.clear();
         self.dirty_sections.clear();
         self.known_empty_sections.clear();
         self.primary_biome = None;
@@ -269,6 +274,10 @@ impl VoxelStorage {
                 && pos.z <= new_max_z
         });
 
+        self.biome_column_map.retain(|&[x, z], _| {
+            x >= min_x && x <= new_max_x && z >= min_z && z <= new_max_z
+        });
+
         self.min_x = min_x;
         self.min_y = min_y;
         self.min_z = min_z;
@@ -343,6 +352,7 @@ impl VoxelStorage {
 
         if let Some(b) = biome {
             self.biome_map.insert(IVec3::new(x, y, z), b.to_string());
+            self.biome_column_map.insert([x, z], b.to_string());
         }
 
         let sec = self
@@ -479,6 +489,7 @@ impl VoxelStorage {
                         let b_idx = bi[idx] as usize;
                         if b_idx < bp.len() {
                             self.biome_map.insert(IVec3::new(wx, wy, wz), bp[b_idx].clone());
+                            self.biome_column_map.insert([wx, wz], bp[b_idx].clone());
                         }
                     }
                 }
@@ -496,6 +507,22 @@ impl VoxelStorage {
         for dy in [1, -1, 2, -2, 4, -4, 8, -8, 16, -16] {
             if let Some(b) = self.biome_map.get(&IVec3::new(x, y + dy, z)) {
                 return b;
+            }
+        }
+        if let Some(b) = self.biome_column_map.get(&[x, z]) {
+            return b;
+        }
+        // If coordinate is outside active selection bounds, horizontally clamp to nearest valid column
+        if self.size_x > 0 && self.size_z > 0 {
+            let cx = x.clamp(self.min_x, self.min_x + self.size_x - 1);
+            let cz = z.clamp(self.min_z, self.min_z + self.size_z - 1);
+            if cx != x || cz != z {
+                if let Some(b) = self.biome_map.get(&IVec3::new(cx, y, cz)) {
+                    return b;
+                }
+                if let Some(b) = self.biome_column_map.get(&[cx, cz]) {
+                    return b;
+                }
             }
         }
         if let Some(ref pb) = self.primary_biome {
@@ -544,15 +571,46 @@ impl VoxelStorage {
 
         if !padded.is_empty && (!self.biome_map.is_empty() || self.primary_biome.is_some()) {
             let mut biome_cols = Vec::with_capacity(256);
+            let (min_x, _, min_z, size_x, _, size_z) = self.get_bounds();
+            let has_bounds = size_x > 0 && size_z > 0;
+            let min_bound_x = min_x;
+            let max_bound_x = min_x + size_x - 1;
+            let min_bound_z = min_z;
+            let max_bound_z = min_z + size_z - 1;
+
             let mid_y = sec_wy + 8;
             for lx in 0..16 {
                 let wx = sec_wx + lx;
                 for lz in 0..16 {
                     let wz = sec_wz + lz;
+
+                    // Prefer block height in this column if non-air block exists, else default to mid_y
+                    let mut sample_y = mid_y;
+                    for ly in (0..16).rev() {
+                        let state = sec.get_local_state(lx as usize, ly as usize, lz as usize);
+                        if state != "minecraft:air" && !state.starts_with("minecraft:air") {
+                            sample_y = sec_wy + ly as i32;
+                            break;
+                        }
+                    }
+
+                    let center_b = self.get_biome(wx, sample_y, wz);
+
                     let col = crate::biome::get_smoothed_column_biome(
-                        |bx, y, bz| self.get_biome(bx, y, bz).to_string(),
+                        |bx, y, bz| {
+                            let cbx = if has_bounds { bx.clamp(min_bound_x, max_bound_x) } else { bx };
+                            let cbz = if has_bounds { bz.clamp(min_bound_z, max_bound_z) } else { bz };
+                            let b = self.get_biome(cbx, y, cbz);
+                            // Avoid erroneous fallback to plains if the sample column had no data but center_b is non-plains
+                            if b == "minecraft:plains" && center_b != "minecraft:plains" {
+                                if !self.biome_column_map.contains_key(&[cbx, cbz]) && !self.biome_map.contains_key(&IVec3::new(cbx, y, cbz)) {
+                                    return center_b.to_string();
+                                }
+                            }
+                            b.to_string()
+                        },
                         wx,
-                        mid_y,
+                        sample_y,
                         wz,
                     );
                     biome_cols.push(col);
@@ -718,6 +776,7 @@ impl VoxelStorage {
                         let b_idx = bi[idx] as usize;
                         if b_idx < bp.len() {
                             self.biome_map.insert(IVec3::new(wx, wy, wz), bp[b_idx].clone());
+                            self.biome_column_map.insert([wx, wz], bp[b_idx].clone());
                         }
                     }
                 }

@@ -213,11 +213,11 @@ pub struct Quad {
 - `ingest_from_source(source, target, sections)`: 从任意 `VoxelSource` 批量流式灌入 `VoxelWriter`。
 
 ### 6.2 存储与网格化器
-- `VoxelStorage`: 3D 稀疏世界体素容器（实现 `VoxelReader` 与 `VoxelWriter`），支持包围盒动态裁剪、局部区块快照 `set_section_snapshot`、CRC32 清单比对 `validate_manifest` 与 `ingest_source` 快速灌流。
+- `VoxelStorage`: 3D 稀疏世界体素容器（实现 `VoxelReader` 与 `VoxelWriter`），支持包围盒动态裁剪、局部区块快照 `set_section_snapshot`、CRC32 清单比对 `validate_manifest` 与 `ingest_source` 快速灌流。内置 `biome_column_map` 二维列群系高速缓存与选区边界边缘约束（Edge Clamping），彻底杜绝选区边缘外推采样产生平原默认色渗色。
 - `SectionStorage`: 紧凑的高性能 16x16x16 方块状态 ID 存储。
 - `PaddedVoxelArray`: 带有 1 格外边框 (18x18x18) 的体素采样窗口。新增 `biome_data: Option<Vec<SmoothedBiomeColumn>>` 字段携带 256 列 (16x16) 平滑生物群系数据。
 - `SmoothedBiomeColumn` / `get_smoothed_column_biome`:
-  基于原版 5x5 (R=2) 反距离权重核的平滑生物群系柱数据结构与解算函数，平滑计算草方块色彩 (`grass_color`)、树叶色彩 (`foliage_color`)、干枯树叶色彩 (`dry_foliage_color`)、水体色彩 (`water_color`) 与 Colormap 三角形采样 UV (`colormap_uv`)。
+  基于原版 5x5 (R=2) 反距离权重核的平滑生物群系柱数据结构与解算函数，平滑计算草方块色彩 (`grass_color`)、树叶色彩 (`foliage_color`)、干枯树叶色彩 (`dry_foliage_color`)、水体色彩 (`water_color`) 与 Colormap 三角形采样 UV (`colormap_uv`)。针对选区边界执行边缘向内钳位与中心回退保护，消除边界渗色。
 - `SectionMesher`:
   - 输入：`PaddedVoxelArray`, `ModelBaker`, `MesherConfig`（配置 `z_up_coordinates: bool` 标准化输出、`origin_centered: bool` 底部中心原点对齐、`weld_vertices: bool` 空间顶点焊接、`selection_bounds: Option<([i32; 3], [i32; 3])>` 包围盒对齐、`atlas: Option<Arc<AtlasAddressMap>>` 图集寻址、`biome_resolver: Option<Arc<BiomeResolver>>` 生物群系调色板着色与 `custom_aliases` 别名映射）。
   - 输出：`MeshData`（包含 `mtk_source_texture_key`、`mtk_material_slot`、`mtk_atlas_chunk_id`、`mtk_uv_tiling_transform`、`mtk_biome_tint_data` 等 15 项标准面属性）。自动剔除多 Element 模型中的冗余 Overlay Decal 面（如草方块侧面叠加层），由前端着色器单面多重采样无缝合成，杜绝共面发黑与 Z-fighting。
