@@ -3,7 +3,7 @@ use glam::Vec3;
 use mtk_core::direction::Direction;
 use mtk_core::mesh::MeshData;
 use mtk_cull::engine::parse_block_name_and_props;
-use mtk_cull::{is_inherently_waterlogged_name, FaceCuller};
+use mtk_cull::FaceCuller;
 
 use crate::fluid_uv::{get_fluid_side_uvs, get_fluid_top_uvs};
 use crate::types::MesherConfig;
@@ -48,8 +48,7 @@ pub fn get_fluid_base_height(state_str: &str) -> f32 {
 
     let (name, props) = parse_block_name_and_props(state_str);
     let clean = name.strip_prefix("minecraft:").unwrap_or(&name);
-    let is_waterlogged = props.get("waterlogged").map(|v| v.as_str()) == Some("true")
-        || is_inherently_waterlogged_name(clean);
+    let is_waterlogged = props.get("waterlogged").map(|v| v.as_str()) == Some("true");
     if is_waterlogged {
         return MAX_FLUID_HEIGHT;
     }
@@ -90,8 +89,7 @@ where
 
     let (name, props) = parse_block_name_and_props(&state_str);
     let clean = name.strip_prefix("minecraft:").unwrap_or(&name);
-    let is_waterlogged = props.get("waterlogged").map(|v| v.as_str()) == Some("true")
-        || is_inherently_waterlogged_name(clean);
+    let is_waterlogged = props.get("waterlogged").map(|v| v.as_str()) == Some("true");
     let clean = clean.strip_prefix("flowing_").unwrap_or(clean);
 
     let is_fluid_match =
@@ -103,8 +101,7 @@ where
         if !above_state.is_empty() && above_state != "minecraft:air" {
             let (a_name, a_props) = parse_block_name_and_props(&above_state);
             let a_clean = a_name.strip_prefix("minecraft:").unwrap_or(&a_name);
-            let a_waterlogged = a_props.get("waterlogged").map(|v| v.as_str()) == Some("true")
-                || is_inherently_waterlogged_name(a_clean);
+            let a_waterlogged = a_props.get("waterlogged").map(|v| v.as_str()) == Some("true");
             let a_clean = a_clean.strip_prefix("flowing_").unwrap_or(a_clean);
 
             if (a_clean == fluid_type.name_str()) || (fluid_type == FluidType::Water && a_waterlogged) {
@@ -128,8 +125,7 @@ where
         "stone" | "dirt" | "grass_block" | "cobblestone" | "sand" | "gravel" | "oak_planks"
         | "spruce_planks" | "birch_planks" | "deepslate" | "bedrock" | "obsidian" | "netherrack"
         | "end_stone" => true,
-        _ => !clean.contains("air") && !clean.contains("sapling") && !clean.contains("flower")
-            && !clean.contains("kelp") && !clean.contains("seagrass") && !clean.contains("coral"),
+        _ => !clean.contains("air") && !clean.contains("sapling") && !clean.contains("flower"),
     };
 
     if is_solid_cube {
@@ -232,8 +228,7 @@ where
     if !above_state.is_empty() && above_state != "minecraft:air" {
         let (a_name, a_props) = parse_block_name_and_props(&above_state);
         let a_clean = a_name.strip_prefix("minecraft:").unwrap_or(&a_name);
-        let a_waterlogged = a_props.get("waterlogged").map(|v| v.as_str()) == Some("true")
-            || is_inherently_waterlogged_name(a_clean);
+        let a_waterlogged = a_props.get("waterlogged").map(|v| v.as_str()) == Some("true");
         let a_clean = a_clean.strip_prefix("flowing_").unwrap_or(a_clean);
 
         if (a_clean == fluid_type.name_str()) || (fluid_type == FluidType::Water && a_waterlogged) {
@@ -242,10 +237,8 @@ where
     }
 
     let state_str = get_state(x, y, z);
-    let (name, props) = parse_block_name_and_props(&state_str);
-    let clean = name.strip_prefix("minecraft:").unwrap_or(&name);
+    let (_, props) = parse_block_name_and_props(&state_str);
     let is_source = props.get("waterlogged").map(|v| v.as_str()) == Some("true")
-        || is_inherently_waterlogged_name(clean)
         || (!state_str.contains("flowing_")
             && props.get("level").map(|l| l.as_str()).unwrap_or("0") == "0");
 
@@ -294,8 +287,7 @@ where
             if !below_state.is_empty() && below_state != "minecraft:air" {
                 let (b_name, b_props) = parse_block_name_and_props(&below_state);
                 let b_clean = b_name.strip_prefix("minecraft:").unwrap_or(&b_name);
-                let b_waterlogged = b_props.get("waterlogged").map(|v| v.as_str()) == Some("true")
-                    || is_inherently_waterlogged_name(b_clean);
+                let b_waterlogged = b_props.get("waterlogged").map(|v| v.as_str()) == Some("true");
                 let b_clean = b_clean.strip_prefix("flowing_").unwrap_or(b_clean);
 
                 if (b_clean == fluid_type.name_str())
@@ -310,8 +302,7 @@ where
         } else {
             let (n_name, n_props) = parse_block_name_and_props(&n_state);
             let n_clean = n_name.strip_prefix("minecraft:").unwrap_or(&n_name);
-            let n_waterlogged = n_props.get("waterlogged").map(|v| v.as_str()) == Some("true")
-                || is_inherently_waterlogged_name(n_clean);
+            let n_waterlogged = n_props.get("waterlogged").map(|v| v.as_str()) == Some("true");
             let n_clean = n_clean.strip_prefix("flowing_").unwrap_or(n_clean);
 
             if (n_clean == fluid_type.name_str()) || (fluid_type == FluidType::Water && n_waterlogged) {
@@ -355,10 +346,8 @@ pub fn emit_fluid_geometry<F>(
 where
     F: FnMut(i32, i32, i32) -> String,
 {
-    let (name, props) = parse_block_name_and_props(state_str);
-    let clean = name.strip_prefix("minecraft:").unwrap_or(&name);
-    let is_waterlogged = props.get("waterlogged").map(|v| v.as_str()) == Some("true")
-        || is_inherently_waterlogged_name(clean);
+    let (_, props) = parse_block_name_and_props(state_str);
+    let is_waterlogged = props.get("waterlogged").map(|v| v.as_str()) == Some("true");
 
     let fluid_type = match FluidType::from_name(state_str) {
         Some(ft) => ft,

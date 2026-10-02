@@ -28,7 +28,7 @@
 | [`CullCategory`](src/types.rs) | 方块剔除类别：`SolidOpaque`, `GlassTranslucent`, `CutoutLeaves`, `PartialShape`, `Fluid`, `NonOccluding`, `Air`。 |
 | [`LeavesCullMode`](src/types.rs) | 树叶剔除模式：`Fancy`（原版双面双透）、`SingleFace`（接触面单面保留，防闪烁）、`Fast`（不透明壳体互剔）、`None`。 |
 | [`GlassCullMode`](src/types.rs) | 玻璃剔除模式：`Group`（跨色玻璃全局互剔）、`SameBlock`（同色方块互剔）、`None`。 |
-| `is_inherently_waterlogged_name` | `(name: &str) -> bool`：快速判定是否为固有含水植物/装饰方块（如 `kelp`, `seagrass`, `coral` 系列等）。 |
+| `is_inherently_waterlogged_name` | `(name: &str) -> bool`：[已废弃 / Deprecated] 兼容保留，核心管线全面转向基于 `waterlogged=true` 属性的纯数据驱动判定。 |
 | `should_skip_rendering` | `(curr_cat, neighbor_cat, ...) -> bool`：基于类别与方块属性的快速渲染跳过规则。 |
 
 ### 2. 2D 矩形布尔与遮挡检测 (`geometry::rect_ops`)

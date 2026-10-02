@@ -15,11 +15,15 @@ use crate::rect_ops::extract_quad_face_occlusion_rect;
 use crate::types::{is_full_rect, BlockCullMeta, CullCategory, FULL_FACE_RECT};
 use super::catalog::{
     is_non_full_or_partial_block, is_non_occluding_block,
-    AIR_NAMES, FLUID_NAMES, GLASS_NAMES, LEAVES_NAMES, INHERENTLY_WATERLOGGED_NAMES,
+    AIR_NAMES, FLUID_NAMES, GLASS_NAMES, LEAVES_NAMES,
 };
 use super::parametric::derive_parametric_face_shapes;
 
 /// Predicate returning true if the block is canonically inherently waterlogged (kelp, seagrass, coral, etc.).
+///
+/// # Deprecation
+/// `libmtk` uses pure data-driven waterlogged determination via the `waterlogged=true` block property.
+#[deprecated(note = "libmtk uses pure data-driven waterlogged determination via `waterlogged=true` property")]
 pub fn is_inherently_waterlogged_name(name: &str) -> bool {
     let clean = name.strip_prefix("minecraft:").unwrap_or(name);
     clean.contains("coral")
@@ -103,9 +107,7 @@ pub fn compute_block_cull_meta(
     let effective_opaque_hint = is_opaque_hint.or(json_opaque);
     let json_type = props.get("__type").and_then(|v| v.parse::<i64>().ok());
 
-    let is_waterlogged = props.get("waterlogged").map(|s| s.as_str()) == Some("true")
-        || INHERENTLY_WATERLOGGED_NAMES.iter().any(|&n| name_low == n)
-        || is_inherently_waterlogged_name(&name_low);
+    let is_waterlogged = props.get("waterlogged").map(|s| s.as_str()) == Some("true");
     let is_air = state_str.is_empty()
         || AIR_NAMES.iter().any(|&n| name_low == n)
         || name_low.ends_with("air");

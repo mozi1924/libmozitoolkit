@@ -382,8 +382,8 @@ fn test_waterlogged_isolated_block_meshing() {
     let mut world = VoxelStorage::new();
     world.set_bounds(0, 0, 0, 16, 16, 16);
 
-    // An isolated kelp block in air at (2, 2, 2)
-    world.set_block(2, 2, 2, "minecraft:kelp[age=0]", None);
+    // An isolated waterlogged kelp block in air at (2, 2, 2)
+    world.set_block(2, 2, 2, "minecraft:kelp[age=0,waterlogged=true]", None);
     // An isolated waterlogged slab in air at (5, 5, 5)
     world.set_block(5, 5, 5, "minecraft:oak_slab[type=bottom,waterlogged=true]", None);
 

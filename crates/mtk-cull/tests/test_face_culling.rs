@@ -434,9 +434,10 @@ fn test_culler_cache_eviction() {
 fn test_vegetation_and_transparent_culling() {
     let culler = FaceCuller::default();
 
-    // 1. Kelp and Seagrass
-    let kelp = culler.get_meta("minecraft:kelp[age=0]", None, None);
-    let seagrass = culler.get_meta("minecraft:seagrass", None, None);
+    // 1. Kelp and Seagrass (data-driven waterlogged property)
+    let kelp = culler.get_meta("minecraft:kelp[age=0,waterlogged=true]", None, None);
+    let dry_kelp = culler.get_meta("minecraft:kelp[age=0,waterlogged=false]", None, None);
+    let seagrass = culler.get_meta("minecraft:seagrass[waterlogged=true]", None, None);
     let stone = culler.get_meta("minecraft:stone", None, None);
     let water = culler.get_meta("minecraft:water[level=0]", None, None);
 
@@ -444,6 +445,7 @@ fn test_vegetation_and_transparent_culling() {
     assert_eq!(seagrass.category, CullCategory::NonOccluding);
     assert!(kelp.is_waterlogged);
     assert!(seagrass.is_waterlogged);
+    assert!(!dry_kelp.is_waterlogged);
     assert!(!kelp.has_full_face(Direction::Up));
     assert!(!kelp.has_full_face(Direction::Down));
 
