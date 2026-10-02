@@ -14,15 +14,7 @@ use mtk_core::direction::Direction;
 use mtk_core::geometry::Quad;
 use mtk_core::mesh::MeshData;
 
-/// Supported attribute domains matching modern DCC & OpenUSD standards.
-#[pyclass(name = "AttributeDomain", eq, eq_int)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PyAttributeDomain {
-    Point,
-    Corner,
-    Face,
-    Mesh,
-}
+pub use crate::attributes::PyAttributeDomain;
 
 /// Python-facing wrapper around contiguous `MeshData`.
 #[pyclass(name = "MeshData")]
@@ -603,182 +595,14 @@ impl PyMeshData {
         dtype: &str,
         buffer: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
-        let domain_enum = match domain.trim().to_lowercase().as_str() {
-            "point" | "vertex" => mtk_core::attributes::AttributeDomain::Point,
-            "corner" | "loop" | "face_varying" => mtk_core::attributes::AttributeDomain::Corner,
-            "face" | "polygon" | "uniform" => mtk_core::attributes::AttributeDomain::Face,
-            "mesh" | "global" | "constant" => mtk_core::attributes::AttributeDomain::Mesh,
-            _ => {
-                return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                    "Invalid attribute domain '{}'. Expected 'point', 'corner', 'face', or 'mesh'",
-                    domain
-                )))
-            }
-        };
+        let domain_enum = crate::attributes::parse_domain_str(domain)?;
 
         let py_buf: PyBuffer<u8> = PyBuffer::get(buffer)?;
         let raw_bytes: &[u8] = unsafe {
             std::slice::from_raw_parts(py_buf.buf_ptr() as *const u8, py_buf.len_bytes())
         };
 
-        let attr_data = match dtype.trim().to_lowercase().as_str() {
-            "float" | "float32" | "f32" => {
-                let elem_size = std::mem::size_of::<f32>();
-                if raw_bytes.len() % elem_size != 0 {
-                    return Err(pyo3::exceptions::PyValueError::new_err("Buffer byte length not divisible by sizeof(float)"));
-                }
-                let count = raw_bytes.len() / elem_size;
-                let mut vec = Vec::with_capacity(count);
-                if count > 0 {
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
-                        vec.set_len(count);
-                    }
-                }
-                mtk_core::attributes::AttributeData::Float(vec)
-            }
-            "float2" | "vec2" => {
-                let elem_size = std::mem::size_of::<[f32; 2]>();
-                if raw_bytes.len() % elem_size != 0 {
-                    return Err(pyo3::exceptions::PyValueError::new_err("Buffer byte length not divisible by sizeof(float2)"));
-                }
-                let count = raw_bytes.len() / elem_size;
-                let mut vec = Vec::with_capacity(count);
-                if count > 0 {
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
-                        vec.set_len(count);
-                    }
-                }
-                mtk_core::attributes::AttributeData::Float2(vec)
-            }
-            "float3" | "vec3" => {
-                let elem_size = std::mem::size_of::<[f32; 3]>();
-                if raw_bytes.len() % elem_size != 0 {
-                    return Err(pyo3::exceptions::PyValueError::new_err("Buffer byte length not divisible by sizeof(float3)"));
-                }
-                let count = raw_bytes.len() / elem_size;
-                let mut vec = Vec::with_capacity(count);
-                if count > 0 {
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
-                        vec.set_len(count);
-                    }
-                }
-                mtk_core::attributes::AttributeData::Float3(vec)
-            }
-            "float4" | "vec4" | "color" => {
-                let elem_size = std::mem::size_of::<[f32; 4]>();
-                if raw_bytes.len() % elem_size != 0 {
-                    return Err(pyo3::exceptions::PyValueError::new_err("Buffer byte length not divisible by sizeof(float4)"));
-                }
-                let count = raw_bytes.len() / elem_size;
-                let mut vec = Vec::with_capacity(count);
-                if count > 0 {
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
-                        vec.set_len(count);
-                    }
-                }
-                mtk_core::attributes::AttributeData::Float4(vec)
-            }
-            "int8" | "i8" => {
-                let count = raw_bytes.len();
-                let mut vec = Vec::with_capacity(count);
-                if count > 0 {
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
-                        vec.set_len(count);
-                    }
-                }
-                mtk_core::attributes::AttributeData::Int8(vec)
-            }
-            "int16" | "i16" => {
-                let elem_size = std::mem::size_of::<i16>();
-                if raw_bytes.len() % elem_size != 0 {
-                    return Err(pyo3::exceptions::PyValueError::new_err("Buffer byte length not divisible by sizeof(int16)"));
-                }
-                let count = raw_bytes.len() / elem_size;
-                let mut vec = Vec::with_capacity(count);
-                if count > 0 {
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
-                        vec.set_len(count);
-                    }
-                }
-                mtk_core::attributes::AttributeData::Int16(vec)
-            }
-            "int32" | "int" | "i32" => {
-                let elem_size = std::mem::size_of::<i32>();
-                if raw_bytes.len() % elem_size != 0 {
-                    return Err(pyo3::exceptions::PyValueError::new_err("Buffer byte length not divisible by sizeof(int32)"));
-                }
-                let count = raw_bytes.len() / elem_size;
-                let mut vec = Vec::with_capacity(count);
-                if count > 0 {
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
-                        vec.set_len(count);
-                    }
-                }
-                mtk_core::attributes::AttributeData::Int32(vec)
-            }
-            "uint8" | "u8" | "byte" => {
-                let count = raw_bytes.len();
-                let mut vec = Vec::with_capacity(count);
-                if count > 0 {
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
-                        vec.set_len(count);
-                    }
-                }
-                mtk_core::attributes::AttributeData::UInt8(vec)
-            }
-            "uint16" | "u16" => {
-                let elem_size = std::mem::size_of::<u16>();
-                if raw_bytes.len() % elem_size != 0 {
-                    return Err(pyo3::exceptions::PyValueError::new_err("Buffer byte length not divisible by sizeof(uint16)"));
-                }
-                let count = raw_bytes.len() / elem_size;
-                let mut vec = Vec::with_capacity(count);
-                if count > 0 {
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
-                        vec.set_len(count);
-                    }
-                }
-                mtk_core::attributes::AttributeData::UInt16(vec)
-            }
-            "uint32" | "u32" => {
-                let elem_size = std::mem::size_of::<u32>();
-                if raw_bytes.len() % elem_size != 0 {
-                    return Err(pyo3::exceptions::PyValueError::new_err("Buffer byte length not divisible by sizeof(uint32)"));
-                }
-                let count = raw_bytes.len() / elem_size;
-                let mut vec = Vec::with_capacity(count);
-                if count > 0 {
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
-                        vec.set_len(count);
-                    }
-                }
-                mtk_core::attributes::AttributeData::UInt32(vec)
-            }
-            "bool" | "boolean" => {
-                let count = raw_bytes.len();
-                let mut vec = Vec::with_capacity(count);
-                for &b in raw_bytes {
-                    vec.push(b != 0);
-                }
-                mtk_core::attributes::AttributeData::Bool(vec)
-            }
-            _ => {
-                return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                    "Unsupported attribute data type '{}'",
-                    dtype
-                )))
-            }
-        };
+        let attr_data = crate::attributes::parse_attribute_buffer(dtype, raw_bytes)?;
 
         self.inner.add_custom_attribute(mtk_core::attributes::MeshAttribute {
             name: name.to_string(),
@@ -791,18 +615,7 @@ impl PyMeshData {
 
     /// Add a string custom attribute (e.g. "mtk_source_texture_key").
     pub fn add_string_attribute(&mut self, name: &str, domain: &str, values: Vec<String>) -> PyResult<()> {
-        let domain_enum = match domain.trim().to_lowercase().as_str() {
-            "point" | "vertex" => mtk_core::attributes::AttributeDomain::Point,
-            "corner" | "loop" | "face_varying" => mtk_core::attributes::AttributeDomain::Corner,
-            "face" | "polygon" | "uniform" => mtk_core::attributes::AttributeDomain::Face,
-            "mesh" | "global" | "constant" => mtk_core::attributes::AttributeDomain::Mesh,
-            _ => {
-                return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                    "Invalid attribute domain '{}'",
-                    domain
-                )))
-            }
-        };
+        let domain_enum = crate::attributes::parse_domain_str(domain)?;
 
         self.inner.add_custom_attribute(mtk_core::attributes::MeshAttribute {
             name: name.to_string(),
@@ -852,21 +665,7 @@ impl PyMeshData {
     /// Retrieve attribute data as a native Python list.
     pub fn get_attribute_data<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
         if let Some(attr) = self.inner.get_custom_attribute(name) {
-            use mtk_core::attributes::AttributeData;
-            match &attr.data {
-                AttributeData::Float(v) => Ok(Some(PyList::new(py, v)?.into_any())),
-                AttributeData::Float2(v) => Ok(Some(PyList::new(py, v)?.into_any())),
-                AttributeData::Float3(v) => Ok(Some(PyList::new(py, v)?.into_any())),
-                AttributeData::Float4(v) => Ok(Some(PyList::new(py, v)?.into_any())),
-                AttributeData::Int8(v) => Ok(Some(PyList::new(py, v)?.into_any())),
-                AttributeData::Int16(v) => Ok(Some(PyList::new(py, v)?.into_any())),
-                AttributeData::Int32(v) => Ok(Some(PyList::new(py, v)?.into_any())),
-                AttributeData::UInt8(v) => Ok(Some(PyList::new(py, v)?.into_any())),
-                AttributeData::UInt16(v) => Ok(Some(PyList::new(py, v)?.into_any())),
-                AttributeData::UInt32(v) => Ok(Some(PyList::new(py, v)?.into_any())),
-                AttributeData::Bool(v) => Ok(Some(PyList::new(py, v)?.into_any())),
-                AttributeData::String(v) => Ok(Some(PyList::new(py, v)?.into_any())),
-            }
+            crate::attributes::attribute_data_to_py_list(py, &attr.data).map(Some)
         } else {
             Ok(None)
         }

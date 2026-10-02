@@ -110,3 +110,62 @@ Rust 处理内核 (libmtk)
 ```
 
 宿主端通过指针与长度（或 Python Buffer Protocol `memoryview` / JS `TypedArray`）直接读取，并在宿主内部调用专有场景 API 批量构建，杜绝逐元素低效循环。
+
+---
+
+## 5. 内部模块化解耦与文件组织规范 (Modularization Standards)
+
+为保持超高内聚性、可维护性并防止单文件膨胀（原则上所有源码文件控制在 300~500 行以内），`libmtk` 对大型复合模块进行了结构性子模块拆分：
+
+### 5.1 核心拆分拓扑
+- **`mtk-core::subdivide`**:
+  - `clip.rs`: 多边形凸裁剪与 Sutherland-Hodgman 2D 拓扑切分
+  - `grid.rs`: 目标细分分辨率推算与整数像素网格切割因子吸附计算
+  - `mesh_split.rs`: 单面多边形切割与全网格自适应细分装配
+  - `mod.rs`: 门面导出与统一测试套件
+- **`mtk-core::extrude_mesh`**:
+  - `types.rs`: 扁平拓扑网格与挤出修复配置
+  - `repair.rs`: 侧面 UV 修复核心计算与法线重构
+  - `random.rs`: 伪随机/梯度噪声挤出算子
+  - `mod.rs`: 门面重导出与集成测试
+- **`mtk-cull::rules::categories`**:
+  - `catalog.rs`: 原版及常见方块剔除类型常数字典与快速查表
+  - `parametric.rs`: 基于方块状态参数（如阶梯半高、朝向）的动态元数据生成
+  - `meta.rs`: `BlockCullMeta` 核心定义与方向遮挡掩码判定
+  - `mod.rs`: 模块门面重导出
+- **`mtk-model::baker::baked_model`**:
+  - `model.rs`: 烘焙方块模型核心基元与变换矩阵
+  - `database.rs`: 烘焙模型数据库与状态键索引
+  - `to_mesh.rs`: 烘焙模型向通用 `MeshData` 的快速灌入与拓扑转换
+  - `legacy.rs`: 旧版原版模型兼容格式解析
+  - `mod.rs`: 门面重导出与集成测试
+- **`mtk-model::parser::blockstate`**:
+  - `definition.rs`: Blockstate JSON 顶层 AST 定义与反序列化
+  - `state.rs`: 变体键解析与状态属性匹配器
+  - `resolver.rs`: 复杂多状态条件解析引擎与烘焙模型关联
+  - `mod.rs`: 门面重导出与测试
+- **`mtk-voxel::storage::world`**:
+  - `container.rs`: 区块 Section 容器存储与三维坐标索引
+  - `snapshot.rs`: 世界切片快照与动态边界提取
+  - `manifest.rs`: 变更清单与 CRC 校验
+  - `padded.rs`: 邻域填充数组与边界平滑支持
+  - `mod.rs`: 模块统一门面重导出
+- **`mtk-sync::session`**:
+  - `dispatcher.rs`: 网络协议数据包分发器与处理流水线
+  - `mod.rs`: `LiveSyncSession` 会话状态机与生命周期管理
+- **`mtk-texture::atlas::builder`**:
+  - `static_atlas.rs`: 静态纹理装箱与多通道 PBR 图集烘焙
+  - `anim_atlas.rs`: 动画条图集处理与帧元数据对齐
+  - `paletted.rs`: 调色板置换贴图预烘焙
+  - `types.rs`: 图集块构建器配置与中间数据结构
+  - `mod.rs`: 门面统一聚合与去重封装
+- **`mtk-material::biome::resolver`**:
+  - `types.rs`: Biome 解析器配置与别名数据结构
+  - `lookup.rs`: 快速别名查询与材质匹配
+  - `scanner.rs`: 模型顶点色与生物群系 Tint 扫描器
+  - `defaults.rs`: 原版默认生物群系回退规则
+  - `mod.rs`: 门面重导出
+- **`mtk-py::attributes`**:
+  - Python Buffer Protocol 零拷贝统一解码器与 DCC 属性域映射
+
+所有拆分严格遵循 **零破坏性（Zero Breaking Changes）** 准则，公共 API、函数签名与符号重导出保持 100% 向后兼容。

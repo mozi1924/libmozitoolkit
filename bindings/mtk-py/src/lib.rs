@@ -2,6 +2,7 @@
 //!
 //! Exposes `libmtk` data structures and high-performance algorithms to Python via PyO3.
 
+pub mod attributes;
 pub mod cull;
 pub mod extrude;
 pub mod material;

@@ -492,6 +492,9 @@ pub fn batch_repair_fluid_uv(
 }
 
 /// Get Minecraft-standard UV coordinates for top/bottom fluid faces.
+///
+/// NOTE: This returns `[Vec2; 4]` for standard geometric pipelines. For raw array
+/// `[[f32; 2]; 4]` voxel meshing coordinates, see `mtk-voxel::fluid::uv::get_fluid_top_uvs`.
 pub fn get_fluid_top_uvs(is_flowing: bool, rotation: f32) -> [Vec2; 4] {
     if !is_flowing {
         return [
@@ -538,6 +541,9 @@ pub fn get_fluid_top_uvs(is_flowing: bool, rotation: f32) -> [Vec2; 4] {
 }
 
 /// Get Minecraft/Mineways-standard UV coordinates for vertical/sloped fluid side faces.
+///
+/// NOTE: This returns `[Vec2; 4]` for standard geometric pipelines. For raw array
+/// `[[f32; 2]; 4]` voxel meshing coordinates, see `mtk-voxel::fluid::uv::get_fluid_side_uvs`.
 pub fn get_fluid_side_uvs(h_left_top: f32, h_right_top: f32) -> [Vec2; 4] {
     [
         Vec2::new(0.0, (1.0 - h_left_top) * 0.5),
