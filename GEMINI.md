@@ -51,6 +51,24 @@
 - 资产预烘焙（Atlas 拼接、Standalone PBR 对齐、Model Baking、BiomeResolver 映射预提取）由 `libmtk::prebake` 统一无头处理，产出格式受 `ASSET_CACHE_FORMAT_VERSION` 版本约束。
 - 宿主端优先从编译缓存加载（`atlas_mapping.json`、`biome_mapping.json`、`cache_manifest.json`），避免运行时对大体积 ZIP/JAR 资产包进行重复解析。
 
+### 规则 8：单文件规模红线与模块化防膨胀 (File Length Redline & Submodule Decomposition)
+- **源码文件行数上限原则**：任何 Rust 源码文件（除集中测试用例 `tests/` 外）常规行数**建议控制在 500 行以内，硬性红线严禁突破 700~800 行**。
+- **严禁无界追加巨石代码**：当向现有模块新增功能时，若预估或实际导致文件接近 600 行，**必须主动创建子模块**（如 `mod.rs` + 子领域文件，参考 `mtk-voxel::storage::world`、`mtk-sync::session`、`mtk-cull::rules` 的模块化实践）进行职责解耦，严禁在一个文件中无休止地堆砌长篇代码。
+- **严格禁止领域越界污染**：
+  - 数据模型层（如 `mtk-model`）严禁内联编写复杂的 2D/3D 几何投影、多边形裁剪或叠面碰撞检测算法；
+  - 所有通用几何清理、共面去重与微观遮挡算法**必须且只能归属 `mtk-core` 或 `mtk-cull`（如 `mtk-cull::FaceSanitizer`）**。
+
+### 规则 9：Crate 级 README 与文档单一事实源 (Crate README & Doc Integrity)
+- **Crate 专属说明不可缺失**：`crates/` 与 `bindings/` 下的所有子 Crate **必须包含专属 `README.md`**，包含其架构定位、输入输出契约、核心公共结构体与方法、以及一个极简使用示例。
+- **公共 API 变动强制双向维护**：当子 Crate 的 Public API 发生变更或新增导出时，除更新根目录 `docs/API_REFERENCE.md` 外，**必须同步维护该 Crate 自身的 `README.md`**。
+
+### 规则 10：内存安全、可见性与 Panic 防御规约 (Safety, Visibility & Panic Defense)
+- **禁止在生产代码中滥用 Panic**：胶水层（`bindings/mtk-py`, `bindings/mtk-ffi`, `bindings/mtk-wasm`）严禁在非测试代码中随意调用 `.unwrap()` / `.expect()`；必须通过 `Result` / `PyResult` 进行优雅的错误向上传播，杜绝因 Rust panic 导致宿主进程（如 Blender 桌面端）无预警崩溃。
+- **最小可见性原则**：严格控制结构体字段与内部辅助函数的可见性，严禁为了跨模块调用方便而无脑使用 `pub`，优先使用 `pub(crate)`、私有字段或显式 getter/setter 维持类型的不变性保证。
+
+### 规则 11：架构设计与 CLI 一致性原则 (Feature & CLI Parity)
+- 根目录文档与架构手册中声明的 CLI 命令行工具（`mtk-cli`）命令（如 `precompile`、`inspect` 等），必须严格对齐底层真实实现或明确注明开发阶段，严禁在文档中宣称未实现的命令，杜绝设计脱节。
+
 ---
 
 ## 3. 核心领域架构与模块划分
@@ -59,7 +77,7 @@
 libmozitoolkit/
 ├── crates/
 │   ├── mtk-core/       -> 基础几何基元、Quad、MeshData、自适应像素切分与挤出算子
-│   ├── mtk-cull/       -> 6 向邻域遮挡状态机、面剔除、2D 矩形差集切分
+│   ├── mtk-cull/       -> 6 向邻域遮挡状态机、FaceSanitizer 叠面消重清洗器、2D 矩形差集切分
 │   ├── mtk-model/      -> BlockState 状态解析、1.21+ Block Model JSON 烘焙、OBJ 解析
 │   ├── mtk-voxel/      -> 16x16x16 Chunk Section 体素存储、流体曲面、平滑 AO 与体素源抽象
 │   ├── mtk-sync/       -> 原生 WebSocket 实时同步客户端、小端序二进制协议与会话管理
@@ -68,7 +86,7 @@ libmozitoolkit/
 │   ├── mtk-material/   -> 66 生物群系调色板引擎、BiomeResolver、并行 UV 重映射与别名解析
 │   ├── libmtk/         -> 统一顶层门面、端到端预编译管线 (Prebake) 与统一错误处理
 │   ├── mtk-bench/      -> 性能压测与基准测试套件
-│   └── mtk-cli/        -> 独立命令行工具 (mtk precompile / bench / inspect)
+│   └── mtk-cli/        -> 独立命令行工具 (mtk)
 └── bindings/
     ├── mtk-py/         -> PyO3 + maturin Python 绑定 (libmtk_py)
     ├── mtk-ffi/        -> C-ABI 动态/静态库与 C 头文件 (cbindgen)
@@ -82,3 +100,4 @@ libmozitoolkit/
 - **系统架构设计**：[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - **公共 API 与核心抽象参考**：[`docs/API_REFERENCE.md`](docs/API_REFERENCE.md)
 - **跨语言绑定与胶水层规范**：[`docs/BINDINGS_DESIGN.md`](docs/BINDINGS_DESIGN.md)
+
