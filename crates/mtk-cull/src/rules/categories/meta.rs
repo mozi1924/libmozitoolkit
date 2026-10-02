@@ -15,9 +15,19 @@ use crate::rect_ops::extract_quad_face_occlusion_rect;
 use crate::types::{is_full_rect, BlockCullMeta, CullCategory, FULL_FACE_RECT};
 use super::catalog::{
     is_non_full_or_partial_block, is_non_occluding_block,
-    AIR_NAMES, FLUID_NAMES, GLASS_NAMES, LEAVES_NAMES,
+    AIR_NAMES, FLUID_NAMES, GLASS_NAMES, LEAVES_NAMES, INHERENTLY_WATERLOGGED_NAMES,
 };
 use super::parametric::derive_parametric_face_shapes;
+
+/// Predicate returning true if the block is canonically inherently waterlogged (kelp, seagrass, coral, etc.).
+pub fn is_inherently_waterlogged_name(name: &str) -> bool {
+    let clean = name.strip_prefix("minecraft:").unwrap_or(name);
+    clean.contains("coral")
+        || clean.contains("kelp")
+        || clean.contains("seagrass")
+        || clean == "sea_pickle"
+        || clean == "bubble_column"
+}
 
 /// Fast extraction of raw block name and properties from state string.
 pub fn parse_block_name_and_props(state_str: &str) -> (String, BTreeMap<String, String>) {
@@ -94,12 +104,8 @@ pub fn compute_block_cull_meta(
     let json_type = props.get("__type").and_then(|v| v.parse::<i64>().ok());
 
     let is_waterlogged = props.get("waterlogged").map(|s| s.as_str()) == Some("true")
-        || matches!(
-            name_low.as_str(),
-            "seagrass" | "tall_seagrass" | "kelp" | "kelp_plant" | "sea_pickle"
-        )
-        || name_low.contains("seagrass")
-        || name_low.contains("kelp");
+        || INHERENTLY_WATERLOGGED_NAMES.iter().any(|&n| name_low == n)
+        || is_inherently_waterlogged_name(&name_low);
     let is_air = state_str.is_empty()
         || AIR_NAMES.iter().any(|&n| name_low == n)
         || name_low.ends_with("air");

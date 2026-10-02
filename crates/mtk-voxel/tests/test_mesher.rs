@@ -377,4 +377,29 @@ fn test_selection_boundary_no_color_bleeding() {
     }
 }
 
+#[test]
+fn test_waterlogged_isolated_block_meshing() {
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+
+    // An isolated kelp block in air at (2, 2, 2)
+    world.set_block(2, 2, 2, "minecraft:kelp[age=0]", None);
+    // An isolated waterlogged slab in air at (5, 5, 5)
+    world.set_block(5, 5, 5, "minecraft:oak_slab[type=bottom,waterlogged=true]", None);
+
+    let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
+    let culler = FaceCuller::default();
+    let config = MesherConfig::default();
+
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+
+    // Both isolated kelp and isolated waterlogged slab MUST emit water geometry
+    // into the mesh even without pre-baked element models!
+    // Specifically, water top, bottom, and side faces should be emitted in open air.
+    assert!(mesh.face_count() > 0);
+    // 2 isolated waterlogged blocks in air with fallback unit cube:
+    // each emits 6 fluid faces + 6 solid block faces = 12 faces per block = 24 total faces!
+    assert_eq!(mesh.face_count(), 24);
+}
+
 

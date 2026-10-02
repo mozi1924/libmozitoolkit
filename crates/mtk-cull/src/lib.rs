@@ -11,7 +11,8 @@ pub mod types;
 
 pub use engine::{
     compute_block_cull_meta, derive_parametric_face_shapes, get_visible_face_directions,
-    is_non_full_or_partial_block, parse_block_name_and_props, FaceCuller,
+    is_inherently_waterlogged_name, is_non_full_or_partial_block, parse_block_name_and_props,
+    FaceCuller,
 };
 pub use geometry::{
     check_coplanar_overlap, clip_face_excluding_hidden_volume,

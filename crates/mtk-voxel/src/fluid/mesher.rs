@@ -3,7 +3,7 @@ use glam::Vec3;
 use mtk_core::direction::Direction;
 use mtk_core::mesh::MeshData;
 use mtk_cull::engine::parse_block_name_and_props;
-use mtk_cull::FaceCuller;
+use mtk_cull::{is_inherently_waterlogged_name, FaceCuller};
 
 use crate::fluid_uv::{get_fluid_side_uvs, get_fluid_top_uvs};
 use crate::types::MesherConfig;
@@ -47,11 +47,13 @@ pub fn get_fluid_base_height(state_str: &str) -> f32 {
     }
 
     let (name, props) = parse_block_name_and_props(state_str);
-    if props.get("waterlogged").map(|v| v.as_str()) == Some("true") {
+    let clean = name.strip_prefix("minecraft:").unwrap_or(&name);
+    let is_waterlogged = props.get("waterlogged").map(|v| v.as_str()) == Some("true")
+        || is_inherently_waterlogged_name(clean);
+    if is_waterlogged {
         return MAX_FLUID_HEIGHT;
     }
 
-    let clean = name.strip_prefix("minecraft:").unwrap_or(&name);
     let clean = clean.strip_prefix("flowing_").unwrap_or(clean);
 
     if clean != "water" && clean != "lava" {
@@ -87,8 +89,9 @@ where
     }
 
     let (name, props) = parse_block_name_and_props(&state_str);
-    let is_waterlogged = props.get("waterlogged").map(|v| v.as_str()) == Some("true");
     let clean = name.strip_prefix("minecraft:").unwrap_or(&name);
+    let is_waterlogged = props.get("waterlogged").map(|v| v.as_str()) == Some("true")
+        || is_inherently_waterlogged_name(clean);
     let clean = clean.strip_prefix("flowing_").unwrap_or(clean);
 
     let is_fluid_match =
@@ -99,8 +102,9 @@ where
         let above_state = get_state(x, y + 1, z);
         if !above_state.is_empty() && above_state != "minecraft:air" {
             let (a_name, a_props) = parse_block_name_and_props(&above_state);
-            let a_waterlogged = a_props.get("waterlogged").map(|v| v.as_str()) == Some("true");
             let a_clean = a_name.strip_prefix("minecraft:").unwrap_or(&a_name);
+            let a_waterlogged = a_props.get("waterlogged").map(|v| v.as_str()) == Some("true")
+                || is_inherently_waterlogged_name(a_clean);
             let a_clean = a_clean.strip_prefix("flowing_").unwrap_or(a_clean);
 
             if (a_clean == fluid_type.name_str()) || (fluid_type == FluidType::Water && a_waterlogged) {
@@ -115,12 +119,17 @@ where
         return get_fluid_base_height(&state_str);
     }
 
-    // Solid opaque block detection
+    // Solid opaque block detection: never classify waterlogged blocks as solid cube boundaries
+    if is_waterlogged {
+        return 0.0;
+    }
+
     let is_solid_cube = match clean {
         "stone" | "dirt" | "grass_block" | "cobblestone" | "sand" | "gravel" | "oak_planks"
         | "spruce_planks" | "birch_planks" | "deepslate" | "bedrock" | "obsidian" | "netherrack"
         | "end_stone" => true,
-        _ => !clean.contains("air") && !clean.contains("sapling") && !clean.contains("flower"),
+        _ => !clean.contains("air") && !clean.contains("sapling") && !clean.contains("flower")
+            && !clean.contains("kelp") && !clean.contains("seagrass") && !clean.contains("coral"),
     };
 
     if is_solid_cube {
@@ -222,8 +231,9 @@ where
     let above_state = get_state(x, y + 1, z);
     if !above_state.is_empty() && above_state != "minecraft:air" {
         let (a_name, a_props) = parse_block_name_and_props(&above_state);
-        let a_waterlogged = a_props.get("waterlogged").map(|v| v.as_str()) == Some("true");
         let a_clean = a_name.strip_prefix("minecraft:").unwrap_or(&a_name);
+        let a_waterlogged = a_props.get("waterlogged").map(|v| v.as_str()) == Some("true")
+            || is_inherently_waterlogged_name(a_clean);
         let a_clean = a_clean.strip_prefix("flowing_").unwrap_or(a_clean);
 
         if (a_clean == fluid_type.name_str()) || (fluid_type == FluidType::Water && a_waterlogged) {
@@ -232,10 +242,12 @@ where
     }
 
     let state_str = get_state(x, y, z);
-    let (_, props) = parse_block_name_and_props(&state_str);
+    let (name, props) = parse_block_name_and_props(&state_str);
+    let clean = name.strip_prefix("minecraft:").unwrap_or(&name);
     let is_source = props.get("waterlogged").map(|v| v.as_str()) == Some("true")
-        || !state_str.contains("flowing_")
-            && props.get("level").map(|l| l.as_str()).unwrap_or("0") == "0";
+        || is_inherently_waterlogged_name(clean)
+        || (!state_str.contains("flowing_")
+            && props.get("level").map(|l| l.as_str()).unwrap_or("0") == "0");
 
     let h_center = sample_fluid_height(&mut get_state, x, y, z, fluid_type);
     let h_n = sample_fluid_height(&mut get_state, x, y, z - 1, fluid_type);
@@ -281,8 +293,9 @@ where
             let below_state = get_state(nx, y - 1, nz);
             if !below_state.is_empty() && below_state != "minecraft:air" {
                 let (b_name, b_props) = parse_block_name_and_props(&below_state);
-                let b_waterlogged = b_props.get("waterlogged").map(|v| v.as_str()) == Some("true");
                 let b_clean = b_name.strip_prefix("minecraft:").unwrap_or(&b_name);
+                let b_waterlogged = b_props.get("waterlogged").map(|v| v.as_str()) == Some("true")
+                    || is_inherently_waterlogged_name(b_clean);
                 let b_clean = b_clean.strip_prefix("flowing_").unwrap_or(b_clean);
 
                 if (b_clean == fluid_type.name_str())
@@ -296,8 +309,9 @@ where
             }
         } else {
             let (n_name, n_props) = parse_block_name_and_props(&n_state);
-            let n_waterlogged = n_props.get("waterlogged").map(|v| v.as_str()) == Some("true");
             let n_clean = n_name.strip_prefix("minecraft:").unwrap_or(&n_name);
+            let n_waterlogged = n_props.get("waterlogged").map(|v| v.as_str()) == Some("true")
+                || is_inherently_waterlogged_name(n_clean);
             let n_clean = n_clean.strip_prefix("flowing_").unwrap_or(n_clean);
 
             if (n_clean == fluid_type.name_str()) || (fluid_type == FluidType::Water && n_waterlogged) {
@@ -341,9 +355,20 @@ pub fn emit_fluid_geometry<F>(
 where
     F: FnMut(i32, i32, i32) -> String,
 {
+    let (name, props) = parse_block_name_and_props(state_str);
+    let clean = name.strip_prefix("minecraft:").unwrap_or(&name);
+    let is_waterlogged = props.get("waterlogged").map(|v| v.as_str()) == Some("true")
+        || is_inherently_waterlogged_name(clean);
+
     let fluid_type = match FluidType::from_name(state_str) {
         Some(ft) => ft,
-        None => return 0,
+        None => {
+            if is_waterlogged {
+                FluidType::Water
+            } else {
+                return 0;
+            }
+        }
     };
 
     let (c_nw, c_ne, c_se, c_sw) =
@@ -353,7 +378,11 @@ where
         calculate_fluid_flow_vector(&mut get_state, x, y, z, fluid_type, own_height);
     let is_flowing = flow_vx.abs() > 1e-4 || flow_vz.abs() > 1e-4 || state_str.contains("flowing_");
 
-    let own_meta = culler.get_meta(state_str, None, None);
+    let fluid_state_str = match fluid_type {
+        FluidType::Water => "minecraft:water[level=0]",
+        FluidType::Lava => "minecraft:lava[level=0]",
+    };
+    let fluid_meta = culler.get_meta(fluid_state_str, None, None);
 
     let (still_sprite, flow_sprite) = if let Some(atlas) = &config.atlas_address_map {
         let (still_name, flow_name) = match fluid_type {
@@ -474,7 +503,7 @@ where
     };
 
     if culler.should_render_face(
-        &own_meta,
+        &fluid_meta,
         up_meta.as_deref(),
         Direction::Up,
         None,
@@ -499,7 +528,7 @@ where
     };
 
     if culler.should_render_face(
-        &own_meta,
+        &fluid_meta,
         down_meta.as_deref(),
         Direction::Down,
         None,
@@ -524,7 +553,7 @@ where
         None
     };
     if culler.should_render_face(
-        &own_meta,
+        &fluid_meta,
         n_meta.as_deref(),
         Direction::North,
         None,
@@ -553,7 +582,7 @@ where
         None
     };
     if culler.should_render_face(
-        &own_meta,
+        &fluid_meta,
         s_meta.as_deref(),
         Direction::South,
         None,
@@ -582,7 +611,7 @@ where
         None
     };
     if culler.should_render_face(
-        &own_meta,
+        &fluid_meta,
         w_meta.as_deref(),
         Direction::West,
         None,
@@ -611,7 +640,7 @@ where
         None
     };
     if culler.should_render_face(
-        &own_meta,
+        &fluid_meta,
         e_meta.as_deref(),
         Direction::East,
         None,
