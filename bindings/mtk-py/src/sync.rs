@@ -200,8 +200,11 @@ impl PyLiveSyncSession {
     }
 
     /// Returns a copy of the underlying `VoxelStorage`.
-    pub fn get_storage(&self) -> PyVoxelStorage {
-        let st = self.inner.storage.read().unwrap();
-        PyVoxelStorage { inner: st.clone() }
+    pub fn get_storage(&self) -> PyResult<PyVoxelStorage> {
+        let st = self.inner
+            .storage
+            .read()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("Storage lock poisoned: {}", e)))?;
+        Ok(PyVoxelStorage { inner: st.clone() })
     }
 }

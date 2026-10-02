@@ -156,23 +156,8 @@ pub fn compute_mesh_biome_attributes(
         };
     }
 
-    let is_multi_biome = multi_biomes.map_or(false, |mb| !mb.is_empty());
-
     // Compute standard global biome colors and colormap UVs
-    let (grass_col, foliage_col, dry_foliage_col, water_col, base_uv, has_cg, has_cf, has_cdf) = if !is_multi_biome {
-        let pal = get_biome_palette(biome_name);
-        (
-            pal.grass_linear(),
-            pal.foliage_linear(),
-            pal.dry_foliage_linear(),
-            pal.water_linear(),
-            pal.colormap_uv(),
-            pal.has_custom_grass,
-            pal.has_custom_foliage,
-            pal.has_custom_dry_foliage,
-        )
-    } else {
-        let mb = multi_biomes.unwrap();
+    let (grass_col, foliage_col, dry_foliage_col, water_col, base_uv, has_cg, has_cf, has_cdf) = if let Some(mb) = multi_biomes.filter(|mb| !mb.is_empty()) {
         let weights: Vec<(&str, f32)> = mb.iter().map(|(n, w)| (n.as_str(), *w)).collect();
         let g = blend_biome_colors(&weights, "grass");
         let f = blend_biome_colors(&weights, "foliage");
@@ -198,6 +183,18 @@ pub fn compute_mesh_biome_attributes(
             [0.2, 0.32]
         };
         (g, f, df, w, uv, false, false, false)
+    } else {
+        let pal = get_biome_palette(biome_name);
+        (
+            pal.grass_linear(),
+            pal.foliage_linear(),
+            pal.dry_foliage_linear(),
+            pal.water_linear(),
+            pal.colormap_uv(),
+            pal.has_custom_grass,
+            pal.has_custom_foliage,
+            pal.has_custom_dry_foliage,
+        )
     };
 
     let colormap_uv_3 = [base_uv[0], base_uv[1], 0.0f32];

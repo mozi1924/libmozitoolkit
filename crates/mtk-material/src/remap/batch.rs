@@ -46,10 +46,7 @@ pub fn remap_mesh_uvs_parallel(
         }
 
         let mat_name = &face_materials[face_idx];
-        let is_grid_atlas = grid_atlas_spec.map_or(false, |spec| spec.matches_atlas_name(mat_name));
-
-        if is_grid_atlas {
-            let spec = grid_atlas_spec.unwrap();
+        if let Some(spec) = grid_atlas_spec.filter(|s| s.matches_atlas_name(mat_name)) {
             let mut sum_u = 0.0f32;
             let mut sum_v = 0.0f32;
             for i in start_idx..end_idx {
@@ -197,10 +194,8 @@ pub fn remap_mesh_multi_uvs_parallel(
 
         let mat_name = &face_materials[face_idx];
         let is_overlay = mat_name.contains("overlay") || mat_name.contains("grass_side_overlay");
-        let is_grid_atlas = grid_atlas_spec.map_or(false, |spec| spec.matches_atlas_name(mat_name));
 
-        if is_grid_atlas {
-            let spec = grid_atlas_spec.unwrap();
+        if let Some(spec) = grid_atlas_spec.filter(|s| s.matches_atlas_name(mat_name)) {
             let mut sum_u = 0.0f32;
             let mut sum_v = 0.0f32;
             for i in start_idx..end_idx {

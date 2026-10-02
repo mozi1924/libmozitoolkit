@@ -28,7 +28,19 @@ pub enum PyAttributeDomain {
 #[pyclass(name = "MeshData")]
 #[derive(Debug, Clone, Default)]
 pub struct PyMeshData {
-    pub(crate) inner: MeshData,
+    pub inner: MeshData,
+}
+
+impl PyMeshData {
+    /// Direct reference to underlying MeshData.
+    pub fn inner(&self) -> &MeshData {
+        &self.inner
+    }
+
+    /// Direct mutable reference to underlying MeshData.
+    pub fn inner_mut(&mut self) -> &mut MeshData {
+        &mut self.inner
+    }
 }
 
 #[pymethods]
@@ -65,6 +77,7 @@ impl PyMeshData {
     pub fn face_count(&self) -> usize {
         self.inner.face_count()
     }
+
 
     /// Checks if the mesh is empty.
     pub fn is_empty(&self) -> bool {
@@ -141,6 +154,10 @@ impl PyMeshData {
     ///
     /// Shape: `(vertex_count * 3,)` float32 or `(vertex_count, 3)` in NumPy via `np.frombuffer(m.positions_memoryview(), dtype=np.float32)`.
     pub fn positions_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+        if self.inner.positions.is_empty() {
+            let bytes = PyBytes::new(py, &[]);
+            return PyMemoryView::from(&bytes);
+        }
         let byte_slice = unsafe {
             std::slice::from_raw_parts(
                 self.inner.positions.as_ptr() as *const u8,
@@ -153,6 +170,10 @@ impl PyMeshData {
 
     /// Read-only memoryview of vertex normals as raw bytes (`float32 * 3` per vertex).
     pub fn normals_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+        if self.inner.normals.is_empty() {
+            let bytes = PyBytes::new(py, &[]);
+            return PyMemoryView::from(&bytes);
+        }
         let byte_slice = unsafe {
             std::slice::from_raw_parts(
                 self.inner.normals.as_ptr() as *const u8,
@@ -165,6 +186,10 @@ impl PyMeshData {
 
     /// Read-only memoryview of vertex UV coordinates as raw bytes (`float32 * 2` per vertex).
     pub fn uvs_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+        if self.inner.uvs.is_empty() {
+            let bytes = PyBytes::new(py, &[]);
+            return PyMemoryView::from(&bytes);
+        }
         let byte_slice = unsafe {
             std::slice::from_raw_parts(
                 self.inner.uvs.as_ptr() as *const u8,
@@ -195,16 +220,16 @@ impl PyMeshData {
     }
 
     /// Flattened secondary vertex UVs `[u0, v0, u1, v1, ...]`.
-    pub fn get_flat_secondary_uvs<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyList>> {
+    pub fn get_flat_secondary_uvs<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyList>>> {
         if let Some(ref sec_uvs) = self.inner.secondary_uvs {
             let mut flat = Vec::with_capacity(sec_uvs.len() * 2);
             for uv in sec_uvs {
                 flat.push(uv[0]);
                 flat.push(uv[1]);
             }
-            Some(PyList::new(py, &flat).expect("failed to create list"))
+            Ok(Some(PyList::new(py, &flat)?))
         } else {
-            None
+            Ok(None)
         }
     }
 
@@ -218,6 +243,16 @@ impl PyMeshData {
         normals: Option<Vec<f32>>,
         face_materials: Option<Vec<u16>>,
     ) -> PyResult<Self> {
+        if positions.len() % 3 != 0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "positions buffer length must be a multiple of 3",
+            ));
+        }
+        if uvs.len() % 2 != 0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "uvs buffer length must be a multiple of 2",
+            ));
+        }
         let v_count = positions.len() / 3;
         let uv_count = uvs.len() / 2;
         if v_count != uv_count {
@@ -225,6 +260,40 @@ impl PyMeshData {
                 "Vertex count ({}) must match UV count ({})",
                 v_count, uv_count
             )));
+        }
+        if indices.len() % 3 != 0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "indices buffer length must be a multiple of 3",
+            ));
+        }
+        for &idx in &indices {
+            if idx as usize >= v_count {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "Index {} out of bounds for vertex count {}",
+                    idx, v_count
+                )));
+            }
+        }
+        if let Some(ref norms) = normals {
+            if norms.len() != positions.len() {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "Normals count ({}) must match positions count ({})",
+                    norms.len(),
+                    positions.len()
+                )));
+            }
+        }
+        let tri_faces = indices.len() / 3;
+        let quad_faces = indices.len() / 6;
+        if let Some(ref mats) = face_materials {
+            if mats.len() != tri_faces && mats.len() != quad_faces && !(indices.is_empty() && mats.is_empty()) {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "face_materials length ({}) must match triangle count ({}) or quad count ({})",
+                    mats.len(),
+                    tri_faces,
+                    quad_faces
+                )));
+            }
         }
 
         let mut pos_vec = Vec::with_capacity(v_count);
@@ -250,7 +319,7 @@ impl PyMeshData {
 
         let face_count = indices.len() / 3;
         let mats = face_materials.unwrap_or_else(|| vec![0; face_count]);
-        let tints = vec![-1; face_count];
+        let tints = vec![-1; mats.len()];
 
         Ok(Self {
             inner: MeshData {
@@ -270,6 +339,10 @@ impl PyMeshData {
 
     /// Read-only memoryview of triangle indices as raw bytes (`uint32` per index).
     pub fn indices_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+        if self.inner.indices.is_empty() {
+            let bytes = PyBytes::new(py, &[]);
+            return PyMemoryView::from(&bytes);
+        }
         let byte_slice = unsafe {
             std::slice::from_raw_parts(
                 self.inner.indices.as_ptr() as *const u8,
@@ -283,6 +356,9 @@ impl PyMeshData {
     /// Read-only memoryview of quad indices as raw bytes (`uint32` per index) if quads are recorded.
     pub fn quad_indices_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
         if let Some(ref quads) = self.inner.quad_indices {
+            if quads.is_empty() {
+                return Ok(None);
+            }
             let byte_slice = unsafe {
                 std::slice::from_raw_parts(
                     quads.as_ptr() as *const u8,
@@ -313,6 +389,11 @@ impl PyMeshData {
         } else {
             self.inner.indices.len()
         };
+
+        if total_loops == 0 {
+            let bytes = PyBytes::new(py, &[]);
+            return PyMemoryView::from(&bytes);
+        }
 
         // When self.inner.uvs already stores per-corner (loop) UVs (e.g. from SectionMesher,
         // append_quad, or where spatial welding preserved corner UVs), its length matches total_loops.
@@ -390,6 +471,10 @@ impl PyMeshData {
         } else {
             self.inner.indices.len() / 3
         };
+        if count == 0 {
+            let bytes = PyBytes::new(py, &[]);
+            return PyMemoryView::from(&bytes);
+        }
         let step = if is_quad { 4i32 } else { 3i32 };
         let mut starts: Vec<i32> = Vec::with_capacity(count);
         for i in 0..count {
@@ -420,6 +505,10 @@ impl PyMeshData {
         } else {
             self.inner.indices.len() / 3
         };
+        if count == 0 {
+            let bytes = PyBytes::new(py, &[]);
+            return PyMemoryView::from(&bytes);
+        }
         let val = if is_quad { 4i32 } else { 3i32 };
         let totals = vec![val; count];
         let byte_slice = unsafe {
@@ -434,6 +523,10 @@ impl PyMeshData {
 
     /// Read-only memoryview of face material slots (`uint16` per face).
     pub fn face_materials_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+        if self.inner.face_materials.is_empty() {
+            let bytes = PyBytes::new(py, &[]);
+            return PyMemoryView::from(&bytes);
+        }
         let byte_slice = unsafe {
             std::slice::from_raw_parts(
                 self.inner.face_materials.as_ptr() as *const u8,
@@ -446,6 +539,10 @@ impl PyMeshData {
 
     /// Read-only memoryview of face tint indices (`int8` per face).
     pub fn face_tint_indices_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+        if self.inner.face_tint_indices.is_empty() {
+            let bytes = PyBytes::new(py, &[]);
+            return PyMemoryView::from(&bytes);
+        }
         let byte_slice = unsafe {
             std::slice::from_raw_parts(
                 self.inner.face_tint_indices.as_ptr() as *const u8,
@@ -459,6 +556,9 @@ impl PyMeshData {
     /// Read-only memoryview of vertex RGBA colors (`float32 * 4` per vertex) if present.
     pub fn colors_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
         if let Some(ref cols) = self.inner.colors {
+            if cols.is_empty() {
+                return Ok(None);
+            }
             let byte_slice = unsafe {
                 std::slice::from_raw_parts(
                     cols.as_ptr() as *const u8,
@@ -529,9 +629,11 @@ impl PyMeshData {
                 }
                 let count = raw_bytes.len() / elem_size;
                 let mut vec = Vec::with_capacity(count);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(raw_bytes.as_ptr() as *const f32, vec.as_mut_ptr(), count);
-                    vec.set_len(count);
+                if count > 0 {
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
+                        vec.set_len(count);
+                    }
                 }
                 mtk_core::attributes::AttributeData::Float(vec)
             }
@@ -542,9 +644,11 @@ impl PyMeshData {
                 }
                 let count = raw_bytes.len() / elem_size;
                 let mut vec = Vec::with_capacity(count);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(raw_bytes.as_ptr() as *const [f32; 2], vec.as_mut_ptr(), count);
-                    vec.set_len(count);
+                if count > 0 {
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
+                        vec.set_len(count);
+                    }
                 }
                 mtk_core::attributes::AttributeData::Float2(vec)
             }
@@ -555,9 +659,11 @@ impl PyMeshData {
                 }
                 let count = raw_bytes.len() / elem_size;
                 let mut vec = Vec::with_capacity(count);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(raw_bytes.as_ptr() as *const [f32; 3], vec.as_mut_ptr(), count);
-                    vec.set_len(count);
+                if count > 0 {
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
+                        vec.set_len(count);
+                    }
                 }
                 mtk_core::attributes::AttributeData::Float3(vec)
             }
@@ -568,18 +674,22 @@ impl PyMeshData {
                 }
                 let count = raw_bytes.len() / elem_size;
                 let mut vec = Vec::with_capacity(count);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(raw_bytes.as_ptr() as *const [f32; 4], vec.as_mut_ptr(), count);
-                    vec.set_len(count);
+                if count > 0 {
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
+                        vec.set_len(count);
+                    }
                 }
                 mtk_core::attributes::AttributeData::Float4(vec)
             }
             "int8" | "i8" => {
                 let count = raw_bytes.len();
                 let mut vec = Vec::with_capacity(count);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(raw_bytes.as_ptr() as *const i8, vec.as_mut_ptr(), count);
-                    vec.set_len(count);
+                if count > 0 {
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
+                        vec.set_len(count);
+                    }
                 }
                 mtk_core::attributes::AttributeData::Int8(vec)
             }
@@ -590,9 +700,11 @@ impl PyMeshData {
                 }
                 let count = raw_bytes.len() / elem_size;
                 let mut vec = Vec::with_capacity(count);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(raw_bytes.as_ptr() as *const i16, vec.as_mut_ptr(), count);
-                    vec.set_len(count);
+                if count > 0 {
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
+                        vec.set_len(count);
+                    }
                 }
                 mtk_core::attributes::AttributeData::Int16(vec)
             }
@@ -603,18 +715,22 @@ impl PyMeshData {
                 }
                 let count = raw_bytes.len() / elem_size;
                 let mut vec = Vec::with_capacity(count);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(raw_bytes.as_ptr() as *const i32, vec.as_mut_ptr(), count);
-                    vec.set_len(count);
+                if count > 0 {
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
+                        vec.set_len(count);
+                    }
                 }
                 mtk_core::attributes::AttributeData::Int32(vec)
             }
             "uint8" | "u8" | "byte" => {
                 let count = raw_bytes.len();
                 let mut vec = Vec::with_capacity(count);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr(), count);
-                    vec.set_len(count);
+                if count > 0 {
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
+                        vec.set_len(count);
+                    }
                 }
                 mtk_core::attributes::AttributeData::UInt8(vec)
             }
@@ -625,9 +741,11 @@ impl PyMeshData {
                 }
                 let count = raw_bytes.len() / elem_size;
                 let mut vec = Vec::with_capacity(count);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(raw_bytes.as_ptr() as *const u16, vec.as_mut_ptr(), count);
-                    vec.set_len(count);
+                if count > 0 {
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
+                        vec.set_len(count);
+                    }
                 }
                 mtk_core::attributes::AttributeData::UInt16(vec)
             }
@@ -638,9 +756,11 @@ impl PyMeshData {
                 }
                 let count = raw_bytes.len() / elem_size;
                 let mut vec = Vec::with_capacity(count);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(raw_bytes.as_ptr() as *const u32, vec.as_mut_ptr(), count);
-                    vec.set_len(count);
+                if count > 0 {
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
+                        vec.set_len(count);
+                    }
                 }
                 mtk_core::attributes::AttributeData::UInt32(vec)
             }
@@ -757,29 +877,29 @@ impl PyMeshData {
     // -------------------------------------------------------------------------
 
     /// Flattened vertex positions `[x0, y0, z0, x1, y1, z1, ...]`.
-    pub fn get_flat_positions<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
-        PyList::new(py, self.inner.positions_flat()).expect("failed to create list")
+    pub fn get_flat_positions<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        PyList::new(py, self.inner.positions_flat())
     }
 
     /// Flattened vertex normals `[nx0, ny0, nz0, nx1, ny1, nz1, ...]`.
-    pub fn get_flat_normals<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
-        PyList::new(py, self.inner.normals_flat()).expect("failed to create list")
+    pub fn get_flat_normals<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        PyList::new(py, self.inner.normals_flat())
     }
 
     /// Flattened vertex UVs `[u0, v0, u1, v1, ...]`.
-    pub fn get_flat_uvs<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
-        PyList::new(py, self.inner.uvs_flat()).expect("failed to create list")
+    pub fn get_flat_uvs<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        PyList::new(py, self.inner.uvs_flat())
     }
 
     /// Triangle face indices `[i0, i1, i2, i3, i4, i5, ...]`.
-    pub fn get_indices<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
-        PyList::new(py, &self.inner.indices).expect("failed to create list")
+    pub fn get_indices<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        PyList::new(py, &self.inner.indices)
     }
 
     /// Quad polygon vertex indices `[v0, v1, v2, v3, ...]` (4 u32 per quad).
-    pub fn get_quad_indices<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
+    pub fn get_quad_indices<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
         let quads = self.inner.reconstruct_quad_indices();
-        PyList::new(py, &quads).expect("failed to create list")
+        PyList::new(py, &quads)
     }
 
     /// Number of quad faces recorded.
@@ -795,7 +915,9 @@ impl PyMeshData {
     /// Welds spatially duplicate vertices within tolerance while preserving indices and face attributes.
     #[pyo3(signature = (tolerance=1e-4))]
     pub fn weld_spatial_vertices(&mut self, tolerance: f32) {
-        self.inner.weld_spatial_vertices(tolerance);
+        if !self.inner.is_empty() {
+            self.inner.weld_spatial_vertices(tolerance);
+        }
     }
 
     /// Culls duplicate overlapping faces and contacting interior coplanar faces from this mesh.
@@ -803,6 +925,9 @@ impl PyMeshData {
     /// Eliminates DCC viewport and render-time Z-fighting artifacts while preserving custom attributes.
     #[pyo3(signature = (tolerance=1e-3, cull_opposite=true, cull_duplicates=true))]
     pub fn cull_faces(&self, tolerance: f32, cull_opposite: bool, cull_duplicates: bool) -> PyMeshData {
+        if self.inner.is_empty() {
+            return PyMeshData::new();
+        }
         let config = mtk_cull::MeshCullConfig {
             tolerance,
             cull_coplanar_opposite: cull_opposite,
@@ -813,13 +938,13 @@ impl PyMeshData {
     }
 
     /// Material slot per face.
-    pub fn get_face_materials<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
-        PyList::new(py, &self.inner.face_materials).expect("failed to create list")
+    pub fn get_face_materials<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        PyList::new(py, &self.inner.face_materials)
     }
 
     /// Tint index per face.
-    pub fn get_face_tint_indices<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
-        PyList::new(py, &self.inner.face_tint_indices).expect("failed to create list")
+    pub fn get_face_tint_indices<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        PyList::new(py, &self.inner.face_tint_indices)
     }
 
     fn __repr__(&self) -> String {
