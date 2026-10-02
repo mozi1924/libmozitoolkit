@@ -13,13 +13,23 @@
 
 ---
 
-## 2. 目标平台与实现方案
+## 2. 绑定演进路线图与目标平台
+
+根据项目整体战略规划，跨语言绑定与工具链按以下优先级演进：
+
+| 绑定 / 工具 | 演进优先级 | 核心目标与技术栈 | 状态与定位 |
+| :--- | :---: | :--- | :--- |
+| **`mtk-py`** | **P0 (当前核心)** | PyO3 + maturin + CPython ABI3 (`libmtk_py`) | **生产事实标准**：MoziToolKit (Blender 4.2+) 扩展插件的核心胶水后端 |
+| **`mtk-cli`** | **P1 (工具与验证)** | Rust 原生 CLI (`mtk`) | **核心工具链**：无头资产预编译、模型排查与测试验证 |
+| **`mtk-bench`** | **P1 (基准压测)** | 性能基准测试套件 | **质量防线**：4000+ 区块段多核网格化与遮挡剔除压测 |
+| **`mtk-ffi`** | **P2 (远期预备)** | C-ABI (`cdylib` / `staticlib` / `mtk.h`) | **生态预备**：面向 Maya、Houdini、C# (Unity)、Godot、C/C++ |
+| **`mtk-wasm`** | **P2 (远期预备)** | wasm-bindgen (`mtk_wasm`) | **生态预备**：面向 WebGPU / Three.js 网页端 3D 资产预览 |
 
 ```
 bindings/
-  ├── mtk-py/    -> Python CPython 扩展模块 (PyO3 + maturin) -> libmtk_py
-  ├── mtk-ffi/   -> C-ABI 动态/静态库 (extern "C" + cbindgen) -> libmtk_ffi
-  └── mtk-wasm/  -> 浏览器与 Node.js 模块 (wasm-bindgen + wasm-pack) -> mtk_wasm
+  ├── mtk-py/    -> [P0] Python CPython 扩展模块 (PyO3 + maturin) -> libmtk_py
+  ├── mtk-ffi/   -> [P2] C-ABI 动态/静态库 (extern "C" + cbindgen) -> libmtk_ffi
+  └── mtk-wasm/  -> [P2] 浏览器与 Node.js 模块 (wasm-bindgen + wasm-pack) -> mtk_wasm
 ```
 
 ---

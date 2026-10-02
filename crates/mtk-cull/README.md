@@ -1,0 +1,167 @@
+# mtk-cull
+
+[![Crates.io](https://img.shields.io/badge/crates.io-mtk--cull-orange.svg)](https://crates.io/crates/mtk-cull)
+[![Documentation](https://docs.rs/mtk-cull/badge.svg)](https://docs.rs/mtk-cull)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
+
+**`mtk-cull`** 是 MoziToolKit (`libmtk`) 体系的微观遮挡剔除与几何消重引擎。专注于 Minecraft 邻域面遮挡判定、2D 矩形差集切分（Occlusion Boolean Operations）、隐藏体素体裁剪，以及对外部导入网格（如 Mineways、jmc2obj、Blockbench OBJ）进行高精度的共面叠面消除与不可见面剔除。
+
+---
+
+## 核心特性 (Key Features)
+
+- **邻域面遮挡状态机 (`FaceCuller`)**：原版 1.21+ 规范的 6 向邻域剔除判定，内置实心不透明体 (`SolidOpaque`)、半透明玻璃 (`GlassTranslucent`)、镂空树叶 (`CutoutLeaves`)、异形方块 (`PartialShape`)、流体 (`Fluid`) 与非遮挡装饰 (`NonOccluding`) 的全状态分类决策。
+- **2D 矩形差集切分算法 (`subtract_rect`)**：极速微观 2D 矩形布尔差集运算（`SmallVec<[Aabb2d; 4]>` 无堆分配优化），精准解算半砖 (Slabs)、楼梯 (Stairs)、活板门 (Trapdoors) 与地毯等异形方块的局部遮挡面。
+- **几何消重与叠面清洗器 (`MeshSanitizer`)**：多边形共面关系分析器（`check_coplanar_overlap`），自动检测并消除完全重合的重复面（Duplicate Faces，杜绝 Z-fighting 闪烁）与背靠背接触面（Contact Faces）。
+- **外部网格微观剔除 (`cull_mesh_faces`)**：基于空间哈希的高性能网格面剔除算子，对任意 `MeshData` 进行无缝拓扑精简，完整保留所有顶点/角点/面级自定义属性与 Quad 拓扑。
+
+---
+
+## 模块结构与核心 API (Architecture & Core Types)
+
+### 1. 邻域面剔除引擎 (`engine`, `rules`, `types`)
+
+| 类型 / 结构体 | 说明 |
+| :--- | :--- |
+| [`FaceCuller`](src/engine/face_culler.rs) | 统一面剔除引擎，内部维护线程安全的 `BlockCullMeta` 元数据高速缓存与 LRU 驱逐机制。 |
+| [`BlockCullMeta`](src/types.rs) | 预烘焙方块剔除元数据，包含 6 向遮挡矩形列表 `face_shapes: [Vec<Aabb2d>; 6]`、满面位掩码 `full_face_mask` 与不透明标记。 |
+| [`CullCategory`](src/types.rs) | 方块剔除类别：`SolidOpaque`, `GlassTranslucent`, `CutoutLeaves`, `PartialShape`, `Fluid`, `NonOccluding`, `Air`。 |
+| [`LeavesCullMode`](src/types.rs) | 树叶剔除模式：`Fancy`（原版双面双透）、`SingleFace`（接触面单面保留，防闪烁）、`Fast`（不透明壳体互剔）、`None`。 |
+| [`GlassCullMode`](src/types.rs) | 玻璃剔除模式：`Group`（跨色玻璃全局互剔）、`SameBlock`（同色方块互剔）、`None`。 |
+| `should_skip_rendering` | `(curr_cat, neighbor_cat, ...) -> bool`：基于类别与方块属性的快速渲染跳过规则。 |
+
+### 2. 2D 矩形布尔与遮挡检测 (`geometry::rect_ops`)
+
+| 函数 | 签名 / 描述 |
+| :--- | :--- |
+| `subtract_rect` | `(subject: &Aabb2d, clip: &Aabb2d) -> SmallVec<[Aabb2d; 4]>`：从目标矩形中裁剪单个遮挡矩形，返回剩余不相交子矩形碎片。 |
+| `subtract_rect_multi` | `(subject: &Aabb2d, clips: &[Aabb2d]) -> Vec<Aabb2d>`：从目标矩形中连续裁剪多个遮挡矩形。 |
+| `is_face_completely_occluded` | `(subjects: &[Aabb2d], occluders: &[Aabb2d]) -> bool`：判定一组目标矩形面是否被遮挡矩形集合完全覆盖。 |
+| `extract_quad_face_occlusion_rect` | `(vertices: &[Vec3; 4], dir: Direction) -> Option<Aabb2d>`：从 3D 四边形中投影提取 2D 单位面上的轴对齐遮挡矩形。 |
+
+### 3. 共面分析与几何消重 (`sanitizer`, `mesh_cull`, `geometry::coplanar`)
+
+| 类型 / 函数 | 说明 |
+| :--- | :--- |
+| [`MeshSanitizer`](src/sanitizer.rs) | 统一网格清洗与几何消重门面，提供 `deduplicate_quads`, `clip_quad_excluding_hidden_volume`, `sanitize_mesh`。 |
+| [`MeshCullConfig`](src/mesh_cull.rs) | 网格剔除配置：`tolerance`（几何容差）、`cull_duplicates`（同向重复面消除）、`cull_coplanar_opposite`（反向接触面剔除）。 |
+| [`MeshCullResult`](src/mesh_cull.rs) | 剔除统计结果，包含 `initial_faces`, `culled_faces`, `remaining_faces` 与净化后的 `mesh: MeshData`。 |
+| `cull_mesh_faces` | `(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResult`：外部网格微观剔除与叠面消除入口。 |
+| `check_coplanar_overlap` | `(verts_a, norm_a, verts_b, norm_b, tol) -> Option<CoplanarRelation>`：计算两多边形的共面投影重叠关系（`Exact`, `ContainedInA`, `ContainedInB`, `Partial`）。 |
+
+---
+
+## 快速上手 (Quick Start)
+
+在 `Cargo.toml` 中添加依赖：
+
+```toml
+[dependencies]
+mtk-cull = { version = "0.1.0" }
+mtk-core = { version = "0.1.0" }
+glam = "0.29"
+```
+
+### 1. 使用 `FaceCuller` 进行方块面可见性判定
+
+```rust
+use mtk_cull::{FaceCuller, GlassCullMode, LeavesCullMode, CullCategory};
+use mtk_core::direction::Direction;
+
+fn main() {
+    let culler = FaceCuller::new(LeavesCullMode::SingleFace, GlassCullMode::Group);
+
+    // 获取方块元数据（自动解析并缓存）
+    let stone = culler.get_meta("minecraft:stone", None, None);
+    let dirt = culler.get_meta("minecraft:dirt", None, None);
+    let air = culler.get_meta("minecraft:air", None, None);
+
+    assert_eq!(stone.category, CullCategory::SolidOpaque);
+
+    // 石头在东侧 (+X) 与泥土紧贴：石头的东面应当被剔除
+    let render_east = culler.should_render_face(
+        &stone,
+        Some(&dirt),
+        Direction::East,
+        None,
+        None,
+        None,
+    );
+    assert!(!render_east, "Touching solid face should be culled");
+
+    // 石头在东侧接触空气：石头的东面应当被渲染
+    let render_air = culler.should_render_face(
+        &stone,
+        Some(&air),
+        Direction::East,
+        None,
+        None,
+        None,
+    );
+    assert!(render_air, "Face touching air should be rendered");
+}
+```
+
+### 2. 2D 矩形差集切分 (半砖/局部遮挡)
+
+```rust
+use mtk_core::geometry::Aabb2d;
+use mtk_cull::geometry::subtract_rect;
+
+fn main() {
+    // 完整的 1.0 x 1.0 单位方块面
+    let full_face = Aabb2d::from_min_max(0.0, 0.0, 1.0, 1.0);
+    // 下半砖遮挡区域 [0.0..1.0, 0.0..0.5]
+    let bottom_slab = Aabb2d::from_min_max(0.0, 0.0, 1.0, 0.5);
+
+    // 执行布尔差集切分
+    let remaining_pieces = subtract_rect(&full_face, &bottom_slab);
+
+    assert_eq!(remaining_pieces.len(), 1);
+    let top_half = remaining_pieces[0];
+    assert_eq!(top_half.min.y, 0.5);
+    assert_eq!(top_half.max.y, 1.0);
+    println!("Unoccluded remainder area: {}", top_half.area());
+}
+```
+
+### 3. 网格几何叠面与重复面净化 (`MeshSanitizer`)
+
+```rust
+use mtk_core::mesh::MeshData;
+use mtk_cull::{MeshCullConfig, MeshSanitizer};
+
+fn main() {
+    let mut mesh = MeshData::new();
+    // ... 填充导入的几何网格 ...
+
+    let config = MeshCullConfig {
+        tolerance: 1e-3,
+        cull_duplicates: true,         // 消除同向重复面
+        cull_coplanar_opposite: true,  // 消除内部背靠背接触面
+    };
+
+    let result = MeshSanitizer::sanitize_mesh(&mesh, &config);
+
+    println!(
+        "Culled {} invisible faces out of {} faces.",
+        result.culled_faces,
+        result.initial_faces
+    );
+}
+```
+
+---
+
+## Feature Flags
+
+| Feature | 默认启用 | 描述 |
+| :--- | :---: | :--- |
+| `std` | 是 | 启用标准库与 `mtk-core/std`。禁用时支持 `no_std`（依赖 `alloc` 与 `RefCell` 缓存）。 |
+| `serde` | 是 | 为 `BlockCullMeta`, `CullCategory` 等结构体实现序列化与反序列化。 |
+
+---
+
+## 许可证 (License)
+
+本项目采用 [MIT OR Apache-2.0](LICENSE) 双重开源许可证。
