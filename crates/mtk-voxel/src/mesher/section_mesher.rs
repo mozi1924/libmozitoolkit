@@ -1,51 +1,26 @@
-use std::sync::Arc;
+//! High-performance mesh generator for individual and batch chunk sections.
 
-use glam::{IVec3, Vec3};
+use std::sync::Arc;
+use glam::IVec3;
 use mtk_core::direction::Direction;
 use mtk_core::mesh::MeshData;
 use mtk_cull::types::BlockCullMeta;
 use mtk_cull::FaceCuller;
-use mtk_material::MaterialResolver;
-use mtk_model::baked::{BakedFace, BakedModel};
+use mtk_model::baked::BakedModel;
 use mtk_model::baker::is_block_emissive;
 use mtk_model::blockstate::BlockState;
 
-use crate::ao::{ao_level_to_brightness, calculate_face_ao, should_flip_quad_diagonal};
+use crate::ao::calculate_face_ao;
 use crate::fluid::emit_fluid_geometry;
 use crate::storage::{padded_index, PaddedVoxelArray, SECTION_SIZE};
 use crate::types::{MesherConfig, VoxelError};
 
 use super::collector::FaceAttributesCollector;
-use super::heuristic::get_unit_cube_texture_candidates;
-use super::tint::compute_face_tint;
-
-#[derive(Clone, Debug)]
-pub(crate) struct PreResolvedFace {
-    pub(crate) source_texture_key: String,
-    pub(crate) override_uvs: Option<[glam::Vec2; 4]>,
-    pub(crate) mat_slot: u16,
-    pub(crate) chunk_id: i32,
-    pub(crate) tex_id: u32,
-    pub(crate) tint_data: [f32; 4],
-    pub(crate) tint_color: [f32; 4],
-    pub(crate) colormap_uv: [f32; 3],
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct PreResolvedModelFace {
-    pub(crate) face: BakedFace,
-    pub(crate) pre: PreResolvedFace,
-}
-
-pub(crate) enum PaletteMeshingData {
-    Model {
-        culled_faces: [Vec<PreResolvedModelFace>; 6],
-        unculled_faces: Vec<PreResolvedModelFace>,
-    },
-    UnitCube {
-        faces: [PreResolvedFace; 6],
-    },
-}
+use super::emitter::{emit_baked_face, emit_unit_cube_face};
+use super::shading::{
+    build_palette_meshing_data, resolve_model_face_shading, resolve_unit_cube_face_shading,
+    sample_biome_tint, PaletteMeshingData, PreResolvedModelFace,
+};
 
 /// High-performance mesh generator for individual and batch chunk sections.
 pub struct SectionMesher;
@@ -89,7 +64,7 @@ impl SectionMesher {
             })
             .collect();
 
-        // Pre-resolve palette emissive states (avoids repeated BlockState::parse in hot loop)
+        // Pre-resolve palette emissive states
         let palette_emissive: Vec<bool> = padded
             .palette
             .iter()
@@ -103,199 +78,8 @@ impl SectionMesher {
             })
             .collect();
 
-        // Pre-resolve palette meshing data (Atlas UVs, material slots, tint) outside hot loop
-        let palette_meshing_data: Vec<PaletteMeshingData> = padded
-            .palette
-            .iter()
-            .zip(palette_models.iter())
-            .map(|(state_str, model_opt)| {
-                let clean_block = mtk_resource::extract_block_name(state_str);
-                if let Some(baked) = model_opt {
-                    let (c_buckets, u_bucket) = baked.get_face_buckets();
-
-                    let resolve_face = |face: &BakedFace| -> PreResolvedModelFace {
-                        let (final_tex_key, override_uvs, mat_slot, chunk_id, tex_id) =
-                            if let Some(ref atlas_uvs) = face.atlas_uvs {
-                                (
-                                    face.texture.clone(),
-                                    Some(*atlas_uvs),
-                                    face.atlas_chunk_id.unwrap_or(0),
-                                    face.atlas_chunk_id.unwrap_or(0) as i32,
-                                    face.atlas_texture_id.unwrap_or(0),
-                                )
-                            } else if let Some(atlas) = &config.atlas_address_map {
-                                let base_loc = if !face.texture.is_empty() {
-                                    mtk_resource::ResourceLocation::parse(&face.texture).ok()
-                                } else {
-                                    None
-                                };
-                                let resolved = if let Some(ref loc) = base_loc {
-                                    MaterialResolver::resolve(
-                                        &loc.as_string(),
-                                        config.custom_aliases.as_deref(),
-                                        atlas,
-                                    )
-                                    .or_else(|| atlas.lookup(loc).map(|sp| ((*loc).clone(), sp)))
-                                } else {
-                                    None
-                                }
-                                .or_else(|| {
-                                    MaterialResolver::resolve(
-                                        &face.texture,
-                                        config.custom_aliases.as_deref(),
-                                        atlas,
-                                    )
-                                });
-
-                                if let Some((res_loc, atlas_loc)) = resolved {
-                                    let u_min = atlas_loc.frame_0_uv_bounds[0];
-                                    let v_min = atlas_loc.frame_0_uv_bounds[1];
-                                    let u_span = atlas_loc.frame_0_uv_bounds[2] - u_min;
-                                    let v_span = atlas_loc.frame_0_uv_bounds[3] - v_min;
-                                    let remapped = [
-                                        glam::Vec2::new(
-                                            u_min + face.uvs[0].x * u_span,
-                                            v_min + (1.0 - face.uvs[0].y) * v_span,
-                                        ),
-                                        glam::Vec2::new(
-                                            u_min + face.uvs[1].x * u_span,
-                                            v_min + (1.0 - face.uvs[1].y) * v_span,
-                                        ),
-                                        glam::Vec2::new(
-                                            u_min + face.uvs[2].x * u_span,
-                                            v_min + (1.0 - face.uvs[2].y) * v_span,
-                                        ),
-                                        glam::Vec2::new(
-                                            u_min + face.uvs[3].x * u_span,
-                                            v_min + (1.0 - face.uvs[3].y) * v_span,
-                                        ),
-                                    ];
-                                    (
-                                        res_loc.as_string(),
-                                        Some(remapped),
-                                        atlas_loc.chunk_id,
-                                        atlas_loc.chunk_id as i32,
-                                        atlas_loc.texture_id,
-                                    )
-                                } else {
-                                    (face.texture.clone(), None, 0, 0, 0)
-                                }
-                            } else {
-                                (face.texture.clone(), None, 0, 0, 0)
-                            };
-
-                        let (tint_data, tint_color, colormap_uv) = compute_face_tint(
-                            &final_tex_key,
-                            clean_block,
-                            face.tint_index,
-                            config.biome_resolver.as_deref(),
-                        );
-
-                        PreResolvedModelFace {
-                            face: face.clone(),
-                            pre: PreResolvedFace {
-                                source_texture_key: final_tex_key,
-                                override_uvs,
-                                mat_slot,
-                                chunk_id,
-                                tex_id,
-                                tint_data,
-                                tint_color,
-                                colormap_uv,
-                            },
-                        }
-                    };
-
-                    let mut culled_faces: [Vec<PreResolvedModelFace>; 6] = Default::default();
-                    for dir in Direction::ALL {
-                        let idx = dir.to_index();
-                        culled_faces[idx] = c_buckets[idx].iter().map(&resolve_face).collect();
-                    }
-                    let unculled_faces: Vec<PreResolvedModelFace> = u_bucket.iter().map(&resolve_face).collect();
-
-                    PaletteMeshingData::Model {
-                        culled_faces,
-                        unculled_faces,
-                    }
-                } else {
-                    let clean_sub = clean_block
-                        .strip_prefix("minecraft:")
-                        .unwrap_or(clean_block);
-
-                    let mut faces: [Option<PreResolvedFace>; 6] = Default::default();
-                    for dir in Direction::ALL {
-                        let (final_tex_key, override_uvs, mat_slot, chunk_id, tex_id) =
-                            if let Some(atlas) = &config.atlas_address_map {
-                                let candidates = get_unit_cube_texture_candidates(clean_sub, dir);
-                                let mut resolved = None;
-                                for cand in &candidates {
-                                    if let Some((res, sp)) = MaterialResolver::resolve(
-                                        cand,
-                                        config.custom_aliases.as_deref(),
-                                        atlas,
-                                    ) {
-                                        resolved = Some((res, sp));
-                                        break;
-                                    }
-                                }
-                                if let Some((res_loc, atlas_loc)) = resolved {
-                                    let u_min = atlas_loc.frame_0_uv_bounds[0];
-                                    let v_min = atlas_loc.frame_0_uv_bounds[1];
-                                    let u_max = atlas_loc.frame_0_uv_bounds[2];
-                                    let v_max = atlas_loc.frame_0_uv_bounds[3];
-                                    let remapped = [
-                                        glam::Vec2::new(u_min, v_max),
-                                        glam::Vec2::new(u_min, v_min),
-                                        glam::Vec2::new(u_max, v_min),
-                                        glam::Vec2::new(u_max, v_max),
-                                    ];
-                                    (
-                                        res_loc.as_string(),
-                                        Some(remapped),
-                                        atlas_loc.chunk_id,
-                                        atlas_loc.chunk_id as i32,
-                                        atlas_loc.texture_id,
-                                    )
-                                } else {
-                                    (format!("minecraft:block/{}", clean_sub), None, 0, 0, 0)
-                                }
-                            } else {
-                                (format!("minecraft:block/{}", clean_sub), None, 0, 0, 0)
-                            };
-
-                        let tint_idx = mtk_material::get_unit_cube_tint_index(clean_sub, dir);
-                        let (tint_data, tint_color, colormap_uv) = compute_face_tint(
-                            &final_tex_key,
-                            clean_block,
-                            tint_idx,
-                            config.biome_resolver.as_deref(),
-                        );
-
-                        faces[dir.to_index()] = Some(PreResolvedFace {
-                            source_texture_key: final_tex_key,
-                            override_uvs,
-                            mat_slot,
-                            chunk_id,
-                            tex_id,
-                            tint_data,
-                            tint_color,
-                            colormap_uv,
-                        });
-                    }
-
-                    PaletteMeshingData::UnitCube {
-                        faces: [
-                            faces[0].take().unwrap(),
-                            faces[1].take().unwrap(),
-                            faces[2].take().unwrap(),
-                            faces[3].take().unwrap(),
-                            faces[4].take().unwrap(),
-                            faces[5].take().unwrap(),
-                        ],
-                    }
-                }
-            })
-            .collect();
+        // Pre-resolve palette meshing data outside hot loop
+        let palette_meshing_data = build_palette_meshing_data(padded, &palette_models, config);
 
         let world_offset_x = (padded.coord.x * 16) as f32;
         let world_offset_y = (padded.coord.y * 16) as f32;
@@ -378,7 +162,6 @@ impl SectionMesher {
                             fluid_uv,
                         );
 
-                        // If it's pure fluid and not waterlogged, don't generate solid cube mesh
                         if meta.is_fluid && !meta.is_waterlogged {
                             continue;
                         }
@@ -407,7 +190,6 @@ impl SectionMesher {
 
                         let mut emit_model_face = |mf: &PreResolvedModelFace| {
                             let face = &mf.face;
-                            let pre_face = &mf.pre;
                             let face_dir = face.direction;
 
                             // Calculate 4-corner AO for face.direction
@@ -426,104 +208,21 @@ impl SectionMesher {
                                 [3, 3, 3, 3]
                             };
 
-                            let (
-                                final_tex_key,
-                                override_uvs,
-                                mat_slot,
-                                chunk_id,
-                                tex_id,
-                                tint_data,
-                                tint_color,
-                                colormap_uv,
-                            ) = (|| {
-                                let solver = config.ctm_solver.as_ref()?;
-                                let base_loc = if !face.texture.is_empty() {
-                                    mtk_resource::ResourceLocation::parse(&face.texture).ok()
-                                } else {
-                                    None
-                                };
-                                let resolved_loc = solver.resolve_face(
-                                    state_str,
-                                    face_dir,
-                                    block_pos,
-                                    base_loc.as_ref(),
-                                    None,
-                                    get_padded_neighbor_state,
-                                )?;
-                                let atlas = config.atlas_address_map.as_ref()?;
-                                let atlas_loc = atlas.lookup(&resolved_loc)?;
-                                let u_min = atlas_loc.frame_0_uv_bounds[0];
-                                let v_min = atlas_loc.frame_0_uv_bounds[1];
-                                let u_span = atlas_loc.frame_0_uv_bounds[2] - u_min;
-                                let v_span = atlas_loc.frame_0_uv_bounds[3] - v_min;
-                                let remapped = [
-                                    glam::Vec2::new(
-                                        u_min + face.uvs[0].x * u_span,
-                                        v_min + (1.0 - face.uvs[0].y) * v_span,
-                                    ),
-                                    glam::Vec2::new(
-                                        u_min + face.uvs[1].x * u_span,
-                                        v_min + (1.0 - face.uvs[1].y) * v_span,
-                                    ),
-                                    glam::Vec2::new(
-                                        u_min + face.uvs[2].x * u_span,
-                                        v_min + (1.0 - face.uvs[2].y) * v_span,
-                                    ),
-                                    glam::Vec2::new(
-                                        u_min + face.uvs[3].x * u_span,
-                                        v_min + (1.0 - face.uvs[3].y) * v_span,
-                                    ),
-                                ];
-                                let ctm_key = resolved_loc.as_string();
-                                let clean_b = mtk_resource::extract_block_name(state_str);
-                                let (td, tc, c_uv) = compute_face_tint(
-                                    &ctm_key,
-                                    clean_b,
-                                    face.tint_index,
-                                    config.biome_resolver.as_deref(),
-                                );
-                                Some((
-                                    ctm_key,
-                                    Some(remapped),
-                                    atlas_loc.chunk_id,
-                                    atlas_loc.chunk_id as i32,
-                                    atlas_loc.texture_id,
-                                    td,
-                                    tc,
-                                    c_uv,
-                                ))
-                            })()
-                            .unwrap_or_else(|| (
-                                pre_face.source_texture_key.clone(),
-                                pre_face.override_uvs,
-                                pre_face.mat_slot,
-                                pre_face.chunk_id,
-                                pre_face.tex_id,
-                                pre_face.tint_data,
-                                pre_face.tint_color,
-                                pre_face.colormap_uv,
-                            ));
+                            let shading = resolve_model_face_shading(
+                                mf,
+                                state_str,
+                                block_pos,
+                                config,
+                                get_padded_neighbor_state,
+                            );
 
-                            let (final_tint_color, final_colormap_uv) = if let Some(ref biome_cols) = padded.biome_data {
-                                let col_idx = lx * 16 + lz;
-                                if col_idx < biome_cols.len() && tint_data[2] > 0.0 {
-                                    let col = &biome_cols[col_idx];
-                                    let uv = [col.colormap_uv[0], col.colormap_uv[1], 0.0];
-                                    let c = match tint_data[3] as u8 {
-                                        mtk_material::TINT_TYPE_GRASS => col.grass_color,
-                                        mtk_material::TINT_TYPE_FOLIAGE => col.foliage_color,
-                                        mtk_material::TINT_TYPE_DRY_FOLIAGE => col.dry_foliage_color,
-                                        mtk_material::TINT_TYPE_WATER => col.water_color,
-                                        mtk_material::TINT_TYPE_HARDCODED => tint_color,
-                                        _ => tint_color,
-                                    };
-                                    (c, uv)
-                                } else {
-                                    (tint_color, colormap_uv)
-                                }
-                            } else {
-                                (tint_color, colormap_uv)
-                            };
+                            let (final_tint_color, final_colormap_uv) = sample_biome_tint(
+                                padded.biome_data.as_deref(),
+                                lx * 16 + lz,
+                                shading.tint_data,
+                                shading.tint_color,
+                                shading.colormap_uv,
+                            );
 
                             emit_baked_face(
                                 &mut mesh,
@@ -533,13 +232,8 @@ impl SectionMesher {
                                 wz,
                                 ao_levels,
                                 config,
-                                override_uvs,
-                                mat_slot,
                                 &mut collector,
-                                final_tex_key,
-                                chunk_id,
-                                tex_id,
-                                tint_data,
+                                &shading,
                                 final_tint_color,
                                 final_colormap_uv,
                                 block_pos,
@@ -638,123 +332,22 @@ impl SectionMesher {
                             };
 
                             let pre_face = &cube_faces[dir.to_index()];
+                            let shading = resolve_unit_cube_face_shading(
+                                pre_face,
+                                dir,
+                                state_str,
+                                block_pos,
+                                config,
+                                get_padded_neighbor_state,
+                            );
 
-                            let (final_tex_key, override_uvs, mat_slot, chunk_id, tex_id, tint_data, tint_color, colormap_uv) =
-                                if let Some(solver) = &config.ctm_solver {
-                                    let clean_block = mtk_resource::extract_block_name(state_str)
-                                        .strip_prefix("minecraft:")
-                                        .unwrap_or(mtk_resource::extract_block_name(state_str));
-                                    let base_loc = mtk_resource::ResourceLocation::new(
-                                        "minecraft",
-                                        format!("block/{}", clean_block),
-                                    );
-                                    if let Some(resolved_loc) = solver.resolve_face(
-                                        state_str,
-                                        dir,
-                                        block_pos,
-                                        Some(&base_loc),
-                                        None,
-                                        get_padded_neighbor_state,
-                                    ) {
-                                        if let Some(atlas) = &config.atlas_address_map {
-                                            if let Some(atlas_loc) = atlas.lookup(&resolved_loc) {
-                                                let u_min = atlas_loc.frame_0_uv_bounds[0];
-                                                let v_min = atlas_loc.frame_0_uv_bounds[1];
-                                                let u_max = atlas_loc.frame_0_uv_bounds[2];
-                                                let v_max = atlas_loc.frame_0_uv_bounds[3];
-                                                let remapped = [
-                                                    glam::Vec2::new(u_min, v_max),
-                                                    glam::Vec2::new(u_min, v_min),
-                                                    glam::Vec2::new(u_max, v_min),
-                                                    glam::Vec2::new(u_max, v_max),
-                                                ];
-                                                let ctm_key = resolved_loc.as_string();
-                                                let clean_b = mtk_resource::extract_block_name(state_str);
-                                                let (td, tc, c_uv) = compute_face_tint(
-                                                    &ctm_key,
-                                                    clean_b,
-                                                    -1,
-                                                    config.biome_resolver.as_deref(),
-                                                );
-                                                (
-                                                    ctm_key,
-                                                    Some(remapped),
-                                                    atlas_loc.chunk_id,
-                                                    atlas_loc.chunk_id as i32,
-                                                    atlas_loc.texture_id,
-                                                    td,
-                                                    tc,
-                                                    c_uv,
-                                                )
-                                            } else {
-                                                (
-                                                    pre_face.source_texture_key.clone(),
-                                                    pre_face.override_uvs,
-                                                    pre_face.mat_slot,
-                                                    pre_face.chunk_id,
-                                                    pre_face.tex_id,
-                                                    pre_face.tint_data,
-                                                    pre_face.tint_color,
-                                                    pre_face.colormap_uv,
-                                                )
-                                            }
-                                        } else {
-                                            (
-                                                pre_face.source_texture_key.clone(),
-                                                pre_face.override_uvs,
-                                                pre_face.mat_slot,
-                                                pre_face.chunk_id,
-                                                pre_face.tex_id,
-                                                pre_face.tint_data,
-                                                pre_face.tint_color,
-                                                pre_face.colormap_uv,
-                                            )
-                                        }
-                                    } else {
-                                        (
-                                            pre_face.source_texture_key.clone(),
-                                            pre_face.override_uvs,
-                                            pre_face.mat_slot,
-                                            pre_face.chunk_id,
-                                            pre_face.tex_id,
-                                            pre_face.tint_data,
-                                            pre_face.tint_color,
-                                            pre_face.colormap_uv,
-                                        )
-                                    }
-                                } else {
-                                    (
-                                        pre_face.source_texture_key.clone(),
-                                        pre_face.override_uvs,
-                                        pre_face.mat_slot,
-                                        pre_face.chunk_id,
-                                        pre_face.tex_id,
-                                        pre_face.tint_data,
-                                        pre_face.tint_color,
-                                        pre_face.colormap_uv,
-                                    )
-                                };
-
-                            let (final_tint_color, final_colormap_uv) = if let Some(ref biome_cols) = padded.biome_data {
-                                let col_idx = lx * 16 + lz;
-                                if col_idx < biome_cols.len() && tint_data[2] > 0.0 {
-                                    let col = &biome_cols[col_idx];
-                                    let uv = [col.colormap_uv[0], col.colormap_uv[1], 0.0];
-                                    let c = match tint_data[3] as u8 {
-                                        mtk_material::TINT_TYPE_GRASS => col.grass_color,
-                                        mtk_material::TINT_TYPE_FOLIAGE => col.foliage_color,
-                                        mtk_material::TINT_TYPE_DRY_FOLIAGE => col.dry_foliage_color,
-                                        mtk_material::TINT_TYPE_WATER => col.water_color,
-                                        mtk_material::TINT_TYPE_HARDCODED => tint_color,
-                                        _ => tint_color,
-                                    };
-                                    (c, uv)
-                                } else {
-                                    (tint_color, colormap_uv)
-                                }
-                            } else {
-                                (tint_color, colormap_uv)
-                            };
+                            let (final_tint_color, final_colormap_uv) = sample_biome_tint(
+                                padded.biome_data.as_deref(),
+                                lx * 16 + lz,
+                                shading.tint_data,
+                                shading.tint_color,
+                                shading.colormap_uv,
+                            );
 
                             emit_unit_cube_face(
                                 &mut mesh,
@@ -764,13 +357,8 @@ impl SectionMesher {
                                 wz,
                                 ao_levels,
                                 config,
-                                override_uvs,
-                                mat_slot,
                                 &mut collector,
-                                final_tex_key,
-                                chunk_id,
-                                tex_id,
-                                tint_data,
+                                &shading,
                                 final_tint_color,
                                 final_colormap_uv,
                                 block_pos,
@@ -843,216 +431,4 @@ impl SectionMesher {
         })
         .map_err(VoxelError::ThreadPoolError)?
     }
-}
-
-/// Helper to emit a baked face into `MeshData` with AO shading and anisotropy flip.
-#[inline]
-fn emit_baked_face(
-    mesh: &mut MeshData,
-    face: &BakedFace,
-    wx: f32,
-    wy: f32,
-    wz: f32,
-    ao_levels: [u8; 4],
-    config: &MesherConfig,
-    override_uvs: Option<[glam::Vec2; 4]>,
-    mat_slot: u16,
-    collector: &mut FaceAttributesCollector,
-    source_texture_key: String,
-    atlas_chunk_id: i32,
-    atlas_texture_id: u32,
-    tint_data: [f32; 4],
-    tint_color: [f32; 4],
-    colormap_uv: [f32; 3],
-    block_pos: IVec3,
-    dir: Direction,
-) {
-    let base_idx = mesh.positions.len() as u32;
-    let norm = config.transform_direction(face.normal);
-    let n = [norm.x, norm.y, norm.z];
-
-    let colors = mesh.colors.get_or_insert_with(Vec::new);
-
-    for i in 0..4 {
-        let v = face.vertices[i];
-        let p = config.transform_position(Vec3::new(wx + v.x, wy + v.y, wz + v.z));
-        mesh.positions.push([p.x, p.y, p.z]);
-        mesh.normals.push(n);
-        if let Some(ref uvs) = override_uvs {
-            mesh.uvs.push([uvs[i].x, uvs[i].y]);
-        } else {
-            mesh.uvs.push([face.uvs[i].x, 1.0 - face.uvs[i].y]);
-        }
-
-        let ao_b = ao_level_to_brightness(ao_levels[i]);
-        colors.push([ao_b, ao_b, ao_b, 1.0]);
-    }
-
-    mesh.quad_indices
-        .get_or_insert_with(Vec::new)
-        .extend_from_slice(&[base_idx, base_idx + 1, base_idx + 2, base_idx + 3]);
-
-    // Triangulate with anisotropy diagonal flip
-    if should_flip_quad_diagonal(ao_levels) {
-        mesh.indices.push(base_idx);
-        mesh.indices.push(base_idx + 1);
-        mesh.indices.push(base_idx + 2);
-
-        mesh.indices.push(base_idx);
-        mesh.indices.push(base_idx + 2);
-        mesh.indices.push(base_idx + 3);
-    } else {
-        mesh.indices.push(base_idx + 1);
-        mesh.indices.push(base_idx + 2);
-        mesh.indices.push(base_idx + 3);
-
-        mesh.indices.push(base_idx);
-        mesh.indices.push(base_idx + 1);
-        mesh.indices.push(base_idx + 3);
-    }
-
-    mesh.face_materials.push(mat_slot);
-    mesh.face_tint_indices.push(face.tint_index);
-
-    collector.push_face(
-        source_texture_key,
-        mat_slot as i32,
-        atlas_chunk_id,
-        atlas_texture_id,
-        [1.0, 1.0, 0.0, 0.0],
-        face.uv_rot,
-        0,
-        tint_data,
-        tint_color,
-        colormap_uv,
-        block_pos,
-        dir.to_index() as u8,
-    );
-}
-
-/// Helper to emit a unit cube face into `MeshData` with AO shading and anisotropy flip.
-#[inline]
-fn emit_unit_cube_face(
-    mesh: &mut MeshData,
-    dir: Direction,
-    wx: f32,
-    wy: f32,
-    wz: f32,
-    ao_levels: [u8; 4],
-    config: &MesherConfig,
-    override_uvs: Option<[glam::Vec2; 4]>,
-    mat_slot: u16,
-    collector: &mut FaceAttributesCollector,
-    source_texture_key: String,
-    atlas_chunk_id: i32,
-    atlas_texture_id: u32,
-    tint_data: [f32; 4],
-    tint_color: [f32; 4],
-    colormap_uv: [f32; 3],
-    block_pos: IVec3,
-) {
-    let base_idx = mesh.positions.len() as u32;
-    let norm = config.transform_direction(dir.normal());
-    let n = [norm.x, norm.y, norm.z];
-
-    let (v0, v1, v2, v3) = match dir {
-        Direction::East => (
-            Vec3::new(1.0, 1.0, 1.0),
-            Vec3::new(1.0, 0.0, 1.0),
-            Vec3::new(1.0, 0.0, 0.0),
-            Vec3::new(1.0, 1.0, 0.0),
-        ),
-        Direction::West => (
-            Vec3::new(0.0, 1.0, 0.0),
-            Vec3::new(0.0, 0.0, 0.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            Vec3::new(0.0, 1.0, 1.0),
-        ),
-        Direction::Up => (
-            Vec3::new(0.0, 1.0, 0.0),
-            Vec3::new(0.0, 1.0, 1.0),
-            Vec3::new(1.0, 1.0, 1.0),
-            Vec3::new(1.0, 1.0, 0.0),
-        ),
-        Direction::Down => (
-            Vec3::new(0.0, 0.0, 1.0),
-            Vec3::new(0.0, 0.0, 0.0),
-            Vec3::new(1.0, 0.0, 0.0),
-            Vec3::new(1.0, 0.0, 1.0),
-        ),
-        Direction::South => (
-            Vec3::new(0.0, 1.0, 1.0),
-            Vec3::new(0.0, 0.0, 1.0),
-            Vec3::new(1.0, 0.0, 1.0),
-            Vec3::new(1.0, 1.0, 1.0),
-        ),
-        Direction::North => (
-            Vec3::new(1.0, 1.0, 0.0),
-            Vec3::new(1.0, 0.0, 0.0),
-            Vec3::new(0.0, 0.0, 0.0),
-            Vec3::new(0.0, 1.0, 0.0),
-        ),
-    };
-
-    let colors = mesh.colors.get_or_insert_with(Vec::new);
-
-    for (i, v) in [v0, v1, v2, v3].into_iter().enumerate() {
-        let p = config.transform_position(Vec3::new(wx + v.x, wy + v.y, wz + v.z));
-        mesh.positions.push([p.x, p.y, p.z]);
-        mesh.normals.push(n);
-
-        let ao_b = ao_level_to_brightness(ao_levels[i]);
-        colors.push([ao_b, ao_b, ao_b, 1.0]);
-    }
-
-    mesh.quad_indices
-        .get_or_insert_with(Vec::new)
-        .extend_from_slice(&[base_idx, base_idx + 1, base_idx + 2, base_idx + 3]);
-
-    if let Some(ref uvs) = override_uvs {
-        for uv in uvs {
-            mesh.uvs.push([uv.x, uv.y]);
-        }
-    } else {
-        mesh.uvs.push([0.0, 1.0]);
-        mesh.uvs.push([0.0, 0.0]);
-        mesh.uvs.push([1.0, 0.0]);
-        mesh.uvs.push([1.0, 1.0]);
-    }
-
-    if should_flip_quad_diagonal(ao_levels) {
-        mesh.indices.push(base_idx);
-        mesh.indices.push(base_idx + 1);
-        mesh.indices.push(base_idx + 2);
-
-        mesh.indices.push(base_idx);
-        mesh.indices.push(base_idx + 2);
-        mesh.indices.push(base_idx + 3);
-    } else {
-        mesh.indices.push(base_idx + 1);
-        mesh.indices.push(base_idx + 2);
-        mesh.indices.push(base_idx + 3);
-
-        mesh.indices.push(base_idx);
-        mesh.indices.push(base_idx + 1);
-        mesh.indices.push(base_idx + 3);
-    }
-
-    mesh.face_materials.push(mat_slot);
-    mesh.face_tint_indices.push(-1);
-
-    collector.push_face(
-        source_texture_key,
-        mat_slot as i32,
-        atlas_chunk_id,
-        atlas_texture_id,
-        [1.0, 1.0, 0.0, 0.0],
-        0.0,
-        0,
-        tint_data,
-        tint_color,
-        colormap_uv,
-        block_pos,
-        dir.to_index() as u8,
-    );
 }

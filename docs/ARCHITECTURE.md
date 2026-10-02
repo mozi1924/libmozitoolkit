@@ -35,7 +35,7 @@ graph TD
         MODEL["mtk-model (BlockState / Baker / OBJ)"]
         TEXTURE["mtk-texture (Atlas / Overlay / PBR Packing / Standalone)"]
         RESOURCE["mtk-resource (VFS / Pack Stack / CTM / Atlases)"]
-        CULL["mtk-cull (Occlusion / Rect Difference / Mesh Cull)"]
+        CULL["mtk-cull (Occlusion / Rect Difference / Mesh Cull / MeshSanitizer)"]
         MAT["mtk-material (66 Biomes SSOT / BiomeResolver / UV Remap)"]
     end
 
@@ -75,7 +75,7 @@ graph TD
 | Crate 路径 | 核心定位 | 依赖上游 | 输出与产物 |
 | :--- | :--- | :--- | :--- |
 | **`crates/mtk-core`** | 纯净数据底座、POD 顶点/面数据结构、通用数学与几何基元、自适应像素网格切分 (`subdivide`) 与智能挤出/UV 修复 (`extrude`) | 仅依赖 `glam`, `serde` (可选) | `MeshData`, `Quad`, `Aabb2d/3d`, `Direction`, `DirMask`, `ExtrudeMeshOutput`, 像素切分算子 |
-| **`crates/mtk-cull`** | 面剔除状态机、2D/3D 矩形差集切分 (Subtract Rect)、外部导入模型面剔除 (`cull_mesh_faces`) | `mtk-core` | `BlockCullMeta`, `FaceCuller`, 裁剪后微矩形列表, `MeshCullResult` |
+| **`crates/mtk-cull`** | 面剔除状态机、2D/3D 矩形差集切分 (Subtract Rect)、统一网格清理工具门面 (`MeshSanitizer`)、外部导入模型面剔除 (`cull_mesh_faces`) | `mtk-core` | `BlockCullMeta`, `FaceCuller`, `MeshSanitizer`, 裁剪后微矩形列表, `MeshCullResult` |
 | **`crates/mtk-model`** | BlockState 状态解析、1.21+ Block Model JSON 烘焙、Wavefront OBJ 解析与导出 | `mtk-core` | `BlockState`, `BlockModelJson`, `BakedModel`, `BakedModelDatabase` |
 | **`crates/mtk-texture`**| 空间装箱图集拼接器 (Stitcher)、多类别图集烘焙 (`build_categories`)、Companion Overlay 贴图合成、Standalone 资产层级对齐 | `mtk-core` | `AtlasBuilder`, `BakedAtlas`, `BakedAtlasChunk`, `RgbaBuffer`, UV 坐标映射表 |
 | **`crates/mtk-voxel`**  | 纯体素核心：16x16x16 Chunk Section 体素存储、平滑 AO 计算、网格化器 (Mesher)、物理流体曲面、统一体素源抽象 (`VoxelSource` / `VoxelReader` / `VoxelWriter`) | `mtk-core`, `mtk-cull`, `mtk-model`, `mtk-texture`, `mtk-resource`, `mtk-material` | `SectionStorage`, `VoxelStorage`, `SectionMesher`, `DeltaMesher`, `VoxelSource`, `WorldMeshBuildResult` |

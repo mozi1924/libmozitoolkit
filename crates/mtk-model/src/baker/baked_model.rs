@@ -157,62 +157,14 @@ impl BakedModel {
             return 0;
         }
 
-        let mut face_list: Vec<(usize, Direction, [Vec3; 4], Vec3)> = Vec::new();
+        let mut face_list = Vec::new();
         for (el_idx, el) in self.elements.iter().enumerate() {
             for (&dir, f) in &el.faces {
-                face_list.push((el_idx, dir, f.vertices, f.normal));
+                face_list.push(((el_idx, dir), f.vertices, f.normal));
             }
         }
 
-        let mut to_remove: std::collections::HashSet<(usize, Direction)> = std::collections::HashSet::new();
-        let tol = 1e-3f32;
-
-        for i in 0..face_list.len() {
-            if to_remove.contains(&(face_list[i].0, face_list[i].1)) {
-                continue;
-            }
-            let (el_a, dir_a, verts_a, norm_a) = &face_list[i];
-
-            for j in (i + 1)..face_list.len() {
-                if to_remove.contains(&(face_list[j].0, face_list[j].1)) {
-                    continue;
-                }
-                let (el_b, dir_b, verts_b, norm_b) = &face_list[j];
-
-                if let Some(rel) = mtk_cull::check_coplanar_overlap(
-                    verts_a,
-                    *norm_a,
-                    verts_b,
-                    *norm_b,
-                    tol,
-                ) {
-                    match rel.overlap {
-                        mtk_cull::CoplanarOverlap::Exact => {
-                            if rel.alignment == mtk_cull::FaceAlignment::SameDirection {
-                                // Exact duplicate face: remove B
-                                to_remove.insert((*el_b, *dir_b));
-                            } else {
-                                // Back-to-back contacting faces: remove both
-                                to_remove.insert((*el_a, *dir_a));
-                                to_remove.insert((*el_b, *dir_b));
-                                break;
-                            }
-                        }
-                        mtk_cull::CoplanarOverlap::ContainedInA => {
-                            // Face B is completely covered/contained within Face A
-                            to_remove.insert((*el_b, *dir_b));
-                        }
-                        mtk_cull::CoplanarOverlap::ContainedInB => {
-                            // Face A is completely covered/contained within Face B
-                            to_remove.insert((*el_a, *dir_a));
-                            break;
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
-
+        let to_remove = mtk_cull::MeshSanitizer::deduplicate_quads(&face_list, 1e-3);
         let culled_count = to_remove.len();
         if culled_count > 0 {
             for (el_idx, dir) in to_remove {

@@ -6,6 +6,7 @@ pub mod engine;
 pub mod geometry;
 pub mod mesh_cull;
 pub mod rules;
+pub mod sanitizer;
 pub mod types;
 
 pub use engine::{
@@ -20,6 +21,7 @@ pub use geometry::{
 };
 pub use mesh_cull::{cull_mesh_faces, MeshCullConfig, MeshCullResult};
 pub use rules::should_skip_rendering;
+pub use sanitizer::MeshSanitizer;
 pub use types::{
     is_empty_rect, is_full_rect, BlockCullMeta, CullCategory, GlassCullMode, LeavesCullMode,
     EMPTY_FACE_RECT, FULL_FACE_RECT,

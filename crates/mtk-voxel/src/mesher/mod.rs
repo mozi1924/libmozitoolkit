@@ -1,13 +1,17 @@
 pub mod ao;
 pub mod collector;
 pub mod delta_mesher;
+pub mod emitter;
 pub mod heuristic;
 pub mod section_mesher;
+pub mod shading;
 pub mod tint;
 
 pub use ao::*;
 pub use collector::*;
 pub use delta_mesher::*;
+pub use emitter::*;
 pub use heuristic::*;
 pub use section_mesher::*;
+pub use shading::*;
 pub use tint::*;

@@ -117,7 +117,10 @@ pub struct Quad {
 - `subtract_rect_multi(subject: Aabb2d, clips: &[Aabb2d]) -> Vec<Aabb2d>`: 多矩形连续差集切分。
 - `should_skip_rendering(curr_cat: CullCategory, neighbor_cat: CullCategory, ...) -> bool`: 原版渲染跳过规则。
 - `check_coplanar_overlap(verts_a: &[Vec3], norm_a: Vec3, verts_b: &[Vec3], norm_b: Vec3, tol: f32) -> Option<CoplanarRelation>`: 统一的共面正交切线投影与 2D 包围盒相交检测算子，返回面法线朝向 (`SameDirection`, `OppositeDirection`) 与覆盖类型 (`Exact`, `ContainedInA`, `ContainedInB`, `Partial`)。
-- `clip_face_excluding_hidden_volume(vertices: &[Vec3; 4], uvs: &[Vec2; 4], direction: Direction, neighbour_bounds: &[([f32; 3], [f32; 3])]) -> Vec<ClippedQuadPiece>`: 针对轴对齐 Quad 面，根据相邻包围盒（AABB 3D）利用 2D 矩形差集剔除内部嵌入隐藏体积，并双线性插值生成保留子面与其子 UV。
+- `MeshSanitizer`: 统一网格清理与几何消重工具门面：
+  - `deduplicate_quads<T>(quads: &[(T, [Vec3; 4], Vec3)], tolerance: f32) -> HashSet<T>`: 批量检测并消除同向重复面、背靠背反向贴合接触面及完全包含面。
+  - `clip_quad_excluding_hidden_volume(...)`: 轴对齐四边形隐藏体包围盒差集裁剪。
+  - `sanitize_mesh(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResult`: 对任意 `MeshData` 连续缓冲执行去重与贴合剔除。
 - `MeshCullConfig`: 网格剔除与叠面消除配置项：
   - `tolerance: f32`: 空间几何重合与共面判定容差（默认 1e-4）。
   - `cull_duplicates: bool`: 是否消除几何位置完全重叠且法线同向的重复面（Duplicate Faces，默认 true）。
@@ -129,7 +132,7 @@ pub struct Quad {
 
 ## 3. 模型与状态机：`mtk-model`
 
-负责 BlockState 字符串解析、1.21+ Block Model JSON 树展开与烘焙。
+负责 BlockState 字符串解析、1.21+ Block Model JSON 树展开与烘焙。几何面的差集裁剪与共面消重统一委托至 `mtk-cull::MeshSanitizer`。
 
 ### 3.1 核心类型与函数
 - `BlockState`: 解析 `minecraft:oak_stairs[facing=east,half=bottom,shape=straight]` 为状态名与键值对 Map。
@@ -142,7 +145,7 @@ pub struct Quad {
   - `cull_coplanar_opposite: bool`: 剔除模型内部背靠背贴合的无用接触面。
   - `tolerance: f32`: 几何判定容差。
 - `BakedModel`: 包含预计算好的 6 向四边形列表 (`Quad` + `FaceAttributes`) 与未指定 cullface 的自由面、原始方块要素元素 (`BakedElement`) 以及预烘焙的面遮挡剔除元数据 (`cull_meta: Option<BlockCullMeta>`)。
-  - `deduplicate_faces(&mut self) -> usize`: 在 Element 面粒度直接消除同向重合面与反向贴合面，并自动重构 6 向分桶。
+  - `deduplicate_faces(&mut self) -> usize`: 委托 `mtk_cull::MeshSanitizer` 在 Element 面粒度直接消除同向重合面与反向贴合面，并自动重构 6 向分桶。
   - `to_mesh_with_options(&self, options: &ModelMeshOptions) -> MeshData`: 带叠面消除与隐藏体裁剪的网格导出。
   - `to_mesh_with_textures(...)`: 批量导出带完整面属性与叠面消除的网格。
   - 提供 6 向分桶字段 `culled_faces: [Vec<BakedFace>; 6]` 与 `unculled_faces: Vec<BakedFace>`，支持 `rebuild_face_buckets()`、`get_face_buckets()` 以及 `remap_to_atlas_with(...)` 离线批量预映射。
@@ -221,6 +224,9 @@ pub struct Quad {
 - `SmoothedBiomeColumn` / `get_smoothed_column_biome`:
   基于原版 5x5 (R=2) 反距离权重核的平滑生物群系柱数据结构与解算函数，平滑计算草方块色彩 (`grass_color`)、树叶色彩 (`foliage_color`)、干枯树叶色彩 (`dry_foliage_color`)、水体色彩 (`water_color`) 与 Colormap 三角形采样 UV (`colormap_uv`)。针对选区边界执行边缘向内钳位与中心回退保护，消除边界渗色。
 - `SectionMesher`:
+  - 核心定位：专注于 18x18x18 体素邻域遍历、邻域遮挡拓扑与 AO 计算。与材质着色元数据解析解耦：
+    - `mtk_voxel::mesher::shading`: 专职负责 CTM 解算器调度 (`resolve_model_face_shading`, `resolve_unit_cube_face_shading`)、Atlas 寻址与 Biome 采样着色 (`sample_biome_tint`, `build_palette_meshing_data`)。
+    - `mtk_voxel::mesher::emitter`: 专职负责顶点空间坐标变换、AO 亮度插值、各向异性对角线翻转与面属性发射 (`emit_baked_face`, `emit_unit_cube_face`)。
   - 输入：`PaddedVoxelArray`, `ModelBaker`, `MesherConfig`（配置 `z_up_coordinates: bool` 标准化输出、`origin_centered: bool` 底部中心原点对齐、`weld_vertices: bool` 空间顶点焊接、`selection_bounds: Option<([i32; 3], [i32; 3])>` 包围盒对齐、`atlas: Option<Arc<AtlasAddressMap>>` 图集寻址、`biome_resolver: Option<Arc<BiomeResolver>>` 生物群系调色板着色与 `custom_aliases` 别名映射）。
   - 输出：`MeshData`（包含 `mtk_source_texture_key`、`mtk_material_slot`、`mtk_atlas_chunk_id`、`mtk_uv_tiling_transform`、`mtk_biome_tint_data` 等 15 项标准面属性）。自动剔除多 Element 模型中的冗余 Overlay Decal 面（如草方块侧面叠加层），由前端着色器单面多重采样无缝合成，杜绝共面发黑与 Z-fighting。
   - **生物群系平滑过渡 (Biome Transition Smoothing)**：在发射网格面时，针对染色面动态索引柱级 `SmoothedBiomeColumn`，将平滑后的调色板颜色与 Colormap UV 注入面属性，使视口中生物群系交界处呈现原版无缝柔和渐变。
