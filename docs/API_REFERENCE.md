@@ -116,6 +116,8 @@ pub struct Quad {
 - `subtract_rect(subject: Aabb2d, clip: Aabb2d) -> SmallVec<[Aabb2d; 4]>`: 2D 矩形差集切分。
 - `subtract_rect_multi(subject: Aabb2d, clips: &[Aabb2d]) -> Vec<Aabb2d>`: 多矩形连续差集切分。
 - `should_skip_rendering(curr_cat: CullCategory, neighbor_cat: CullCategory, ...) -> bool`: 原版渲染跳过规则。
+- `check_coplanar_overlap(verts_a: &[Vec3], norm_a: Vec3, verts_b: &[Vec3], norm_b: Vec3, tol: f32) -> Option<CoplanarRelation>`: 统一的共面正交切线投影与 2D 包围盒相交检测算子，返回面法线朝向 (`SameDirection`, `OppositeDirection`) 与覆盖类型 (`Exact`, `ContainedInA`, `ContainedInB`, `Partial`)。
+- `clip_face_excluding_hidden_volume(vertices: &[Vec3; 4], uvs: &[Vec2; 4], direction: Direction, neighbour_bounds: &[([f32; 3], [f32; 3])]) -> Vec<ClippedQuadPiece>`: 针对轴对齐 Quad 面，根据相邻包围盒（AABB 3D）利用 2D 矩形差集剔除内部嵌入隐藏体积，并双线性插值生成保留子面与其子 UV。
 - `MeshCullConfig`: 网格剔除与叠面消除配置项：
   - `tolerance: f32`: 空间几何重合与共面判定容差（默认 1e-4）。
   - `cull_duplicates: bool`: 是否消除几何位置完全重叠且法线同向的重复面（Duplicate Faces，默认 true）。

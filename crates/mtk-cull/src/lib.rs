@@ -13,8 +13,10 @@ pub use engine::{
     is_non_full_or_partial_block, parse_block_name_and_props, FaceCuller,
 };
 pub use geometry::{
+    check_coplanar_overlap, clip_face_excluding_hidden_volume,
     extract_face_occlusion_from_boxes, extract_quad_face_occlusion_rect,
     is_face_completely_occluded, is_fully_occluded, subtract_rect, subtract_rect_multi,
+    ClippedQuadPiece, CoplanarOverlap, CoplanarRelation, FaceAlignment,
 };
 pub use mesh_cull::{cull_mesh_faces, MeshCullConfig, MeshCullResult};
 pub use rules::should_skip_rendering;

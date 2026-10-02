@@ -202,99 +202,50 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
         'search: for delta_d in -1..=1 {
             let search_key = [plane_key[0], plane_key[1], plane_key[2], plane_key[3] + delta_d];
             if let Some(neighbors) = plane_buckets.get(&search_key) {
-                for (other_idx, other_norm, other_center, other_verts) in neighbors {
+                for (other_idx, other_norm, _other_center, other_verts) in neighbors {
                     if faces_to_cull.contains(other_idx) {
                         continue;
                     }
 
-                    let dot = normal.dot(*other_norm);
-                    let is_same_dir = dot > 0.99;
-                    let is_opp_dir = dot < -0.99;
-                    if !is_same_dir && !is_opp_dir {
-                        continue;
-                    }
+                    if let Some(rel) = crate::geometry::coplanar::check_coplanar_overlap(
+                        &face_verts,
+                        normal,
+                        other_verts,
+                        *other_norm,
+                        tol,
+                    ) {
+                        let is_same_dir = rel.alignment == crate::geometry::coplanar::FaceAlignment::SameDirection;
+                        let is_opp_dir = rel.alignment == crate::geometry::coplanar::FaceAlignment::OppositeDirection;
 
-                    // Precise distance check to plane
-                    let plane_dist = ((center - *other_center).dot(normal)).abs();
-                    if plane_dist > tol {
-                        continue;
-                    }
-
-                    // Compute 2D tangent basis (u_axis, v_axis)
-                    let up = if normal.y.abs() > 0.9 { glam::Vec3::Z } else { glam::Vec3::Y };
-                    let mut u_axis = up.cross(normal);
-                    let u_len = u_axis.length();
-                    if u_len < 1e-5 {
-                        u_axis = glam::Vec3::X;
-                    } else {
-                        u_axis /= u_len;
-                    }
-                    let v_axis = normal.cross(u_axis).normalize();
-
-                    // Project face_verts to (u, v)
-                    let (mut u_min_a, mut u_max_a) = (f32::INFINITY, f32::NEG_INFINITY);
-                    let (mut v_min_a, mut v_max_a) = (f32::INFINITY, f32::NEG_INFINITY);
-                    for v in &face_verts {
-                        let u = v.dot(u_axis);
-                        let vc = v.dot(v_axis);
-                        u_min_a = u_min_a.min(u);
-                        u_max_a = u_max_a.max(u);
-                        v_min_a = v_min_a.min(vc);
-                        v_max_a = v_max_a.max(vc);
-                    }
-                    let area_a = (u_max_a - u_min_a) * (v_max_a - v_min_a);
-                    if area_a <= 1e-6 {
-                        continue;
-                    }
-
-                    // Project other_verts to (u, v)
-                    let (mut u_min_b, mut u_max_b) = (f32::INFINITY, f32::NEG_INFINITY);
-                    let (mut v_min_b, mut v_max_b) = (f32::INFINITY, f32::NEG_INFINITY);
-                    for v in other_verts {
-                        let u = v.dot(u_axis);
-                        let vc = v.dot(v_axis);
-                        u_min_b = u_min_b.min(u);
-                        u_max_b = u_max_b.max(u);
-                        v_min_b = v_min_b.min(vc);
-                        v_max_b = v_max_b.max(vc);
-                    }
-                    let area_b = (u_max_b - u_min_b) * (v_max_b - v_min_b);
-                    if area_b <= 1e-6 {
-                        continue;
-                    }
-
-                    let inter_u_min = u_min_a.max(u_min_b);
-                    let inter_u_max = u_max_a.min(u_max_b);
-                    let inter_v_min = v_min_a.max(v_min_b);
-                    let inter_v_max = v_max_a.min(v_max_b);
-
-                    if inter_u_max > inter_u_min + tol && inter_v_max > inter_v_min + tol {
-                        let inter_area = (inter_u_max - inter_u_min) * (inter_v_max - inter_v_min);
-                        let is_exact = (u_min_a - u_min_b).abs() <= tol
-                            && (u_max_a - u_max_b).abs() <= tol
-                            && (v_min_a - v_min_b).abs() <= tol
-                            && (v_max_a - v_max_b).abs() <= tol;
-
-                        if is_exact {
-                            if config.cull_duplicates && is_same_dir {
-                                faces_to_cull.insert(face_idx);
-                                break 'search;
-                            } else if config.cull_coplanar_opposite && is_opp_dir {
-                                faces_to_cull.insert(face_idx);
-                                faces_to_cull.insert(*other_idx);
-                                break 'search;
+                        match rel.overlap {
+                            crate::geometry::coplanar::CoplanarOverlap::Exact => {
+                                if config.cull_duplicates && is_same_dir {
+                                    faces_to_cull.insert(face_idx);
+                                    break 'search;
+                                } else if config.cull_coplanar_opposite && is_opp_dir {
+                                    faces_to_cull.insert(face_idx);
+                                    faces_to_cull.insert(*other_idx);
+                                    break 'search;
+                                }
                             }
-                        } else if inter_area >= area_a * 0.99 - tol {
-                            // Face A is completely covered by other face B
-                            if (config.cull_duplicates && is_same_dir) || (config.cull_coplanar_opposite && is_opp_dir) {
-                                faces_to_cull.insert(face_idx);
-                                break 'search;
+                            crate::geometry::coplanar::CoplanarOverlap::ContainedInB => {
+                                // Face A is completely covered by other face B
+                                if (config.cull_duplicates && is_same_dir)
+                                    || (config.cull_coplanar_opposite && is_opp_dir)
+                                {
+                                    faces_to_cull.insert(face_idx);
+                                    break 'search;
+                                }
                             }
-                        } else if inter_area >= area_b * 0.99 - tol {
-                            // Other face B is completely covered by Face A
-                            if (config.cull_duplicates && is_same_dir) || (config.cull_coplanar_opposite && is_opp_dir) {
-                                faces_to_cull.insert(*other_idx);
+                            crate::geometry::coplanar::CoplanarOverlap::ContainedInA => {
+                                // Other face B is completely covered by Face A
+                                if (config.cull_duplicates && is_same_dir)
+                                    || (config.cull_coplanar_opposite && is_opp_dir)
+                                {
+                                    faces_to_cull.insert(*other_idx);
+                                }
                             }
+                            _ => {}
                         }
                     }
                 }
