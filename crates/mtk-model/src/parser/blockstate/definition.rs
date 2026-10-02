@@ -189,6 +189,18 @@ impl BlockStateDefinition {
                     if k == "flower_amount" || k == "flowers" || k == "pickles" || k == "candles" {
                         vals.insert("1".to_string());
                     }
+                    // Walls / Pale Moss: Direction connection properties containing "low" or "tall" also have "none" in Minecraft
+                    if vals.contains("low") || vals.contains("tall") {
+                        vals.insert("none".to_string());
+                    }
+                    // Bamboo: leaves can be "none"
+                    if k == "leaves" && (vals.contains("small") || vals.contains("large")) {
+                        vals.insert("none".to_string());
+                    }
+                    // Composter: level can be "0"
+                    if k == "level" && vals.contains("1") {
+                        vals.insert("0".to_string());
+                    }
                 }
 
                 if prop_values.is_empty() {
@@ -233,6 +245,11 @@ impl BlockStateDefinition {
                             } else if seen.insert(state_str.clone()) {
                                 results.push(state_str);
                             }
+                        }
+
+                        // Also add base unparameterized block ID fallback
+                        if seen.insert(base_id.to_string()) {
+                            results.push(base_id.to_string());
                         }
                     } else {
                         // Fallback to base id if combinatorial explosion

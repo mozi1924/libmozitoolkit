@@ -163,7 +163,14 @@ impl BakedModelDatabase {
                         // Prefer canonical vanilla default values!
                         for (cand_k, cand_v) in &cand_props {
                             if !target_props.contains_key(*cand_k) {
-                                if matches!(
+                                if *cand_k == "up" && (target_base_id.ends_with("_wall") || target_base_id == "wall") {
+                                    // In vanilla Minecraft, wall blocks default to up=true (post enabled)
+                                    if *cand_v == "true" {
+                                        score += 10;
+                                    } else {
+                                        score -= 10;
+                                    }
+                                } else if matches!(
                                     *cand_v,
                                     "false" | "0" | "none" | "straight" | "bottom" | "lower" | "single"
                                         | "foot" | "normal" | "side" | "y" | "north"

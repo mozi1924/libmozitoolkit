@@ -56,10 +56,18 @@ impl SectionMesher {
             .iter()
             .zip(palette_models.iter())
             .map(|(st, model_opt)| {
+                let runtime_meta = culler.get_meta(st, None, None);
                 if let Some(model) = model_opt {
-                    Arc::new(model.get_or_compute_cull_meta())
+                    let mut meta = model.get_or_compute_cull_meta();
+                    // Runtime states in voxel storage (e.g. waterlogged) must take precedence
+                    // over baked model base state cull_meta
+                    if runtime_meta.is_waterlogged {
+                        meta.is_waterlogged = true;
+                    }
+                    meta.props = runtime_meta.props.clone();
+                    Arc::new(meta)
                 } else {
-                    culler.get_meta(st, None, None)
+                    runtime_meta
                 }
             })
             .collect();

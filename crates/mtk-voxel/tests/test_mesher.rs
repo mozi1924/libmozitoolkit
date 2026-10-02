@@ -402,4 +402,61 @@ fn test_waterlogged_isolated_block_meshing() {
     assert_eq!(mesh.face_count(), 24);
 }
 
+#[test]
+fn test_waterlogged_isolated_block_with_baked_model() {
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+
+    // An isolated waterlogged slab in air at (5, 5, 5)
+    world.set_block(5, 5, 5, "minecraft:oak_slab[type=bottom,waterlogged=true]", None);
+
+    let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
+    let culler = FaceCuller::default();
+    let config = MesherConfig::default();
+
+    // Create a mock baked model for the slab (without waterlogged in its block_state)
+    let face = mtk_model::baker::BakedFace {
+        direction: mtk_core::Direction::Up,
+        vertices: [
+            glam::Vec3::new(0.0, 0.5, 0.0),
+            glam::Vec3::new(0.0, 0.5, 1.0),
+            glam::Vec3::new(1.0, 0.5, 1.0),
+            glam::Vec3::new(1.0, 0.5, 0.0),
+        ],
+        texture: "minecraft:block/oak_planks".to_string(),
+        ..Default::default()
+    };
+    let mut faces_map = std::collections::HashMap::new();
+    faces_map.insert(mtk_core::Direction::Up, face);
+    let mut slab_model = mtk_model::baker::BakedModel {
+        block_state: "minecraft:oak_slab[type=bottom]".to_string(),
+        elements: vec![mtk_model::baker::BakedElement {
+            from_pos: [0.0, 0.0, 0.0],
+            to_pos: [16.0, 8.0, 16.0],
+            faces: faces_map,
+        }],
+        obj_faces: Vec::new(),
+        faces: std::array::from_fn(|_| mtk_model::baker::BakedFace::default()),
+        is_cube: false,
+        is_opaque: false,
+        is_emissive: false,
+        emissive_level: 0.0,
+        cull_meta: None,
+        culled_faces: Default::default(),
+        unculled_faces: Vec::new(),
+    };
+    slab_model.rebuild_face_buckets();
+    let slab_arc = std::sync::Arc::new(slab_model);
+
+    let mesh = SectionMesher::mesh_section(
+        &padded,
+        &culler,
+        |state| if state.contains("oak_slab") { Some(slab_arc.clone()) } else { None },
+        &config,
+    );
+
+    // 1 solid model face + 6 fluid faces (top, bottom, 4 sides) = 7 faces!
+    assert_eq!(mesh.face_count(), 7);
+}
+
 
