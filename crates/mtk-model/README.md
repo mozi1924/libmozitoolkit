@@ -13,11 +13,17 @@ Headless Minecraft BlockState parser, 1.21+ Block Model JSON hierarchy baking en
 - **微观几何烘焙与 6 向快速分桶**：
   - 将方块要素变换为局部三维空间四边形 (`BakedFace`)，精准维护 UV 旋转、UVLock 纹理锁定算法与法线朝向；
   - 自动将几何面划分至 6 向邻域剔除桶 (`culled_faces: [Vec<BakedFace>; 6]`) 与免剔除桶 (`unculled_faces`)，支撑体素网格化热循环极速发射。
+- **红石引线状态机与连接解算 (Redstone Wire State & Geometry)**：
+  - 内置原版 1.21+ `redstone_wire.json` Multipart 组合定义与全部变体模型（dot, side0/1, side_alt0/1, up 等）；
+  - `normalize_redstone_wire_properties` 支持单臂直连自动拉直（如只有 north 则自动补齐 south=side 形成通线）、点状与交叉别名规范化；
+  - `resolve_redstone_wire_connections` 自动针对 3D 体素邻域解算平地邻接、下行斜坡与上行贴墙导线；
+  - 针对贴墙引线实现空间坐标感知的单面薄片剔除（North/South/East/West/Up/Down 贴墙面保留室内朝向，剔除贴墙背面）；
+  - 动态计算红石信号发光等级 `get_block_emissive_level` (`power / 15.0`)。
 - **叠面消重与接触面剔除**：直接调用 `mtk-cull::MeshSanitizer` 在模型要素粒度消除同向重合面（根除 DCC 视口 Z-fighting）与内部反向贴合接触面。
 - **多级智能模型数据库 (`BakedModelDatabase`)**：
   - **Tier 1 (Exact Match)**: 极速精确哈希查询；
   - **Tier 1.5 (Canonical)**: 规范化键查询（消除属性书写顺序与空格差异）；
-  - **Tier 2 (Canonical Filter)**: 剥离世界运行时非几何属性（如 `waterlogged`, `occupied`, `distance`, `stage`）进行查询；
+  - **Tier 2 (Canonical Filter)**: 剥离世界运行时非几何属性（如 `waterlogged`, `occupied`, `distance`, `stage`, `power`）进行几何查询；
   - **Tier 3 (Subset Match)**: 核心几何变体属性子集模糊降级匹配；
   - **Tier 4 (Base ID Fallback)**: 回退至基础方块默认模型。
 - **Wavefront OBJ 模组模型加载**：支持 Mod 与第三方导出工具的 Wavefront OBJ 模型解析与面材质属性提取。
@@ -138,9 +144,15 @@ pub struct BakedModelDatabase {
 | :--- | :--- |
 | `BlockState::parse(s: &str) -> Result<BlockState, ModelError>` | 解析方块状态字符串。 |
 | `BlockStateResolver::resolve(def, state) -> Vec<VariantMatch>` | 评估匹配方块状态对应的模型变体。 |
+| `normalize_redstone_wire_properties(props)` | 规范化红石引线方向连接、单臂拉直与别名。 |
+| `resolve_redstone_wire_connections(pos, connectable_fn)` | 依据 3D 体素邻域自动计算红石引线四向连接状态（none/side/up）。 |
+| `map_legacy_redstone_name(name) -> Option<(&'static str, BTreeMap)>` | 将 Mineways/Jmc2Obj 材质名映射为红石引线规范状态。 |
+| `get_builtin_blockstate_def(name) -> Option<BlockStateDefinition>` | 获取内置原版 BlockState 组合定义（含 `redstone_wire`）。 |
+| `get_builtin_model_by_id(model_id) -> Option<BlockModelJson>` | 获取内置原版模型 JSON（含红石引线全套模型）。 |
 | `ModelBaker::new() -> Self` | 创建通用模型烘焙器。 |
 | `baker.bake_blockstate(state_str, def, model_loader) -> Result<BakedModel, ModelError>` | 端到端烘焙指定方块状态为 `BakedModel`。 |
 | `is_block_emissive(state: &BlockState) -> bool` | 判断方块是否为自发光方块。 |
+| `get_block_emissive_level(state: &BlockState) -> f32` | 计算发光方块与红石引线（`power / 15.0`）的发光强度等级。 |
 | `WavefrontObjParser::parse_str(text, filter) -> Vec<ObjRawFace>` | 解析通用 Wavefront OBJ 文本。 |
 
 ---
@@ -255,3 +267,30 @@ fn main() {
     println!("Removed {} overlapping faces from database", removed);
 }
 ```
+
+### 示例 4：烘焙内置红石引线并提取发光与染色属性
+```rust
+use mtk_model::baker::ModelBaker;
+use mtk_core::attributes::constants::{ATTR_EMISSION, ATTR_BIOME_TINT_COLOR};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut baker = ModelBaker::new();
+
+    // 烘焙带信号强度的红石引线（自动使用内置 1.21+ fallback 模型与状态机）
+    let baked = baker.bake_blockstate(
+        "minecraft:redstone_wire[power=15,north=up,south=side]",
+        None,
+        |_| None,
+    )?;
+
+    assert!(baked.is_emissive);
+    assert_eq!(baked.emissive_level, 1.0);
+
+    let (mesh, _) = baked.to_mesh_with_textures(false);
+    assert!(mesh.has_custom_attribute(ATTR_EMISSION));
+    assert!(mesh.has_custom_attribute(ATTR_BIOME_TINT_COLOR));
+
+    Ok(())
+}
+```
+

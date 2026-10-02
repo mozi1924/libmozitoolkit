@@ -80,6 +80,8 @@ impl BlockStateResolver {
                             actual_v = props.get("flowers").map(|s| s.as_str());
                         } else if k == "flowers" {
                             actual_v = props.get("flower_amount").map(|s| s.as_str());
+                        } else if matches!(k.as_str(), "east" | "north" | "south" | "west") {
+                            actual_v = Some("none");
                         }
                     }
                     let actual = actual_v.unwrap_or("");

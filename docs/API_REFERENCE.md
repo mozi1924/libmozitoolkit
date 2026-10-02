@@ -79,6 +79,10 @@ pub struct FlatPolygonMesh {
 ### 2.3 生物群系调色板与色彩数学单一事实源 (Biome SSOT)
 - **唯一权威来源**：`mtk-material::biome`。
 - **66 种原版官方生物群系规范表**：包含所有 Overworld, Nether, The End 群系的规范温度、湿度、草方块颜色、树叶颜色与水体颜色。
+- **硬编码方块染色与红石信号强度 (Hardcoded Tints & Redstone Wire)**：
+  - 云杉树叶、白桦树叶、睡莲与红石引线均为硬编码染色类别 (`TINT_TYPE_HARDCODED = 4`)；
+  - 红石引线 (`redstone_wire`) 统一维护 0~15 级标准 sRGB Hex 表与 Linear RGBA 线性渐变色彩，发光强度按 `power / 15.0` 计算；
+  - 烘焙网格注入 `mtk_biome_tint_data` (`[1.0, 1.0, 1.0, 4.0]`) 与 `mtk_emission` 属性，着色器阶段无缝自适应渲染。
 - **色彩空间规范**：
   - 宿主与渲染器内部色彩混合**必须在标准线性空间（Linear RGBA, $[0.0, 1.0]$）中进行**；
   - 导出/展示贴图时使用权威转换公式双向映射：

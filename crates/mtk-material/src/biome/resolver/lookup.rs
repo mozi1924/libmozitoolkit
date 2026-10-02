@@ -39,6 +39,53 @@ impl BiomeResolver {
             }
         }
 
+        // Special handling for dynamic Redstone Wire signal strength (power 0..15)
+        let is_redstone = stem.starts_with("redstone_dust")
+            || stem.starts_with("redstone_wire")
+            || block_name.map_or(false, |b| b.contains("redstone_wire") || b.contains("redstone_dust"));
+
+        if is_redstone && stem != "redstone_dust_overlay" {
+            let power = block_name
+                .and_then(|b| {
+                    if let Some(pos) = b.find("power=") {
+                        let sub = &b[pos + 6..];
+                        let end = sub.find(&[',', ']', ' '][..]).unwrap_or(sub.len());
+                        sub[..end].parse::<u8>().ok()
+                    } else if b.ends_with("_on") || b.contains("lit=true") {
+                        Some(15)
+                    } else if b.ends_with("_off") || b.contains("lit=false") {
+                        Some(0)
+                    } else {
+                        None
+                    }
+                })
+                .or_else(|| {
+                    if stem.ends_with("_on") {
+                        Some(15)
+                    } else if stem.ends_with("_off") {
+                        Some(0)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(0);
+
+            let col = super::super::hardcoded::get_redstone_wire_color(power);
+            let hex = super::super::hardcoded::get_redstone_wire_hex(power);
+            return TintInfo {
+                tint_type: TINT_TYPE_HARDCODED,
+                tint_category: "hardcoded".to_string(),
+                tint_weight: 1.0,
+                base_tint_weight: 1.0,
+                overlay_tint_weight: 1.0,
+                has_overlay: false,
+                overlay_texture: None,
+                is_hardcoded: true,
+                hardcoded_color: Some(col),
+                hardcoded_hex: Some(hex.to_string()),
+            };
+        }
+
         // 3. Check Hardcoded block tints
         if let Some(hex) = get_hardcoded_tint_hex(stem).or_else(|| block_name.and_then(get_hardcoded_tint_hex)) {
             let col = hex_to_linear_rgba(hex);

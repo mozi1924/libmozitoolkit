@@ -89,6 +89,7 @@ pub fn emit_baked_face(
         shading.tint_data,
         final_tint_color,
         final_colormap_uv,
+        shading.emission,
         block_pos,
         dir.to_index() as u8,
     );
@@ -211,6 +212,7 @@ pub fn emit_unit_cube_face(
         shading.tint_data,
         final_tint_color,
         final_colormap_uv,
+        shading.emission,
         block_pos,
         dir.to_index() as u8,
     );

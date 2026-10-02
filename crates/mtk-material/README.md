@@ -134,6 +134,9 @@ pub struct MeshMultiUvRemapResult {
 | `get_colormap_uv(temp: f32, hum: f32) -> [f32; 2]` | 计算原版三角形 Colormap 采样 UV。 |
 | `get_biome_palette(name: &str) -> &'static BiomePalette` | 获取权威生物群系调色板（默认回退 `plains`）。 |
 | `classify_tint_category(clean_stem, block_name, tint_index) -> &'static str` | 权威判定方块/贴图染色语义类别。 |
+| `get_redstone_wire_color(power: u8) -> [f32; 4]` | 获取红石引线对应信号强度（0..15）的权威 Linear RGBA 线性颜色。 |
+| `get_redstone_wire_srgb(power: u8) -> [f32; 4]` | 获取红石引线对应信号强度（0..15）的标准 sRGB 浮点色彩。 |
+| `get_redstone_wire_hex(power: u8) -> &'static str` | 获取红石引线对应信号强度（0..15）的十六进制颜色代码。 |
 | `blend_biome_colors(weights: &[(&str, f32)], category: &str) -> [f32; 4]` | 多生物群系加权线性混合色彩。 |
 | `compute_mesh_biome_attributes(texture_keys, biome, multi_biomes, resolver)` | Rayon 并行计算全网格染色面属性数组。 |
 
@@ -231,3 +234,27 @@ fn main() {
     println!("Local UVs: {:?}", result.local_uvs);
 }
 ```
+
+### 示例 4：查询红石引线信号强度动态硬编码染色
+```rust
+use mtk_material::biome::hardcoded::{get_redstone_wire_color, get_redstone_wire_hex};
+use mtk_material::BiomeResolver;
+
+fn main() {
+    // 1. 直接查询 0 与 15 级红石线性色彩
+    println!("Off state hex: {}", get_redstone_wire_hex(0));  // -> "#4B0000"
+    println!("Max signal hex: {}", get_redstone_wire_hex(15)); // -> "#FF2600"
+    println!("Max signal Linear: {:?}", get_redstone_wire_color(15));
+
+    // 2. 通过 BiomeResolver 动态解算方块状态中的信号等级
+    let resolver = BiomeResolver::new();
+    let tint = resolver.get_tint_info(
+        "redstone_dust_line0",
+        Some("minecraft:redstone_wire[power=15]"),
+        Some(0),
+    );
+    assert_eq!(tint.tint_type, 4); // TINT_TYPE_HARDCODED
+    assert_eq!(tint.hardcoded_hex.as_deref(), Some("#FF2600"));
+}
+```
+

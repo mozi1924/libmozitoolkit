@@ -27,6 +27,7 @@ pub struct PreResolvedFace {
     pub tint_data: [f32; 4],
     pub tint_color: [f32; 4],
     pub colormap_uv: [f32; 3],
+    pub emission: f32,
 }
 
 /// Pre-resolved model face bundling the original BakedFace geometry and pre-resolved shading.
@@ -58,6 +59,7 @@ pub struct ResolvedFaceShading {
     pub tint_data: [f32; 4],
     pub tint_color: [f32; 4],
     pub colormap_uv: [f32; 3],
+    pub emission: f32,
 }
 
 /// Pre-resolves palette meshing data (Atlas UVs, material slots, tint) outside the meshing hot loop.
@@ -72,6 +74,14 @@ pub fn build_palette_meshing_data(
         .zip(palette_models.iter())
         .map(|(state_str, model_opt)| {
             let clean_block = mtk_resource::extract_block_name(state_str);
+            let emission = if let Some(ref baked) = model_opt {
+                baked.emissive_level
+            } else {
+                mtk_model::baker::get_block_emissive_level(
+                    &mtk_model::blockstate::BlockState::parse(state_str).unwrap_or_default(),
+                )
+            };
+
             if let Some(baked) = model_opt {
                 let (c_buckets, u_bucket) = baked.get_face_buckets();
 
@@ -148,7 +158,7 @@ pub fn build_palette_meshing_data(
 
                     let (tint_data, tint_color, colormap_uv) = compute_face_tint(
                         &final_tex_key,
-                        clean_block,
+                        state_str,
                         face.tint_index,
                         config.biome_resolver.as_deref(),
                     );
@@ -164,6 +174,7 @@ pub fn build_palette_meshing_data(
                             tint_data,
                             tint_color,
                             colormap_uv,
+                            emission,
                         },
                     }
                 };
@@ -229,7 +240,7 @@ pub fn build_palette_meshing_data(
                     let tint_idx = mtk_material::get_unit_cube_tint_index(clean_sub, dir);
                     let (tint_data, tint_color, colormap_uv) = compute_face_tint(
                         &final_tex_key,
-                        clean_block,
+                        state_str,
                         tint_idx,
                         config.biome_resolver.as_deref(),
                     );
@@ -243,6 +254,7 @@ pub fn build_palette_meshing_data(
                         tint_data,
                         tint_color,
                         colormap_uv,
+                        emission,
                     });
                 }
 
@@ -315,10 +327,9 @@ where
                         ),
                     ];
                     let ctm_key = resolved_loc.as_string();
-                    let clean_b = mtk_resource::extract_block_name(state_str);
                     let (td, tc, c_uv) = compute_face_tint(
                         &ctm_key,
-                        clean_b,
+                        state_str,
                         face.tint_index,
                         config.biome_resolver.as_deref(),
                     );
@@ -331,6 +342,7 @@ where
                         tint_data: td,
                         tint_color: tc,
                         colormap_uv: c_uv,
+                        emission: pre_face.emission,
                     };
                 }
             }
@@ -346,6 +358,7 @@ where
         tint_data: pre_face.tint_data,
         tint_color: pre_face.tint_color,
         colormap_uv: pre_face.colormap_uv,
+        emission: pre_face.emission,
     }
 }
 
@@ -390,10 +403,9 @@ where
                         Vec2::new(u_max, v_max),
                     ];
                     let ctm_key = resolved_loc.as_string();
-                    let clean_b = mtk_resource::extract_block_name(state_str);
                     let (td, tc, c_uv) = compute_face_tint(
                         &ctm_key,
-                        clean_b,
+                        state_str,
                         -1,
                         config.biome_resolver.as_deref(),
                     );
@@ -406,6 +418,7 @@ where
                         tint_data: td,
                         tint_color: tc,
                         colormap_uv: c_uv,
+                        emission: pre_face.emission,
                     };
                 }
             }
@@ -421,6 +434,7 @@ where
         tint_data: pre_face.tint_data,
         tint_color: pre_face.tint_color,
         colormap_uv: pre_face.colormap_uv,
+        emission: pre_face.emission,
     }
 }
 

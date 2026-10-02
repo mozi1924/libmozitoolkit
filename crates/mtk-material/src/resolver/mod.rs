@@ -184,6 +184,57 @@ impl MaterialResolver {
             }
         }
 
+        // 3.5. Built-in legacy redstone material alias fallbacks (Mineways / Jmc2Obj)
+        if cleaned.starts_with("redstone_dust") || cleaned.starts_with("redstone_wire") {
+            let base = cleaned
+                .strip_suffix("_on")
+                .or_else(|| cleaned.strip_suffix("_off"))
+                .unwrap_or(&cleaned);
+            let candidates: &[&str] = match base {
+                "redstone_dust_line0" | "redstone_wire_line0" => &[
+                    "block/redstone_dust_line0",
+                    "block/redstone_dust_overlay",
+                    "block/redstone_dust_dot",
+                ],
+                "redstone_dust_line1" | "redstone_wire_line1" => &[
+                    "block/redstone_dust_line1",
+                    "block/redstone_dust_overlay",
+                    "block/redstone_dust_dot",
+                ],
+                "redstone_dust_dot" | "redstone_wire_dot" => &[
+                    "block/redstone_dust_dot",
+                    "block/redstone_dust_overlay",
+                ],
+                "redstone_dust_angled" | "redstone_wire_angled" => &[
+                    "block/redstone_dust_line0",
+                    "block/redstone_dust_line1",
+                    "block/redstone_dust_overlay",
+                ],
+                "redstone_dust_three_way" | "redstone_wire_three_way" => &[
+                    "block/redstone_dust_line1",
+                    "block/redstone_dust_overlay",
+                    "block/redstone_dust_dot",
+                ],
+                "redstone_dust_four_way" | "redstone_dust_cross" | "redstone_wire_four_way" => &[
+                    "block/redstone_dust_dot",
+                    "block/redstone_dust_line1",
+                    "block/redstone_dust_overlay",
+                ],
+                "redstone_dust_overlay" | "redstone_wire_overlay" => &[
+                    "block/redstone_dust_overlay",
+                ],
+                _ => &[],
+            };
+
+            for &cand in candidates {
+                if let Some(sprite_loc) = address_map.lookup_str(cand) {
+                    let res_loc = ResourceLocation::parse(cand)
+                        .unwrap_or_else(|_| ResourceLocation::new("minecraft", cand));
+                    return Some((res_loc, sprite_loc));
+                }
+            }
+        }
+
         // 4. Default standard Minecraft category fallbacks
         let fallbacks = [
             format!("block/{}", cleaned),

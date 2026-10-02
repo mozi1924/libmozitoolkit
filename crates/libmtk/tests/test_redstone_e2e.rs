@@ -1,0 +1,93 @@
+use mtk_core::attributes::constants::{ATTR_BIOME_TINT_COLOR, ATTR_BIOME_TINT_DATA, ATTR_EMISSION};
+use mtk_core::attributes::AttributeData;
+use mtk_core::direction::Direction;
+use mtk_material::BiomeResolver;
+use mtk_model::baker::baked_model::BakedModelDatabase;
+use mtk_model::baker::ModelBaker;
+
+#[test]
+fn test_end_to_end_redstone_wire_baking_and_material_addressing() {
+    let mut baker = ModelBaker::new();
+
+    // 1. Off state (Power 0)
+    let baked_off = baker
+        .bake_blockstate("minecraft:redstone_wire[power=0,axis=z]", None, |_| None)
+        .expect("Must bake redstone wire off state");
+
+    assert!(!baked_off.is_emissive);
+    assert_eq!(baked_off.emissive_level, 0.0);
+    let (mesh_off, _) = baked_off.to_mesh_with_textures(false);
+
+    let em_attr_off = mesh_off.get_custom_attribute(ATTR_EMISSION).unwrap();
+    if let AttributeData::Float(ref vals) = em_attr_off.data {
+        assert_eq!(vals[0], 0.0);
+    } else {
+        panic!("Emission attribute must be Float");
+    }
+
+    let col_attr_off = mesh_off.get_custom_attribute(ATTR_BIOME_TINT_COLOR).unwrap();
+    if let AttributeData::Float4(ref cols) = col_attr_off.data {
+        assert!((cols[0][0] - 0.3).abs() < 1e-4);
+        assert_eq!(cols[0][1], 0.0);
+    } else {
+        panic!("Tint color attribute must be Float4");
+    }
+
+    // 2. On state (Power 15) with vertical wall wire (north=up)
+    let baked_on = baker
+        .bake_blockstate("minecraft:redstone_wire[power=15,north=up]", None, |_| None)
+        .expect("Must bake redstone wire on state");
+
+    assert!(baked_on.is_emissive);
+    assert!((baked_on.emissive_level - 1.0).abs() < 1e-4);
+    let (mesh_on, _) = baked_on.to_mesh_with_textures(false);
+
+    let em_attr_on = mesh_on.get_custom_attribute(ATTR_EMISSION).unwrap();
+    if let AttributeData::Float(ref vals) = em_attr_on.data {
+        assert!((vals[0] - 1.0).abs() < 1e-4);
+    } else {
+        panic!("Emission attribute must be Float");
+    }
+
+    let col_attr_on = mesh_on.get_custom_attribute(ATTR_BIOME_TINT_COLOR).unwrap();
+    if let AttributeData::Float4(ref cols) = col_attr_on.data {
+        assert!((cols[0][0] - 1.0).abs() < 1e-4);
+        assert!((cols[0][1] - 0.15).abs() < 1e-4);
+    } else {
+        panic!("Tint color attribute must be Float4");
+    }
+
+    let data_attr_on = mesh_on.get_custom_attribute(ATTR_BIOME_TINT_DATA).unwrap();
+    if let AttributeData::Float4(ref datas) = data_attr_on.data {
+        assert_eq!(datas[0][3], 4.0); // TINT_TYPE_HARDCODED
+    } else {
+        panic!("Tint data attribute must be Float4");
+    }
+
+    // 3. Verify vertical wall wire faces into the room (South)
+    let south_faces: Vec<_> = baked_on
+        .elements
+        .iter()
+        .flat_map(|el| el.faces.iter())
+        .filter(|(&dir, _)| dir == Direction::South)
+        .collect();
+    assert!(!south_faces.is_empty(), "Vertical wall wire must retain room-facing South face");
+
+    // 4. Verify BiomeResolver address lookup matches
+    let resolver = BiomeResolver::new();
+    let tint_info_off = resolver.get_tint_info("redstone_dust_line0", Some("minecraft:redstone_wire[power=0]"), Some(0));
+    assert_eq!(tint_info_off.hardcoded_hex.as_deref(), Some("#4B0000"));
+
+    let tint_info_on = resolver.get_tint_info("redstone_dust_line0", Some("minecraft:redstone_wire[power=15]"), Some(0));
+    assert_eq!(tint_info_on.hardcoded_hex.as_deref(), Some("#FF2600"));
+
+    // 5. Verify BakedModelDatabase Tier 2 non-geometric property stripping
+    let mut db = BakedModelDatabase::new();
+    let geometric = baker
+        .bake_blockstate("minecraft:redstone_wire[east=side,west=side]", None, |_| None)
+        .unwrap();
+    db.insert("minecraft:redstone_wire[east=side,west=side]".to_string(), geometric);
+
+    let match_with_power = db.get("minecraft:redstone_wire[east=side,power=15,west=side]");
+    assert!(match_with_power.is_some(), "Database must match geometry when power is specified");
+}

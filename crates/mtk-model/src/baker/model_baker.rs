@@ -97,6 +97,30 @@ pub fn is_block_emissive(blockstate: &BlockState) -> bool {
     false
 }
 
+/// Returns the normalized emission level (0.0 .. 1.0) for a blockstate.
+pub fn get_block_emissive_level(blockstate: &BlockState) -> f32 {
+    let short_name = blockstate.name.as_str();
+    let p = &blockstate.properties;
+
+    if short_name == "redstone_wire" {
+        if let Some(power) = p.get("power").and_then(|s| s.parse::<f32>().ok()) {
+            return (power / 15.0).clamp(0.0, 1.0);
+        }
+        return 0.0;
+    }
+    if short_name == "respawn_anchor" {
+        if let Some(charges) = p.get("charges").and_then(|s| s.parse::<f32>().ok()) {
+            return (charges / 4.0).clamp(0.0, 1.0);
+        }
+        return 0.0;
+    }
+    if is_block_emissive(blockstate) {
+        1.0
+    } else {
+        0.0
+    }
+}
+
 /// Universal, headless Minecraft Model Baker.
 ///
 /// Bakes arbitrary BlockStates and models (both native Minecraft JSON models and Mod Wavefront OBJ meshes)
@@ -141,6 +165,10 @@ impl ModelBaker {
 
         let variant_matches = if let Some(def) = blockstate_def {
             BlockStateResolver::resolve(def, &blockstate)
+        } else if let Some(builtin_def) =
+            BuiltinModelRegistry::get_builtin_blockstate_def(&blockstate.name)
+        {
+            BlockStateResolver::resolve(&builtin_def, &blockstate)
         } else {
             vec![BlockStateResolver::heuristic_match(&blockstate)]
         };
@@ -149,13 +177,19 @@ impl ModelBaker {
         let mut six_faces: [Option<BakedFace>; 6] = [None, None, None, None, None, None];
 
         for variant in &variant_matches {
-            let mut root_model = model_loader(&variant.model_id).unwrap_or_default();
+            let mut root_model = model_loader(&variant.model_id)
+                .or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id))
+                .unwrap_or_default();
             apply_bell_patches(&variant.model_id, &mut root_model);
 
-            let mut resolved = root_model.resolve_hierarchy(&variant.model_id, &mut model_loader)?;
+            let mut resolved = root_model.resolve_hierarchy(&variant.model_id, |id| {
+                model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+            })?;
             if resolved.elements.is_empty() {
                 if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(&blockstate) {
-                    resolved = builtin.resolve_hierarchy(&variant.model_id, &mut model_loader)?;
+                    resolved = builtin.resolve_hierarchy(&variant.model_id, |id| {
+                        model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                    })?;
                 }
             }
 
@@ -186,15 +220,32 @@ impl ModelBaker {
                         None => continue,
                     };
 
-                    if is_zero_z && orig_dir == Direction::South && elem.faces.contains_key("north")
-                    {
-                        continue;
-                    }
-                    if is_zero_x && orig_dir == Direction::East && elem.faces.contains_key("west") {
-                        continue;
-                    }
-                    if is_zero_y && orig_dir == Direction::Down && elem.faces.contains_key("up") {
-                        continue;
+                    // Cull occluded backface of zero-thickness wall/floor decals
+                    if elem_rot.is_none() {
+                        if is_zero_z {
+                            if from_pos[2] < 8.0 && orig_dir == Direction::North && elem.faces.contains_key("south") {
+                                continue;
+                            }
+                            if from_pos[2] > 8.0 && orig_dir == Direction::South && elem.faces.contains_key("north") {
+                                continue;
+                            }
+                        }
+                        if is_zero_x {
+                            if from_pos[0] < 8.0 && orig_dir == Direction::West && elem.faces.contains_key("east") {
+                                continue;
+                            }
+                            if from_pos[0] > 8.0 && orig_dir == Direction::East && elem.faces.contains_key("west") {
+                                continue;
+                            }
+                        }
+                        if is_zero_y {
+                            if from_pos[1] < 8.0 && orig_dir == Direction::Down && elem.faces.contains_key("up") {
+                                continue;
+                            }
+                            if from_pos[1] > 8.0 && orig_dir == Direction::Up && elem.faces.contains_key("down") {
+                                continue;
+                            }
+                        }
                     }
 
                     let cullface_dir = face_data
@@ -345,6 +396,7 @@ impl ModelBaker {
                     .any(|&w| if w == "bed" { false } else { short_name.contains(w) }));
 
         let emissive = is_block_emissive(&blockstate);
+        let emissive_level = get_block_emissive_level(&blockstate);
 
         let mut quads: Vec<([glam::Vec3; 4], Direction)> = Vec::new();
         if !baked_elements.is_empty() {
@@ -369,7 +421,7 @@ impl ModelBaker {
             is_cube,
             is_opaque,
             is_emissive: emissive,
-            emissive_level: if emissive { 1.0 } else { 0.0 },
+            emissive_level,
             cull_meta: Some(cull_meta),
             culled_faces: Default::default(),
             unculled_faces: Default::default(),
@@ -468,6 +520,7 @@ impl ModelBaker {
             properties: std::collections::BTreeMap::new(),
         });
         let emissive = is_block_emissive(&blockstate);
+        let emissive_level = get_block_emissive_level(&blockstate);
         let cull_meta = mtk_cull::compute_block_cull_meta(block_state, None, Some(false));
 
         let mut baked_model = BakedModel {
@@ -478,7 +531,7 @@ impl ModelBaker {
             is_cube: false,
             is_opaque: false,
             is_emissive: emissive,
-            emissive_level: if emissive { 1.0 } else { 0.0 },
+            emissive_level,
             cull_meta: Some(cull_meta),
             culled_faces: Default::default(),
             unculled_faces: Default::default(),

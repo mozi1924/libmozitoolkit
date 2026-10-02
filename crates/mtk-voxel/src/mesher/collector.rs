@@ -20,6 +20,7 @@ pub struct FaceAttributesCollector {
     pub biome_tint_data: Vec<[f32; 4]>,
     pub biome_tint_colors: Vec<[f32; 4]>,
     pub colormap_uvs: Vec<[f32; 3]>,
+    pub emissions: Vec<f32>,
     pub block_xs: Vec<i32>,
     pub block_ys: Vec<i32>,
     pub block_zs: Vec<i32>,
@@ -40,6 +41,7 @@ impl FaceAttributesCollector {
             biome_tint_data: Vec::with_capacity(capacity),
             biome_tint_colors: Vec::with_capacity(capacity),
             colormap_uvs: Vec::with_capacity(capacity),
+            emissions: Vec::with_capacity(capacity),
             block_xs: Vec::with_capacity(capacity),
             block_ys: Vec::with_capacity(capacity),
             block_zs: Vec::with_capacity(capacity),
@@ -60,6 +62,7 @@ impl FaceAttributesCollector {
         tint_data: [f32; 4],
         tint_color: [f32; 4],
         colormap_uv: [f32; 3],
+        emission: f32,
         block_pos: IVec3,
         face_dir: u8,
     ) {
@@ -74,6 +77,7 @@ impl FaceAttributesCollector {
         self.biome_tint_data.push(tint_data);
         self.biome_tint_colors.push(tint_color);
         self.colormap_uvs.push(colormap_uv);
+        self.emissions.push(emission);
         self.block_xs.push(block_pos.x);
         self.block_ys.push(block_pos.y);
         self.block_zs.push(block_pos.z);
@@ -155,6 +159,11 @@ impl FaceAttributesCollector {
             "mtk_face_dir",
             AttributeDomain::Face,
             AttributeData::UInt8(self.face_dirs),
+        ));
+        mesh.add_custom_attribute(MeshAttribute::new(
+            "mtk_emission",
+            AttributeDomain::Face,
+            AttributeData::Float(self.emissions),
         ));
     }
 }

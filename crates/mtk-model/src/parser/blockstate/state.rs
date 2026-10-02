@@ -78,6 +78,20 @@ impl BlockState {
             }
         }
 
+        let (name, mut properties) = if let Some((canon_name, redstone_props)) =
+            super::redstone::map_legacy_redstone_name(&name)
+        {
+            let mut merged = redstone_props;
+            merged.extend(properties);
+            (canon_name.to_string(), merged)
+        } else {
+            (name, properties)
+        };
+
+        if name == "redstone_wire" {
+            properties = super::redstone::normalize_redstone_wire_properties(&properties);
+        }
+
         Ok(Self {
             namespace,
             name,

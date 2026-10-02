@@ -217,7 +217,7 @@ impl BlockStateDefinition {
                         total_combos = total_combos.saturating_mul(list.len());
                     }
 
-                    if total_combos <= 512 {
+                    if total_combos <= 2048 {
                         let mut combos: Vec<Vec<(String, String)>> = vec![Vec::new()];
                         for (key, values) in keys.iter().zip(value_lists.iter()) {
                             let mut next_combos = Vec::new();

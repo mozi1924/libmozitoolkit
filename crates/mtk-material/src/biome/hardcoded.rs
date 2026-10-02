@@ -19,11 +19,48 @@ pub static HARDCODED_BLOCK_TINTS: &[(&str, &str)] = &[
     ("attached_pumpkin_stem", "#E0C71C"),
     ("melon_stem", "#E0C71C"),
     ("pumpkin_stem", "#E0C71C"),
+    ("redstone_dust_line", "#4B0000"),
+    ("redstone_dust_line0", "#4B0000"),
+    ("redstone_dust_line1", "#4B0000"),
+    ("redstone_dust_dot", "#4B0000"),
     ("redstone_wire", "#4B0000"),
     ("redstone_wire_line0", "#4B0000"),
     ("redstone_wire_line1", "#4B0000"),
     ("redstone_wire_dot", "#4B0000"),
 ];
+
+/// Precomputed canonical hex strings for redstone wire power levels 0 to 15.
+pub static REDSTONE_WIRE_TINT_HEX: [&str; 16] = [
+    "#4B0000", "#580200", "#640500", "#700700",
+    "#7C0A00", "#880C00", "#940F00", "#A01100",
+    "#AC1400", "#B81600", "#C31900", "#CF1B00",
+    "#DB1E00", "#E72000", "#F32300", "#FF2600",
+];
+
+/// Returns the sRGB float color `[r, g, b, 1.0]` for a redstone wire signal power level (0..15).
+pub fn get_redstone_wire_srgb(power: u8) -> [f32; 4] {
+    let p = power.min(15) as f32;
+    let t = p / 15.0;
+    let r = 0.3 + 0.7 * t;
+    let g = if power == 0 { 0.0 } else { 0.15 * t };
+    [r, g, 0.0, 1.0]
+}
+
+/// Returns the Linear RGBA float color for Blender shaders for redstone wire signal power level (0..15).
+pub fn get_redstone_wire_color(power: u8) -> [f32; 4] {
+    let srgb = get_redstone_wire_srgb(power);
+    [
+        super::palettes::srgb_to_linear(srgb[0]),
+        super::palettes::srgb_to_linear(srgb[1]),
+        super::palettes::srgb_to_linear(srgb[2]),
+        1.0,
+    ]
+}
+
+/// Returns the static hex color string for a redstone wire signal power level (0..15).
+pub fn get_redstone_wire_hex(power: u8) -> &'static str {
+    REDSTONE_WIRE_TINT_HEX[power.min(15) as usize]
+}
 
 /// Canonical Minecraft Block Colors Registry.
 /// Maps block stem to layer definitions: (category, default_weight).
@@ -69,6 +106,7 @@ pub static BLOCK_TINT_REGISTRY: &[(&str, &[(&str, f32)])] = &[
     ("attached_pumpkin_stem", &[("hardcoded", 1.0)]),
     ("melon_stem", &[("hardcoded", 1.0)]),
     ("pumpkin_stem", &[("hardcoded", 1.0)]),
+    ("redstone_wire", &[("hardcoded", 1.0)]),
 ];
 
 /// Explicit list of vanilla blocks and textures that must NEVER receive biome tint.
@@ -94,6 +132,7 @@ pub static EXPLICIT_NONE_BLOCKS: &[&str] = &[
     "dirt",
     "coarse_dirt",
     "rooted_dirt",
+    "redstone_dust_overlay",
 ];
 
 /// Known vanilla texture stems with a grass biome colour provider.

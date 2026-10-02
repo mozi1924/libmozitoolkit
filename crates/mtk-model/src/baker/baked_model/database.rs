@@ -67,6 +67,7 @@ impl BakedModelDatabase {
 
         // Tier 2: Strip known non-geometric properties that never affect block model geometry in vanilla
         const NON_GEOMETRIC_PROPS: &[&str] = &[
+            "power",
             "waterlogged",
             "occupied",
             "distance",
@@ -98,6 +99,20 @@ impl BakedModelDatabase {
 
             if let Some(model) = self.models.get(&canon_filtered) {
                 return Some(model);
+            }
+
+            // Fallback for models stored with default zero values (e.g. redstone_wire with power=0)
+            if filtered_props.contains_key("east") || filtered_props.contains_key("north") {
+                let mut p0_props = filtered_props.clone();
+                p0_props.insert("power".to_string(), "0".to_string());
+                let props_str: Vec<String> = p0_props
+                    .iter()
+                    .map(|(k, v)| format!("{}={}", k, v))
+                    .collect();
+                let canon_p0 = format!("{}[{}]", base_id, props_str.join(","));
+                if let Some(model) = self.models.get(&canon_p0) {
+                    return Some(model);
+                }
             }
         }
 
@@ -140,6 +155,9 @@ impl BakedModelDatabase {
                     let mut relaxed_score = 0i32;
 
                     for (k, v) in target_props {
+                        if NON_GEOMETRIC_PROPS.contains(&k.as_str()) {
+                            continue;
+                        }
                         if let Some(&cand_v) = cand_props.get(k.as_str()) {
                             if cand_v == v.as_str() {
                                 matched_keys += 1;
