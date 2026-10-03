@@ -111,10 +111,11 @@ pub fn compute_block_cull_meta(
     let is_air = state_str.is_empty()
         || AIR_NAMES.iter().any(|&n| name_low == n)
         || name_low.ends_with("air");
+    let clean_name = name_low.strip_prefix("minecraft:").unwrap_or(&name_low);
     let is_fluid = !is_air
-        && (FLUID_NAMES.iter().any(|&n| name_low == n)
-            || name_low.contains("water")
-            || name_low.contains("lava"));
+        && (FLUID_NAMES
+            .iter()
+            .any(|&n| n.strip_prefix("minecraft:").unwrap_or(n) == clean_name));
     let is_leaves = !is_air
         && (LEAVES_NAMES.iter().any(|&n| name_low == n)
             || name_low.ends_with("_leaves")
