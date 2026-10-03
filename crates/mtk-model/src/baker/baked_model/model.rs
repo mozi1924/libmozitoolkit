@@ -101,7 +101,7 @@ impl Default for ModelMeshOptions {
 }
 
 /// Fully baked model containing all elements, directional faces summary, and metadata.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct BakedModel {
     pub block_state: String,
     pub elements: Vec<BakedElement>,
@@ -114,10 +114,49 @@ pub struct BakedModel {
     pub emissive_level: f32,
     #[serde(default)]
     pub cull_meta: Option<mtk_cull::BlockCullMeta>,
-    #[serde(default)]
+    #[serde(skip)]
     pub culled_faces: [Vec<BakedFace>; 6],
-    #[serde(default)]
+    #[serde(skip)]
     pub unculled_faces: Vec<BakedFace>,
+}
+
+impl<'de> Deserialize<'de> for BakedModel {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct BakedModelHelper {
+            block_state: String,
+            elements: Vec<BakedElement>,
+            #[serde(default)]
+            obj_faces: Vec<BakedObjFace>,
+            faces: [BakedFace; 6],
+            is_cube: bool,
+            is_opaque: bool,
+            is_emissive: bool,
+            emissive_level: f32,
+            #[serde(default)]
+            cull_meta: Option<mtk_cull::BlockCullMeta>,
+        }
+
+        let helper = BakedModelHelper::deserialize(deserializer)?;
+        let mut model = BakedModel {
+            block_state: helper.block_state,
+            elements: helper.elements,
+            obj_faces: helper.obj_faces,
+            faces: helper.faces,
+            is_cube: helper.is_cube,
+            is_opaque: helper.is_opaque,
+            is_emissive: helper.is_emissive,
+            emissive_level: helper.emissive_level,
+            cull_meta: helper.cull_meta,
+            culled_faces: Default::default(),
+            unculled_faces: Default::default(),
+        };
+        model.rebuild_face_buckets();
+        Ok(model)
+    }
 }
 
 impl BakedModel {

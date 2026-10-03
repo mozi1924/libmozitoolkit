@@ -503,5 +503,72 @@ fn test_baker_coplanar_opposite_contact_faces() {
     assert_eq!(after_mesh.triangle_count(), 4);
 }
 
+#[test]
+fn test_builtin_blockbench_json_models() {
+    use mtk_model::builtin::BuiltinModelRegistry;
+    use mtk_model::baker::ModelBaker;
+
+    let test_model_ids = [
+        "minecraft:block/chest",
+        "minecraft:block/chest_left",
+        "minecraft:block/chest_right",
+        "minecraft:block/trapped_chest",
+        "minecraft:block/ender_chest",
+        "minecraft:block/bed_foot",
+        "minecraft:block/bed_head",
+        "minecraft:block/shulker_box",
+        "minecraft:block/sign_standing",
+        "minecraft:block/sign_wall",
+        "minecraft:block/hanging_sign",
+        "minecraft:block/wall_hanging_sign",
+        "minecraft:block/skull",
+        "minecraft:block/skull_wall",
+        "minecraft:block/dragon_head",
+        "minecraft:block/piglin_head",
+        "minecraft:block/bell_floor",
+        "minecraft:block/bell_ceiling",
+        "minecraft:block/bell_wall",
+        "minecraft:block/bell_between_walls",
+        "minecraft:block/end_portal",
+        "minecraft:block/decorated_pot",
+    ];
+
+    for model_id in test_model_ids {
+        let model = BuiltinModelRegistry::get_builtin_model_by_id(model_id)
+            .unwrap_or_else(|| panic!("Builtin model {} must exist", model_id));
+        assert!(
+            model.elements.is_some() && !model.elements.as_ref().unwrap().is_empty(),
+            "Model {} must have elements",
+            model_id
+        );
+    }
+
+    let mut baker = ModelBaker::new();
+    let empty_loader = |_: &str| None;
+
+    // Test baking double chests (left and right)
+    let chest_left = baker
+        .bake_blockstate("minecraft:chest[facing=south,type=left]", None, empty_loader)
+        .expect("Left chest should bake");
+    assert_eq!(chest_left.elements.len(), 3);
+
+    let chest_right = baker
+        .bake_blockstate("minecraft:chest[facing=south,type=right]", None, empty_loader)
+        .expect("Right chest should bake");
+    assert_eq!(chest_right.elements.len(), 3);
+
+    // Test baking bell in all 4 attachments
+    for att in ["floor", "ceiling", "single_wall", "double_wall"] {
+        let state = format!("minecraft:bell[attachment={},facing=north]", att);
+        let bell = baker
+            .bake_blockstate(&state, None, empty_loader)
+            .unwrap_or_else(|_| panic!("Bell {} must bake", att));
+        assert!(!bell.elements.is_empty(), "Bell {} must have elements", att);
+        // Has both support frame elements and 2 bell body elements
+        assert!(bell.elements.len() >= 3, "Bell {} must contain frame and body", att);
+    }
+}
+
+
 
 

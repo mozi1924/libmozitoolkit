@@ -5,7 +5,7 @@ use mtk_core::direction::Direction;
 
 use crate::baked::{BakedElement, BakedFace, BakedModel};
 use crate::blockstate::{BlockState, BlockStateDefinition, BlockStateResolver};
-use crate::builtin::{apply_bell_patches, BuiltinModelRegistry};
+use crate::builtin::BuiltinModelRegistry;
 use crate::error::ModelError;
 use crate::math::{bake_face_exact, rotate_direction};
 use crate::model_json::BlockModelJson;
@@ -177,16 +177,19 @@ impl ModelBaker {
         let mut six_faces: [Option<BakedFace>; 6] = [None, None, None, None, None, None];
 
         for variant in &variant_matches {
-            let mut root_model = model_loader(&variant.model_id)
+            let root_model = model_loader(&variant.model_id)
                 .or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id))
                 .unwrap_or_default();
-            apply_bell_patches(&variant.model_id, &mut root_model);
 
             let mut resolved = root_model.resolve_hierarchy(&variant.model_id, |id| {
                 model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
             })?;
             if resolved.elements.is_empty() {
-                if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(&blockstate) {
+                if let Some(builtin) = BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id) {
+                    resolved = builtin.resolve_hierarchy(&variant.model_id, |id| {
+                        model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                    })?;
+                } else if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(&blockstate) {
                     resolved = builtin.resolve_hierarchy(&variant.model_id, |id| {
                         model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
                     })?;

@@ -1,0 +1,221 @@
+{
+  "textures": {
+    "particle": "minecraft:entity/bed/red",
+    "texture": "minecraft:entity/bed/red"
+  },
+  "elements": [
+    {
+      "from": [
+        0,
+        3,
+        0
+      ],
+      "to": [
+        16,
+        9,
+        16
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            1.5,
+            5.5,
+            5.5,
+            7.0
+          ],
+          "rotation": 180,
+          "texture": "#texture"
+        },
+        "east": {
+          "uv": [
+            5.5,
+            7.0,
+            7.0,
+            11.0
+          ],
+          "rotation": 90,
+          "texture": "#texture"
+        },
+        "south": {
+          "uv": [
+            5.5,
+            5.5,
+            9.5,
+            7.0
+          ],
+          "rotation": 180,
+          "texture": "#texture"
+        },
+        "west": {
+          "uv": [
+            0.0,
+            7.0,
+            1.5,
+            11.0
+          ],
+          "rotation": 270,
+          "texture": "#texture"
+        },
+        "up": {
+          "uv": [
+            1.5,
+            7.0,
+            5.5,
+            11.0
+          ],
+          "texture": "#texture"
+        },
+        "down": {
+          "uv": [
+            7.0,
+            7.0,
+            11.0,
+            11.0
+          ],
+          "rotation": 180,
+          "texture": "#texture"
+        }
+      }
+    },
+    {
+      "from": [
+        0,
+        0,
+        13
+      ],
+      "to": [
+        3,
+        3,
+        16
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            14.75,
+            3.75,
+            15.5,
+            4.5
+          ],
+          "texture": "#texture"
+        },
+        "east": {
+          "uv": [
+            14.0,
+            3.75,
+            14.75,
+            4.5
+          ],
+          "texture": "#texture"
+        },
+        "south": {
+          "uv": [
+            13.25,
+            3.75,
+            14.0,
+            4.5
+          ],
+          "texture": "#texture"
+        },
+        "west": {
+          "uv": [
+            12.5,
+            3.75,
+            13.25,
+            4.5
+          ],
+          "texture": "#texture"
+        },
+        "up": {
+          "uv": [
+            13.25,
+            3.0,
+            14.0,
+            3.75
+          ],
+          "rotation": 270,
+          "texture": "#texture"
+        },
+        "down": {
+          "uv": [
+            14.0,
+            3.0,
+            14.75,
+            3.75
+          ],
+          "rotation": 90,
+          "texture": "#texture"
+        }
+      }
+    },
+    {
+      "from": [
+        13,
+        0,
+        13
+      ],
+      "to": [
+        16,
+        3,
+        16
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            14.0,
+            5.25,
+            14.75,
+            6.0
+          ],
+          "texture": "#texture"
+        },
+        "east": {
+          "uv": [
+            13.25,
+            5.25,
+            14.0,
+            6.0
+          ],
+          "texture": "#texture"
+        },
+        "south": {
+          "uv": [
+            12.5,
+            5.25,
+            13.25,
+            6.0
+          ],
+          "texture": "#texture"
+        },
+        "west": {
+          "uv": [
+            14.75,
+            5.25,
+            15.5,
+            6.0
+          ],
+          "texture": "#texture"
+        },
+        "up": {
+          "uv": [
+            13.25,
+            4.5,
+            14.0,
+            5.25
+          ],
+          "rotation": 180,
+          "texture": "#texture"
+        },
+        "down": {
+          "uv": [
+            14.0,
+            4.5,
+            14.75,
+            5.25
+          ],
+          "rotation": 180,
+          "texture": "#texture"
+        }
+      }
+    }
+  ]
+}

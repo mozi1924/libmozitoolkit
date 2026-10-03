@@ -10,23 +10,14 @@ Headless Minecraft BlockState parser, 1.21+ Block Model JSON hierarchy baking en
 
 - **BlockState 状态机与变体解算**：解析带属性方块标识符（如 `minecraft:oak_stairs[facing=east,half=bottom,shape=straight]`），支持原版 `variants` 规则匹配与 `multipart` 组合条件树评估（`OR`, `AND`, 属性正则匹配）。
 - **递归模型继承树展开 (Hierarchy Resolution)**：支持多达 32 层的父模型继承（`parent`），合并子父级纹理字典，精准展开 `#texture` 变量引用并将纹理绑定写入三维要素 (Element)。
-- **微观几何烘焙与 6 向快速分桶**：
-  - 将方块要素变换为局部三维空间四边形 (`BakedFace`)，精准维护 UV 旋转、UVLock 纹理锁定算法与法线朝向；
-  - 自动将几何面划分至 6 向邻域剔除桶 (`culled_faces: [Vec<BakedFace>; 6]`) 与免剔除桶 (`unculled_faces`)，支撑体素网格化热循环极速发射。
-- **红石引线状态机与连接解算 (Redstone Wire State & Geometry)**：
-  - 内置原版 1.21+ `redstone_wire.json` Multipart 组合定义与全部变体模型（dot, side0/1, side_alt0/1, up 等）；
-  - `normalize_redstone_wire_properties` 支持单臂直连自动拉直（如只有 north 则自动补齐 south=side 形成通线）、点状与交叉别名规范化；
-  - `resolve_redstone_wire_connections` 自动针对 3D 体素邻域解算平地邻接、下行斜坡与上行贴墙导线；
-  - 针对贴墙引线实现空间坐标感知的单面薄片剔除（North/South/East/West/Up/Down 贴墙面保留室内朝向，剔除贴墙背面）；
-  - 动态计算红石信号发光等级 `get_block_emissive_level` (`power / 15.0`)。
-- **叠面消重与接触面剔除**：直接调用 `mtk-cull::MeshSanitizer` 在模型要素粒度消除同向重合面（根除 DCC 视口 Z-fighting）与内部反向贴合接触面。
-- **多级智能模型数据库 (`BakedModelDatabase`)**：
-  - **Tier 1 (Exact Match)**: 极速精确哈希查询；
-  - **Tier 1.5 (Canonical)**: 规范化键查询（消除属性书写顺序与空格差异）；
-  - **Tier 2 (Canonical Filter)**: 剥离世界运行时非几何属性（如 `waterlogged`, `occupied`, `distance`, `stage`, `power`）进行几何查询；
-  - **Tier 3 (Subset Match)**: 核心几何变体属性子集模糊降级匹配；
-  - **Tier 4 (Base ID Fallback)**: 回退至基础方块默认模型。
-- **Wavefront OBJ 模组模型加载**：支持 Mod 与第三方导出工具的 Wavefront OBJ 模型解析与面材质属性提取。
+- **内置标准类原版 JSON 实体模型库 (Blockbench-Compatible Built-in Models)**：
+  - 针对原版 Java 动态代码渲染的实体方块（箱子、床、潜影盒、头颅、告示牌、悬挂告示牌、钟、末地传送门、饰纹陶罐等），彻底摒弃专有 AST 与 OBJ 冗余，内置纯净的标准 Minecraft `BlockModelJson` 与 `BlockStateDefinition`；
+  - 全部内置模型可直接由 Blockbench 等标准 DCC 工具导入并可视化编辑，天然兼容材质包纹理重映射；
+  - 烘焙管线与解析器 100% 消费通用规范 JSON，杜绝硬编码特殊分支与运行时补丁注入。
+- **紧凑状态烘焙与防膨胀架构 (Compact State Enumeration & Anti-Bloat)**：
+  - 摒弃盲目的多部件笛卡尔积组合暴增，严格剔除世界运行时非几何属性（如 `waterlogged`, `distance`, `persistent`, `occupied`）；
+  - `BakedModel` 对 `culled_faces` 与 `unculled_faces` 采用序列化剥离（`#[serde(skip)]`）与加载后延迟重建机制，使 `models.bin` 缓存体积缩减 60%~80%；
+  - 多级智能模型数据库支持动态三级兼容度打分与属性清洗回退。
 
 ---
 
@@ -147,8 +138,9 @@ pub struct BakedModelDatabase {
 | `normalize_redstone_wire_properties(props)` | 规范化红石引线方向连接、单臂拉直与别名。 |
 | `resolve_redstone_wire_connections(pos, connectable_fn)` | 依据 3D 体素邻域自动计算红石引线四向连接状态（none/side/up）。 |
 | `map_legacy_redstone_name(name) -> Option<(&'static str, BTreeMap)>` | 将 Mineways/Jmc2Obj 材质名映射为红石引线规范状态。 |
-| `get_builtin_blockstate_def(name) -> Option<BlockStateDefinition>` | 获取内置原版 BlockState 组合定义（含 `redstone_wire`）。 |
-| `get_builtin_model_by_id(model_id) -> Option<BlockModelJson>` | 获取内置原版模型 JSON（含红石引线全套模型）。 |
+| `get_builtin_blockstate_def(name) -> Option<BlockStateDefinition>` | 获取内置原版 BlockState 组合定义（含箱子、床、潜影盒、告示牌、钟、头颅、红石引线等）。 |
+| `get_builtin_model_by_id(model_id) -> Option<BlockModelJson>` | 获取内置原版标准模型 JSON（含箱子各组件、钟各朝向、床、告示牌、头颅、红石引线等全套模型）。 |
+| `get_builtin_model_for_state(blockstate) -> Option<BlockModelJson>` | 依据方块状态获取对应的内置回退模型。 |
 | `ModelBaker::new() -> Self` | 创建通用模型烘焙器。 |
 | `baker.bake_blockstate(state_str, def, model_loader) -> Result<BakedModel, ModelError>` | 端到端烘焙指定方块状态为 `BakedModel`。 |
 | `is_block_emissive(state: &BlockState) -> bool` | 判断方块是否为自发光方块。 |

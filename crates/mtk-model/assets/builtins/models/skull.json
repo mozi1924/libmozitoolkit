@@ -1,0 +1,76 @@
+{
+  "textures": {
+    "particle": "minecraft:entity/skeleton/skeleton",
+    "texture": "minecraft:entity/skeleton/skeleton"
+  },
+  "elements": [
+    {
+      "from": [
+        4,
+        0,
+        4
+      ],
+      "to": [
+        12,
+        8,
+        12
+      ],
+      "faces": {
+        "down": {
+          "uv": [
+            4.0,
+            0,
+            6.0,
+            2.0
+          ],
+          "texture": "#texture"
+        },
+        "up": {
+          "uv": [
+            2.0,
+            0,
+            4.0,
+            2.0
+          ],
+          "texture": "#texture"
+        },
+        "north": {
+          "uv": [
+            6.0,
+            2.0,
+            8.0,
+            4.0
+          ],
+          "texture": "#texture"
+        },
+        "south": {
+          "uv": [
+            2.0,
+            2.0,
+            4.0,
+            4.0
+          ],
+          "texture": "#texture"
+        },
+        "east": {
+          "uv": [
+            4.0,
+            2.0,
+            6.0,
+            4.0
+          ],
+          "texture": "#texture"
+        },
+        "west": {
+          "uv": [
+            0,
+            2.0,
+            2.0,
+            4.0
+          ],
+          "texture": "#texture"
+        }
+      }
+    }
+  ]
+}
