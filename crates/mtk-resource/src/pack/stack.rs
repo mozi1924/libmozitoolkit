@@ -181,8 +181,24 @@ impl ResourcePackStack {
     /// Read and parse an atlas definition for a category, falling back to standard default if not found.
     pub fn load_atlas_category(&self, category: &crate::atlas::AtlasCategory) -> AtlasDefinition {
         let loc = category.atlas_location();
-        self.load_atlas_definition(&loc)
-            .unwrap_or_else(|_| category.default_definition())
+        let mut def = self.load_atlas_definition(&loc)
+            .unwrap_or_else(|_| category.default_definition());
+
+        if matches!(category, crate::atlas::AtlasCategory::Blocks) {
+            let end_portal_loc = ResourceLocation::vanilla("entity/end_portal/end_portal");
+            let has_end_portal = def.sources.iter().any(|s| match s {
+                crate::atlas::AtlasSource::Single { resource, .. } => resource == &end_portal_loc,
+                _ => false,
+            });
+            if !has_end_portal {
+                def.sources.push(crate::atlas::AtlasSource::Single {
+                    resource: end_portal_loc,
+                    sprite: None,
+                });
+            }
+        }
+
+        def
     }
 
     /// Resolve all PBR companions (`_n`, `_s`, `.mcmeta`) using granular per-channel fallback.

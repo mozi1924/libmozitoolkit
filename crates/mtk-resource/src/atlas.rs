@@ -266,6 +266,10 @@ impl AtlasCategory {
                         resource: ResourceLocation::vanilla("entity/enchantment/enchanting_table_book"),
                         sprite: None,
                     },
+                    AtlasSource::Single {
+                        resource: ResourceLocation::vanilla("entity/end_portal/end_portal"),
+                        sprite: None,
+                    },
                 ],
             },
             AtlasCategory::Items => {

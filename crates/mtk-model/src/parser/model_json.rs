@@ -140,7 +140,15 @@ impl BlockModelJson {
         let mut curr = target;
         let mut visited = HashSet::new();
 
-        while let Some(var_name) = curr.strip_prefix('#') {
+        loop {
+            let var_name = if let Some(v) = curr.strip_prefix('#') {
+                v
+            } else if textures.contains_key(curr) && !curr.contains('/') && !curr.contains(':') {
+                curr
+            } else {
+                break;
+            };
+
             if visited.contains(var_name) {
                 return Err(ModelError::CircularParentHierarchy(format!(
                     "Cyclic texture variable '#{}'",

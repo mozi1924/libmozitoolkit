@@ -37,6 +37,8 @@ const EMISSIVE_BLOCKS: &[&str] = &[
     "ochre_froglight",
     "pearlescent_froglight",
     "verdant_froglight",
+    "end_portal",
+    "end_gateway",
 ];
 
 const KNOWN_NON_CUBES: &[&str] = &[
@@ -293,9 +295,7 @@ impl ModelBaker {
                         }
                         if let (Some(f_down), Some(f_up)) = (elem.faces.get("down"), elem.faces.get("up")) {
                             if f_down.texture == f_up.texture && f_down.tintindex == f_up.tintindex {
-                                let keep_dir = if from_pos[1] < 8.0 - 1e-4 {
-                                    Direction::Up
-                                } else if from_pos[1] > 8.0 + 1e-4 {
+                                let keep_dir = if from_pos[1] >= 15.0 - 1e-4 {
                                     Direction::Down
                                 } else {
                                     Direction::Up

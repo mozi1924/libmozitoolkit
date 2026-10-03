@@ -258,3 +258,73 @@ fn test_fluid_material_resolver_prioritization() {
     assert_eq!(loc.path, "block/lava_flow");
     assert_eq!(sp.texture_id, 204);
 }
+
+#[test]
+fn test_special_block_material_aliases() {
+    let mut address_map = AtlasAddressMap::new();
+
+    address_map.sprites.insert(
+        ResourceLocation::new("minecraft", "entity/end_portal/end_portal"),
+        AtlasSpriteLocation {
+            chunk_id: 1,
+            category: "blocks".to_string(),
+            texture_id: 301,
+            ..Default::default()
+        },
+    );
+    address_map.sprites.insert(
+        ResourceLocation::new("minecraft", "entity/conduit/base"),
+        AtlasSpriteLocation {
+            chunk_id: 1,
+            category: "blocks".to_string(),
+            texture_id: 302,
+            ..Default::default()
+        },
+    );
+    address_map.sprites.insert(
+        ResourceLocation::new("minecraft", "entity/banner/banner_base"),
+        AtlasSpriteLocation {
+            chunk_id: 1,
+            category: "blocks".to_string(),
+            texture_id: 303,
+            ..Default::default()
+        },
+    );
+    address_map.sprites.insert(
+        ResourceLocation::new("minecraft", "block/oak_hanging_sign"),
+        AtlasSpriteLocation {
+            chunk_id: 1,
+            category: "blocks".to_string(),
+            texture_id: 304,
+            ..Default::default()
+        },
+    );
+
+    // 1. End portal / Gateway
+    let res = MaterialResolver::resolve("end_portal", None, &address_map);
+    assert!(res.is_some());
+    assert_eq!(res.unwrap().0.path, "entity/end_portal/end_portal");
+
+    let res = MaterialResolver::resolve("minecraft:block/end_portal", None, &address_map);
+    assert!(res.is_some());
+    assert_eq!(res.unwrap().0.path, "entity/end_portal/end_portal");
+
+    let res = MaterialResolver::resolve("end_gateway", None, &address_map);
+    assert!(res.is_some());
+    assert_eq!(res.unwrap().0.path, "entity/end_portal/end_portal");
+
+    // 2. Conduit
+    let res = MaterialResolver::resolve("conduit", None, &address_map);
+    assert!(res.is_some());
+    assert_eq!(res.unwrap().0.path, "entity/conduit/base");
+
+    // 3. Banner base
+    let res = MaterialResolver::resolve("banner_base", None, &address_map);
+    assert!(res.is_some());
+    assert_eq!(res.unwrap().0.path, "entity/banner/banner_base");
+
+    // 4. Hanging sign legacy path
+    let res = MaterialResolver::resolve("minecraft:entity/signs/hanging/oak", None, &address_map);
+    assert!(res.is_some());
+    assert_eq!(res.unwrap().0.path, "block/oak_hanging_sign");
+}

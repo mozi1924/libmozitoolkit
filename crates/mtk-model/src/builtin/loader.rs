@@ -63,8 +63,6 @@ impl MiExModelLoader {
             MIEX_SHULKER_BOX_JSON
         } else if short_name == "end_portal" {
             MIEX_END_PORTAL_JSON
-        } else if short_name.contains("hanging_sign") {
-            MIEX_HANGING_SIGN_JSON
         } else if short_name.contains("sign") {
             MIEX_SIGN_JSON
         } else if short_name.contains("head") || short_name.contains("skull") {

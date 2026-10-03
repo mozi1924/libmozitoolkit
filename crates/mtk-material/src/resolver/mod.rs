@@ -265,6 +265,56 @@ impl MaterialResolver {
             }
         }
 
+        // 3.6 Special built-in canonical aliases (End Portal, Gateway, Conduit, Banner, Hanging Signs)
+        if raw_material_name.contains("end_portal")
+            || raw_material_name.contains("end_gateway")
+            || cleaned == "end_portal"
+            || cleaned == "end_gateway"
+        {
+            for &cand in &[
+                "entity/end_portal/end_portal",
+                "entity/end_portal",
+                "block/end_portal",
+            ] {
+                if let Some(sprite_loc) = address_map.lookup_str(cand) {
+                    let res_loc = ResourceLocation::parse(cand)
+                        .unwrap_or_else(|_| ResourceLocation::new("minecraft", cand));
+                    return Some((res_loc, sprite_loc));
+                }
+            }
+        }
+
+        if cleaned == "conduit" || raw_material_name.contains("conduit") {
+            for &cand in &["entity/conduit/base", "block/conduit"] {
+                if let Some(sprite_loc) = address_map.lookup_str(cand) {
+                    let res_loc = ResourceLocation::parse(cand)
+                        .unwrap_or_else(|_| ResourceLocation::new("minecraft", cand));
+                    return Some((res_loc, sprite_loc));
+                }
+            }
+        }
+
+        if cleaned == "banner" || cleaned == "banner_base" || raw_material_name.contains("banner") {
+            for &cand in &["entity/banner/banner_base", "entity/banner/base"] {
+                if let Some(sprite_loc) = address_map.lookup_str(cand) {
+                    let res_loc = ResourceLocation::parse(cand)
+                        .unwrap_or_else(|_| ResourceLocation::new("minecraft", cand));
+                    return Some((res_loc, sprite_loc));
+                }
+            }
+        }
+
+        if raw_material_name.contains("hanging") && raw_material_name.contains("sign") {
+            let clean_raw = raw_material_name.strip_prefix("minecraft:").unwrap_or(raw_material_name);
+            let wood = clean_raw.rsplit('/').next().unwrap_or("");
+            let cand = format!("block/{}_hanging_sign", wood);
+            if let Some(sprite_loc) = address_map.lookup_str(&cand) {
+                let res_loc = ResourceLocation::parse(&cand)
+                    .unwrap_or_else(|_| ResourceLocation::new("minecraft", &cand));
+                return Some((res_loc, sprite_loc));
+            }
+        }
+
         // 4. Default standard Minecraft category fallbacks
         let fallbacks = [
             format!("block/{}", cleaned),

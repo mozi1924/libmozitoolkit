@@ -1,9 +1,9 @@
 {
     "blocks": [ "minecraft:end_portal" ],
-    "defaultTexture": "minecraft:block/end_portal",
+    "defaultTexture": "minecraft:entity/end_portal/end_portal",
     "handler": {
         "textures": {
-            "texture": "'minecraft:block/end_portal'"
+            "texture": "'minecraft:entity/end_portal/end_portal'"
         },
         "elements": [
             {

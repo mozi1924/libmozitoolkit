@@ -6,11 +6,13 @@ use std::collections::HashMap;
 use crate::builtin::loader::MiExModelLoader;
 use crate::builtin::patch::apply_bell_patches;
 use crate::parser::blockstate::{BlockState, BlockStateDefinition};
-use crate::parser::model_json::{BlockModelJson, ElementJson, FaceJson, TextureValue};
+use crate::parser::model_json::{BlockModelJson, BuiltinTransform, ElementJson, FaceJson, TextureValue};
 
 // Embedded BlockStates
 pub const DEF_DECORATED_POT: &str = include_str!("../../assets/builtins/blockstates/decorated_pot.json");
 pub const DEF_END_PORTAL: &str = include_str!("../../assets/builtins/blockstates/end_portal.json");
+pub const DEF_END_GATEWAY: &str = include_str!("../../assets/builtins/blockstates/end_gateway.json");
+pub const DEF_CONDUIT: &str = include_str!("../../assets/builtins/blockstates/conduit.json");
 pub const DEF_BELL: &str = r#"{
     "variants": {
         "attachment=ceiling,facing=east": { "model": "minecraft:block/bell_ceiling", "y": 90 },
@@ -35,6 +37,8 @@ pub const DEF_BELL: &str = r#"{
 // Embedded Models
 pub const MODEL_DECORATED_POT: &str = include_str!("../../assets/builtins/models/decorated_pot.json");
 pub const MODEL_END_PORTAL: &str = include_str!("../../assets/builtins/models/end_portal.json");
+pub const MODEL_END_GATEWAY: &str = include_str!("../../assets/builtins/models/end_gateway.json");
+pub const MODEL_CONDUIT: &str = include_str!("../../assets/builtins/models/conduit.json");
 
 /// Retrieves an embedded builtin `BlockStateDefinition` by block name.
 pub fn get_builtin_blockstate_def(name: &str) -> Option<BlockStateDefinition> {
@@ -44,6 +48,8 @@ pub fn get_builtin_blockstate_def(name: &str) -> Option<BlockStateDefinition> {
         "bell" => DEF_BELL,
         "decorated_pot" => DEF_DECORATED_POT,
         "end_portal" => DEF_END_PORTAL,
+        "end_gateway" => DEF_END_GATEWAY,
+        "conduit" => DEF_CONDUIT,
         _ => return None,
     };
 
@@ -163,6 +169,12 @@ pub fn get_builtin_model_by_id(model_id: &str) -> Option<BlockModelJson> {
     if stem == "end_portal" {
         return serde_json::from_str(MODEL_END_PORTAL).ok();
     }
+    if stem == "end_gateway" {
+        return serde_json::from_str(MODEL_END_GATEWAY).ok();
+    }
+    if stem == "conduit" {
+        return serde_json::from_str(MODEL_CONDUIT).ok();
+    }
 
     // Map entity block model IDs to canonical BlockStates evaluated by MiExModelLoader
     let canonical_state = match stem {
@@ -185,6 +197,128 @@ pub fn get_builtin_model_by_id(model_id: &str) -> Option<BlockModelJson> {
     MiExModelLoader::load_for_blockstate(&bs)
 }
 
+/// Procedurally synthesizes a banner model (standing or wall) with pole, crossbar, and cloth.
+fn create_builtin_banner_model(blockstate: &BlockState) -> Option<BlockModelJson> {
+    let name = blockstate.name.as_str();
+    let clean = name.strip_prefix("minecraft:").unwrap_or(name);
+    let is_wall = clean.ends_with("_wall_banner");
+
+    let rot_y = if is_wall {
+        let facing = blockstate
+            .properties
+            .get("facing")
+            .map(|s| s.as_str())
+            .unwrap_or("north");
+        match facing {
+            "north" => 180.0,
+            "east" => 270.0,
+            "south" => 0.0,
+            "west" => 90.0,
+            _ => 180.0,
+        }
+    } else {
+        let rotation: f32 = blockstate
+            .properties
+            .get("rotation")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0.0);
+        (rotation / 16.0) * 360.0
+    };
+
+    let mut textures = HashMap::new();
+    textures.insert(
+        "particle".to_string(),
+        TextureValue::Path("minecraft:entity/banner/banner_base".to_string()),
+    );
+    textures.insert(
+        "base".to_string(),
+        TextureValue::Path("minecraft:entity/banner/banner_base".to_string()),
+    );
+    textures.insert(
+        "cloth".to_string(),
+        TextureValue::Path("minecraft:entity/banner/base".to_string()),
+    );
+
+    let scale = 2.0 / 3.0;
+    let offset_x = 8.0;
+    let offset_y = if is_wall { 13.0 } else { 28.666666 };
+    let offset_z = if is_wall { 1.0 } else { 8.0 };
+
+    let mut elements = Vec::new();
+
+    // 1. Crossbar element
+    elements.push(ElementJson {
+        from: [
+            -10.0 * scale + offset_x,
+            -1.0 * scale + offset_y,
+            -1.0 * scale + offset_z,
+        ],
+        to: [
+            10.0 * scale + offset_x,
+            1.0 * scale + offset_y,
+            1.0 * scale + offset_z,
+        ],
+        rotation: None,
+        transform: Some(BuiltinTransform {
+            rotate: [0.0, rot_y, 0.0],
+            pivot: [8.0, 8.0, 8.0],
+        }),
+        shade: Some(true),
+        faces: make_simple_faces("#base"),
+    });
+
+    // 2. Post element (standing banner only)
+    if !is_wall {
+        elements.push(ElementJson {
+            from: [
+                -1.0 * scale + offset_x,
+                -43.0 * scale + offset_y,
+                -1.0 * scale + offset_z,
+            ],
+            to: [
+                1.0 * scale + offset_x,
+                -1.0 * scale + offset_y,
+                1.0 * scale + offset_z,
+            ],
+            rotation: None,
+            transform: Some(BuiltinTransform {
+                rotate: [0.0, rot_y, 0.0],
+                pivot: [8.0, 8.0, 8.0],
+            }),
+            shade: Some(true),
+            faces: make_simple_faces("#base"),
+        });
+    }
+
+    // 3. Banner cloth element
+    elements.push(ElementJson {
+        from: [
+            -10.0 * scale + offset_x,
+            -39.0 * scale + offset_y,
+            1.0 * scale + offset_z,
+        ],
+        to: [
+            10.0 * scale + offset_x,
+            1.0 * scale + offset_y,
+            2.0 * scale + offset_z,
+        ],
+        rotation: None,
+        transform: Some(BuiltinTransform {
+            rotate: [0.0, rot_y, 0.0],
+            pivot: [8.0, 8.0, 8.0],
+        }),
+        shade: Some(true),
+        faces: make_simple_faces("#cloth"),
+    });
+
+    Some(BlockModelJson {
+        parent: None,
+        ambientocclusion: Some(true),
+        textures: Some(textures),
+        elements: Some(elements),
+    })
+}
+
 /// Fallback model for a blockstate when no external model was discovered.
 pub fn get_builtin_model_for_state(blockstate: &BlockState) -> Option<BlockModelJson> {
     let clean = blockstate.name.strip_prefix("minecraft:").unwrap_or(&blockstate.name);
@@ -193,6 +327,12 @@ pub fn get_builtin_model_for_state(blockstate: &BlockState) -> Option<BlockModel
     }
     if clean == "end_portal" {
         return get_builtin_model_by_id("end_portal");
+    }
+    if clean == "end_gateway" {
+        return get_builtin_model_by_id("end_gateway");
+    }
+    if clean == "conduit" {
+        return get_builtin_model_by_id("conduit");
     }
     if clean == "bell" {
         let att = blockstate
@@ -207,6 +347,9 @@ pub fn get_builtin_model_for_state(blockstate: &BlockState) -> Option<BlockModel
             _ => "bell_floor",
         };
         return get_builtin_model_by_id(model_id);
+    }
+    if clean.ends_with("_banner") {
+        return create_builtin_banner_model(blockstate);
     }
     None
 }

@@ -26,6 +26,10 @@ impl BakedModel {
         let mut element_bounds: Vec<Option<([f32; 3], [f32; 3])>> = Vec::new();
         if options.clip_hidden_volume && self.elements.len() > 1 {
             for el in &self.elements {
+                if el.is_inverted() {
+                    element_bounds.push(None);
+                    continue;
+                }
                 let mut min_pos = Vec3::splat(f32::INFINITY);
                 let mut max_pos = Vec3::splat(f32::NEG_INFINITY);
                 for face in el.faces.values() {
@@ -49,12 +53,16 @@ impl BakedModel {
 
         // 1. Process JSON elements
         for (el_idx, el) in self.elements.iter().enumerate() {
-            let other_bounds: Vec<([f32; 3], [f32; 3])> = element_bounds
-                .iter()
-                .enumerate()
-                .filter(|(idx, _)| *idx != el_idx)
-                .filter_map(|(_, b)| *b)
-                .collect();
+            let other_bounds: Vec<([f32; 3], [f32; 3])> = if el.is_inverted() {
+                Vec::new()
+            } else {
+                element_bounds
+                    .iter()
+                    .enumerate()
+                    .filter(|(idx, _)| *idx != el_idx)
+                    .filter_map(|(_, b)| *b)
+                    .collect()
+            };
 
             for face in el.faces.values() {
                 // Skip standalone overlay decal faces: in MoziToolKit/libmtk, overlays are
@@ -225,10 +233,12 @@ impl BakedModel {
         }
 
         // 3. De-overlapping and Duplicate/Opposite Face Culling (prevents DCC renderer Z-fighting)
-        if (options.cull_duplicates || options.cull_coplanar_opposite) && mesh.face_count() > 0 {
+        let has_inverted = self.elements.iter().any(|e| e.is_inverted());
+        let cull_coplanar_opposite = options.cull_coplanar_opposite && !has_inverted;
+        if (options.cull_duplicates || cull_coplanar_opposite) && mesh.face_count() > 0 {
             let cull_cfg = mtk_cull::MeshCullConfig {
                 tolerance: options.tolerance,
-                cull_coplanar_opposite: options.cull_coplanar_opposite,
+                cull_coplanar_opposite,
                 cull_duplicates: options.cull_duplicates,
             };
             mesh = mtk_cull::cull_mesh_faces(&mesh, &cull_cfg).mesh;

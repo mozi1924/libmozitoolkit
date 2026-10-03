@@ -758,3 +758,126 @@ fn test_scaffolding_baking_and_deduplicate() {
     assert!(textures.iter().any(|t| t.contains("scaffolding_top")), "Scaffolding top texture must be present!");
 }
 
+#[test]
+fn test_vault_and_spawner_inverted_elements() {
+    let mut baker = ModelBaker::new();
+    let loader = |id: &str| -> Option<mtk_model::BlockModelJson> {
+        let path = format!("/home/mozi/mc/assets/minecraft/models/{}.json", id.strip_prefix("minecraft:").unwrap_or(id));
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+    };
+
+    // 1. Spawner: 2 elements (outer + inner cage), total 12 faces
+    if let Ok(bs_str) = std::fs::read_to_string("/home/mozi/mc/assets/minecraft/blockstates/spawner.json") {
+        let bs_def: mtk_model::BlockStateDefinition = serde_json::from_str(&bs_str).unwrap();
+        let mut spawner = baker
+            .bake_blockstate("minecraft:spawner", Some(&bs_def), loader)
+            .expect("Should bake spawner");
+
+        assert_eq!(spawner.elements.len(), 2, "Spawner should have 2 elements");
+        assert!(spawner.elements[1].is_inverted(), "Inner cage element must be detected as inverted");
+
+        let removed = spawner.deduplicate_faces();
+        assert_eq!(removed, 0, "Deduplicate faces must not remove inverted cage faces");
+
+        let (mesh, textures) = spawner.to_mesh_with_textures(true);
+        assert_eq!(mesh.face_count(), 12, "Spawner mesh must have all 12 faces (6 outer + 6 inner)");
+        assert!(textures.iter().any(|t| t.contains("spawner")));
+    }
+
+    // 2. Vault: Element 0 (outer box) + Element 1 (inner cage), top face must be preserved
+    if let Ok(bs_str) = std::fs::read_to_string("/home/mozi/mc/assets/minecraft/blockstates/vault.json") {
+        let bs_def: mtk_model::BlockStateDefinition = serde_json::from_str(&bs_str).unwrap();
+        let mut vault = baker
+            .bake_blockstate("minecraft:vault[facing=north,vault_state=inactive,ominous=false]", Some(&bs_def), loader)
+            .expect("Should bake vault");
+
+        assert_eq!(vault.elements.len(), 2, "Vault should have 2 elements");
+        assert!(vault.elements[1].is_inverted(), "Cage inverted faces must be detected as inverted");
+
+        vault.deduplicate_faces();
+
+        let (mesh, textures) = vault.to_mesh_with_textures(true);
+        assert!(mesh.face_count() >= 7, "Vault mesh must retain both outer and inner faces (got {})", mesh.face_count());
+
+        // Check that at least one face has normal pointing UP (0, 1, 0)
+        let has_up_normal = mesh.normals.iter().any(|n| n[1] > 0.99);
+        assert!(has_up_normal, "Vault top face with normal (0, 1, 0) must be preserved!");
+        assert!(textures.iter().any(|t| t.contains("vault_top")), "vault_top texture must be present!");
+    }
+}
+
+#[test]
+fn test_heavy_core_texture_resolution() {
+    let mut baker = ModelBaker::new();
+    let loader = |id: &str| -> Option<mtk_model::BlockModelJson> {
+        let path = format!("/home/mozi/mc/assets/minecraft/models/{}.json", id.strip_prefix("minecraft:").unwrap_or(id));
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+    };
+
+    if let Ok(bs_str) = std::fs::read_to_string("/home/mozi/mc/assets/minecraft/blockstates/heavy_core.json") {
+        let bs_def: mtk_model::BlockStateDefinition = serde_json::from_str(&bs_str).unwrap();
+        let hc = baker
+            .bake_blockstate("minecraft:heavy_core", Some(&bs_def), loader)
+            .expect("Should bake heavy_core");
+
+        let (mesh, textures) = hc.to_mesh_with_textures(true);
+        assert_eq!(mesh.face_count(), 6, "Heavy core should have 6 faces");
+        assert_eq!(textures, vec!["minecraft:block/heavy_core".to_string()], "Heavy core must resolve 'all' to 'minecraft:block/heavy_core'");
+    }
+}
+
+#[test]
+fn test_end_portal_gateway_conduit_and_banner_builtins() {
+    let mut baker = ModelBaker::new();
+    let empty_loader = |_: &str| -> Option<mtk_model::BlockModelJson> { None };
+
+    // 1. End Portal
+    let ep = baker
+        .bake_blockstate("minecraft:end_portal", None, empty_loader)
+        .expect("Should bake end_portal builtin");
+    assert!(ep.is_emissive, "End portal must be emissive");
+    let (ep_mesh, ep_tex) = ep.to_mesh_with_textures(false);
+    assert_eq!(ep_mesh.face_count(), 1, "End portal should have 1 upward face");
+    assert_eq!(ep_tex, vec!["minecraft:entity/end_portal/end_portal".to_string()]);
+    assert!(ep_mesh.normals.iter().all(|n| n[1] > 0.99), "End portal normal must face Up (0, 1, 0)");
+
+    // 2. End Gateway
+    let eg = baker
+        .bake_blockstate("minecraft:end_gateway", None, empty_loader)
+        .expect("Should bake end_gateway builtin");
+    assert!(eg.is_emissive, "End gateway must be emissive");
+    let (eg_mesh, eg_tex) = eg.to_mesh_with_textures(false);
+    assert_eq!(eg_mesh.face_count(), 6, "End gateway should have 6 cube faces");
+    assert_eq!(eg_tex, vec!["minecraft:entity/end_portal/end_portal".to_string()]);
+
+    // 3. Conduit
+    let conduit = baker
+        .bake_blockstate("minecraft:conduit", None, empty_loader)
+        .expect("Should bake conduit builtin");
+    assert!(conduit.is_emissive, "Conduit must be emissive");
+    let (cd_mesh, cd_tex) = conduit.to_mesh_with_textures(false);
+    assert_eq!(cd_mesh.face_count(), 6, "Conduit should have 6 faces");
+    assert_eq!(cd_tex, vec!["minecraft:entity/conduit/base".to_string()]);
+
+    // 4. Banner (standing)
+    let standing_banner = baker
+        .bake_blockstate("minecraft:black_banner[rotation=4]", None, empty_loader)
+        .expect("Should bake standing banner builtin");
+    let (sb_mesh, sb_tex) = standing_banner.to_mesh_with_textures(false);
+    assert!(sb_mesh.face_count() >= 12, "Standing banner must have pole, crossbar, and cloth faces (got {})", sb_mesh.face_count());
+    assert!(sb_tex.contains(&"minecraft:entity/banner/banner_base".to_string()));
+
+    // 5. Wall Banner
+    let wall_banner = baker
+        .bake_blockstate("minecraft:red_wall_banner[facing=north]", None, empty_loader)
+        .expect("Should bake wall banner builtin");
+    let (wb_mesh, wb_tex) = wall_banner.to_mesh_with_textures(false);
+    assert!(wb_mesh.face_count() >= 10, "Wall banner must have crossbar and cloth faces (got {})", wb_mesh.face_count());
+    assert!(wb_tex.contains(&"minecraft:entity/banner/banner_base".to_string()));
+}
+
+

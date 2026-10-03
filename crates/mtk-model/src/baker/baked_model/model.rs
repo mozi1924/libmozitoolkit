@@ -76,6 +76,16 @@ pub struct BakedElement {
     pub faces: HashMap<Direction, BakedFace>,
 }
 
+impl BakedElement {
+    /// Returns true if this element has inverted coordinates (`from > to` in any axis),
+    /// which vanilla Minecraft uses to create inward-facing interior geometry (e.g. spawners, vaults).
+    pub fn is_inverted(&self) -> bool {
+        self.from_pos[0] > self.to_pos[0] + 1e-4
+            || self.from_pos[1] > self.to_pos[1] + 1e-4
+            || self.from_pos[2] > self.to_pos[2] + 1e-4
+    }
+}
+
 /// Options for configuring mesh generation and face de-overlapping from baked models.
 #[derive(Debug, Clone)]
 pub struct ModelMeshOptions {
@@ -199,8 +209,9 @@ impl BakedModel {
             let is_plane = (el.from_pos[0] - el.to_pos[0]).abs() < 1e-4
                 || (el.from_pos[1] - el.to_pos[1]).abs() < 1e-4
                 || (el.from_pos[2] - el.to_pos[2]).abs() < 1e-4;
+            let is_inverted = el.is_inverted();
             for (&dir, f) in &el.faces {
-                face_list.push(((el_idx, dir, is_plane), f.vertices, f.normal, &f.texture, f.tint_index));
+                face_list.push(((el_idx, dir, is_plane, is_inverted), f.vertices, f.normal, &f.texture, f.tint_index));
             }
         }
 
@@ -211,10 +222,10 @@ impl BakedModel {
             if to_remove.contains(&(face_list[i].0.0, face_list[i].0.1)) {
                 continue;
             }
-            let ((el_a, dir_a, is_plane_a), verts_a, norm_a, tex_a, tint_a) = &face_list[i];
+            let ((el_a, dir_a, is_plane_a, is_inverted_a), verts_a, norm_a, tex_a, tint_a) = &face_list[i];
 
             for j in (i + 1)..face_list.len() {
-                let ((el_b, dir_b, is_plane_b), verts_b, norm_b, tex_b, tint_b) = &face_list[j];
+                let ((el_b, dir_b, is_plane_b, is_inverted_b), verts_b, norm_b, tex_b, tint_b) = &face_list[j];
                 if el_a == el_b || to_remove.contains(&(*el_b, *dir_b)) {
                     continue;
                 }
@@ -234,7 +245,7 @@ impl BakedModel {
                                 if tex_a == tex_b && tint_a == tint_b {
                                     to_remove.insert((*el_b, *dir_b));
                                 }
-                            } else if !*is_plane_a && !*is_plane_b {
+                            } else if !*is_plane_a && !*is_plane_b && !*is_inverted_a && !*is_inverted_b {
                                 // Solid cuboid back-to-back contacting faces: remove both
                                 to_remove.insert((*el_a, *dir_a));
                                 to_remove.insert((*el_b, *dir_b));
@@ -243,13 +254,13 @@ impl BakedModel {
                         }
                         CoplanarOverlap::ContainedInA => {
                             // Only solid cuboid back-to-back contacting faces: Face B is completely covered by Cuboid A
-                            if rel.alignment == FaceAlignment::OppositeDirection && !*is_plane_a && !*is_plane_b {
+                            if rel.alignment == FaceAlignment::OppositeDirection && !*is_plane_a && !*is_plane_b && !*is_inverted_a && !*is_inverted_b {
                                 to_remove.insert((*el_b, *dir_b));
                             }
                         }
                         CoplanarOverlap::ContainedInB => {
                             // Only solid cuboid back-to-back contacting faces: Face A is completely covered by Cuboid B
-                            if rel.alignment == FaceAlignment::OppositeDirection && !*is_plane_a && !*is_plane_b {
+                            if rel.alignment == FaceAlignment::OppositeDirection && !*is_plane_a && !*is_plane_b && !*is_inverted_a && !*is_inverted_b {
                                 to_remove.insert((*el_a, *dir_a));
                                 break;
                             }
