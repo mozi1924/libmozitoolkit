@@ -181,8 +181,11 @@ impl ModelBaker {
                 let r = external.resolve_hierarchy(&variant.model_id, |id| {
                     model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
                 })?;
-                if r.elements.is_empty() {
-                    // External model is empty (e.g. vanilla Java BER dummy block/skull.json).
+                let clean_block = blockstate.name.strip_prefix("minecraft:").unwrap_or(&blockstate.name);
+                let is_missing_bell_body = clean_block == "bell" && !r.textures.contains_key("bell_body");
+                if r.elements.is_empty() || is_missing_bell_body {
+                    // External model is empty (e.g. vanilla Java BER dummy block/skull.json)
+                    // or missing bell body (e.g. vanilla Java bell JSON which only has frame).
                     // Fallback to builtin model for this blockstate or variant ID.
                     if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(&blockstate) {
                         builtin.resolve_hierarchy(&variant.model_id, |id| {

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use glam::Vec3;
+use mtk_core::Direction;
 use mtk_model::{
     BlockModelJson, BlockStateDefinition, ModObjLoader, ModelBaker, WavefrontObjParser,
 };
@@ -136,24 +137,62 @@ fn test_builtin_chest_and_bell_fallback() {
     assert!(!chest_model.elements.is_empty(), "Chest should have builtin elements");
     assert!(chest_model.elements.len() >= 3, "Single chest should have base, lid, and latch");
 
-    // Bell with empty elements -> should have bell patches applied
-    let bell_loader = |id: &str| {
+    // Bell with vanilla-like frame-only elements (missing bell_body texture/elements)
+    // should trigger fallback to builtin bell model and include the golden bell body
+    let vanilla_bell_loader = |id: &str| {
         if id.contains("bell") {
+            let mut textures = HashMap::new();
+            textures.insert("particle".to_string(), mtk_model::TextureValue::Path("minecraft:block/bell_bottom".to_string()));
+            textures.insert("bar".to_string(), mtk_model::TextureValue::Path("minecraft:block/dark_oak_planks".to_string()));
+            textures.insert("post".to_string(), mtk_model::TextureValue::Path("minecraft:block/stone".to_string()));
+            // Vanilla has 3 frame elements, 0 bell body
             Some(mtk_model::BlockModelJson {
                 parent: None,
                 ambientocclusion: Some(true),
-                textures: None,
-                elements: Some(vec![]),
+                textures: Some(textures),
+                elements: Some(vec![mtk_model::ElementJson {
+                    from: [2.0, 13.0, 7.0],
+                    to: [14.0, 15.0, 9.0],
+                    faces: HashMap::new(),
+                    rotation: None,
+                    transform: None,
+                    shade: None,
+                }]),
             })
         } else {
             None
         }
     };
     let bell_model = baker
-        .bake_blockstate("minecraft:bell[attachment=floor,facing=north]", None, bell_loader)
-        .expect("Should bake bell with patches");
+        .bake_blockstate("minecraft:bell[attachment=floor,facing=north]", None, vanilla_bell_loader)
+        .expect("Should bake bell with body fallback");
 
-    assert!(!bell_model.elements.is_empty(), "Bell should have patched elements");
+    assert_eq!(bell_model.elements.len(), 5, "Bell should have all 5 elements (3 frame + 2 body)");
+    let bell_mesh = bell_model.to_mesh(false);
+    assert_eq!(bell_mesh.face_count(), 28, "Bell should have 28 faces (16 frame + 12 body)");
+
+    // Test Chest UV correctness (top of lid and base floor)
+    let chest_lid = &chest_model.elements[1];
+    let lid_up = chest_lid.faces.get(&Direction::Up).expect("Lid should have Up face");
+    // Up face of lid should be bright oak plank (U: 7.0..10.5, V: 0.0..3.5 in BlockModel coords)
+    assert!(lid_up.uv_bounds[0] >= 0.4 && lid_up.uv_bounds[2] <= 0.7, "Lid up face should map to outside top");
+
+    // Double chest left and right
+    let left_chest = baker
+        .bake_blockstate("minecraft:chest[facing=north,type=left]", None, empty_loader)
+        .expect("Should bake left chest");
+    let left_bottom = &left_chest.elements[0];
+    let left_west = left_bottom.faces.get(&Direction::West).expect("Left chest should have West face");
+    // Left chest West face is the outer solid wall (U: 29..43 in pixels -> 7.25..10.75 in 16x16 -> ~0.45..0.67 in UV)
+    assert!(left_west.uv_bounds[0] >= 0.4, "Left chest West face should be solid outer texture");
+
+    let right_chest = baker
+        .bake_blockstate("minecraft:chest[facing=north,type=right]", None, empty_loader)
+        .expect("Should bake right chest");
+    let right_bottom = &right_chest.elements[0];
+    let right_east = right_bottom.faces.get(&Direction::East).expect("Right chest should have East face");
+    // Right chest East face is the outer solid wall (U: 0..14 in pixels -> 0.0..3.5 in 16x16 -> 0.0..0.22 in UV)
+    assert!(right_east.uv_bounds[0] <= 0.05, "Right chest East face should be solid outer texture");
 }
 
 #[test]
