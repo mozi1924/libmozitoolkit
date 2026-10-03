@@ -56,6 +56,40 @@ pub fn get_builtin_blockstate_def(name: &str) -> Option<BlockStateDefinition> {
     serde_json::from_str(raw_json).ok()
 }
 
+/// Helper to create UV-explicit faces for a cuboid element with given texture variable and UVs.
+fn make_box_faces(
+    tex: &str,
+    up: [f32; 4],
+    down: [f32; 4],
+    north: [f32; 4],
+    south: [f32; 4],
+    east: [f32; 4],
+    west: [f32; 4],
+) -> HashMap<String, FaceJson> {
+    let mut map = HashMap::new();
+    let entries = [
+        ("up", up),
+        ("down", down),
+        ("north", north),
+        ("south", south),
+        ("east", east),
+        ("west", west),
+    ];
+    for (dir, uv) in entries {
+        map.insert(
+            dir.to_string(),
+            FaceJson {
+                uv: Some(uv),
+                texture: tex.to_string(),
+                cullface: None,
+                rotation: None,
+                tintindex: None,
+            },
+        );
+    }
+    map
+}
+
 /// Helper to create simple faces for a cuboid element with given texture variable.
 fn make_simple_faces(tex: &str) -> HashMap<String, FaceJson> {
     let mut map = HashMap::new();
@@ -264,7 +298,15 @@ fn create_builtin_banner_model(blockstate: &BlockState) -> Option<BlockModelJson
             pivot: [8.0, 8.0, 8.0],
         }),
         shade: Some(true),
-        faces: make_simple_faces("#base"),
+        faces: make_box_faces(
+            "#base",
+            [0.5, 10.5, 5.5, 11.0],
+            [5.5, 10.5, 10.5, 11.0],
+            [6.0, 11.0, 11.0, 11.5],
+            [0.5, 11.0, 5.5, 11.5],
+            [5.5, 11.0, 6.0, 11.5],
+            [0.0, 11.0, 0.5, 11.5],
+        ),
     });
 
     // 2. Post element (standing banner only)
@@ -286,7 +328,15 @@ fn create_builtin_banner_model(blockstate: &BlockState) -> Option<BlockModelJson
                 pivot: [8.0, 8.0, 8.0],
             }),
             shade: Some(true),
-            faces: make_simple_faces("#base"),
+            faces: make_box_faces(
+                "#base",
+                [11.5, 0.0, 12.0, 0.5],
+                [12.0, 0.0, 12.5, 0.5],
+                [12.5, 0.5, 13.0, 11.0],
+                [11.5, 0.5, 12.0, 11.0],
+                [12.0, 0.5, 12.5, 11.0],
+                [11.0, 0.5, 11.5, 11.0],
+            ),
         });
     }
 
@@ -308,7 +358,15 @@ fn create_builtin_banner_model(blockstate: &BlockState) -> Option<BlockModelJson
             pivot: [8.0, 8.0, 8.0],
         }),
         shade: Some(true),
-        faces: make_simple_faces("#cloth"),
+        faces: make_box_faces(
+            "#cloth",
+            [0.25, 0.0, 5.25, 0.25],
+            [5.25, 0.0, 10.25, 0.25],
+            [5.5, 0.25, 10.5, 10.25],
+            [0.25, 0.25, 5.25, 10.25],
+            [5.25, 0.25, 5.5, 10.25],
+            [0.0, 0.25, 0.25, 10.25],
+        ),
     });
 
     Some(BlockModelJson {

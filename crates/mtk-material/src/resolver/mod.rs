@@ -304,6 +304,32 @@ impl MaterialResolver {
             }
         }
 
+        if cleaned == "decorated_pot"
+            || cleaned == "decorated_pot_base"
+            || cleaned == "decorated_pot_side"
+            || raw_material_name.contains("decorated_pot")
+        {
+            for &cand in &[
+                "entity/decorated_pot/decorated_pot_side",
+                "entity/decorated_pot/decorated_pot_base",
+            ] {
+                if let Some(sprite_loc) = address_map.lookup_str(cand) {
+                    let res_loc = ResourceLocation::parse(cand)
+                        .unwrap_or_else(|_| ResourceLocation::new("minecraft", cand));
+                    return Some((res_loc, sprite_loc));
+                }
+            }
+        }
+
+        if cleaned.contains("pottery_pattern") {
+            let cand = format!("entity/decorated_pot/{}", cleaned);
+            if let Some(sprite_loc) = address_map.lookup_str(&cand) {
+                let res_loc = ResourceLocation::parse(&cand)
+                    .unwrap_or_else(|_| ResourceLocation::new("minecraft", &cand));
+                return Some((res_loc, sprite_loc));
+            }
+        }
+
         if raw_material_name.contains("hanging") && raw_material_name.contains("sign") {
             let clean_raw = raw_material_name.strip_prefix("minecraft:").unwrap_or(raw_material_name);
             let wood = clean_raw.rsplit('/').next().unwrap_or("");

@@ -306,3 +306,99 @@ fn test_atlas_builder_with_overlay() {
     let stone_px = overlay_buf.get_pixel(stone_loc.pixel_rect[0] + 8, stone_loc.pixel_rect[1] + 8);
     assert_eq!(stone_px, [0, 0, 0, 0]);
 }
+
+#[test]
+fn test_independent_atlases_not_hijacked_by_entities() {
+    use mtk_resource::AtlasCategory;
+
+    let banner_base_id = ResourceLocation::parse("minecraft:entity/banner/banner_base").unwrap();
+    let pot_base_id = ResourceLocation::parse("minecraft:entity/decorated_pot/decorated_pot_base").unwrap();
+    let zombie_id = ResourceLocation::parse("minecraft:entity/zombie/zombie").unwrap();
+
+    let sprites_banner = vec![DecodedSprite {
+        sprite_id: banner_base_id.clone(),
+        albedo: RgbaBuffer::solid(64, 64, 255, 0, 0, 255),
+        normal: None,
+        specular: None,
+        overlay: None,
+        frame_width: 64,
+        frame_height: 64,
+        frame_count: 1,
+        metadata: None,
+    }];
+    let sprites_pot = vec![DecodedSprite {
+        sprite_id: pot_base_id.clone(),
+        albedo: RgbaBuffer::solid(32, 32, 200, 100, 50, 255),
+        normal: None,
+        specular: None,
+        overlay: None,
+        frame_width: 32,
+        frame_height: 32,
+        frame_count: 1,
+        metadata: None,
+    }];
+
+    let builder = AtlasBuilder::new(AtlasBuilderConfig::default());
+    let baked_banner = builder.build_from_sprites_with_category(sprites_banner, "banner_patterns").unwrap();
+    let baked_pot = builder.build_from_sprites_with_category(sprites_pot, "decorated_pot").unwrap();
+
+    let mut combined_map = baked_banner.address_map;
+    combined_map.merge(baked_pot.address_map);
+
+    let mut entities_sprites = vec![
+        DecodedSprite {
+            sprite_id: banner_base_id.clone(),
+            albedo: RgbaBuffer::solid(64, 64, 255, 0, 0, 255),
+            normal: None,
+            specular: None,
+            overlay: None,
+            frame_width: 64,
+            frame_height: 64,
+            frame_count: 1,
+            metadata: None,
+        },
+        DecodedSprite {
+            sprite_id: pot_base_id.clone(),
+            albedo: RgbaBuffer::solid(32, 32, 200, 100, 50, 255),
+            normal: None,
+            specular: None,
+            overlay: None,
+            frame_width: 32,
+            frame_height: 32,
+            frame_count: 1,
+            metadata: None,
+        },
+        DecodedSprite {
+            sprite_id: zombie_id.clone(),
+            albedo: RgbaBuffer::solid(64, 64, 0, 255, 0, 255),
+            normal: None,
+            specular: None,
+            overlay: None,
+            frame_width: 64,
+            frame_height: 64,
+            frame_count: 1,
+            metadata: None,
+        },
+    ];
+
+    // Filter out already allocated sprites and independent categories
+    entities_sprites.retain(|sp| !combined_map.sprites.contains_key(&sp.sprite_id));
+    entities_sprites.retain(|sp| {
+        let cat = AtlasCategory::classify_texture_path(&sp.sprite_id.path);
+        cat == AtlasCategory::Entities || cat == AtlasCategory::Misc
+    });
+
+    let baked_entities = builder.build_from_sprites_with_category(entities_sprites, "entities").unwrap();
+    combined_map.merge(baked_entities.address_map);
+
+    // Assertions: banner and pot MUST maintain their independent atlas categories
+    let banner_loc = combined_map.lookup_static(&banner_base_id).unwrap();
+    assert_eq!(banner_loc.category, "banner_patterns");
+
+    let pot_loc = combined_map.lookup_static(&pot_base_id).unwrap();
+    assert_eq!(pot_loc.category, "decorated_pot");
+
+    let zombie_loc = combined_map.lookup_static(&zombie_id).unwrap();
+    assert_eq!(zombie_loc.category, "entities");
+}
+

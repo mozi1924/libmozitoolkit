@@ -70,6 +70,22 @@ impl AtlasBuilder {
                 continue;
             }
 
+            // Filter out sprites that have already been allocated to an authoritative atlas
+            decoded.retain(|sp| !address_map.sprites.contains_key(&sp.sprite_id));
+
+            // Dedicated independent atlases (e.g. banner_patterns, decorated_pot, chests, etc.)
+            // must never be swept into the catch-all "entities" sheet.
+            if category_name == "entities" {
+                decoded.retain(|sp| {
+                    let cat = mtk_resource::AtlasCategory::classify_texture_path(&sp.sprite_id.path);
+                    cat == mtk_resource::AtlasCategory::Entities || cat == mtk_resource::AtlasCategory::Misc
+                });
+            }
+
+            if decoded.is_empty() {
+                continue;
+            }
+
             // 4. Separate static and anim sprites
             let (static_sprites, anim_sprites) = separate_static_and_anim_sprites(decoded);
 

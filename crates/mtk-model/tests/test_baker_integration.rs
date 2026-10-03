@@ -870,6 +870,11 @@ fn test_end_portal_gateway_conduit_and_banner_builtins() {
     let (sb_mesh, sb_tex) = standing_banner.to_mesh_with_textures(false);
     assert!(sb_mesh.face_count() >= 12, "Standing banner must have pole, crossbar, and cloth faces (got {})", sb_mesh.face_count());
     assert!(sb_tex.contains(&"minecraft:entity/banner/banner_base".to_string()));
+    // Verify all banner UV coordinates are properly bounded in [0.0, 1.0]
+    for uv in &sb_mesh.uvs {
+        assert!(uv[0] >= -1e-4 && uv[0] <= 1.0 + 1e-4, "Standing banner U coordinate out of bounds: {}", uv[0]);
+        assert!(uv[1] >= -1e-4 && uv[1] <= 1.0 + 1e-4, "Standing banner V coordinate out of bounds: {}", uv[1]);
+    }
 
     // 5. Wall Banner
     let wall_banner = baker
@@ -878,6 +883,24 @@ fn test_end_portal_gateway_conduit_and_banner_builtins() {
     let (wb_mesh, wb_tex) = wall_banner.to_mesh_with_textures(false);
     assert!(wb_mesh.face_count() >= 10, "Wall banner must have crossbar and cloth faces (got {})", wb_mesh.face_count());
     assert!(wb_tex.contains(&"minecraft:entity/banner/banner_base".to_string()));
+    for uv in &wb_mesh.uvs {
+        assert!(uv[0] >= -1e-4 && uv[0] <= 1.0 + 1e-4, "Wall banner U coordinate out of bounds: {}", uv[0]);
+        assert!(uv[1] >= -1e-4 && uv[1] <= 1.0 + 1e-4, "Wall banner V coordinate out of bounds: {}", uv[1]);
+    }
+
+    // 6. Decorated Pot
+    let pot_model = baker
+        .bake_blockstate("minecraft:decorated_pot[facing=north]", None, empty_loader)
+        .expect("Should bake decorated pot builtin");
+    let (pot_mesh, pot_tex) = pot_model.to_mesh_with_textures(false);
+    assert!(pot_mesh.face_count() >= 16, "Decorated pot must have body and neck faces (got {})", pot_mesh.face_count());
+    assert!(pot_tex.contains(&"minecraft:entity/decorated_pot/decorated_pot_side".to_string()));
+    assert!(pot_tex.contains(&"minecraft:entity/decorated_pot/decorated_pot_base".to_string()));
+    for uv in &pot_mesh.uvs {
+        assert!(uv[0] >= -1e-4 && uv[0] <= 1.0 + 1e-4, "Decorated pot U coordinate out of bounds: {}", uv[0]);
+        assert!(uv[1] >= -1e-4 && uv[1] <= 1.0 + 1e-4, "Decorated pot V coordinate out of bounds: {}", uv[1]);
+    }
 }
+
 
 
