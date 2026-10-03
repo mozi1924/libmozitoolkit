@@ -1,70 +1,151 @@
-//! Embedded vanilla fallback blockstates and JSON models strictly for Java BER entity blocks
-//! (chests, bells, shulker boxes, skulls, end portal, decorated pot) lacking static JSON models in vanilla.
+//! Embedded vanilla fallback blockstates and JSON models strictly for blocks lacking
+//! static JSON models in vanilla (bell, decorated pot, end portal) or bridging
+//! model ID lookups to dynamic MiEx AST evaluations.
 
 use std::collections::HashMap;
-use crate::parser::blockstate::{BlockState, BlockStateDefinition, BlockStateResolver};
-use crate::parser::model_json::BlockModelJson;
+use crate::builtin::loader::MiExModelLoader;
+use crate::builtin::patch::apply_bell_patches;
+use crate::parser::blockstate::{BlockState, BlockStateDefinition};
+use crate::parser::model_json::{BlockModelJson, ElementJson, FaceJson, TextureValue};
 
-// BlockStates (Only true Java BlockEntityRenderer blocks)
-pub const DEF_CHEST: &str = include_str!("../../assets/builtins/blockstates/chest.json");
-pub const DEF_TRAPPED_CHEST: &str = include_str!("../../assets/builtins/blockstates/trapped_chest.json");
-pub const DEF_ENDER_CHEST: &str = include_str!("../../assets/builtins/blockstates/ender_chest.json");
-pub const DEF_SHULKER_BOX: &str = include_str!("../../assets/builtins/blockstates/shulker_box.json");
-pub const DEF_SKULL: &str = include_str!("../../assets/builtins/blockstates/skull.json");
-pub const DEF_WALL_SKULL: &str = include_str!("../../assets/builtins/blockstates/wall_skull.json");
-pub const DEF_BELL: &str = include_str!("../../assets/builtins/blockstates/bell.json");
-pub const DEF_END_PORTAL: &str = include_str!("../../assets/builtins/blockstates/end_portal.json");
+// Embedded BlockStates
 pub const DEF_DECORATED_POT: &str = include_str!("../../assets/builtins/blockstates/decorated_pot.json");
+pub const DEF_END_PORTAL: &str = include_str!("../../assets/builtins/blockstates/end_portal.json");
+pub const DEF_BELL: &str = r#"{
+    "variants": {
+        "attachment=ceiling,facing=east": { "model": "minecraft:block/bell_ceiling", "y": 90 },
+        "attachment=ceiling,facing=north": { "model": "minecraft:block/bell_ceiling" },
+        "attachment=ceiling,facing=south": { "model": "minecraft:block/bell_ceiling", "y": 180 },
+        "attachment=ceiling,facing=west": { "model": "minecraft:block/bell_ceiling", "y": 270 },
+        "attachment=double_wall,facing=east": { "model": "minecraft:block/bell_between_walls" },
+        "attachment=double_wall,facing=north": { "model": "minecraft:block/bell_between_walls", "y": 270 },
+        "attachment=double_wall,facing=south": { "model": "minecraft:block/bell_between_walls", "y": 90 },
+        "attachment=double_wall,facing=west": { "model": "minecraft:block/bell_between_walls", "y": 180 },
+        "attachment=floor,facing=east": { "model": "minecraft:block/bell_floor", "y": 90 },
+        "attachment=floor,facing=north": { "model": "minecraft:block/bell_floor" },
+        "attachment=floor,facing=south": { "model": "minecraft:block/bell_floor", "y": 180 },
+        "attachment=floor,facing=west": { "model": "minecraft:block/bell_floor", "y": 270 },
+        "attachment=single_wall,facing=east": { "model": "minecraft:block/bell_wall" },
+        "attachment=single_wall,facing=north": { "model": "minecraft:block/bell_wall", "y": 270 },
+        "attachment=single_wall,facing=south": { "model": "minecraft:block/bell_wall", "y": 90 },
+        "attachment=single_wall,facing=west": { "model": "minecraft:block/bell_wall", "y": 180 }
+    }
+}"#;
 
-// Models (Only true Java BlockEntityRenderer blocks)
-pub const MODEL_CHEST: &str = include_str!("../../assets/builtins/models/chest.json");
-pub const MODEL_CHEST_LEFT: &str = include_str!("../../assets/builtins/models/chest_left.json");
-pub const MODEL_CHEST_RIGHT: &str = include_str!("../../assets/builtins/models/chest_right.json");
-pub const MODEL_TRAPPED_CHEST: &str = include_str!("../../assets/builtins/models/trapped_chest.json");
-pub const MODEL_TRAPPED_CHEST_LEFT: &str = include_str!("../../assets/builtins/models/trapped_chest_left.json");
-pub const MODEL_TRAPPED_CHEST_RIGHT: &str = include_str!("../../assets/builtins/models/trapped_chest_right.json");
-pub const MODEL_ENDER_CHEST: &str = include_str!("../../assets/builtins/models/ender_chest.json");
-pub const MODEL_SHULKER_BOX: &str = include_str!("../../assets/builtins/models/shulker_box.json");
-pub const MODEL_SKULL: &str = include_str!("../../assets/builtins/models/skull.json");
-pub const MODEL_SKULL_WALL: &str = include_str!("../../assets/builtins/models/skull_wall.json");
-pub const MODEL_DRAGON_HEAD: &str = include_str!("../../assets/builtins/models/dragon_head.json");
-pub const MODEL_PIGLIN_HEAD: &str = include_str!("../../assets/builtins/models/piglin_head.json");
-pub const MODEL_BELL_FLOOR: &str = include_str!("../../assets/builtins/models/bell_floor.json");
-pub const MODEL_BELL_CEILING: &str = include_str!("../../assets/builtins/models/bell_ceiling.json");
-pub const MODEL_BELL_WALL: &str = include_str!("../../assets/builtins/models/bell_wall.json");
-pub const MODEL_BELL_BETWEEN_WALLS: &str = include_str!("../../assets/builtins/models/bell_between_walls.json");
-pub const MODEL_END_PORTAL: &str = include_str!("../../assets/builtins/models/end_portal.json");
+// Embedded Models
 pub const MODEL_DECORATED_POT: &str = include_str!("../../assets/builtins/models/decorated_pot.json");
+pub const MODEL_END_PORTAL: &str = include_str!("../../assets/builtins/models/end_portal.json");
 
 /// Retrieves an embedded builtin `BlockStateDefinition` by block name.
 pub fn get_builtin_blockstate_def(name: &str) -> Option<BlockStateDefinition> {
     let clean = name.strip_prefix("minecraft:").unwrap_or(name);
 
-    let raw_json = if clean == "chest" || clean.ends_with("_chest") {
-        if clean == "trapped_chest" {
-            DEF_TRAPPED_CHEST
-        } else if clean == "ender_chest" {
-            DEF_ENDER_CHEST
-        } else {
-            DEF_CHEST
-        }
-    } else if clean == "shulker_box" || clean.ends_with("_shulker_box") {
-        DEF_SHULKER_BOX
-    } else if clean == "bell" {
-        DEF_BELL
-    } else if clean == "end_portal" {
-        DEF_END_PORTAL
-    } else if clean == "decorated_pot" {
-        DEF_DECORATED_POT
-    } else if clean.contains("wall_skull") || clean.contains("wall_head") {
-        DEF_WALL_SKULL
-    } else if clean.contains("skull") || clean.contains("head") {
-        DEF_SKULL
-    } else {
-        return None;
+    let raw_json = match clean {
+        "bell" => DEF_BELL,
+        "decorated_pot" => DEF_DECORATED_POT,
+        "end_portal" => DEF_END_PORTAL,
+        _ => return None,
     };
 
     serde_json::from_str(raw_json).ok()
+}
+
+/// Helper to create simple faces for a cuboid element with given texture variable.
+fn make_simple_faces(tex: &str) -> HashMap<String, FaceJson> {
+    let mut map = HashMap::new();
+    for dir in &["north", "south", "east", "west", "up", "down"] {
+        map.insert(
+            dir.to_string(),
+            FaceJson {
+                uv: None,
+                texture: tex.to_string(),
+                cullface: None,
+                rotation: None,
+                tintindex: None,
+            },
+        );
+    }
+    map
+}
+
+/// Synthesizes vanilla bell frame models and applies bell body patches.
+fn create_builtin_bell_model(stem: &str) -> Option<BlockModelJson> {
+    let mut textures = HashMap::new();
+    textures.insert("particle".to_string(), TextureValue::Path("minecraft:block/bell_bottom".to_string()));
+    textures.insert("bar".to_string(), TextureValue::Path("minecraft:block/dark_oak_planks".to_string()));
+    textures.insert("post".to_string(), TextureValue::Path("minecraft:block/stone".to_string()));
+
+    let mut elements = Vec::new();
+
+    match stem {
+        "bell_floor" => {
+            elements.push(ElementJson {
+                from: [2.0, 13.0, 7.0],
+                to: [14.0, 15.0, 9.0],
+                rotation: None,
+                transform: None,
+                shade: Some(true),
+                faces: make_simple_faces("#bar"),
+            });
+            elements.push(ElementJson {
+                from: [14.0, 0.0, 6.0],
+                to: [16.0, 16.0, 10.0],
+                rotation: None,
+                transform: None,
+                shade: Some(true),
+                faces: make_simple_faces("#post"),
+            });
+            elements.push(ElementJson {
+                from: [0.0, 0.0, 6.0],
+                to: [2.0, 16.0, 10.0],
+                rotation: None,
+                transform: None,
+                shade: Some(true),
+                faces: make_simple_faces("#post"),
+            });
+        }
+        "bell_ceiling" => {
+            elements.push(ElementJson {
+                from: [7.0, 13.0, 7.0],
+                to: [9.0, 16.0, 9.0],
+                rotation: None,
+                transform: None,
+                shade: Some(true),
+                faces: make_simple_faces("#bar"),
+            });
+        }
+        "bell_wall" => {
+            elements.push(ElementJson {
+                from: [3.0, 13.0, 7.0],
+                to: [16.0, 15.0, 9.0],
+                rotation: None,
+                transform: None,
+                shade: Some(true),
+                faces: make_simple_faces("#bar"),
+            });
+        }
+        "bell_between_walls" => {
+            elements.push(ElementJson {
+                from: [0.0, 13.0, 7.0],
+                to: [16.0, 15.0, 9.0],
+                rotation: None,
+                transform: None,
+                shade: Some(true),
+                faces: make_simple_faces("#bar"),
+            });
+        }
+        _ => return None,
+    }
+
+    let mut model = BlockModelJson {
+        parent: None,
+        ambientocclusion: Some(true),
+        textures: Some(textures),
+        elements: Some(elements),
+    };
+
+    apply_bell_patches("block/bell_", &mut model);
+    Some(model)
 }
 
 /// Retrieves an embedded builtin `BlockModelJson` by model resource path / ID.
@@ -72,77 +153,60 @@ pub fn get_builtin_model_by_id(model_id: &str) -> Option<BlockModelJson> {
     let clean = model_id.strip_prefix("minecraft:").unwrap_or(model_id);
     let stem = clean.strip_prefix("block/").unwrap_or(clean);
 
-    let raw_json = match stem {
-        "chest" => MODEL_CHEST,
-        "chest_left" => MODEL_CHEST_LEFT,
-        "chest_right" => MODEL_CHEST_RIGHT,
-        "trapped_chest" => MODEL_TRAPPED_CHEST,
-        "trapped_chest_left" => MODEL_TRAPPED_CHEST_LEFT,
-        "trapped_chest_right" => MODEL_TRAPPED_CHEST_RIGHT,
-        "ender_chest" => MODEL_ENDER_CHEST,
-        "shulker_box" => MODEL_SHULKER_BOX,
-        "skull" => MODEL_SKULL,
-        "skull_wall" => MODEL_SKULL_WALL,
-        "dragon_head" => MODEL_DRAGON_HEAD,
-        "piglin_head" => MODEL_PIGLIN_HEAD,
-        "bell_floor" => MODEL_BELL_FLOOR,
-        "bell_ceiling" => MODEL_BELL_CEILING,
-        "bell_wall" => MODEL_BELL_WALL,
-        "bell_between_walls" => MODEL_BELL_BETWEEN_WALLS,
-        "end_portal" => MODEL_END_PORTAL,
-        "decorated_pot" => MODEL_DECORATED_POT,
+    if stem.starts_with("bell_") {
+        return create_builtin_bell_model(stem);
+    }
+
+    if stem == "decorated_pot" {
+        return serde_json::from_str(MODEL_DECORATED_POT).ok();
+    }
+    if stem == "end_portal" {
+        return serde_json::from_str(MODEL_END_PORTAL).ok();
+    }
+
+    // Map entity block model IDs to canonical BlockStates evaluated by MiExModelLoader
+    let canonical_state = match stem {
+        "chest" => "minecraft:chest[facing=north,type=single]",
+        "chest_left" => "minecraft:chest[facing=north,type=left]",
+        "chest_right" => "minecraft:chest[facing=north,type=right]",
+        "trapped_chest" => "minecraft:trapped_chest[facing=north,type=single]",
+        "trapped_chest_left" => "minecraft:trapped_chest[facing=north,type=left]",
+        "trapped_chest_right" => "minecraft:trapped_chest[facing=north,type=right]",
+        "ender_chest" => "minecraft:ender_chest[facing=north]",
+        "shulker_box" => "minecraft:shulker_box[facing=up]",
+        "skull" => "minecraft:skeleton_skull[rotation=0]",
+        "skull_wall" => "minecraft:skeleton_wall_skull[facing=north]",
+        "dragon_head" => "minecraft:dragon_head[rotation=0]",
+        "piglin_head" => "minecraft:piglin_head[rotation=0]",
         _ => return None,
     };
 
-    serde_json::from_str(raw_json).ok()
+    let bs = BlockState::parse(canonical_state).ok()?;
+    MiExModelLoader::load_for_blockstate(&bs)
 }
 
 /// Fallback model for a blockstate when no external model was discovered.
 pub fn get_builtin_model_for_state(blockstate: &BlockState) -> Option<BlockModelJson> {
-    if let Some(def) = get_builtin_blockstate_def(&blockstate.name) {
-        let matches = BlockStateResolver::resolve(&def, blockstate);
-        if let Some(first_match) = matches.first() {
-            let clean = blockstate.name.strip_prefix("minecraft:").unwrap_or(&blockstate.name);
-            let model_key = if clean.contains("dragon") {
-                "dragon_head"
-            } else if clean.contains("piglin") {
-                "piglin_head"
-            } else {
-                &first_match.model_id
-            };
-            if let Some(mut model) = get_builtin_model_by_id(model_key) {
-                // Adjust textures for variant colors and head types if applicable
-                if clean.ends_with("_shulker_box") && clean != "shulker_box" {
-                    let color = clean.strip_suffix("_shulker_box").unwrap_or("");
-                    let tex = format!("minecraft:entity/shulker/shulker_{}", color);
-                    let textures = model.textures.get_or_insert_with(HashMap::new);
-                    textures.insert("particle".to_string(), crate::parser::model_json::TextureValue::Path(tex.clone()));
-                    textures.insert("texture".to_string(), crate::parser::model_json::TextureValue::Path(tex));
-                } else if clean.contains("player_head") || clean.contains("player_wall_head") {
-                    let tex = "minecraft:entity/player/wide/steve".to_string();
-                    let textures = model.textures.get_or_insert_with(HashMap::new);
-                    textures.insert("particle".to_string(), crate::parser::model_json::TextureValue::Path(tex.clone()));
-                    textures.insert("texture".to_string(), crate::parser::model_json::TextureValue::Path(tex));
-                } else if clean.contains("zombie_head") || clean.contains("zombie_wall_head") {
-                    let tex = "minecraft:entity/zombie/zombie".to_string();
-                    let textures = model.textures.get_or_insert_with(HashMap::new);
-                    textures.insert("particle".to_string(), crate::parser::model_json::TextureValue::Path(tex.clone()));
-                    textures.insert("texture".to_string(), crate::parser::model_json::TextureValue::Path(tex));
-                } else if clean.contains("creeper_head") || clean.contains("creeper_wall_head") {
-                    let tex = "minecraft:entity/creeper/creeper".to_string();
-                    let textures = model.textures.get_or_insert_with(HashMap::new);
-                    textures.insert("particle".to_string(), crate::parser::model_json::TextureValue::Path(tex.clone()));
-                    textures.insert("texture".to_string(), crate::parser::model_json::TextureValue::Path(tex));
-                } else if clean.contains("wither_skeleton") {
-                    let tex = "minecraft:entity/skeleton/wither_skeleton".to_string();
-                    let textures = model.textures.get_or_insert_with(HashMap::new);
-                    textures.insert("particle".to_string(), crate::parser::model_json::TextureValue::Path(tex.clone()));
-                    textures.insert("texture".to_string(), crate::parser::model_json::TextureValue::Path(tex));
-                }
-                return Some(model);
-            }
-        }
+    let clean = blockstate.name.strip_prefix("minecraft:").unwrap_or(&blockstate.name);
+    if clean == "decorated_pot" {
+        return get_builtin_model_by_id("decorated_pot");
+    }
+    if clean == "end_portal" {
+        return get_builtin_model_by_id("end_portal");
+    }
+    if clean == "bell" {
+        let att = blockstate
+            .properties
+            .get("attachment")
+            .map(|s| s.as_str())
+            .unwrap_or("floor");
+        let model_id = match att {
+            "ceiling" => "bell_ceiling",
+            "single_wall" | "wall" => "bell_wall",
+            "double_wall" => "bell_between_walls",
+            _ => "bell_floor",
+        };
+        return get_builtin_model_by_id(model_id);
     }
     None
 }
-

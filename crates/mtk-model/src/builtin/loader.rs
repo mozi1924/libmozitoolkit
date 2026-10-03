@@ -54,8 +54,7 @@ impl MiExModelLoader {
         let short_name = name.strip_prefix("minecraft:").unwrap_or(name);
 
         let raw_json = if short_name == "chest"
-            || short_name == "trapped_chest"
-            || short_name == "ender_chest"
+            || short_name.ends_with("_chest")
         {
             MIEX_CHEST_JSON
         } else if short_name == "bed" || short_name.ends_with("_bed") {

@@ -10,10 +10,11 @@ Headless Minecraft BlockState parser, 1.21+ Block Model JSON hierarchy baking en
 
 - **BlockState 状态机与变体解算**：解析带属性方块标识符（如 `minecraft:oak_stairs[facing=east,half=bottom,shape=straight]`），支持原版 `variants` 规则匹配与 `multipart` 组合条件树评估（`OR`, `AND`, 属性正则匹配）。
 - **递归模型继承树展开 (Hierarchy Resolution)**：支持多达 32 层的父模型继承（`parent`），合并子父级纹理字典，精准展开 `#texture` 变量引用并将纹理绑定写入三维要素 (Element)。
-- **内置标准类原版 JSON 实体模型库 (Blockbench-Compatible Built-in Models)**：
-  - 针对原版 Java 动态代码渲染的实体方块（箱子、床、潜影盒、头颅、告示牌、悬挂告示牌、钟、末地传送门、饰纹陶罐等），彻底摒弃专有 AST 与 OBJ 冗余，内置纯净的标准 Minecraft `BlockModelJson` 与 `BlockStateDefinition`；
-  - 全部内置模型可直接由 Blockbench 等标准 DCC 工具导入并可视化编辑，天然兼容材质包纹理重映射；
-  - 烘焙管线与解析器 100% 消费通用规范 JSON，杜绝硬编码特殊分支与运行时补丁注入。
+- **混合式实体模型架构 (Hybrid Parametric & Vanilla Model Architecture)**：
+  - **普通方块 (Vanilla-First Pipeline)**：100% 遵循原版 BlockState 状态机与 BlockModel JSON 规范，无头烘焙红石线缆、连接墙、楼梯以及各类第三方材质包自定义模型；
+  - **实体方块 (BER Parametric Fallback Layer)**：针对 Java 原版通过 `BlockEntityRenderer` 动态绘制且在 assets 中缺失 elements 的实体方块（箱子、床、潜影盒、头颅、告示牌、悬挂告示牌、末地传送门等），内置轻量 MiEx 表达式参数化模型求值器与 Minecraft 实体 Box UV 计算内核，优雅消解状态组合爆炸与手调 UV 倒置问题；
+  - **外部材质包优先**：若用户材质包中提供了包含真实 elements 的实体方块模型，管线自动优先消费外部规范 JSON，实现与资源包生态的完美兼容。
+
 - **紧凑状态烘焙与防膨胀架构 (Compact State Enumeration & Anti-Bloat)**：
   - 摒弃盲目的多部件笛卡尔积组合暴增，严格剔除世界运行时非几何属性（如 `waterlogged`, `distance`, `persistent`, `occupied`）；
   - `BakedModel` 对 `culled_faces` 与 `unculled_faces` 采用序列化剥离（`#[serde(skip)]`）与加载后延迟重建机制，使 `models.bin` 缓存体积缩减 60%~80%；

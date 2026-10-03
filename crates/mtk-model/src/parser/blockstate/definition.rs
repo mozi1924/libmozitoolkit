@@ -334,6 +334,89 @@ impl BlockStateDefinition {
                 }
             }
         }
+
+        let short_name = base_id.strip_prefix("minecraft:").unwrap_or(base_id);
+
+        if short_name == "chest" || short_name == "trapped_chest" || short_name.ends_with("_chest") {
+            if short_name == "chest_boat" || short_name.ends_with("_chest_boat") {
+                return None;
+            }
+            let mut list = Vec::new();
+            let facings = ["north", "south", "east", "west"];
+            if short_name == "ender_chest" {
+                for f in facings {
+                    list.push(format!("{}[facing={}]", base_id, f));
+                }
+            } else {
+                let types = ["single", "left", "right"];
+                for f in facings {
+                    for t in types {
+                        list.push(format!("{}[facing={},type={}]", base_id, f, t));
+                    }
+                }
+            }
+            return Some(list);
+        }
+
+        if short_name.ends_with("_head") || short_name.ends_with("_skull") {
+            let mut list = Vec::new();
+            if short_name.contains("_wall_") {
+                for f in ["north", "south", "east", "west"] {
+                    list.push(format!("{}[facing={}]", base_id, f));
+                }
+            } else {
+                for r in 0..16 {
+                    list.push(format!("{}[rotation={}]", base_id, r));
+                }
+            }
+            return Some(list);
+        }
+
+        if short_name == "shulker_box" || short_name.ends_with("_shulker_box") {
+            let mut list = Vec::new();
+            for f in ["down", "up", "north", "south", "west", "east"] {
+                list.push(format!("{}[facing={}]", base_id, f));
+            }
+            return Some(list);
+        }
+
+        if short_name.ends_with("_banner") {
+            let mut list = Vec::new();
+            if short_name.contains("_wall_") {
+                for f in ["north", "south", "east", "west"] {
+                    list.push(format!("{}[facing={}]", base_id, f));
+                }
+            } else {
+                for r in 0..16 {
+                    list.push(format!("{}[rotation={}]", base_id, r));
+                }
+            }
+            return Some(list);
+        }
+
+        if short_name.ends_with("_sign") || short_name.contains("hanging_sign") {
+            let mut list = Vec::new();
+            if short_name.contains("_wall_") {
+                for f in ["north", "south", "east", "west"] {
+                    list.push(format!("{}[facing={}]", base_id, f));
+                }
+            } else {
+                for r in 0..16 {
+                    list.push(format!("{}[rotation={}]", base_id, r));
+                }
+            }
+            return Some(list);
+        }
+
+        if short_name == "decorated_pot" {
+            let mut list = Vec::new();
+            for f in ["north", "south", "east", "west"] {
+                list.push(format!("{}[facing={}]", base_id, f));
+            }
+            return Some(list);
+        }
+
         None
     }
 }
+

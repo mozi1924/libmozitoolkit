@@ -7,7 +7,7 @@
         "variables": [
             "type = thisBlock.state.type == null ? '' : ('_' + thisBlock.state.type)",
             "type = type == '_single' ? '' : type",
-            "texBasename = thisBlock.name.contains('trapped') ? 'trapped' : (thisBlock.name.contains('ender_chest') ? 'ender' : 'normal')",
+            "texBasename = thisBlock.name.contains('trapped') ? 'trapped' : (thisBlock.name.contains('ender_chest') ? 'ender' : (thisBlock.name.contains('copper') ? 'copper' : 'normal'))",
             "rotY = 0",
             "rotY = thisBlock.state.facing == 'north' ? 0.0 : rotY",
             "rotY = thisBlock.state.facing == 'east' ? 90.0 : rotY",

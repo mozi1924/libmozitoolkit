@@ -184,8 +184,7 @@ impl ModelBaker {
                 let clean_block = blockstate.name.strip_prefix("minecraft:").unwrap_or(&blockstate.name);
                 let is_missing_bell_body = clean_block == "bell" && !r.textures.contains_key("bell_body");
                 if r.elements.is_empty() || is_missing_bell_body {
-                    // External model is empty (e.g. vanilla Java BER dummy block/skull.json)
-                    // or missing bell body (e.g. vanilla Java bell JSON which only has frame).
+                    // External model is empty (e.g. vanilla Java BER dummy block/skull.json or chest).
                     // Fallback to builtin model for this blockstate or variant ID.
                     if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(&blockstate) {
                         builtin.resolve_hierarchy(&variant.model_id, |id| {
@@ -221,10 +220,14 @@ impl ModelBaker {
                 let to_pos = elem.to;
                 let elem_rot = elem.rotation.as_ref();
 
-                // Prevent internal overlapping zero-thickness faces
-                let is_zero_x = (from_pos[0] - to_pos[0]).abs() < 1e-5;
-                let is_zero_y = (from_pos[1] - to_pos[1]).abs() < 1e-5;
-                let is_zero_z = (from_pos[2] - to_pos[2]).abs() < 1e-5;
+                // DCC-First zero-thickness planar element face deduplication and single-sided baking:
+                // Minecraft elements with zero thickness (plants like cross.json, crops, ladders, rails, decals)
+                // define duplicate back-to-back faces with opposite normals purely to counteract OpenGL backface culling.
+                // In modern DCC pipelines (Blender), double-sided rendering is handled via shaders, and overlapping
+                // coplanar geometry causes Z-fighting and gets mistakenly culled as occluded interior contact faces.
+                let is_zero_x = (from_pos[0] - to_pos[0]).abs() < 1e-4;
+                let is_zero_y = (from_pos[1] - to_pos[1]).abs() < 1e-4;
+                let is_zero_z = (from_pos[2] - to_pos[2]).abs() < 1e-4;
 
                 let is_full_cuboid = from_pos == [0.0, 0.0, 0.0]
                     && to_pos == [16.0, 16.0, 16.0]
@@ -243,30 +246,63 @@ impl ModelBaker {
                         None => continue,
                     };
 
-                    // Cull occluded backface of zero-thickness wall/floor decals
-                    if elem_rot.is_none() {
-                        if is_zero_z {
-                            if from_pos[2] < 8.0 && orig_dir == Direction::North && elem.faces.contains_key("south") {
-                                continue;
-                            }
-                            if from_pos[2] > 8.0 && orig_dir == Direction::South && elem.faces.contains_key("north") {
-                                continue;
+                    // For zero-thickness planes, collapse back-to-back faces with identical textures/tints
+                    // into a single canonical face facing outwards (or canonical DCC orientation for center planes).
+                    if is_zero_z {
+                        // Skip degenerate edge faces parallel to normal
+                        if orig_dir != Direction::North && orig_dir != Direction::South {
+                            continue;
+                        }
+                        if let (Some(f_north), Some(f_south)) = (elem.faces.get("north"), elem.faces.get("south")) {
+                            if f_north.texture == f_south.texture && f_north.tintindex == f_south.tintindex {
+                                let keep_dir = if from_pos[2] > 8.0 + 1e-4 {
+                                    Direction::North
+                                } else if from_pos[2] < 8.0 - 1e-4 {
+                                    Direction::South
+                                } else {
+                                    Direction::North
+                                };
+                                if orig_dir != keep_dir {
+                                    continue;
+                                }
                             }
                         }
-                        if is_zero_x {
-                            if from_pos[0] < 8.0 && orig_dir == Direction::West && elem.faces.contains_key("east") {
-                                continue;
-                            }
-                            if from_pos[0] > 8.0 && orig_dir == Direction::East && elem.faces.contains_key("west") {
-                                continue;
+                    } else if is_zero_x {
+                        // Skip degenerate edge faces parallel to normal
+                        if orig_dir != Direction::West && orig_dir != Direction::East {
+                            continue;
+                        }
+                        if let (Some(f_west), Some(f_east)) = (elem.faces.get("west"), elem.faces.get("east")) {
+                            if f_west.texture == f_east.texture && f_west.tintindex == f_east.tintindex {
+                                let keep_dir = if from_pos[0] > 8.0 + 1e-4 {
+                                    Direction::West
+                                } else if from_pos[0] < 8.0 - 1e-4 {
+                                    Direction::East
+                                } else {
+                                    Direction::West
+                                };
+                                if orig_dir != keep_dir {
+                                    continue;
+                                }
                             }
                         }
-                        if is_zero_y {
-                            if from_pos[1] < 8.0 && orig_dir == Direction::Down && elem.faces.contains_key("up") {
-                                continue;
-                            }
-                            if from_pos[1] > 8.0 && orig_dir == Direction::Up && elem.faces.contains_key("down") {
-                                continue;
+                    } else if is_zero_y {
+                        // Skip degenerate edge faces parallel to normal
+                        if orig_dir != Direction::Down && orig_dir != Direction::Up {
+                            continue;
+                        }
+                        if let (Some(f_down), Some(f_up)) = (elem.faces.get("down"), elem.faces.get("up")) {
+                            if f_down.texture == f_up.texture && f_down.tintindex == f_up.tintindex {
+                                let keep_dir = if from_pos[1] < 8.0 - 1e-4 {
+                                    Direction::Up
+                                } else if from_pos[1] > 8.0 + 1e-4 {
+                                    Direction::Down
+                                } else {
+                                    Direction::Up
+                                };
+                                if orig_dir != keep_dir {
+                                    continue;
+                                }
                             }
                         }
                     }
@@ -287,14 +323,20 @@ impl ModelBaker {
                         16.0
                     };
 
+                    let (eff_rot_x, eff_rot_y) = if elem.transform.is_some() {
+                        (0.0, 0.0)
+                    } else {
+                        (variant.rot_x, variant.rot_y)
+                    };
+
                     let baked_geom = bake_face_exact(
                         orig_dir,
                         from_pos,
                         to_pos,
                         face_data.uv,
                         face_data.rotation as f32,
-                        variant.rot_x,
-                        variant.rot_y,
+                        eff_rot_x,
+                        eff_rot_y,
                         elem_rot,
                         elem.transform.as_ref(),
                         variant.uvlock,
@@ -303,7 +345,7 @@ impl ModelBaker {
 
                     let rotated_cullface = cullface_dir
                         .map(|cd| {
-                            let mut d = rotate_direction(cd, variant.rot_x, variant.rot_y);
+                            let mut d = rotate_direction(cd, eff_rot_x, eff_rot_y);
                             if let Some(bt) = elem.transform.as_ref() {
                                 d = rotate_direction(d, bt.rotate[0], bt.rotate[1]);
                             }

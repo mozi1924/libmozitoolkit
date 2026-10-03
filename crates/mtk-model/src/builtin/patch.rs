@@ -92,3 +92,68 @@ pub fn apply_bell_patches(model_id: &str, model: &mut BlockModelJson) -> bool {
 
     true
 }
+
+/// Applies bell patches directly to a flattened `ResolvedBlockModel`.
+pub fn apply_bell_patches_resolved(model_id: &str, model: &mut crate::parser::model_json::ResolvedBlockModel) -> bool {
+    let clean = model_id.strip_prefix("minecraft:").unwrap_or(model_id);
+    if !clean.starts_with("block/bell_") && clean != "block/bell" {
+        return false;
+    }
+
+    let tex_id = "minecraft:entity/bell/bell_body".to_string();
+    if !model.textures.contains_key("bell_body") {
+        model.textures.insert("bell_body".to_string(), tex_id.clone());
+    }
+
+    let make_face = |uv: [f32; 4]| -> crate::parser::model_json::ResolvedFace {
+        crate::parser::model_json::ResolvedFace {
+            uv: Some(uv),
+            texture: tex_id.clone(),
+            cullface: None,
+            rotation: 0,
+            tintindex: -1,
+        }
+    };
+
+    let bell_elem_1 = crate::parser::model_json::ResolvedElement {
+        from: [5.0, 6.0, 5.0],
+        to: [11.0, 13.0, 11.0],
+        rotation: None,
+        transform: None,
+        shade: true,
+        faces: {
+            let mut f = HashMap::new();
+            f.insert("north".to_string(), make_face([3.0, 3.0, 6.0, 6.5]));
+            f.insert("east".to_string(), make_face([6.0, 3.0, 9.0, 6.5]));
+            f.insert("south".to_string(), make_face([9.0, 3.0, 12.0, 6.5]));
+            f.insert("west".to_string(), make_face([0.0, 3.0, 3.0, 6.5]));
+            f.insert("up".to_string(), make_face([3.0, 0.0, 6.0, 3.0]));
+            f.insert("down".to_string(), make_face([6.0, 0.0, 9.0, 3.0]));
+            f
+        },
+    };
+
+    let bell_elem_2 = crate::parser::model_json::ResolvedElement {
+        from: [4.0, 4.0, 4.0],
+        to: [12.0, 6.0, 12.0],
+        rotation: None,
+        transform: None,
+        shade: true,
+        faces: {
+            let mut f = HashMap::new();
+            f.insert("north".to_string(), make_face([4.0, 10.5, 8.0, 11.5]));
+            f.insert("east".to_string(), make_face([8.0, 10.5, 12.0, 11.5]));
+            f.insert("south".to_string(), make_face([12.0, 10.5, 16.0, 11.5]));
+            f.insert("west".to_string(), make_face([0.0, 10.5, 4.0, 11.5]));
+            f.insert("up".to_string(), make_face([4.0, 6.5, 8.0, 10.5]));
+            f.insert("down".to_string(), make_face([8.0, 6.5, 12.0, 10.5]));
+            f
+        },
+    };
+
+    model.elements.push(bell_elem_1);
+    model.elements.push(bell_elem_2);
+
+    true
+}
+
