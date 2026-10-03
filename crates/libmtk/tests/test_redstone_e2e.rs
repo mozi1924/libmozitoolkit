@@ -1,4 +1,4 @@
-use mtk_core::attributes::constants::{ATTR_BIOME_TINT_COLOR, ATTR_BIOME_TINT_DATA, ATTR_EMISSION};
+use mtk_core::attributes::constants::ATTR_EMISSION;
 use mtk_core::attributes::AttributeData;
 use mtk_core::direction::Direction;
 use mtk_material::BiomeResolver;
@@ -34,7 +34,7 @@ fn test_end_to_end_redstone_wire_baking_and_material_addressing() {
 
     // 1. Off state (Power 0)
     let baked_off = baker
-        .bake_blockstate("minecraft:redstone_wire[power=0,axis=z]", Some(&def), get_test_redstone_model)
+        .bake_blockstate("minecraft:redstone_wire[north=side,power=0,south=side]", Some(&def), get_test_redstone_model)
         .expect("Must bake redstone wire off state");
 
     assert!(!baked_off.is_emissive);
@@ -48,17 +48,9 @@ fn test_end_to_end_redstone_wire_baking_and_material_addressing() {
         panic!("Emission attribute must be Float");
     }
 
-    let col_attr_off = mesh_off.get_custom_attribute(ATTR_BIOME_TINT_COLOR).unwrap();
-    if let AttributeData::Float4(ref cols) = col_attr_off.data {
-        assert!((cols[0][0] - 0.3).abs() < 1e-4);
-        assert_eq!(cols[0][1], 0.0);
-    } else {
-        panic!("Tint color attribute must be Float4");
-    }
-
-    // 2. On state (Power 15) with vertical wall wire (north=up)
+    // 2. On state (Power 15) with vertical wall wire (north=up, south=side)
     let baked_on = baker
-        .bake_blockstate("minecraft:redstone_wire[power=15,north=up]", Some(&def), get_test_redstone_model)
+        .bake_blockstate("minecraft:redstone_wire[north=up,power=15,south=side]", Some(&def), get_test_redstone_model)
         .expect("Must bake redstone wire on state");
 
     assert!(baked_on.is_emissive);
@@ -70,21 +62,6 @@ fn test_end_to_end_redstone_wire_baking_and_material_addressing() {
         assert!((vals[0] - 1.0).abs() < 1e-4);
     } else {
         panic!("Emission attribute must be Float");
-    }
-
-    let col_attr_on = mesh_on.get_custom_attribute(ATTR_BIOME_TINT_COLOR).unwrap();
-    if let AttributeData::Float4(ref cols) = col_attr_on.data {
-        assert!((cols[0][0] - 1.0).abs() < 1e-4);
-        assert!((cols[0][1] - 0.15).abs() < 1e-4);
-    } else {
-        panic!("Tint color attribute must be Float4");
-    }
-
-    let data_attr_on = mesh_on.get_custom_attribute(ATTR_BIOME_TINT_DATA).unwrap();
-    if let AttributeData::Float4(ref datas) = data_attr_on.data {
-        assert_eq!(datas[0][3], 4.0); // TINT_TYPE_HARDCODED
-    } else {
-        panic!("Tint data attribute must be Float4");
     }
 
     // 3. Verify vertical wall wire faces into the room (South)

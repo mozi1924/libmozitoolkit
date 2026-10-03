@@ -100,20 +100,6 @@ impl BakedModelDatabase {
             if let Some(model) = self.models.get(&canon_filtered) {
                 return Some(model);
             }
-
-            // Fallback for models stored with default zero values (e.g. redstone_wire with power=0)
-            if filtered_props.contains_key("east") || filtered_props.contains_key("north") {
-                let mut p0_props = filtered_props.clone();
-                p0_props.insert("power".to_string(), "0".to_string());
-                let props_str: Vec<String> = p0_props
-                    .iter()
-                    .map(|(k, v)| format!("{}={}", k, v))
-                    .collect();
-                let canon_p0 = format!("{}[{}]", base_id, props_str.join(","));
-                if let Some(model) = self.models.get(&canon_p0) {
-                    return Some(model);
-                }
-            }
         }
 
         // Helper closure to find the best compatible variant for a given base_id and property map
@@ -191,13 +177,13 @@ impl BakedModelDatabase {
                                 } else if matches!(
                                     *cand_v,
                                     "false" | "0" | "none" | "straight" | "bottom" | "lower" | "single"
-                                        | "foot" | "normal" | "side" | "y" | "north"
+                                        | "foot" | "normal" | "y" | "north"
                                 ) {
                                     score += 10;
                                 } else if matches!(
                                     *cand_v,
                                     "true" | "1" | "top" | "upper" | "head" | "inner" | "outer" | "double"
-                                        | "x" | "z" | "south" | "east" | "west"
+                                        | "x" | "z" | "south" | "east" | "west" | "side" | "up" | "low" | "tall"
                                 ) {
                                     score -= 10;
                                 }

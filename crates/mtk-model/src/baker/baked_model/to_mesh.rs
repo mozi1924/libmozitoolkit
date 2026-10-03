@@ -119,22 +119,7 @@ impl BakedModel {
                     mesh.face_materials.push(slot);
                     mesh.face_tint_indices.push(face.tint_index);
 
-                    let (tint_color, tint_data) = if face.tint_index >= 0
-                        && self.block_state.contains("redstone_wire")
-                    {
-                        let power = self
-                            .block_state
-                            .split(&['[', ',', ']'][..])
-                            .find_map(|seg| seg.strip_prefix("power="))
-                            .and_then(|v| v.parse::<f32>().ok())
-                            .unwrap_or(0.0);
-                        let t = (power / 15.0).clamp(0.0, 1.0);
-                        let r = 0.3 + 0.7 * t;
-                        let g = if power <= 0.0 { 0.0 } else { 0.15 * t };
-                        ([r, g, 0.0, 1.0], [1.0, 1.0, 1.0, 4.0])
-                    } else {
-                        ([1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 0.0, 0.0])
-                    };
+                    let (tint_color, tint_data) = ([1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 0.0, 0.0]);
 
                     face_attributes_list.push(mtk_core::attributes::FaceAttributes {
                         texture_key: face.texture.clone(),
@@ -177,22 +162,7 @@ impl BakedModel {
             }
 
             let emission = if self.is_emissive { self.emissive_level } else { 0.0 };
-            let (tint_color, tint_data) = if obj_f.tint_index >= 0
-                && self.block_state.contains("redstone_wire")
-            {
-                let power = self
-                    .block_state
-                    .split(&['[', ',', ']'][..])
-                    .find_map(|seg| seg.strip_prefix("power="))
-                    .and_then(|v| v.parse::<f32>().ok())
-                    .unwrap_or(0.0);
-                let t = (power / 15.0).clamp(0.0, 1.0);
-                let r = 0.3 + 0.7 * t;
-                let g = if power <= 0.0 { 0.0 } else { 0.15 * t };
-                ([r, g, 0.0, 1.0], [1.0, 1.0, 1.0, 4.0])
-            } else {
-                ([1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 0.0, 0.0])
-            };
+            let (tint_color, tint_data) = ([1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 0.0, 0.0]);
 
             let face_attr = mtk_core::attributes::FaceAttributes {
                 texture_key: obj_f.texture.clone(),

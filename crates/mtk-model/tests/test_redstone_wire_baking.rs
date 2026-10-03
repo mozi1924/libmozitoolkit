@@ -1,7 +1,6 @@
 use mtk_core::direction::Direction;
 use mtk_model::baker::baked_model::BakedModelDatabase;
 use mtk_model::baker::ModelBaker;
-use mtk_model::parser::blockstate::resolve_redstone_wire_connections;
 use mtk_model::{BlockModelJson, BlockStateDefinition};
 
 fn get_test_redstone_def() -> BlockStateDefinition {
@@ -31,7 +30,11 @@ fn test_bake_redstone_wire_vanilla_resolution() {
     let def = get_test_redstone_def();
 
     let baked = baker
-        .bake_blockstate("minecraft:redstone_wire[power=15]", Some(&def), get_test_redstone_model)
+        .bake_blockstate(
+            "minecraft:redstone_wire[east=none,north=none,power=15,south=none,west=none]",
+            Some(&def),
+            get_test_redstone_model,
+        )
         .expect("Baking must succeed for redstone_wire with vanilla definition");
 
     assert!(!baked.is_cube);
@@ -42,8 +45,8 @@ fn test_bake_redstone_wire_vanilla_resolution() {
     assert!(!mesh.positions.is_empty());
     assert!(textures.iter().any(|t| t.contains("redstone_dust_dot")));
 
-    // Check MeshData custom attributes for tint_color and emission level
-    use mtk_core::attributes::constants::{ATTR_BIOME_TINT_COLOR, ATTR_BIOME_TINT_DATA, ATTR_EMISSION};
+    // Check MeshData custom attributes for emission level
+    use mtk_core::attributes::constants::ATTR_EMISSION;
     use mtk_core::attributes::AttributeData;
 
     let emission_attr = mesh.get_custom_attribute(ATTR_EMISSION).unwrap();
@@ -53,22 +56,6 @@ fn test_bake_redstone_wire_vanilla_resolution() {
     } else {
         panic!("Emission attribute must be Float");
     }
-
-    let tint_col_attr = mesh.get_custom_attribute(ATTR_BIOME_TINT_COLOR).unwrap();
-    if let AttributeData::Float4(ref cols) = tint_col_attr.data {
-        assert!(!cols.is_empty());
-        assert!((cols[0][0] - 1.0).abs() < 1e-4); // Max power red
-    } else {
-        panic!("Tint color attribute must be Float4");
-    }
-
-    let tint_data_attr = mesh.get_custom_attribute(ATTR_BIOME_TINT_DATA).unwrap();
-    if let AttributeData::Float4(ref datas) = tint_data_attr.data {
-        assert!(!datas.is_empty());
-        assert_eq!(datas[0][3], 4.0); // TINT_TYPE_HARDCODED
-    } else {
-        panic!("Tint data attribute must be Float4");
-    }
 }
 
 #[test]
@@ -76,20 +63,23 @@ fn test_bake_redstone_wire_straight_line_z() {
     let mut baker = ModelBaker::new();
     let def = get_test_redstone_def();
 
-    // Test axis=z alias
-    let baked_axis = baker
-        .bake_blockstate("minecraft:redstone_wire[axis=z,power=0]", Some(&def), get_test_redstone_model)
+    let baked_z = baker
+        .bake_blockstate(
+            "minecraft:redstone_wire[east=none,north=side,power=0,south=side,west=none]",
+            Some(&def),
+            get_test_redstone_model,
+        )
         .unwrap();
 
-    assert!(!baked_axis.is_emissive);
-    assert_eq!(baked_axis.emissive_level, 0.0);
+    assert!(!baked_z.is_emissive);
+    assert_eq!(baked_z.emissive_level, 0.0);
 
-    let (_mesh, textures) = baked_axis.to_mesh_with_textures(false);
+    let (_mesh, textures) = baked_z.to_mesh_with_textures(false);
     assert!(textures.iter().any(|t| t.contains("redstone_dust_line0")));
-    assert!(baked_axis.elements.iter().any(|el| el.faces.values().any(|f| f.texture.contains("redstone_dust_overlay"))));
+    assert!(baked_z.elements.iter().any(|el| el.faces.values().any(|f| f.texture.contains("redstone_dust_overlay"))));
     // Straight line in vanilla does not include dot
     assert!(!textures.iter().any(|t| t.contains("redstone_dust_dot")));
-    assert_eq!(baked_axis.elements.len(), 4); // 2 elements (line0 + overlay) * 2 parts
+    assert_eq!(baked_z.elements.len(), 4); // 2 elements (line0 + overlay) * 2 parts
 }
 
 #[test]
@@ -99,7 +89,11 @@ fn test_bake_redstone_wire_corner_and_cross() {
 
     // 1. Corner (angled) includes dot + side elements
     let baked_corner = baker
-        .bake_blockstate("minecraft:redstone_wire[east=side,north=side]", Some(&def), get_test_redstone_model)
+        .bake_blockstate(
+            "minecraft:redstone_wire[east=side,north=side,south=none,west=none]",
+            Some(&def),
+            get_test_redstone_model,
+        )
         .unwrap();
     let (_, textures_corner) = baked_corner.to_mesh_with_textures(false);
     assert!(textures_corner.iter().any(|t| t.contains("redstone_dust_dot")));
@@ -126,9 +120,13 @@ fn test_bake_redstone_wire_vertical_ascending_wall() {
     let mut baker = ModelBaker::new();
     let def = get_test_redstone_def();
 
-    // Vertical ascending wire on north wall: north=up, south=side (auto-straightened)
+    // Vertical ascending wire on north wall: north=up, south=side
     let baked = baker
-        .bake_blockstate("minecraft:redstone_wire[north=up]", Some(&def), get_test_redstone_model)
+        .bake_blockstate(
+            "minecraft:redstone_wire[east=none,north=up,south=side,west=none]",
+            Some(&def),
+            get_test_redstone_model,
+        )
         .unwrap();
 
     let (mesh, textures) = baked.to_mesh_with_textures(false);
@@ -159,43 +157,6 @@ fn test_bake_redstone_wire_vertical_ascending_wall() {
         has_south_normal,
         "Mesh must contain South-facing normals for the vertical wire on North wall"
     );
-}
-
-#[test]
-fn test_redstone_connection_resolution_and_auto_straighten() {
-    // Isolated wire -> all none
-    let isolated = resolve_redstone_wire_connections(|_, _, _| None);
-    assert_eq!(isolated.get("east").unwrap(), "none");
-    assert_eq!(isolated.get("west").unwrap(), "none");
-    assert_eq!(isolated.get("north").unwrap(), "none");
-    assert_eq!(isolated.get("south").unwrap(), "none");
-
-    // Single neighbor to the East -> auto-straightens East and West to "side"
-    let single_east = resolve_redstone_wire_connections(|dx, dy, dz| {
-        if dx == 1 && dy == 0 && dz == 0 {
-            Some("minecraft:repeater")
-        } else {
-            None
-        }
-    });
-    assert_eq!(single_east.get("east").unwrap(), "side");
-    assert_eq!(single_east.get("west").unwrap(), "side");
-    assert_eq!(single_east.get("north").unwrap(), "none");
-    assert_eq!(single_east.get("south").unwrap(), "none");
-
-    // Neighbor on solid block above at (0, 1, -1) -> North is "up"
-    let north_up = resolve_redstone_wire_connections(|dx, dy, dz| {
-        if dx == 0 && dy == 0 && dz == -1 {
-            Some("minecraft:stone") // solid block in front
-        } else if dx == 0 && dy == 1 && dz == -1 {
-            Some("minecraft:redstone_wire") // wire on top of solid block
-        } else {
-            None
-        }
-    });
-    assert_eq!(north_up.get("north").unwrap(), "up");
-    // Single arm auto-straightening makes south "side"
-    assert_eq!(north_up.get("south").unwrap(), "side");
 }
 
 #[test]

@@ -4,12 +4,10 @@
 //! matching logic against `blockstates/*.json` variant definitions and multipart rules.
 
 pub mod definition;
-pub mod redstone;
 pub mod resolver;
 pub mod state;
 
 pub use definition::*;
-pub use redstone::*;
 pub use resolver::*;
 pub use state::*;
 
