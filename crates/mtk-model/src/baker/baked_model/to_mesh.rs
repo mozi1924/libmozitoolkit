@@ -23,7 +23,7 @@ impl BakedModel {
         let mut texture_list: Vec<String> = Vec::new();
 
         // Prepare bounding boxes for hidden volume clipping from actual transformed vertices
-        let mut element_bounds = Vec::new();
+        let mut element_bounds: Vec<Option<([f32; 3], [f32; 3])>> = Vec::new();
         if options.clip_hidden_volume && self.elements.len() > 1 {
             for el in &self.elements {
                 let mut min_pos = Vec3::splat(f32::INFINITY);
@@ -34,7 +34,14 @@ impl BakedModel {
                         max_pos = max_pos.max(*v);
                     }
                 }
-                element_bounds.push(([min_pos.x, min_pos.y, min_pos.z], [max_pos.x, max_pos.y, max_pos.z]));
+                let is_volume = (max_pos.x - min_pos.x) > 1e-4
+                    && (max_pos.y - min_pos.y) > 1e-4
+                    && (max_pos.z - min_pos.z) > 1e-4;
+                if is_volume {
+                    element_bounds.push(Some(([min_pos.x, min_pos.y, min_pos.z], [max_pos.x, max_pos.y, max_pos.z])));
+                } else {
+                    element_bounds.push(None);
+                }
             }
         }
 
@@ -42,11 +49,11 @@ impl BakedModel {
 
         // 1. Process JSON elements
         for (el_idx, el) in self.elements.iter().enumerate() {
-            let other_bounds: Vec<_> = element_bounds
+            let other_bounds: Vec<([f32; 3], [f32; 3])> = element_bounds
                 .iter()
                 .enumerate()
                 .filter(|(idx, _)| *idx != el_idx)
-                .map(|(_, b)| *b)
+                .filter_map(|(_, b)| *b)
                 .collect();
 
             for face in el.faces.values() {

@@ -200,7 +200,7 @@ impl BakedModel {
                 || (el.from_pos[1] - el.to_pos[1]).abs() < 1e-4
                 || (el.from_pos[2] - el.to_pos[2]).abs() < 1e-4;
             for (&dir, f) in &el.faces {
-                face_list.push(((el_idx, dir, is_plane), f.vertices, f.normal));
+                face_list.push(((el_idx, dir, is_plane), f.vertices, f.normal, &f.texture, f.tint_index));
             }
         }
 
@@ -211,10 +211,10 @@ impl BakedModel {
             if to_remove.contains(&(face_list[i].0.0, face_list[i].0.1)) {
                 continue;
             }
-            let ((el_a, dir_a, is_plane_a), verts_a, norm_a) = &face_list[i];
+            let ((el_a, dir_a, is_plane_a), verts_a, norm_a, tex_a, tint_a) = &face_list[i];
 
             for j in (i + 1)..face_list.len() {
-                let ((el_b, dir_b, is_plane_b), verts_b, norm_b) = &face_list[j];
+                let ((el_b, dir_b, is_plane_b), verts_b, norm_b, tex_b, tint_b) = &face_list[j];
                 if el_a == el_b || to_remove.contains(&(*el_b, *dir_b)) {
                     continue;
                 }
@@ -230,8 +230,10 @@ impl BakedModel {
                     match rel.overlap {
                         CoplanarOverlap::Exact => {
                             if rel.alignment == FaceAlignment::SameDirection {
-                                // Exact duplicate face: remove B (even on 2D planes)
-                                to_remove.insert((*el_b, *dir_b));
+                                // Exact duplicate face: only remove B if identical texture and tint
+                                if tex_a == tex_b && tint_a == tint_b {
+                                    to_remove.insert((*el_b, *dir_b));
+                                }
                             } else if !*is_plane_a && !*is_plane_b {
                                 // Solid cuboid back-to-back contacting faces: remove both
                                 to_remove.insert((*el_a, *dir_a));
@@ -240,12 +242,14 @@ impl BakedModel {
                             }
                         }
                         CoplanarOverlap::ContainedInA => {
-                            if rel.alignment == FaceAlignment::SameDirection || (!*is_plane_a && !*is_plane_b) {
+                            // Only solid cuboid back-to-back contacting faces: Face B is completely covered by Cuboid A
+                            if rel.alignment == FaceAlignment::OppositeDirection && !*is_plane_a && !*is_plane_b {
                                 to_remove.insert((*el_b, *dir_b));
                             }
                         }
                         CoplanarOverlap::ContainedInB => {
-                            if rel.alignment == FaceAlignment::SameDirection || (!*is_plane_a && !*is_plane_b) {
+                            // Only solid cuboid back-to-back contacting faces: Face A is completely covered by Cuboid B
+                            if rel.alignment == FaceAlignment::OppositeDirection && !*is_plane_a && !*is_plane_b {
                                 to_remove.insert((*el_a, *dir_a));
                                 break;
                             }

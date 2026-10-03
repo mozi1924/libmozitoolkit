@@ -229,19 +229,15 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
                                 }
                             }
                             crate::geometry::coplanar::CoplanarOverlap::ContainedInB => {
-                                // Face A is completely covered by other face B
-                                if (config.cull_duplicates && is_same_dir)
-                                    || (config.cull_coplanar_opposite && is_opp_dir)
-                                {
+                                // Face A is completely covered by other face B back-to-back
+                                if config.cull_coplanar_opposite && is_opp_dir {
                                     faces_to_cull.insert(face_idx);
                                     break 'search;
                                 }
                             }
                             crate::geometry::coplanar::CoplanarOverlap::ContainedInA => {
-                                // Other face B is completely covered by Face A
-                                if (config.cull_duplicates && is_same_dir)
-                                    || (config.cull_coplanar_opposite && is_opp_dir)
-                                {
+                                // Other face B is completely covered by Face A back-to-back
+                                if config.cull_coplanar_opposite && is_opp_dir {
                                     faces_to_cull.insert(*other_idx);
                                 }
                             }

@@ -88,7 +88,7 @@ fn test_bake_redstone_wire_corner_and_cross() {
     let def = get_test_redstone_def();
 
     // 1. Corner (angled) includes dot + side elements
-    let baked_corner = baker
+    let mut baked_corner = baker
         .bake_blockstate(
             "minecraft:redstone_wire[east=side,north=side,south=none,west=none]",
             Some(&def),
@@ -100,8 +100,13 @@ fn test_bake_redstone_wire_corner_and_cross() {
     assert!(textures_corner.iter().any(|t| t.contains("redstone_dust_line0")));
     assert!(textures_corner.iter().any(|t| t.contains("redstone_dust_line1")));
 
+    let removed_corner = baked_corner.deduplicate_faces();
+    assert_eq!(removed_corner, 0, "deduplicate_faces must not remove 2D planar arms in corner wire");
+    let (mesh_corner, _) = baked_corner.to_mesh_with_textures(true);
+    assert_eq!(mesh_corner.face_count(), 3, "Corner wire must have 3 faces (dot + 2 arms)");
+
     // 2. Four-way cross includes dot + all 4 sides
-    let baked_cross = baker
+    let mut baked_cross = baker
         .bake_blockstate(
             "minecraft:redstone_wire[east=side,north=side,south=side,west=side]",
             Some(&def),
@@ -113,6 +118,11 @@ fn test_bake_redstone_wire_corner_and_cross() {
     assert!(textures_cross.iter().any(|t| t.contains("redstone_dust_line0")));
     assert!(textures_cross.iter().any(|t| t.contains("redstone_dust_line1")));
     assert_eq!(baked_cross.elements.len(), 10); // 2 elements * 5 multipart matches
+
+    let removed_cross = baked_cross.deduplicate_faces();
+    assert_eq!(removed_cross, 0, "deduplicate_faces must not remove 2D planar arms in cross wire");
+    let (mesh_cross, _) = baked_cross.to_mesh_with_textures(true);
+    assert_eq!(mesh_cross.face_count(), 5, "Cross wire must have 5 faces (dot + 4 arms)");
 }
 
 #[test]
