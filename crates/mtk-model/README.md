@@ -138,9 +138,9 @@ pub struct BakedModelDatabase {
 | `normalize_redstone_wire_properties(props)` | 规范化红石引线方向连接、单臂拉直与别名。 |
 | `resolve_redstone_wire_connections(pos, connectable_fn)` | 依据 3D 体素邻域自动计算红石引线四向连接状态（none/side/up）。 |
 | `map_legacy_redstone_name(name) -> Option<(&'static str, BTreeMap)>` | 将 Mineways/Jmc2Obj 材质名映射为红石引线规范状态。 |
-| `get_builtin_blockstate_def(name) -> Option<BlockStateDefinition>` | 获取内置原版 BlockState 组合定义（含箱子、床、潜影盒、告示牌、钟、头颅、红石引线等）。 |
-| `get_builtin_model_by_id(model_id) -> Option<BlockModelJson>` | 获取内置原版标准模型 JSON（含箱子各组件、钟各朝向、床、告示牌、头颅、红石引线等全套模型）。 |
-| `get_builtin_model_for_state(blockstate) -> Option<BlockModelJson>` | 依据方块状态获取对应的内置回退模型。 |
+| `get_builtin_blockstate_def(name) -> Option<BlockStateDefinition>` | 获取内置原版 Java BER 实体方块 BlockState 定义（箱子、潜影盒、钟、头颅、饰纹陶罐、末地传送门等无 JSON 几何之方块）。 |
+| `get_builtin_model_by_id(model_id) -> Option<BlockModelJson>` | 获取内置原版标准 Blockbench 兼容模型 JSON（箱子各形态、潜影盒、钟各悬挂态、头颅/龙首/猪灵首、陶罐、传送门）。 |
+| `get_builtin_model_for_state(blockstate) -> Option<BlockModelJson>` | 依据方块状态获取对应的内置实体回退模型并自动映射材质。 |
 | `ModelBaker::new() -> Self` | 创建通用模型烘焙器。 |
 | `baker.bake_blockstate(state_str, def, model_loader) -> Result<BakedModel, ModelError>` | 端到端烘焙指定方块状态为 `BakedModel`。 |
 | `is_block_emissive(state: &BlockState) -> bool` | 判断方块是否为自发光方块。 |

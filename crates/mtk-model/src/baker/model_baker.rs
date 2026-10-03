@@ -8,7 +8,7 @@ use crate::blockstate::{BlockState, BlockStateDefinition, BlockStateResolver};
 use crate::builtin::BuiltinModelRegistry;
 use crate::error::ModelError;
 use crate::math::{bake_face_exact, rotate_direction};
-use crate::model_json::BlockModelJson;
+use crate::model_json::{BlockModelJson, ResolvedBlockModel};
 use crate::obj::{ModObjLoader, WavefrontObjParser};
 
 /// White-list of natively light-emitting blocks in Minecraft.
@@ -177,24 +177,41 @@ impl ModelBaker {
         let mut six_faces: [Option<BakedFace>; 6] = [None, None, None, None, None, None];
 
         for variant in &variant_matches {
-            let root_model = model_loader(&variant.model_id)
-                .or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id))
-                .unwrap_or_default();
-
-            let mut resolved = root_model.resolve_hierarchy(&variant.model_id, |id| {
-                model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
-            })?;
-            if resolved.elements.is_empty() {
-                if let Some(builtin) = BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id) {
-                    resolved = builtin.resolve_hierarchy(&variant.model_id, |id| {
-                        model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
-                    })?;
-                } else if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(&blockstate) {
-                    resolved = builtin.resolve_hierarchy(&variant.model_id, |id| {
-                        model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
-                    })?;
+            let resolved = if let Some(external) = model_loader(&variant.model_id) {
+                let r = external.resolve_hierarchy(&variant.model_id, |id| {
+                    model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                })?;
+                if r.elements.is_empty() {
+                    // External model is empty (e.g. vanilla Java BER dummy block/skull.json).
+                    // Fallback to builtin model for this blockstate or variant ID.
+                    if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(&blockstate) {
+                        builtin.resolve_hierarchy(&variant.model_id, |id| {
+                            model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                        })?
+                    } else if let Some(builtin) = BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id) {
+                        builtin.resolve_hierarchy(&variant.model_id, |id| {
+                            model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                        })?
+                    } else {
+                        r
+                    }
+                } else {
+                    r
                 }
-            }
+            } else {
+                // No external model found for variant.model_id.
+                if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(&blockstate) {
+                    builtin.resolve_hierarchy(&variant.model_id, |id| {
+                        model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                    })?
+                } else if let Some(builtin) = BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id) {
+                    builtin.resolve_hierarchy(&variant.model_id, |id| {
+                        model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                    })?
+                } else {
+                    ResolvedBlockModel::default()
+                }
+            };
 
             for elem in &resolved.elements {
                 let from_pos = elem.from;

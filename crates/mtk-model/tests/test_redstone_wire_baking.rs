@@ -2,16 +2,37 @@ use mtk_core::direction::Direction;
 use mtk_model::baker::baked_model::BakedModelDatabase;
 use mtk_model::baker::ModelBaker;
 use mtk_model::parser::blockstate::resolve_redstone_wire_connections;
+use mtk_model::{BlockModelJson, BlockStateDefinition};
+
+fn get_test_redstone_def() -> BlockStateDefinition {
+    serde_json::from_str(include_str!("fixtures/redstone/blockstates/redstone_wire.json")).unwrap()
+}
+
+fn get_test_redstone_model(id: &str) -> Option<BlockModelJson> {
+    let clean = id.strip_prefix("minecraft:").unwrap_or(id);
+    let stem = clean.strip_prefix("block/").unwrap_or(clean);
+    let raw = match stem {
+        "redstone_dust_dot" => include_str!("fixtures/redstone/models/block/redstone_dust_dot.json"),
+        "redstone_dust_side0" => include_str!("fixtures/redstone/models/block/redstone_dust_side0.json"),
+        "redstone_dust_side1" => include_str!("fixtures/redstone/models/block/redstone_dust_side1.json"),
+        "redstone_dust_side_alt0" => include_str!("fixtures/redstone/models/block/redstone_dust_side_alt0.json"),
+        "redstone_dust_side_alt1" => include_str!("fixtures/redstone/models/block/redstone_dust_side_alt1.json"),
+        "redstone_dust_side" => include_str!("fixtures/redstone/models/block/redstone_dust_side.json"),
+        "redstone_dust_side_alt" => include_str!("fixtures/redstone/models/block/redstone_dust_side_alt.json"),
+        "redstone_dust_up" => include_str!("fixtures/redstone/models/block/redstone_dust_up.json"),
+        _ => return None,
+    };
+    serde_json::from_str(raw).ok()
+}
 
 #[test]
-fn test_bake_redstone_wire_builtin_fallback() {
+fn test_bake_redstone_wire_vanilla_resolution() {
     let mut baker = ModelBaker::new();
+    let def = get_test_redstone_def();
 
-    // Bare redstone wire with no external blockstate definition or model loader
-    // should seamlessly use builtin fallback models.
     let baked = baker
-        .bake_blockstate("minecraft:redstone_wire[power=15]", None, |_| None)
-        .expect("Builtin fallback baking must succeed for redstone_wire");
+        .bake_blockstate("minecraft:redstone_wire[power=15]", Some(&def), get_test_redstone_model)
+        .expect("Baking must succeed for redstone_wire with vanilla definition");
 
     assert!(!baked.is_cube);
     assert!(baked.is_emissive);
@@ -53,10 +74,11 @@ fn test_bake_redstone_wire_builtin_fallback() {
 #[test]
 fn test_bake_redstone_wire_straight_line_z() {
     let mut baker = ModelBaker::new();
+    let def = get_test_redstone_def();
 
     // Test axis=z alias
     let baked_axis = baker
-        .bake_blockstate("minecraft:redstone_wire[axis=z,power=0]", None, |_| None)
+        .bake_blockstate("minecraft:redstone_wire[axis=z,power=0]", Some(&def), get_test_redstone_model)
         .unwrap();
 
     assert!(!baked_axis.is_emissive);
@@ -73,10 +95,11 @@ fn test_bake_redstone_wire_straight_line_z() {
 #[test]
 fn test_bake_redstone_wire_corner_and_cross() {
     let mut baker = ModelBaker::new();
+    let def = get_test_redstone_def();
 
     // 1. Corner (angled) includes dot + side elements
     let baked_corner = baker
-        .bake_blockstate("minecraft:redstone_wire[east=side,north=side]", None, |_| None)
+        .bake_blockstate("minecraft:redstone_wire[east=side,north=side]", Some(&def), get_test_redstone_model)
         .unwrap();
     let (_, textures_corner) = baked_corner.to_mesh_with_textures(false);
     assert!(textures_corner.iter().any(|t| t.contains("redstone_dust_dot")));
@@ -87,8 +110,8 @@ fn test_bake_redstone_wire_corner_and_cross() {
     let baked_cross = baker
         .bake_blockstate(
             "minecraft:redstone_wire[east=side,north=side,south=side,west=side]",
-            None,
-            |_| None,
+            Some(&def),
+            get_test_redstone_model,
         )
         .unwrap();
     let (_, textures_cross) = baked_cross.to_mesh_with_textures(false);
@@ -101,10 +124,11 @@ fn test_bake_redstone_wire_corner_and_cross() {
 #[test]
 fn test_bake_redstone_wire_vertical_ascending_wall() {
     let mut baker = ModelBaker::new();
+    let def = get_test_redstone_def();
 
     // Vertical ascending wire on north wall: north=up, south=side (auto-straightened)
     let baked = baker
-        .bake_blockstate("minecraft:redstone_wire[north=up]", None, |_| None)
+        .bake_blockstate("minecraft:redstone_wire[north=up]", Some(&def), get_test_redstone_model)
         .unwrap();
 
     let (mesh, textures) = baked.to_mesh_with_textures(false);
@@ -178,10 +202,11 @@ fn test_redstone_connection_resolution_and_auto_straighten() {
 fn test_baked_model_database_redstone_power_stripping() {
     let mut db = BakedModelDatabase::new();
     let mut baker = ModelBaker::new();
+    let def = get_test_redstone_def();
 
     // Bake pure geometric model without power: redstone_wire[east=side,west=side]
     let baked = baker
-        .bake_blockstate("minecraft:redstone_wire[east=side,west=side]", None, |_| None)
+        .bake_blockstate("minecraft:redstone_wire[east=side,west=side]", Some(&def), get_test_redstone_model)
         .unwrap();
 
     db.insert("minecraft:redstone_wire[east=side,west=side]".to_string(), baked);

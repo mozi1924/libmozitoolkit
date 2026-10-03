@@ -4,14 +4,37 @@ use mtk_core::direction::Direction;
 use mtk_material::BiomeResolver;
 use mtk_model::baker::baked_model::BakedModelDatabase;
 use mtk_model::baker::ModelBaker;
+use mtk_model::{BlockModelJson, BlockStateDefinition};
+
+fn get_test_redstone_def() -> BlockStateDefinition {
+    serde_json::from_str(include_str!("fixtures/redstone/blockstates/redstone_wire.json")).unwrap()
+}
+
+fn get_test_redstone_model(id: &str) -> Option<BlockModelJson> {
+    let clean = id.strip_prefix("minecraft:").unwrap_or(id);
+    let stem = clean.strip_prefix("block/").unwrap_or(clean);
+    let raw = match stem {
+        "redstone_dust_dot" => include_str!("fixtures/redstone/models/block/redstone_dust_dot.json"),
+        "redstone_dust_side0" => include_str!("fixtures/redstone/models/block/redstone_dust_side0.json"),
+        "redstone_dust_side1" => include_str!("fixtures/redstone/models/block/redstone_dust_side1.json"),
+        "redstone_dust_side_alt0" => include_str!("fixtures/redstone/models/block/redstone_dust_side_alt0.json"),
+        "redstone_dust_side_alt1" => include_str!("fixtures/redstone/models/block/redstone_dust_side_alt1.json"),
+        "redstone_dust_side" => include_str!("fixtures/redstone/models/block/redstone_dust_side.json"),
+        "redstone_dust_side_alt" => include_str!("fixtures/redstone/models/block/redstone_dust_side_alt.json"),
+        "redstone_dust_up" => include_str!("fixtures/redstone/models/block/redstone_dust_up.json"),
+        _ => return None,
+    };
+    serde_json::from_str(raw).ok()
+}
 
 #[test]
 fn test_end_to_end_redstone_wire_baking_and_material_addressing() {
     let mut baker = ModelBaker::new();
+    let def = get_test_redstone_def();
 
     // 1. Off state (Power 0)
     let baked_off = baker
-        .bake_blockstate("minecraft:redstone_wire[power=0,axis=z]", None, |_| None)
+        .bake_blockstate("minecraft:redstone_wire[power=0,axis=z]", Some(&def), get_test_redstone_model)
         .expect("Must bake redstone wire off state");
 
     assert!(!baked_off.is_emissive);
@@ -35,7 +58,7 @@ fn test_end_to_end_redstone_wire_baking_and_material_addressing() {
 
     // 2. On state (Power 15) with vertical wall wire (north=up)
     let baked_on = baker
-        .bake_blockstate("minecraft:redstone_wire[power=15,north=up]", None, |_| None)
+        .bake_blockstate("minecraft:redstone_wire[power=15,north=up]", Some(&def), get_test_redstone_model)
         .expect("Must bake redstone wire on state");
 
     assert!(baked_on.is_emissive);
@@ -84,7 +107,7 @@ fn test_end_to_end_redstone_wire_baking_and_material_addressing() {
     // 5. Verify BakedModelDatabase Tier 2 non-geometric property stripping
     let mut db = BakedModelDatabase::new();
     let geometric = baker
-        .bake_blockstate("minecraft:redstone_wire[east=side,west=side]", None, |_| None)
+        .bake_blockstate("minecraft:redstone_wire[east=side,west=side]", Some(&def), get_test_redstone_model)
         .unwrap();
     db.insert("minecraft:redstone_wire[east=side,west=side]".to_string(), geometric);
 

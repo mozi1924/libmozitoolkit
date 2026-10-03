@@ -161,11 +161,11 @@ fn test_builtin_models_coverage() {
     let mut baker = mtk_model::ModelBaker::new();
     let empty_loader = |_: &str| None;
 
-    // Bed
-    let bed = baker
-        .bake_blockstate("minecraft:red_bed[facing=north,part=foot]", None, empty_loader)
-        .expect("Should bake red bed");
-    assert!(!bed.elements.is_empty(), "Bed should have elements");
+    // Chest
+    let chest = baker
+        .bake_blockstate("minecraft:chest[facing=north,type=single]", None, empty_loader)
+        .expect("Should bake chest");
+    assert!(!chest.elements.is_empty(), "Chest should have elements");
 
     // Shulker box
     let shulker = baker
@@ -173,17 +173,17 @@ fn test_builtin_models_coverage() {
         .expect("Should bake shulker box");
     assert!(!shulker.elements.is_empty(), "Shulker box should have elements");
 
-    // Standing sign
-    let sign = baker
-        .bake_blockstate("minecraft:oak_sign[rotation=4]", None, empty_loader)
-        .expect("Should bake sign");
-    assert!(!sign.elements.is_empty(), "Sign should have elements");
+    // Decorated pot
+    let pot = baker
+        .bake_blockstate("minecraft:decorated_pot[facing=north]", None, empty_loader)
+        .expect("Should bake decorated pot");
+    assert!(!pot.elements.is_empty(), "Decorated pot should have elements");
 
-    // Wall sign
-    let wall_sign = baker
-        .bake_blockstate("minecraft:oak_wall_sign[facing=north]", None, empty_loader)
-        .expect("Should bake wall sign");
-    assert!(!wall_sign.elements.is_empty(), "Wall sign should have elements");
+    // Dragon head
+    let dragon_head = baker
+        .bake_blockstate("minecraft:dragon_head[rotation=0]", None, empty_loader)
+        .expect("Should bake dragon head");
+    assert!(!dragon_head.elements.is_empty(), "Dragon head should have elements");
 
     // Skull
     let skull = baker
@@ -514,13 +514,7 @@ fn test_builtin_blockbench_json_models() {
         "minecraft:block/chest_right",
         "minecraft:block/trapped_chest",
         "minecraft:block/ender_chest",
-        "minecraft:block/bed_foot",
-        "minecraft:block/bed_head",
         "minecraft:block/shulker_box",
-        "minecraft:block/sign_standing",
-        "minecraft:block/sign_wall",
-        "minecraft:block/hanging_sign",
-        "minecraft:block/wall_hanging_sign",
         "minecraft:block/skull",
         "minecraft:block/skull_wall",
         "minecraft:block/dragon_head",
