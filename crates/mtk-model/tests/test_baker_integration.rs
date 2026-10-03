@@ -900,7 +900,42 @@ fn test_end_portal_gateway_conduit_and_banner_builtins() {
         assert!(uv[0] >= -1e-4 && uv[0] <= 1.0 + 1e-4, "Decorated pot U coordinate out of bounds: {}", uv[0]);
         assert!(uv[1] >= -1e-4 && uv[1] <= 1.0 + 1e-4, "Decorated pot V coordinate out of bounds: {}", uv[1]);
     }
+
+    // Verify decorated pot neck (Y in [16/16, 17/16]) and rim (Y in [17/16, 20/16])
+    let max_y = pot_mesh.positions.iter().map(|p| p[1]).fold(f32::NEG_INFINITY, f32::max);
+    assert!((max_y - 20.0 / 16.0).abs() < 1e-3, "Decorated pot rim top must be at Y=20/16 = 1.25 (got {})", max_y);
 }
+
+#[test]
+fn test_dragon_and_piglin_head_geometry() {
+    let mut baker = mtk_model::ModelBaker::new();
+    let empty_loader = |_: &str| None;
+
+    // 1. Dragon Head
+    let dragon = baker
+        .bake_blockstate("minecraft:dragon_head[rotation=0]", None, empty_loader)
+        .expect("Should bake dragon head");
+    let (dragon_mesh, dragon_tex) = dragon.to_mesh_with_textures(false);
+    assert!(!dragon_mesh.positions.is_empty(), "Dragon mesh should have vertices");
+    assert!(dragon_tex.contains(&"minecraft:entity/enderdragon/dragon".to_string()));
+
+    // 2. Piglin Head
+    let piglin = baker
+        .bake_blockstate("minecraft:piglin_head[rotation=0]", None, empty_loader)
+        .expect("Should bake piglin head");
+    let (piglin_mesh, piglin_tex) = piglin.to_mesh_with_textures(false);
+    assert!(!piglin_mesh.positions.is_empty(), "Piglin mesh should have vertices");
+    assert!(piglin_tex.contains(&"minecraft:entity/piglin/piglin".to_string()));
+
+    // Verify ears tilt outward beyond the head's lateral boundary:
+    // Head width is [3..13] / 16 = [0.1875..0.8125].
+    // Rotated ears tilt outward: max_x > 13.0/16 and min_x < 3.0/16.
+    let min_x = piglin_mesh.positions.iter().map(|p| p[0]).fold(f32::INFINITY, f32::min);
+    let max_x = piglin_mesh.positions.iter().map(|p| p[0]).fold(f32::NEG_INFINITY, f32::max);
+    assert!(min_x < 3.0 / 16.0 - 0.05, "Piglin ear must tilt outward past West boundary (min_x = {})", min_x);
+    assert!(max_x > 13.0 / 16.0 + 0.05, "Piglin ear must tilt outward past East boundary (max_x = {})", max_x);
+}
+
 
 
 

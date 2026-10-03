@@ -459,6 +459,13 @@ mod tests {
             "minecraft:entity/enderdragon/dragon"
         );
 
+        // Verify dragon jaw rotation (element 2)
+        let jaw = &elems_dragon[2];
+        let jaw_rot = jaw.rotation.as_ref().expect("Dragon jaw should have rotation");
+        assert_eq!(jaw_rot.axis, "x");
+        assert_eq!(jaw_rot.angle, 11.5);
+        assert_eq!(jaw_rot.origin, [8.0, 3.0, 14.0]);
+
         let bs_piglin = BlockState::parse("minecraft:piglin_head[rotation=4]").unwrap();
         let model_piglin = MiExModelLoader::load_for_blockstate(&bs_piglin).expect("Piglin head should load");
         let elems_piglin = model_piglin.elements.unwrap();
@@ -470,5 +477,23 @@ mod tests {
         );
         let t_piglin = elems_piglin[0].transform.as_ref().unwrap();
         assert_eq!(t_piglin.rotate[1], 270.0, "Rotation 4 should be 270 deg (22.5*4 + 180)");
+
+        // Verify piglin ear rotations and distinct UVs
+        let right_ear = &elems_piglin[2];
+        let right_ear_rot = right_ear.rotation.as_ref().expect("Right ear should have rotation");
+        assert_eq!(right_ear_rot.axis, "z");
+        assert_eq!(right_ear_rot.angle, 30.0);
+        assert_eq!(right_ear_rot.origin, [12.5, 6.0, 8.0]);
+
+        let left_ear = &elems_piglin[3];
+        let left_ear_rot = left_ear.rotation.as_ref().expect("Left ear should have rotation");
+        assert_eq!(left_ear_rot.axis, "z");
+        assert_eq!(left_ear_rot.angle, -30.0);
+        assert_eq!(left_ear_rot.origin, [3.5, 6.0, 8.0]);
+
+        // Verify left and right ears have different face UVs
+        let right_faces = &right_ear.faces;
+        let left_faces = &left_ear.faces;
+        assert_ne!(right_faces.get("west").unwrap().uv, left_faces.get("west").unwrap().uv);
     }
 }
