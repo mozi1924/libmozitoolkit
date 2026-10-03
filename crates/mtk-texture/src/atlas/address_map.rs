@@ -65,6 +65,30 @@ pub struct AtlasSpriteLocation {
     pub has_overlay: bool,
 }
 
+impl Default for AtlasSpriteLocation {
+    fn default() -> Self {
+        Self {
+            chunk_id: 0,
+            category: default_category(),
+            is_animated: false,
+            sprite_kind: SpriteKind::default(),
+            texture_id: 0,
+            uv_bounds: [0.0, 0.0, 1.0, 1.0],
+            frame_0_uv_bounds: [0.0, 0.0, 1.0, 1.0],
+            local_uv_bounds: default_local_uv_bounds(),
+            frame_uv_step: [0.0, 0.0],
+            pixel_rect: [0, 0, 16, 16],
+            strip_pixel_rect: [0, 0, 16, 16],
+            frame_size: [16, 16],
+            frame_count: 1,
+            animation: None,
+            has_normal: false,
+            has_specular: false,
+            has_overlay: false,
+        }
+    }
+}
+
 fn default_category() -> String {
     "blocks".to_string()
 }

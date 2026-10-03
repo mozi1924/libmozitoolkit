@@ -131,6 +131,25 @@ pub fn decode_grid_atlas_uv<'a>(
     (candidates, local_uv)
 }
 
+#[inline]
+fn get_fluid_candidates(name: &str) -> Option<&'static [&'static str]> {
+    match name {
+        "water" | "minecraft:water" | "stationary_water" | "water_still" => {
+            Some(&["block/water_still", "block/water_flow"])
+        }
+        "flowing_water" | "minecraft:flowing_water" | "water_flow" => {
+            Some(&["block/water_flow", "block/water_still"])
+        }
+        "lava" | "minecraft:lava" | "stationary_lava" | "lava_still" => {
+            Some(&["block/lava_still", "block/lava_flow"])
+        }
+        "flowing_lava" | "minecraft:flowing_lava" | "lava_flow" => {
+            Some(&["block/lava_flow", "block/lava_still"])
+        }
+        _ => None,
+    }
+}
+
 /// Unified data-driven resolver for mapping raw DCC material names to canonical AtlasSpriteLocations.
 pub struct MaterialResolver;
 
@@ -141,14 +160,25 @@ impl MaterialResolver {
         custom_aliases: Option<&HashMap<String, Vec<String>>>,
         address_map: &'a AtlasAddressMap,
     ) -> Option<(ResourceLocation, &'a AtlasSpriteLocation)> {
+        let cleaned = clean_identifier(raw_material_name);
+
+        // 0. Built-in fluid alias prioritization (prevents "water" / "lava" from colliding with paintings or particles)
+        if let Some(candidates) = get_fluid_candidates(raw_material_name).or_else(|| get_fluid_candidates(&cleaned)) {
+            for &cand in candidates {
+                if let Some(sprite_loc) = address_map.lookup_str(cand) {
+                    let res_loc = ResourceLocation::parse(cand)
+                        .unwrap_or_else(|_| ResourceLocation::new("minecraft", cand));
+                    return Some((res_loc, sprite_loc));
+                }
+            }
+        }
+
         // 1. Direct O(1) lookup attempt on raw name
         if let Some(loc) = address_map.lookup_str(raw_material_name) {
             if let Ok(res_loc) = ResourceLocation::parse(raw_material_name) {
                 return Some((res_loc, loc));
             }
         }
-
-        let cleaned = clean_identifier(raw_material_name);
 
         // 2. Direct O(1) lookup attempt on cleaned name
         if let Some(loc) = address_map.lookup_str(&cleaned) {

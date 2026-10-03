@@ -174,3 +174,87 @@ fn test_parallel_batch_mesh_remap() {
     assert_eq!(multi_res.atlas_uvs.len(), 8);
     assert_eq!(multi_res.face_uv_modes, vec![0, 0]);
 }
+
+#[test]
+fn test_fluid_material_resolver_prioritization() {
+    let mut address_map = AtlasAddressMap::new();
+
+    // Painting "water" that would otherwise collide if looked up naively
+    address_map.sprites.insert(
+        ResourceLocation::new("minecraft", "water"),
+        AtlasSpriteLocation {
+            chunk_id: 99,
+            category: "paintings".to_string(),
+            texture_id: 999,
+            ..Default::default()
+        },
+    );
+
+    // Block water textures
+    address_map.sprites.insert(
+        ResourceLocation::new("minecraft", "block/water_still"),
+        AtlasSpriteLocation {
+            chunk_id: 1,
+            category: "blocks".to_string(),
+            texture_id: 201,
+            ..Default::default()
+        },
+    );
+    address_map.sprites.insert(
+        ResourceLocation::new("minecraft", "block/water_flow"),
+        AtlasSpriteLocation {
+            chunk_id: 1,
+            category: "blocks".to_string(),
+            texture_id: 202,
+            ..Default::default()
+        },
+    );
+
+    // Block lava textures
+    address_map.sprites.insert(
+        ResourceLocation::new("minecraft", "block/lava_still"),
+        AtlasSpriteLocation {
+            chunk_id: 1,
+            category: "blocks".to_string(),
+            texture_id: 203,
+            ..Default::default()
+        },
+    );
+    address_map.sprites.insert(
+        ResourceLocation::new("minecraft", "block/lava_flow"),
+        AtlasSpriteLocation {
+            chunk_id: 1,
+            category: "blocks".to_string(),
+            texture_id: 204,
+            ..Default::default()
+        },
+    );
+
+    // 1. "water" resolves to "block/water_still" (chunk 1, id 201), NOT painting (chunk 99)
+    let res = MaterialResolver::resolve("water", None, &address_map);
+    assert!(res.is_some());
+    let (loc, sp) = res.unwrap();
+    assert_eq!(loc.path, "block/water_still");
+    assert_eq!(sp.texture_id, 201);
+
+    // 2. "flowing_water" resolves to "block/water_flow"
+    let res = MaterialResolver::resolve("flowing_water", None, &address_map);
+    assert!(res.is_some());
+    let (loc, sp) = res.unwrap();
+    assert_eq!(loc.path, "block/water_flow");
+    assert_eq!(sp.texture_id, 202);
+
+    // 3. "lava" resolves to "block/lava_still"
+    let res = MaterialResolver::resolve("lava", None, &address_map);
+    assert!(res.is_some());
+    let (loc, sp) = res.unwrap();
+    assert_eq!(loc.path, "block/lava_still");
+    assert_eq!(sp.texture_id, 203);
+
+    // 4. "flowing_lava" resolves to "block/lava_flow"
+    let res = MaterialResolver::resolve("flowing_lava", None, &address_map);
+    assert!(res.is_some());
+    let (loc, sp) = res.unwrap();
+    assert_eq!(loc.path, "block/lava_flow");
+    assert_eq!(sp.texture_id, 204);
+}

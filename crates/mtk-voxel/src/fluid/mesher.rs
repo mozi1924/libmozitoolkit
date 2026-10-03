@@ -365,7 +365,14 @@ where
     let own_height = get_fluid_base_height(state_str);
     let (flow_vx, flow_vz, flow_angle) =
         calculate_fluid_flow_vector(&mut get_state, x, y, z, fluid_type, own_height);
-    let is_flowing = flow_vx.abs() > 1e-4 || flow_vz.abs() > 1e-4 || state_str.contains("flowing_");
+    let level_int: u32 = props
+        .get("level")
+        .and_then(|l| l.parse().ok())
+        .unwrap_or(0);
+    let is_flowing = (level_int > 0 && !is_waterlogged)
+        || flow_vx.abs() > 1e-4
+        || flow_vz.abs() > 1e-4
+        || state_str.contains("flowing_");
 
     let fluid_state_str = match fluid_type {
         FluidType::Water => "minecraft:water[level=0]",
@@ -561,7 +568,7 @@ where
             uvs,
             -Vec3::Z,
             Direction::North,
-            is_flowing || (c_ne != c_nw),
+            true,
         );
     }
 
@@ -590,7 +597,7 @@ where
             uvs,
             Vec3::Z,
             Direction::South,
-            is_flowing || (c_sw != c_se),
+            true,
         );
     }
 
@@ -619,7 +626,7 @@ where
             uvs,
             -Vec3::X,
             Direction::West,
-            is_flowing || (c_nw != c_sw),
+            true,
         );
     }
 
@@ -648,7 +655,7 @@ where
             uvs,
             Vec3::X,
             Direction::East,
-            is_flowing || (c_se != c_ne),
+            true,
         );
     }
 
