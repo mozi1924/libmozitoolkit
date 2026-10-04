@@ -3,7 +3,7 @@ use mtk_cull::FaceCuller;
 use mtk_voxel::mesher::SectionMesher;
 use mtk_voxel::source::ingest_from_source;
 use mtk_voxel::storage::{VoxelPointCloud, VoxelStorage};
-use mtk_voxel::types::MesherConfig;
+use mtk_voxel::types::{CoordinateSystem, MesherConfig};
 
 #[test]
 fn test_point_cloud_extraction_no_culling_and_roundtrip() {
@@ -158,4 +158,41 @@ fn test_point_cloud_voxel_source_ingestion() {
     assert_eq!(count, 2, "Should have loaded 2 sections");
     assert_eq!(target.get_block(0, 0, 0), "minecraft:stone");
     assert_eq!(target.get_block(16, 0, 0), "minecraft:gold_block");
+}
+
+#[test]
+fn test_point_cloud_origin_centered_alignment() {
+    let mut storage = VoxelStorage::new();
+    storage.set_bounds(0, 0, 0, 10, 10, 10);
+    storage.set_block(0, 0, 0, "minecraft:stone", None);
+    storage.set_block(9, 9, 9, "minecraft:stone", None);
+
+    let config = MesherConfig {
+        origin_centered: true,
+        coordinate_system: CoordinateSystem::ZUpRightHanded,
+        ..Default::default()
+    };
+
+    let cloud = storage.to_point_cloud(&config);
+    assert_eq!(cloud.len(), 2);
+    assert!(cloud.bounds.is_some());
+    let bounds = cloud.bounds.unwrap();
+    assert_eq!(bounds, [0, 0, 0, 10, 10, 10]);
+
+    // For block (0, 0, 0): center in MC is (0.5, 0.5, 0.5)
+    // Bounds center: cx = 5.0, by = 0.0, cz = 5.0
+    // Centered MC: (0.5 - 5.0, 0.5 - 0.0, 0.5 - 5.0) = (-4.5, 0.5, -4.5)
+    // Z-Up (x, -z, y): (-4.5, 4.5, 0.5)
+    for i in 0..cloud.len() {
+        if cloud.block_x[i] == 0 && cloud.block_y[i] == 0 && cloud.block_z[i] == 0 {
+            let p_off = i * 3;
+            assert!((cloud.positions[p_off] - (-4.5)).abs() < 1e-5);
+            assert!((cloud.positions[p_off + 1] - 4.5).abs() < 1e-5);
+            assert!((cloud.positions[p_off + 2] - 0.5).abs() < 1e-5);
+        }
+    }
+
+    // Roundtrip back to storage should preserve exact bounds
+    let restored = cloud.reconstruct_storage();
+    assert_eq!(restored.get_bounds(), (0, 0, 0, 10, 10, 10));
 }

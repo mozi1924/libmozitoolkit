@@ -37,6 +37,8 @@ pub struct VoxelPointCloud {
     pub biomes: Vec<String>,
     /// Optional composite light levels (sky in high nibble, block in low nibble).
     pub light_levels: Vec<u8>,
+    /// Optional bounding box `[min_x, min_y, min_z, size_x, size_y, size_z]` to preserve origin alignment.
+    pub bounds: Option<[i32; 6]>,
 }
 
 impl VoxelPointCloud {
@@ -55,6 +57,7 @@ impl VoxelPointCloud {
             block_states: Vec::with_capacity(capacity),
             biomes: Vec::with_capacity(capacity),
             light_levels: Vec::with_capacity(capacity),
+            bounds: None,
         }
     }
 
@@ -134,6 +137,14 @@ impl VoxelPointCloud {
             AttributeData::UInt8(self.light_levels.clone()),
         ));
 
+        if let Some(b) = self.bounds {
+            mesh.add_custom_attribute(MeshAttribute::new(
+                "mtk_bounds",
+                AttributeDomain::Mesh,
+                AttributeData::Int32(b.to_vec()),
+            ));
+        }
+
         mesh
     }
 
@@ -205,6 +216,15 @@ impl VoxelPointCloud {
             })
             .unwrap_or_else(|| vec![0u8; count]);
 
+        let bounds = mesh
+            .get_custom_attribute("mtk_bounds")
+            .and_then(|a| match &a.data {
+                AttributeData::Int32(v) if v.len() == 6 => {
+                    Some([v[0], v[1], v[2], v[3], v[4], v[5]])
+                }
+                _ => None,
+            });
+
         Ok(Self {
             positions,
             block_x,
@@ -213,6 +233,7 @@ impl VoxelPointCloud {
             block_states,
             biomes,
             light_levels,
+            bounds,
         })
     }
 
@@ -226,6 +247,13 @@ impl VoxelPointCloud {
             return Self::new();
         }
 
+        let mut effective_config = config.clone();
+        let (bx, by, bz, sx, sy, sz) = storage.get_bounds();
+        let has_bounds = sx > 0 && sy > 0 && sz > 0;
+        if effective_config.origin_centered && effective_config.selection_bounds.is_none() && has_bounds {
+            effective_config.selection_bounds = Some(([bx, by, bz], [sx, sy, sz]));
+        }
+
         // Pre-estimate non-air block count for single reallocation
         let total_est: usize = non_empty
             .iter()
@@ -234,6 +262,9 @@ impl VoxelPointCloud {
             .sum();
 
         let mut cloud = Self::with_capacity(total_est);
+        if has_bounds {
+            cloud.bounds = Some([bx, by, bz, sx, sy, sz]);
+        }
 
         for sec_coord in non_empty {
             if let Some(sec) = storage.sections.get(&sec_coord) {
@@ -258,7 +289,7 @@ impl VoxelPointCloud {
 
                             // Compute center point under active coordinate transform and centering
                             let center = Vec3::new(wx as f32 + 0.5, wy as f32 + 0.5, wz as f32 + 0.5);
-                            let transformed = config.transform_position(center);
+                            let transformed = effective_config.transform_position(center);
 
                             let biome = storage.get_biome(wx, wy, wz);
 
@@ -317,7 +348,10 @@ impl VoxelPointCloud {
             max_z = max_z.max(bz);
         }
 
-        if min_x <= max_x && min_y <= max_y && min_z <= max_z {
+        // If bounds were recorded on the cloud, preserve exact bounds for origin stability.
+        if let Some([bx, by, bz, sx, sy, sz]) = self.bounds {
+            storage.set_bounds(bx, by, bz, sx, sy, sz);
+        } else if min_x <= max_x && min_y <= max_y && min_z <= max_z {
             storage.set_bounds(
                 min_x,
                 min_y,

@@ -91,9 +91,20 @@ impl PyVoxelPointCloud {
         }
     }
 
+    /// Returns optional bounding box `[min_x, min_y, min_z, size_x, size_y, size_z]`.
+    #[getter]
+    pub fn bounds(&self) -> Option<[i32; 6]> {
+        self.inner.bounds
+    }
+
+    #[setter]
+    pub fn set_bounds(&mut self, bounds: Option<[i32; 6]>) {
+        self.inner.bounds = bounds;
+    }
+
     /// Batch constructor from flat arrays or lists.
     #[staticmethod]
-    #[pyo3(signature = (positions, block_x, block_y, block_z, block_states, biomes=None, light_levels=None))]
+    #[pyo3(signature = (positions, block_x, block_y, block_z, block_states, biomes=None, light_levels=None, bounds=None))]
     pub fn from_arrays(
         positions: Vec<f32>,
         block_x: Vec<i32>,
@@ -102,6 +113,7 @@ impl PyVoxelPointCloud {
         block_states: Vec<String>,
         biomes: Option<Vec<String>>,
         light_levels: Option<Vec<u8>>,
+        bounds: Option<[i32; 6]>,
     ) -> PyResult<Self> {
         let count = block_x.len();
         if positions.len() != count * 3
@@ -131,6 +143,7 @@ impl PyVoxelPointCloud {
                 block_states,
                 biomes: biomes_vec,
                 light_levels: lights_vec,
+                bounds,
             },
         })
     }
