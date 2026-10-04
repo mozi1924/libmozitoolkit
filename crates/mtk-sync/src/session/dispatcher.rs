@@ -21,9 +21,10 @@ pub fn event_worker_loop(
 ) {
     let mut stream_total_sections: usize = 0;
     let mut stream_received_sections: usize = 0;
+    let mut pending_non_streaming_updates = false;
 
     while running.load(Ordering::Relaxed) {
-        match msg_receiver.recv_timeout(std::time::Duration::from_millis(100)) {
+        match msg_receiver.recv_timeout(std::time::Duration::from_millis(50)) {
             Ok(ClientMessage::Status(status)) => {
                 let _ = event_sender.send(SyncEvent::StatusChange(status));
             }
@@ -32,6 +33,8 @@ pub fn event_worker_loop(
                 break;
             }
             Ok(ClientMessage::PacketReceived(packet)) => {
+                let is_sec_snapshot = matches!(packet, Packet::SectionSnapshot { .. });
+                let more_pending = !msg_receiver.is_empty();
                 handle_packet(
                     packet,
                     &world,
@@ -41,10 +44,46 @@ pub fn event_worker_loop(
                     &mut stream_received_sections,
                     Some(&cmd_sender),
                     &sync_requested,
+                    more_pending,
                 );
+                if is_sec_snapshot && stream_id_atomic.load(Ordering::SeqCst) == 0 {
+                    pending_non_streaming_updates = true;
+                }
             }
-            Err(crossbeam_channel::RecvTimeoutError::Timeout) => continue,
+            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
+                if pending_non_streaming_updates {
+                    pending_non_streaming_updates = false;
+                    let (unified, world_mesh) = {
+                        let mut w = world.write().unwrap();
+                        let _ = w.rebuild_dirty();
+                        let wm = if w.unified_mesh { w.get_world_mesh().cloned() } else { None };
+                        (w.unified_mesh, wm)
+                    };
+                    if unified {
+                        if let Some(mesh) = world_mesh {
+                            let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
+                        }
+                    }
+                }
+                continue;
+            }
             Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
+        }
+
+        // If a batch of non-streaming section snapshots finished and channel is now quiet, remesh once
+        if pending_non_streaming_updates && msg_receiver.is_empty() {
+            pending_non_streaming_updates = false;
+            let (unified, world_mesh) = {
+                let mut w = world.write().unwrap();
+                let _ = w.rebuild_dirty();
+                let wm = if w.unified_mesh { w.get_world_mesh().cloned() } else { None };
+                (w.unified_mesh, wm)
+            };
+            if unified {
+                if let Some(mesh) = world_mesh {
+                    let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
+                }
+            }
         }
     }
 }
@@ -59,28 +98,14 @@ pub fn handle_packet(
     stream_received_sections: &mut usize,
     cmd_sender: Option<&Sender<ClientCommand>>,
     sync_requested: &Arc<AtomicBool>,
+    more_pending: bool,
 ) {
     match packet {
         Packet::SelectionInfo { min_pos, size } => {
-            let (bounds_changed, has_sections, unified) = {
+            {
                 let mut w = world.write().unwrap();
-                let changed = w.set_bounds(min_pos.x, min_pos.y, min_pos.z, size.x, size.y, size.z);
-                let has = !w.storage.get_all_non_empty_sections().is_empty();
-                (changed, has, w.unified_mesh)
-            };
-
-            if bounds_changed && has_sections {
-                sync_requested.store(false, Ordering::SeqCst);
-                let mesh = {
-                    let mut w = world.write().unwrap();
-                    w.rebuild_all().cloned().unwrap_or_default()
-                };
-                if unified && !mesh.is_empty() {
-                    let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
-                }
+                w.set_bounds(min_pos.x, min_pos.y, min_pos.z, size.x, size.y, size.z);
             }
-
-            stream_id_atomic.store(0, Ordering::SeqCst);
             let _ = event_sender.send(SyncEvent::SelectionUpdated { min_pos, size });
         }
 
@@ -211,7 +236,7 @@ pub fn handle_packet(
                     total: *stream_total_sections,
                     message: format!("Receiving chunk ({}/{})", *stream_received_sections, *stream_total_sections),
                 });
-            } else {
+            } else if !more_pending {
                 let (unified, section_mesh, world_mesh) = {
                     let mut w = world.write().unwrap();
                     let s_mesh = w.rebuild_single_section(sec_coord);
@@ -281,6 +306,23 @@ pub fn handle_packet(
             };
 
             if mismatched.is_empty() {
+                let (rebuilt_mesh, is_unified) = {
+                    let mut w = world.write().unwrap();
+                    let needs_remesh = w.get_world_mesh().is_none() || !w.storage.dirty_sections.is_empty();
+                    if needs_remesh && !w.storage.get_all_non_empty_sections().is_empty() {
+                        let m = w.rebuild_all().cloned().unwrap_or_default();
+                        (Some(m), w.unified_mesh)
+                    } else {
+                        (None, w.unified_mesh)
+                    }
+                };
+                if is_unified {
+                    if let Some(m) = rebuilt_mesh {
+                        if !m.is_empty() {
+                            let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: m });
+                        }
+                    }
+                }
                 let _ = event_sender.send(SyncEvent::Verified {
                     is_verified: true,
                     message: "100% in sync with scene".to_string(),

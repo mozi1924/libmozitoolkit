@@ -186,6 +186,7 @@ impl LiveSyncSession {
             &mut 0,
             None,
             &self.sync_requested,
+            false,
         );
     }
 }

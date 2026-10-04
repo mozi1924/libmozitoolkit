@@ -144,6 +144,7 @@ fn test_auto_sync_request_on_manifest_mismatch() {
         &mut rec_sec,
         Some(&cmd_sender),
         &sync_requested,
+        false,
     );
 
     // Should have sent ReqFullSync (0x80)

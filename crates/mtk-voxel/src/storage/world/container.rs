@@ -61,6 +61,8 @@ pub struct VoxelStorage {
     /// Incremental generation counter (Atomic for lock-free multi-thread sync).
     #[cfg_attr(feature = "serde", serde(with = "serde_atomic_u64"))]
     pub generation: AtomicU64,
+    /// Indicates whether bounds were explicitly established (e.g. by set_bounds / set_full_snapshot).
+    pub has_explicit_bounds: bool,
 }
 
 impl Clone for VoxelStorage {
@@ -80,6 +82,7 @@ impl Clone for VoxelStorage {
             known_empty_sections: self.known_empty_sections.clone(),
             section_crc_map: self.section_crc_map.clone(),
             generation: AtomicU64::new(self.generation.load(Ordering::Relaxed)),
+            has_explicit_bounds: self.has_explicit_bounds,
         }
     }
 }
@@ -101,6 +104,7 @@ impl Default for VoxelStorage {
             known_empty_sections: HashSet::new(),
             section_crc_map: HashMap::new(),
             generation: AtomicU64::new(0),
+            has_explicit_bounds: false,
         }
     }
 }
@@ -143,6 +147,7 @@ impl VoxelStorage {
         self.size_x = 0;
         self.size_y = 0;
         self.size_z = 0;
+        self.has_explicit_bounds = false;
         self.advance_generation();
     }
 
@@ -215,6 +220,7 @@ impl VoxelStorage {
             self.size_x = size_x;
             self.size_y = size_y;
             self.size_z = size_z;
+            self.has_explicit_bounds = size_x > 0 && size_y > 0 && size_z > 0;
             self.advance_generation();
             return true;
         }
@@ -238,6 +244,7 @@ impl VoxelStorage {
             self.size_x = size_x;
             self.size_y = size_y;
             self.size_z = size_z;
+            self.has_explicit_bounds = size_x > 0 && size_y > 0 && size_z > 0;
             self.advance_generation();
             return true;
         }
@@ -283,6 +290,7 @@ impl VoxelStorage {
         self.size_x = size_x;
         self.size_y = size_y;
         self.size_z = size_z;
+        self.has_explicit_bounds = true;
         self.advance_generation();
 
         // Mark boundary seam sections dirty
@@ -394,24 +402,28 @@ impl VoxelStorage {
 
     /// Returns the biome registry identifier for block coordinate `(x, y, z)`.
     pub fn get_biome(&self, x: i32, y: i32, z: i32) -> &str {
-        if let Some(b) = self.biome_map.get(&IVec3::new(x, y, z)) {
-            return b;
-        }
-        for dy in [1, -1, 2, -2, 4, -4, 8, -8, 16, -16] {
-            if let Some(b) = self.biome_map.get(&IVec3::new(x, y + dy, z)) {
+        if !self.biome_map.is_empty() {
+            if let Some(b) = self.biome_map.get(&IVec3::new(x, y, z)) {
                 return b;
+            }
+            for dy in [1, -1, 2, -2, 4, -4, 8, -8, 16, -16] {
+                if let Some(b) = self.biome_map.get(&IVec3::new(x, y + dy, z)) {
+                    return b;
+                }
             }
         }
         if let Some(b) = self.biome_column_map.get(&[x, z]) {
             return b;
         }
         // If coordinate is outside active selection bounds, horizontally clamp to nearest valid column
-        if self.size_x > 0 && self.size_z > 0 {
+        if self.size_x > 0 && self.size_z > 0 && !self.biome_column_map.is_empty() {
             let cx = x.clamp(self.min_x, self.min_x + self.size_x - 1);
             let cz = z.clamp(self.min_z, self.min_z + self.size_z - 1);
             if cx != x || cz != z {
-                if let Some(b) = self.biome_map.get(&IVec3::new(cx, y, cz)) {
-                    return b;
+                if !self.biome_map.is_empty() {
+                    if let Some(b) = self.biome_map.get(&IVec3::new(cx, y, cz)) {
+                        return b;
+                    }
                 }
                 if let Some(b) = self.biome_column_map.get(&[cx, cz]) {
                     return b;

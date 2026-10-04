@@ -56,6 +56,7 @@ impl VoxelStorage {
         self.size_x = size_x;
         self.size_y = size_y;
         self.size_z = size_z;
+        self.has_explicit_bounds = true;
 
         let total = (size_x * size_y * size_z) as usize;
         let p_len = palette.len();
@@ -97,10 +98,9 @@ impl VoxelStorage {
 
             if has_biomes {
                 if let (Some(bp), Some(bi)) = (biome_palette, biome_indices) {
-                    if idx < bi.len() {
+                    if bp.len() > 1 && ly == 0 && idx < bi.len() {
                         let b_idx = bi[idx] as usize;
                         if b_idx < bp.len() {
-                            self.biome_map.insert(IVec3::new(wx, wy, wz), bp[b_idx].clone());
                             self.biome_column_map.insert([wx, wz], bp[b_idx].clone());
                         }
                     }
@@ -132,32 +132,34 @@ impl VoxelStorage {
             return false;
         }
 
-        if self.size_x == 0 || self.size_y == 0 || self.size_z == 0 {
-            self.min_x = start_x;
-            self.min_y = start_y;
-            self.min_z = start_z;
-            self.size_x = size_x;
-            self.size_y = size_y;
-            self.size_z = size_z;
-        } else {
-            let cur_max_x = self.min_x + self.size_x;
-            let cur_max_y = self.min_y + self.size_y;
-            let cur_max_z = self.min_z + self.size_z;
+        if !self.has_explicit_bounds {
+            if self.size_x == 0 || self.size_y == 0 || self.size_z == 0 {
+                self.min_x = start_x;
+                self.min_y = start_y;
+                self.min_z = start_z;
+                self.size_x = size_x;
+                self.size_y = size_y;
+                self.size_z = size_z;
+            } else {
+                let cur_max_x = self.min_x + self.size_x;
+                let cur_max_y = self.min_y + self.size_y;
+                let cur_max_z = self.min_z + self.size_z;
 
-            let new_min_x = self.min_x.min(start_x);
-            let new_min_y = self.min_y.min(start_y);
-            let new_min_z = self.min_z.min(start_z);
+                let new_min_x = self.min_x.min(start_x);
+                let new_min_y = self.min_y.min(start_y);
+                let new_min_z = self.min_z.min(start_z);
 
-            let new_max_x = cur_max_x.max(start_x + size_x);
-            let new_max_y = cur_max_y.max(start_y + size_y);
-            let new_max_z = cur_max_z.max(start_z + size_z);
+                let new_max_x = cur_max_x.max(start_x + size_x);
+                let new_max_y = cur_max_y.max(start_y + size_y);
+                let new_max_z = cur_max_z.max(start_z + size_z);
 
-            self.min_x = new_min_x;
-            self.min_y = new_min_y;
-            self.min_z = new_min_z;
-            self.size_x = new_max_x - new_min_x;
-            self.size_y = new_max_y - new_min_y;
-            self.size_z = new_max_z - new_min_z;
+                self.min_x = new_min_x;
+                self.min_y = new_min_y;
+                self.min_z = new_min_z;
+                self.size_x = new_max_x - new_min_x;
+                self.size_y = new_max_y - new_min_y;
+                self.size_z = new_max_z - new_min_z;
+            }
         }
 
         let total_blocks = (size_x * size_y * size_z) as usize;
@@ -205,10 +207,9 @@ impl VoxelStorage {
 
             if has_biomes {
                 if let (Some(bp), Some(bi)) = (biome_palette, biome_indices) {
-                    if idx < bi.len() {
+                    if bp.len() > 1 && ly == 0 && idx < bi.len() {
                         let b_idx = bi[idx] as usize;
                         if b_idx < bp.len() {
-                            self.biome_map.insert(IVec3::new(wx, wy, wz), bp[b_idx].clone());
                             self.biome_column_map.insert([wx, wz], bp[b_idx].clone());
                         }
                     }
