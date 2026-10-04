@@ -6,22 +6,22 @@ fn test_sync_session_initialization() {
     let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None, true);
     let events = session.poll_events();
     assert!(events.is_empty());
-    assert!(session.unified_mesh);
+    assert!(session.world.read().unwrap().unified_mesh);
 }
 
 #[test]
 fn test_sync_session_packet_flow() {
     let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None, true);
 
-    // 1. Manually test storage update and meshing on session storage
+    // 1. Manually test storage update and meshing on session world
     {
-        let mut st = session.storage.write().unwrap();
-        st.set_bounds(0, 0, 0, 16, 16, 16);
+        let mut w = session.world.write().unwrap();
+        w.set_bounds(0, 0, 0, 16, 16, 16);
         let palette = vec!["minecraft:air".to_string(), "minecraft:stone".to_string()];
         let mut grid = vec![0u16; 4096];
         grid[0] = 1;
-        st.set_section_snapshot(0, 0, 0, 0, 0, 0, 16, 16, 16, &palette, &grid, None, None);
-        assert_eq!(st.get_block(0, 0, 0), "minecraft:stone");
+        w.set_section_snapshot(0, 0, 0, 0, 0, 0, 16, 16, 16, &palette, &grid, None, None);
+        assert_eq!(w.get_block(0, 0, 0), "minecraft:stone");
     }
 
     // 2. Test get_world_mesh on session (welded by default: 8 vertices, 36 indices, 24 UVs)
@@ -34,15 +34,11 @@ fn test_sync_session_packet_flow() {
 
 #[test]
 fn test_two_phase_streaming_cross_chunk_culling_and_welding() {
-    use std::collections::HashMap;
     use glam::IVec3;
     use mtk_sync::protocol::packet::Packet;
     use mtk_sync::SyncEvent;
 
     let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None, true);
-    let mut cache = HashMap::new();
-    let mut total_sec = 0;
-    let mut rec_sec = 0;
 
     // Stream 2 sections:
     // Section (0, 0, 0) has stone at (15, 0, 0).
@@ -50,74 +46,46 @@ fn test_two_phase_streaming_cross_chunk_culling_and_welding() {
     // These two stone blocks touch across chunk boundary x=15 and x=16!
 
     // Step 1: StreamBegin
-    session.process_packet_direct(
-        Packet::StreamBegin {
-            stream_id: 42,
-            total_sections: 2,
-            flags: 0,
-        },
-        &mut cache,
-        &mut total_sec,
-        &mut rec_sec,
-    );
+    session.process_packet_direct(Packet::StreamBegin {
+        stream_id: 42,
+        total_sections: 2,
+        flags: 0,
+    });
 
     // Step 2: SectionSnapshot (0, 0, 0)
     let palette_a = vec!["minecraft:air".to_string(), "minecraft:stone".to_string()];
     let mut grid_a = vec![0u16; 4096];
-    // Block at (15, 0, 0): index is 15 in this chunk
-    // In block_index(x, y, z): x * 256 + y * 16 + z
     grid_a[15 * 256] = 1;
-    session.process_packet_direct(
-        Packet::SectionSnapshot {
-            sec_coord: IVec3::new(0, 0, 0),
-            start_pos: IVec3::new(0, 0, 0),
-            size: IVec3::new(16, 16, 16),
-            palette: palette_a,
-            grid_indices: grid_a,
-            biome_palette: None,
-            biome_indices: None,
-        },
-        &mut cache,
-        &mut total_sec,
-        &mut rec_sec,
-    );
-
-    // During streaming, cache should be empty (no premature meshing!)
-    assert!(cache.is_empty());
+    session.process_packet_direct(Packet::SectionSnapshot {
+        sec_coord: IVec3::new(0, 0, 0),
+        start_pos: IVec3::new(0, 0, 0),
+        size: IVec3::new(16, 16, 16),
+        palette: palette_a,
+        grid_indices: grid_a,
+        biome_palette: None,
+        biome_indices: None,
+    });
 
     // Step 3: SectionSnapshot (1, 0, 0)
     let palette_b = vec!["minecraft:air".to_string(), "minecraft:stone".to_string()];
     let mut grid_b = vec![0u16; 4096];
-    // Block at (16, 0, 0): relative x=0 in section (1,0,0) -> index = 0
     grid_b[0] = 1;
-    session.process_packet_direct(
-        Packet::SectionSnapshot {
-            sec_coord: IVec3::new(1, 0, 0),
-            start_pos: IVec3::new(16, 0, 0),
-            size: IVec3::new(16, 16, 16),
-            palette: palette_b,
-            grid_indices: grid_b,
-            biome_palette: None,
-            biome_indices: None,
-        },
-        &mut cache,
-        &mut total_sec,
-        &mut rec_sec,
-    );
-
-    assert!(cache.is_empty());
+    session.process_packet_direct(Packet::SectionSnapshot {
+        sec_coord: IVec3::new(1, 0, 0),
+        start_pos: IVec3::new(16, 0, 0),
+        size: IVec3::new(16, 16, 16),
+        palette: palette_b,
+        grid_indices: grid_b,
+        biome_palette: None,
+        biome_indices: None,
+    });
 
     // Step 4: StreamEnd
-    session.process_packet_direct(
-        Packet::StreamEnd {
-            stream_id: 42,
-            sent_sections: 2,
-            status: mtk_sync::protocol::constants::StreamStatus::Success,
-        },
-        &mut cache,
-        &mut total_sec,
-        &mut rec_sec,
-    );
+    session.process_packet_direct(Packet::StreamEnd {
+        stream_id: 42,
+        sent_sections: 2,
+        status: mtk_sync::protocol::constants::StreamStatus::Success,
+    });
 
     // Meshing should now have completed!
     let events = session.poll_events();
@@ -141,14 +109,13 @@ fn test_two_phase_streaming_cross_chunk_culling_and_welding() {
 
 #[test]
 fn test_auto_sync_request_on_manifest_mismatch() {
-    use std::collections::HashMap;
     use std::sync::atomic::{AtomicBool, AtomicU32};
     use std::sync::Arc;
     use glam::IVec3;
     use mtk_sync::client::ClientCommand;
     use mtk_sync::protocol::constants::PacketType;
     use mtk_sync::protocol::packet::{ManifestSectionEntry, Packet};
-    use mtk_sync::{LiveSyncSession, SyncEvent};
+    use mtk_sync::{session::dispatcher, LiveSyncSession, SyncEvent};
     use mtk_voxel::types::MesherConfig;
 
     let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None, true);
@@ -156,10 +123,8 @@ fn test_auto_sync_request_on_manifest_mismatch() {
     let (event_sender, _event_receiver) = crossbeam_channel::unbounded::<SyncEvent>();
     let sync_requested = Arc::new(AtomicBool::new(false));
     let stream_id = Arc::new(AtomicU32::new(0));
-    let mut cache = HashMap::new();
     let mut total_sec = 0;
     let mut rec_sec = 0;
-    let mut config = MesherConfig::default();
 
     // 1. Cold start / empty storage: manifest with 1 non-empty section
     let manifest_packet = Packet::SectionManifest {
@@ -170,15 +135,10 @@ fn test_auto_sync_request_on_manifest_mismatch() {
         }],
     };
 
-    LiveSyncSession::handle_packet(
+    dispatcher::handle_packet(
         manifest_packet,
-        &session.storage,
+        &session.world,
         &event_sender,
-        &mut config,
-        &session.culler,
-        &session.model_db,
-        session.unified_mesh,
-        &mut cache,
         &stream_id,
         &mut total_sec,
         &mut rec_sec,
@@ -197,4 +157,3 @@ fn test_auto_sync_request_on_manifest_mismatch() {
     }
     assert!(sync_requested.load(std::sync::atomic::Ordering::SeqCst), "sync_requested flag should be set");
 }
-

@@ -36,12 +36,61 @@ impl PyBakedAtlas {
 
     /// Number of baked texture sheets / chunks.
     pub fn get_chunk_count(&self) -> usize {
-        self.inner.chunks.len()
+        self.inner.chunk_count()
     }
 
-    /// Returns chunk metadata: `(width, height, is_animated, category, file_stem)`.
+    /// Returns chunk metadata dictionary by chunk ID:
+    /// `{chunk_id, category, is_animated, width, height, has_normal, has_specular, has_overlay, file_stem, category_chunk_index}`.
+    pub fn get_chunk_info<'py>(&self, py: Python<'py>, chunk_id: u16) -> PyResult<Option<Bound<'py, PyDict>>> {
+        if let Some(cm) = self.inner.get_chunk_meta(chunk_id) {
+            let dict = PyDict::new(py);
+            dict.set_item("chunk_id", cm.chunk_id)?;
+            dict.set_item("category", &cm.category)?;
+            dict.set_item("is_animated", cm.is_animated)?;
+            dict.set_item("category_chunk_index", cm.category_chunk_index)?;
+            dict.set_item("width", cm.width)?;
+            dict.set_item("height", cm.height)?;
+            dict.set_item("has_normal", cm.has_normal)?;
+            dict.set_item("has_specular", cm.has_specular)?;
+            dict.set_item("has_overlay", cm.has_overlay)?;
+            dict.set_item("file_stem", cm.file_stem())?;
+            Ok(Some(dict))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Returns a list of dictionaries for all chunks in the atlas.
+    pub fn get_all_chunks_info<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, pyo3::types::PyList>> {
+        let list = pyo3::types::PyList::empty(py);
+        for cm in self.inner.address_map.get_chunks() {
+            let dict = PyDict::new(py);
+            dict.set_item("chunk_id", cm.chunk_id)?;
+            dict.set_item("category", &cm.category)?;
+            dict.set_item("is_animated", cm.is_animated)?;
+            dict.set_item("category_chunk_index", cm.category_chunk_index)?;
+            dict.set_item("width", cm.width)?;
+            dict.set_item("height", cm.height)?;
+            dict.set_item("has_normal", cm.has_normal)?;
+            dict.set_item("has_specular", cm.has_specular)?;
+            dict.set_item("has_overlay", cm.has_overlay)?;
+            dict.set_item("file_stem", cm.file_stem())?;
+            list.append(dict)?;
+        }
+        Ok(list)
+    }
+
+    /// Returns chunk metadata tuple: `(width, height, is_animated, category, file_stem)`.
     pub fn get_chunk_meta(&self, index: usize) -> PyResult<(u32, u32, bool, String, String)> {
         if let Some(chunk) = self.inner.chunks.get(index) {
+            Ok((
+                chunk.width,
+                chunk.height,
+                chunk.is_animated,
+                chunk.category.clone(),
+                chunk.file_stem(),
+            ))
+        } else if let Some(chunk) = self.inner.address_map.chunks.get(index) {
             Ok((
                 chunk.width,
                 chunk.height,

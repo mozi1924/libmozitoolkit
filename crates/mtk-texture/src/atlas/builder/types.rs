@@ -54,6 +54,22 @@ pub struct BakedAtlas {
     pub address_map: AtlasAddressMap,
 }
 
+impl BakedAtlas {
+    /// Total number of baked atlas sheets / chunks.
+    pub fn chunk_count(&self) -> usize {
+        if !self.chunks.is_empty() {
+            self.chunks.len()
+        } else {
+            self.address_map.chunks.len()
+        }
+    }
+
+    /// Lookup chunk descriptor from address map by chunk ID.
+    pub fn get_chunk_meta(&self, chunk_id: u16) -> Option<&crate::atlas::address_map::AtlasChunkMeta> {
+        self.address_map.get_chunk_meta(chunk_id)
+    }
+}
+
 /// Top-level coordinator for building vanilla Minecraft atlases with PBR sync.
 pub struct AtlasBuilder {
     pub(crate) config: AtlasBuilderConfig,

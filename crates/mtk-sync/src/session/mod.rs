@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
@@ -7,10 +6,9 @@ use crossbeam_channel::{Receiver, Sender};
 use glam::IVec3;
 use mtk_core::mesh::MeshData;
 use mtk_cull::FaceCuller;
-use mtk_model::baked::{BakedModel, BakedModelDatabase};
-use mtk_voxel::mesher::SectionMesher;
-use mtk_voxel::storage::VoxelStorage;
+use mtk_model::baked::BakedModelDatabase;
 use mtk_voxel::types::MesherConfig;
+use mtk_voxel::VoxelWorld;
 
 use crate::client::{ClientMessage, SyncClient};
 use crate::events::SyncEvent;
@@ -20,18 +18,10 @@ pub mod dispatcher;
 
 pub use dispatcher::*;
 
-/// High-level Live Sync Session managing connection, storage, multi-threaded meshing, and event queues.
+/// High-level Live Sync Session managing WebSocket streaming, VoxelWorld scene synchronization, and event queues.
 pub struct LiveSyncSession {
-    /// In-memory 3D Voxel storage shared with background mesher threads.
-    pub storage: Arc<RwLock<VoxelStorage>>,
-    /// Active Mesher configuration.
-    pub config: MesherConfig,
-    /// Face Culling rules.
-    pub culler: FaceCuller,
-    /// Prebaked Minecraft blockstate model database for custom JSON models.
-    pub model_db: Option<Arc<BakedModelDatabase>>,
-    /// Whether to merge all chunk sections into a single, seamless world mesh.
-    pub unified_mesh: bool,
+    /// In-memory 3D Voxel World scene engine managing storage, meshing, and cache.
+    pub world: Arc<RwLock<VoxelWorld>>,
 
     client: Option<SyncClient>,
     event_sender: Sender<SyncEvent>,
@@ -53,12 +43,10 @@ impl LiveSyncSession {
         unified_mesh: bool,
     ) -> Self {
         let (event_sender, event_receiver) = crossbeam_channel::unbounded::<SyncEvent>();
+        let world = VoxelWorld::new(config, culler, model_db, unified_mesh);
+
         Self {
-            storage: Arc::new(RwLock::new(VoxelStorage::new())),
-            config: config.unwrap_or_default(),
-            culler: culler.unwrap_or_default(),
-            model_db,
-            unified_mesh,
+            world: Arc::new(RwLock::new(world)),
             client: None,
             event_sender,
             event_receiver,
@@ -71,12 +59,12 @@ impl LiveSyncSession {
 
     /// Sets or replaces the baked model database.
     pub fn set_model_db(&mut self, model_db: Option<Arc<BakedModelDatabase>>) {
-        self.model_db = model_db;
+        self.world.write().unwrap().set_model_db(model_db);
     }
 
     /// Toggles single unified world mesh mode.
     pub fn set_unified_mesh(&mut self, unified_mesh: bool) {
-        self.unified_mesh = unified_mesh;
+        self.world.write().unwrap().set_unified_mesh(unified_mesh);
     }
 
     /// Starts the live sync session connecting to the given WebSocket `url`.
@@ -91,12 +79,8 @@ impl LiveSyncSession {
             max_reconnect_attempts,
         )?;
 
-        let storage_clone = self.storage.clone();
+        let world_clone = self.world.clone();
         let event_sender_clone = self.event_sender.clone();
-        let config_clone = self.config.clone();
-        let culler_clone = self.culler.clone();
-        let model_db_clone = self.model_db.clone();
-        let unified_mesh = self.unified_mesh;
         let stream_id_clone = self.current_stream_id.clone();
         let sync_requested_clone = self.sync_requested.clone();
         self.sync_requested.store(false, Ordering::SeqCst);
@@ -108,12 +92,8 @@ impl LiveSyncSession {
             event_worker_loop(
                 msg_receiver,
                 cmd_sender,
-                storage_clone,
+                world_clone,
                 event_sender_clone,
-                config_clone,
-                culler_clone,
-                model_db_clone,
-                unified_mesh,
                 stream_id_clone,
                 sync_requested_clone,
                 worker_running,
@@ -148,44 +128,19 @@ impl LiveSyncSession {
         events
     }
 
-    /// Meshes the entire active VoxelStorage volume and returns a unified `MeshData`.
+    /// Queries the current full merged world geometry as a `MeshData`.
     pub fn get_world_mesh(&self) -> MeshData {
-        let st = self.storage.read().unwrap();
-        let non_empty = st.get_all_non_empty_sections();
-        if non_empty.is_empty() {
-            return MeshData::new();
-        }
-
-        let mut config = self.config.clone();
-        if config.origin_centered {
-            let (min_x, min_y, min_z, sz_x, sz_y, sz_z) = st.get_bounds();
-            if sz_x > 0 && sz_y > 0 && sz_z > 0 {
-                config.selection_bounds = Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]));
-            }
-        }
-
-        let padded: Vec<_> = non_empty.iter().map(|&c| st.get_section_padded_array(c)).collect();
-        let db_opt = self.model_db.clone();
-        let model_lookup = move |state: &str| -> Option<Arc<BakedModel>> {
-            db_opt.as_ref().and_then(|db| db.get(state).cloned().map(Arc::new))
-        };
-
-        if let Ok(results) = SectionMesher::mesh_sections_parallel(
-            &padded,
-            &self.culler,
-            model_lookup,
-            &config,
-            None,
-        ) {
-            let section_meshes: Vec<_> = results.into_iter().map(|(_, m)| m).collect();
-            let mut merged = MeshData::merge_all(&section_meshes);
-            if config.weld_vertices {
-                merged.weld_spatial_vertices(1e-4);
-            }
-            merged
+        let mut w = self.world.write().unwrap();
+        if let Some(m) = w.get_world_mesh() {
+            m.clone()
         } else {
-            MeshData::new()
+            w.rebuild_all().cloned().unwrap_or_default()
         }
+    }
+
+    /// Returns the active slice of Atlas Chunk IDs referenced by the current world mesh.
+    pub fn used_chunk_ids(&self) -> Vec<u32> {
+        self.world.read().unwrap().used_chunk_ids().to_vec()
     }
 
     /// Sends a Full Sync Request (0x80) to Minecraft server.
@@ -220,62 +175,17 @@ impl LiveSyncSession {
         }
     }
 
-    /// Dispatches a raw packet into the session pipeline synchronously (useful for testing or direct ingestion).
-    pub fn process_packet_direct(
-        &self,
-        packet: Packet,
-        section_mesh_cache: &mut HashMap<IVec3, MeshData>,
-        stream_total_sections: &mut usize,
-        stream_received_sections: &mut usize,
-    ) {
-        let mut config = self.config.clone();
+    /// Dispatches a raw packet into the session pipeline synchronously.
+    pub fn process_packet_direct(&self, packet: Packet) {
         dispatcher::handle_packet(
             packet,
-            &self.storage,
+            &self.world,
             &self.event_sender,
-            &mut config,
-            &self.culler,
-            &self.model_db,
-            self.unified_mesh,
-            section_mesh_cache,
             &self.current_stream_id,
-            stream_total_sections,
-            stream_received_sections,
+            &mut 0,
+            &mut 0,
             None,
             &self.sync_requested,
-        );
-    }
-
-    /// Associated function for packet handling (compatibility).
-    pub fn handle_packet(
-        packet: Packet,
-        storage: &Arc<RwLock<VoxelStorage>>,
-        event_sender: &Sender<SyncEvent>,
-        config: &mut MesherConfig,
-        culler: &FaceCuller,
-        model_db: &Option<Arc<BakedModelDatabase>>,
-        unified_mesh: bool,
-        section_mesh_cache: &mut HashMap<IVec3, MeshData>,
-        stream_id_atomic: &Arc<AtomicU32>,
-        stream_total_sections: &mut usize,
-        stream_received_sections: &mut usize,
-        cmd_sender: Option<&Sender<crate::client::ClientCommand>>,
-        sync_requested: &Arc<AtomicBool>,
-    ) {
-        dispatcher::handle_packet(
-            packet,
-            storage,
-            event_sender,
-            config,
-            culler,
-            model_db,
-            unified_mesh,
-            section_mesh_cache,
-            stream_id_atomic,
-            stream_total_sections,
-            stream_received_sections,
-            cmd_sender,
-            sync_requested,
         );
     }
 }

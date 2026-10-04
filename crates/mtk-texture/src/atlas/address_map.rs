@@ -215,4 +215,14 @@ impl AtlasAddressMap {
     pub fn from_json(json_str: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(json_str)
     }
+
+    /// Lookup chunk descriptor by chunk ID.
+    pub fn get_chunk_meta(&self, chunk_id: u16) -> Option<&AtlasChunkMeta> {
+        self.chunks.iter().find(|c| c.chunk_id == chunk_id)
+    }
+
+    /// Returns a slice of all chunk descriptors.
+    pub fn get_chunks(&self) -> &[AtlasChunkMeta] {
+        &self.chunks
+    }
 }

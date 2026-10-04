@@ -615,6 +615,34 @@ impl MeshData {
             ));
         }
     }
+
+    /// Returns a sorted list of unique material slot IDs present across all faces in this mesh.
+    pub fn used_materials(&self) -> Vec<MaterialSlotId> {
+        let mut set = std::collections::BTreeSet::new();
+        for &m in &self.face_materials {
+            set.insert(m);
+        }
+        set.into_iter().collect()
+    }
+
+    /// Compacts `face_materials` to contiguous indices `0..N-1` and returns the mapping of original material IDs.
+    pub fn compact_materials(&mut self) -> Vec<MaterialSlotId> {
+        let original_ids = self.used_materials();
+        if original_ids.is_empty() {
+            return Vec::new();
+        }
+        let id_to_slot: HashMap<MaterialSlotId, MaterialSlotId> = original_ids
+            .iter()
+            .enumerate()
+            .map(|(slot, &orig)| (orig, slot as MaterialSlotId))
+            .collect();
+        for m in &mut self.face_materials {
+            if let Some(&new_slot) = id_to_slot.get(m) {
+                *m = new_slot;
+            }
+        }
+        original_ids
+    }
 }
 
 #[cfg(test)]
@@ -690,5 +718,17 @@ mod tests {
         } else {
             panic!("Expected Int32 attribute data");
         }
+    }
+
+    #[test]
+    fn test_mesh_used_and_compact_materials() {
+        let mut mesh = MeshData::new();
+        mesh.face_materials = vec![5, 0, 5, 12, 0];
+        assert_eq!(mesh.used_materials(), vec![0, 5, 12]);
+
+        let original_mapping = mesh.compact_materials();
+        assert_eq!(original_mapping, vec![0, 5, 12]);
+        assert_eq!(mesh.face_materials, vec![1, 0, 1, 2, 0]);
+        assert_eq!(mesh.used_materials(), vec![0, 1, 2]);
     }
 }

@@ -199,12 +199,17 @@ impl PyLiveSyncSession {
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e))
     }
 
+    /// Returns the unique Atlas Chunk IDs used by the active world mesh.
+    pub fn used_chunk_ids(&self) -> Vec<u32> {
+        self.inner.used_chunk_ids()
+    }
+
     /// Returns a copy of the underlying `VoxelStorage`.
     pub fn get_storage(&self) -> PyResult<PyVoxelStorage> {
-        let st = self.inner
-            .storage
+        let w = self.inner
+            .world
             .read()
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("Storage lock poisoned: {}", e)))?;
-        Ok(PyVoxelStorage { inner: st.clone() })
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("World lock poisoned: {}", e)))?;
+        Ok(PyVoxelStorage { inner: w.storage.clone() })
     }
 }

@@ -1,15 +1,9 @@
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, RwLock};
 
 use crossbeam_channel::{Receiver, Sender};
 use glam::IVec3;
-use mtk_core::mesh::MeshData;
-use mtk_cull::FaceCuller;
-use mtk_model::baked::{BakedModel, BakedModelDatabase};
-use mtk_voxel::mesher::{DeltaMesher, SectionMesher};
-use mtk_voxel::storage::VoxelStorage;
-use mtk_voxel::types::MesherConfig;
+use mtk_voxel::VoxelWorld;
 
 use crate::client::{ClientCommand, ClientMessage};
 use crate::events::SyncEvent;
@@ -19,17 +13,12 @@ use crate::protocol::*;
 pub fn event_worker_loop(
     msg_receiver: Receiver<ClientMessage>,
     cmd_sender: Sender<ClientCommand>,
-    storage: Arc<RwLock<VoxelStorage>>,
+    world: Arc<RwLock<VoxelWorld>>,
     event_sender: Sender<SyncEvent>,
-    mut config: MesherConfig,
-    culler: FaceCuller,
-    model_db: Option<Arc<BakedModelDatabase>>,
-    unified_mesh: bool,
     stream_id_atomic: Arc<AtomicU32>,
     sync_requested: Arc<AtomicBool>,
     running: Arc<AtomicBool>,
 ) {
-    let mut section_mesh_cache: HashMap<IVec3, MeshData> = HashMap::new();
     let mut stream_total_sections: usize = 0;
     let mut stream_received_sections: usize = 0;
 
@@ -45,13 +34,8 @@ pub fn event_worker_loop(
             Ok(ClientMessage::PacketReceived(packet)) => {
                 handle_packet(
                     packet,
-                    &storage,
+                    &world,
                     &event_sender,
-                    &mut config,
-                    &culler,
-                    &model_db,
-                    unified_mesh,
-                    &mut section_mesh_cache,
                     &stream_id_atomic,
                     &mut stream_total_sections,
                     &mut stream_received_sections,
@@ -68,76 +52,34 @@ pub fn event_worker_loop(
 /// Dispatches a single packet into the session pipeline and triggers corresponding meshing and events.
 pub fn handle_packet(
     packet: Packet,
-    storage: &Arc<RwLock<VoxelStorage>>,
+    world: &Arc<RwLock<VoxelWorld>>,
     event_sender: &Sender<SyncEvent>,
-    config: &mut MesherConfig,
-    culler: &FaceCuller,
-    model_db: &Option<Arc<BakedModelDatabase>>,
-    unified_mesh: bool,
-    section_mesh_cache: &mut HashMap<IVec3, MeshData>,
     stream_id_atomic: &Arc<AtomicU32>,
     stream_total_sections: &mut usize,
     stream_received_sections: &mut usize,
     cmd_sender: Option<&Sender<ClientCommand>>,
     sync_requested: &Arc<AtomicBool>,
 ) {
-    let model_lookup = |state: &str| -> Option<Arc<BakedModel>> {
-        model_db.as_ref().and_then(|db| db.get(state).cloned().map(Arc::new))
-    };
-
     match packet {
         Packet::SelectionInfo { min_pos, size } => {
-            let bounds_changed = {
-                let mut st = storage.write().unwrap();
-                st.set_bounds(min_pos.x, min_pos.y, min_pos.z, size.x, size.y, size.z)
+            let (bounds_changed, has_sections, unified) = {
+                let mut w = world.write().unwrap();
+                let changed = w.set_bounds(min_pos.x, min_pos.y, min_pos.z, size.x, size.y, size.z);
+                let has = !w.storage.get_all_non_empty_sections().is_empty();
+                (changed, has, w.unified_mesh)
             };
-            let new_bounds = Some(([min_pos.x, min_pos.y, min_pos.z], [size.x, size.y, size.z]));
-            let bounds_differ = config.selection_bounds != new_bounds;
-            if config.origin_centered {
-                config.selection_bounds = new_bounds;
-            }
 
-            if bounds_changed || bounds_differ {
+            if bounds_changed && has_sections {
                 sync_requested.store(false, Ordering::SeqCst);
-                section_mesh_cache.clear();
-                // If storage already has sections, rebuild all of them so world mesh reflects new origin/bounds
-                let non_empty = {
-                    let st = storage.read().unwrap();
-                    st.get_all_non_empty_sections()
+                let mesh = {
+                    let mut w = world.write().unwrap();
+                    w.rebuild_all().cloned().unwrap_or_default()
                 };
-                if !non_empty.is_empty() {
-                    let padded_sections: Vec<_> = {
-                        let st = storage.read().unwrap();
-                        non_empty
-                            .iter()
-                            .map(|&coord| st.get_section_padded_array(coord))
-                            .collect()
-                    };
-                    if let Ok(results) = SectionMesher::mesh_sections_parallel(
-                        &padded_sections,
-                        culler,
-                        &model_lookup,
-                        config,
-                        None,
-                    ) {
-                        for (coord, mesh) in results {
-                            if !mesh.is_empty() {
-                                section_mesh_cache.insert(coord, mesh);
-                            }
-                        }
-                        if unified_mesh {
-                            let meshes: Vec<_> = section_mesh_cache.values().cloned().collect();
-                            let mut world_mesh = MeshData::merge_all(&meshes);
-                            if config.weld_vertices {
-                                world_mesh.weld_spatial_vertices(1e-4);
-                            }
-                            let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
-                        }
-                    }
+                if unified && !mesh.is_empty() {
+                    let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
                 }
             }
 
-            // Invalidate any previous stream state on selection change
             stream_id_atomic.store(0, Ordering::SeqCst);
             let _ = event_sender.send(SyncEvent::SelectionUpdated { min_pos, size });
         }
@@ -166,10 +108,9 @@ pub fn handle_packet(
             biome_palette,
             biome_indices,
         } => {
-            // Check if identical to skip heavy rebuild
             let identical = {
-                let st = storage.read().unwrap();
-                st.is_snapshot_identical(
+                let w = world.read().unwrap();
+                w.storage.is_snapshot_identical(
                     min_pos.x,
                     min_pos.y,
                     min_pos.z,
@@ -189,10 +130,9 @@ pub fn handle_packet(
                 return;
             }
 
-            // Ingest full snapshot
-            let non_empty_sections = {
-                let mut st = storage.write().unwrap();
-                st.set_full_snapshot(
+            let (total_sections, unified, mesh) = {
+                let mut w = world.write().unwrap();
+                w.set_full_snapshot(
                     min_pos.x,
                     min_pos.y,
                     min_pos.z,
@@ -204,68 +144,34 @@ pub fn handle_packet(
                     biome_palette.as_deref(),
                     biome_indices.as_deref(),
                 );
-                st.get_all_non_empty_sections()
+                let total = w.storage.get_all_non_empty_sections().len();
+                let m = w.rebuild_all().cloned().unwrap_or_default();
+                (total, w.unified_mesh, m)
             };
 
-            let total = non_empty_sections.len();
             let _ = event_sender.send(SyncEvent::StreamProgress {
-                current: 0,
-                total,
-                message: format!("Meshing {} sections...", total),
+                current: total_sections,
+                total: total_sections,
+                message: format!("Meshing {} sections...", total_sections),
             });
 
-            // Build meshes in parallel using Rayon
-            let padded_sections: Vec<_> = {
-                let st = storage.read().unwrap();
-                non_empty_sections
-                    .iter()
-                    .map(|&coord| st.get_section_padded_array(coord))
-                    .collect()
-            };
-
-            section_mesh_cache.clear();
-
-            if config.origin_centered {
-                config.selection_bounds = Some(([min_pos.x, min_pos.y, min_pos.z], [size.x, size.y, size.z]));
-            }
-
-            if let Ok(results) = SectionMesher::mesh_sections_parallel(
-                &padded_sections,
-                culler,
-                &model_lookup,
-                config,
-                None,
-            ) {
-                for (coord, mesh) in results {
-                    if !mesh.is_empty() {
-                        section_mesh_cache.insert(coord, mesh);
-                    }
-                }
-
-                if unified_mesh {
-                    let mut world_mesh = MeshData::new();
-                    for mesh in section_mesh_cache.values() {
-                        world_mesh.append_mesh(mesh);
-                    }
-                    if config.weld_vertices {
-                        world_mesh.weld_spatial_vertices(1e-4);
-                    }
-                    let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
-                } else {
-                    for (i, (coord, mesh)) in section_mesh_cache.iter().enumerate() {
-                        let _ = event_sender.send(SyncEvent::SectionMeshReady { coord: *coord, mesh: mesh.clone() });
-                        let _ = event_sender.send(SyncEvent::StreamProgress {
-                            current: i + 1,
-                            total,
-                            message: format!("Meshed chunk ({}/{})", i + 1, total),
-                        });
-                    }
+            if unified {
+                let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
+            } else {
+                let w = world.read().unwrap();
+                for (i, (&coord, s_mesh)) in w.get_section_cache().iter().enumerate() {
+                    let _ = event_sender.send(SyncEvent::SectionMeshReady { coord, mesh: s_mesh.clone() });
+                    let _ = event_sender.send(SyncEvent::StreamProgress {
+                        current: i + 1,
+                        total: total_sections,
+                        message: format!("Meshed chunk ({}/{})", i + 1, total_sections),
+                    });
                 }
             }
 
             let _ = event_sender.send(SyncEvent::StreamFinished {
                 stream_id: 0,
-                built_sections: total,
+                built_sections: total_sections,
             });
         }
 
@@ -278,10 +184,9 @@ pub fn handle_packet(
             biome_palette,
             biome_indices,
         } => {
-            // Ingest into VoxelStorage
             {
-                let mut st = storage.write().unwrap();
-                st.set_section_snapshot(
+                let mut w = world.write().unwrap();
+                w.set_section_snapshot(
                     sec_coord.x,
                     sec_coord.y,
                     sec_coord.z,
@@ -306,40 +211,22 @@ pub fn handle_packet(
                     total: *stream_total_sections,
                     message: format!("Receiving chunk ({}/{})", *stream_received_sections, *stream_total_sections),
                 });
-                // Two-phase streaming: wait for StreamEnd so all neighboring sections are present in memory.
             } else {
-                // Out-of-stream single-section update or repair
-                let padded = {
-                    let st = storage.read().unwrap();
-                    if config.origin_centered && config.selection_bounds.is_none() {
-                        let (min_x, min_y, min_z, sz_x, sz_y, sz_z) = st.get_bounds();
-                        if sz_x > 0 && sz_y > 0 && sz_z > 0 {
-                            config.selection_bounds = Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]));
-                        }
-                    }
-                    st.get_section_padded_array(sec_coord)
+                let (unified, section_mesh, world_mesh) = {
+                    let mut w = world.write().unwrap();
+                    let s_mesh = w.rebuild_single_section(sec_coord);
+                    let w_mesh = if w.unified_mesh { w.get_world_mesh().cloned() } else { None };
+                    (w.unified_mesh, s_mesh, w_mesh)
                 };
 
-                let mesh = SectionMesher::mesh_section(&padded, culler, &model_lookup, config);
-                if mesh.is_empty() {
-                    section_mesh_cache.remove(&sec_coord);
-                } else {
-                    section_mesh_cache.insert(sec_coord, mesh.clone());
-                }
-
-                if unified_mesh {
-                    let mut world_mesh = MeshData::new();
-                    for m in section_mesh_cache.values() {
-                        world_mesh.append_mesh(m);
+                if unified {
+                    if let Some(mesh) = world_mesh {
+                        let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
                     }
-                    if config.weld_vertices {
-                        world_mesh.weld_spatial_vertices(1e-4);
-                    }
-                    let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
                 } else {
                     let _ = event_sender.send(SyncEvent::SectionMeshReady {
                         coord: sec_coord,
-                        mesh,
+                        mesh: section_mesh,
                     });
                 }
             }
@@ -355,39 +242,23 @@ pub fn handle_packet(
                 .map(|c| (c.rel_pos.x + min_pos.x, c.rel_pos.y + min_pos.y, c.rel_pos.z + min_pos.z, c.state.as_str()))
                 .collect();
 
-            let rebuilt_meshes = {
-                let mut st = storage.write().unwrap();
-                st.apply_delta_update(min_pos.x, min_pos.y, min_pos.z, &borrowed_changes);
-                if config.origin_centered && config.selection_bounds.is_none() {
-                    let (min_x, min_y, min_z, sz_x, sz_y, sz_z) = st.get_bounds();
-                    if sz_x > 0 && sz_y > 0 && sz_z > 0 {
-                        config.selection_bounds = Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]));
-                    }
-                }
-                DeltaMesher::rebuild_dirty_sections(&mut st, culler, &model_lookup, config)
+            let (rebuilt, unified, world_mesh) = {
+                let mut w = world.write().unwrap();
+                w.apply_delta_update(min_pos.x, min_pos.y, min_pos.z, &borrowed_changes);
+                let r = w.rebuild_dirty().unwrap_or_default();
+                let wm = if w.unified_mesh { w.get_world_mesh().cloned() } else { None };
+                (r, w.unified_mesh, wm)
             };
 
-            let affected: Vec<IVec3> = rebuilt_meshes.iter().map(|(c, _)| *c).collect();
-            for (coord, mesh) in rebuilt_meshes {
-                if mesh.is_empty() {
-                    section_mesh_cache.remove(&coord);
-                } else {
-                    section_mesh_cache.insert(coord, mesh.clone());
+            let affected: Vec<IVec3> = rebuilt.iter().map(|(c, _)| *c).collect();
+            if unified {
+                if let Some(mesh) = world_mesh {
+                    let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
                 }
-                if !unified_mesh {
+            } else {
+                for (coord, mesh) in rebuilt {
                     let _ = event_sender.send(SyncEvent::SectionMeshReady { coord, mesh });
                 }
-            }
-
-            if unified_mesh {
-                let mut world_mesh = MeshData::new();
-                for m in section_mesh_cache.values() {
-                    world_mesh.append_mesh(m);
-                }
-                if config.weld_vertices {
-                    world_mesh.weld_spatial_vertices(1e-4);
-                }
-                let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
             }
 
             let _ = event_sender.send(SyncEvent::DeltaApplied {
@@ -403,9 +274,9 @@ pub fn handle_packet(
                 .collect();
 
             let (mismatched, is_storage_empty) = {
-                let mut st = storage.write().unwrap();
-                let mismatches = st.validate_manifest(&raw_entries, None);
-                let empty = st.get_all_non_empty_sections().is_empty();
+                let mut w = world.write().unwrap();
+                let mismatches = w.storage.validate_manifest(&raw_entries, None);
+                let empty = w.storage.get_all_non_empty_sections().is_empty();
                 (mismatches, empty)
             };
 
@@ -420,7 +291,6 @@ pub fn handle_packet(
                     message: format!("Detected {} out-of-sync sections", mismatched.len()),
                 });
 
-                // Automatically request synchronization according to live sync protocol contract
                 let is_streaming = stream_id_atomic.load(Ordering::SeqCst) != 0;
                 if let Some(sender) = cmd_sender {
                     if !is_streaming && !sync_requested.load(Ordering::SeqCst) {
@@ -462,56 +332,19 @@ pub fn handle_packet(
             stream_id_atomic.store(0, Ordering::SeqCst);
             sync_requested.store(false, Ordering::SeqCst);
 
-            // Phase 2 (BUILD): Build all sections with complete neighbor data in memory
-            let (bounds, padded_sections) = {
-                let st = storage.read().unwrap();
-                let b = st.get_bounds();
-                let non_empty = st.get_all_non_empty_sections();
-                let padded: Vec<_> = non_empty
-                    .iter()
-                    .map(|&c| st.get_section_padded_array(c))
-                    .collect();
-                (b, padded)
+            let (total, unified, mesh) = {
+                let mut w = world.write().unwrap();
+                let m = w.rebuild_all().cloned().unwrap_or_default();
+                let total_sections = w.get_section_cache().len();
+                (total_sections, w.unified_mesh, m)
             };
 
-            if config.origin_centered {
-                let (min_x, min_y, min_z, sz_x, sz_y, sz_z) = bounds;
-                if sz_x > 0 && sz_y > 0 && sz_z > 0 {
-                    config.selection_bounds = Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]));
-                }
-            }
-
-            section_mesh_cache.clear();
-            let total = padded_sections.len();
-
-            if total > 0 {
-                if let Ok(results) = SectionMesher::mesh_sections_parallel(
-                    &padded_sections,
-                    culler,
-                    &model_lookup,
-                    config,
-                    None,
-                ) {
-                    for (coord, mesh) in results {
-                        if !mesh.is_empty() {
-                            section_mesh_cache.insert(coord, mesh);
-                        }
-                    }
-                }
-            }
-
-            if unified_mesh {
-                let mut world_mesh = MeshData::new();
-                for m in section_mesh_cache.values() {
-                    world_mesh.append_mesh(m);
-                }
-                if config.weld_vertices {
-                    world_mesh.weld_spatial_vertices(1e-4);
-                }
-                let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
+            if unified {
+                let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
             } else {
-                for (i, (coord, mesh)) in section_mesh_cache.iter().enumerate() {
-                    let _ = event_sender.send(SyncEvent::SectionMeshReady { coord: *coord, mesh: mesh.clone() });
+                let w = world.read().unwrap();
+                for (i, (&coord, s_mesh)) in w.get_section_cache().iter().enumerate() {
+                    let _ = event_sender.send(SyncEvent::SectionMeshReady { coord, mesh: s_mesh.clone() });
                     let _ = event_sender.send(SyncEvent::StreamProgress {
                         current: i + 1,
                         total,

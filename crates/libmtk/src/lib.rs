@@ -125,6 +125,7 @@ pub use mtk_voxel::source::{ingest_from_source, VoxelReader, VoxelSource, VoxelW
 pub use mtk_voxel::storage::{PaddedVoxelArray, SectionStorage};
 pub use mtk_voxel::types::{CoordinateSystem, MesherConfig, WorldMeshBuildResult};
 pub use mtk_voxel::world::VoxelStorage;
+pub use mtk_voxel::VoxelWorld;
 
 #[cfg(feature = "sync")]
 pub use mtk_sync as sync;

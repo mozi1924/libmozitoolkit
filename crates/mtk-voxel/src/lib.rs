@@ -33,6 +33,9 @@ pub use storage::{
     PADDED_VOLUME, SECTION_SIZE, SECTION_VOLUME,
 };
 pub use types::{CoordinateSystem, MesherConfig, VoxelError, WorldMeshBuildResult};
+pub use world::VoxelWorld;
+
+pub mod world;
 
 // Backward-compatibility module aliases
 pub mod ao {
@@ -46,7 +49,4 @@ pub mod delta_mesher {
 }
 pub mod fluid_uv {
     pub use crate::fluid::uv::*;
-}
-pub mod world {
-    pub use crate::storage::world::*;
 }

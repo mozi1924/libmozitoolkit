@@ -336,6 +336,16 @@ impl PyMeshData {
         memoryview::colors_memoryview(self, py)
     }
 
+    /// Returns a list of unique material slot IDs present across all faces in this mesh.
+    pub fn used_materials(&self) -> Vec<u16> {
+        self.inner.used_materials()
+    }
+
+    /// Compacts face material slot IDs into contiguous 0..N-1 and returns original mapping.
+    pub fn compact_materials(&mut self) -> Vec<u16> {
+        self.inner.compact_materials()
+    }
+
     // -------------------------------------------------------------------------
     // Custom Attributes & List Delegates (implemented in attributes.rs)
     // -------------------------------------------------------------------------
