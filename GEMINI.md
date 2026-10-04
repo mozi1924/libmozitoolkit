@@ -39,12 +39,12 @@
 - 所有生物群系（Biome）、方块 Tint 与颜色映射逻辑必须且只能以 `mtk-material::biome` 为唯一权威事实源（Single Source of Truth, SSOT），内置 66 种原版规范调色板与线性色彩数学（sRGB 与 Linear RGBA 双向转换）。
 - 严禁在其他子模块（如 `mtk-voxel`）或宿主前端中分散、硬编码重复的生物群系调色板。
 
-### 规则 6：工作区虚拟环境与轮子编译规范 (Workspace Venv & Wheel Build Policy)
+### 规则 6：工作区虚拟环境、双态联动与轮子编译规范 (Workspace Venv & Dual-Mode Build Policy)
 - 当需要使用 `maturin` 编译 Python 绑定轮子（Wheel, `.whl`）或进行 Python 绑定调试时，**必须严格使用工作区内的虚拟环境（如 `/home/mozi/libmozitoolkit/.venv`）**。
 - 若当前工作区内不存在虚拟环境，**必须首先在工作区根目录下创建专属虚拟环境**（如 `python3 -m venv .venv`），并在该虚拟环境中安装 `maturin`，严禁污染或依赖宿主系统全局环境。
-- **Blender 4.2+ 扩展轮子规范与严禁全局 bpy 污染**：
-  - 编译产物必须是符合 CPython 3.11+ 标准 ABI 与目标平台 Tag 的规范 Wheel 包。
-  - 编译完成的 Release 轮子包（`target/wheels/*.whl`）**必须且仅能同步拷贝至 Blender 插件前端目录（`/home/mozi/MoziToolKit/wheels/`）**供 Blender 4.2+ 扩展清单声明与本地隔离加载。
+- **开发态直通与发布态隔离 (Dev Direct-Link vs Release Wheel Isolation)**：
+  - **日常开发态 (Dev Direct Link)**：`cargo build --release -p mtk-py --features extension-module` 产出 `target/release/liblibmtk_py.so`。通过软链接（`MoziToolKit/dev/lib/libmtk_py.so`）直接打通 Blender 宿主，代码改动后 Blender 重载插件即可即时生效，严禁在开发期频繁构建或安装轮子。
+  - **发布态 (Release Packaging)**：对外正式打包时通过 `maturin build --release` 产出符合 CPython 3.11+ 标准 ABI (`abi3`) 的规范 Wheel 包，由 `MoziToolKit/build.py` 在发布阶段统一装配并隔离。
   - **严禁将编译产物直接安装（`pip install`）到宿主系统的全局 Python 或 Blender 全局 `bpy` 环境中**，杜绝破坏环境隔离与沙箱完整性。
 
 ### 规则 7：资产缓存与预编译规范 (Precompile Cache Contract)
