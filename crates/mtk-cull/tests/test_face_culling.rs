@@ -434,10 +434,10 @@ fn test_culler_cache_eviction() {
 fn test_vegetation_and_transparent_culling() {
     let culler = FaceCuller::default();
 
-    // 1. Kelp and Seagrass (data-driven waterlogged property)
-    let kelp = culler.get_meta("minecraft:kelp[age=0,waterlogged=true]", None, None);
+    // 1. Kelp and Seagrass (canonical inherently submerged vanilla blocks)
+    let kelp = culler.get_meta("minecraft:kelp[age=0]", None, None);
     let dry_kelp = culler.get_meta("minecraft:kelp[age=0,waterlogged=false]", None, None);
-    let seagrass = culler.get_meta("minecraft:seagrass[waterlogged=true]", None, None);
+    let seagrass = culler.get_meta("minecraft:seagrass", None, None);
     let stone = culler.get_meta("minecraft:stone", None, None);
     let water = culler.get_meta("minecraft:water[level=0]", None, None);
 
@@ -456,6 +456,10 @@ fn test_vegetation_and_transparent_culling() {
 
     // Water against waterlogged kelp: water boundary face skips rendering (culls) to avoid inner split walls
     assert!(!culler.should_render_face(&water, Some(&kelp), Direction::Down, None, None, None));
+    // Water against waterlogged seagrass: water boundary face skips rendering (culls)
+    assert!(!culler.should_render_face(&water, Some(&seagrass), Direction::Down, None, None, None));
+    // Water against dry kelp: water boundary face MUST render
+    assert!(culler.should_render_face(&water, Some(&dry_kelp), Direction::Down, None, None, None));
 
     // 2. Leaf litter
     let leaf_litter = culler.get_meta("minecraft:leaf_litter", None, None);

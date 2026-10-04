@@ -19,22 +19,37 @@ use super::catalog::{
 };
 use super::parametric::derive_parametric_face_shapes;
 
-/// Predicate returning true if the block is canonically inherently waterlogged (kelp, seagrass, coral, etc.).
-///
-/// # Deprecation
-/// `libmtk` uses pure data-driven waterlogged determination via the `waterlogged=true` block property.
-#[deprecated(note = "libmtk uses pure data-driven waterlogged determination via `waterlogged=true` property")]
-pub fn is_inherently_waterlogged_name(name: &str) -> bool {
+/// Canonical vanilla Minecraft blocks that canonically only exist submerged in water and
+/// do not carry an explicit `waterlogged` property in their blockstate string.
+#[inline]
+pub fn is_inherently_submerged_block(name: &str) -> bool {
     let clean = name.strip_prefix("minecraft:").unwrap_or(name);
-    clean.contains("coral")
-        || clean.contains("kelp")
-        || clean.contains("seagrass")
-        || clean == "sea_pickle"
-        || clean == "bubble_column"
+    let lower = clean.to_ascii_lowercase();
+    matches!(
+        lower.as_str(),
+        "seagrass" | "tall_seagrass" | "kelp" | "kelp_plant" | "bubble_column"
+    )
+}
+
+/// Predicate returning true if the block is canonically inherently waterlogged (kelp, seagrass, etc.).
+pub fn is_inherently_waterlogged_name(name: &str) -> bool {
+    is_inherently_submerged_block(name)
 }
 
 /// Fast extraction of raw block name and properties from state string.
+///
+/// Automatically populates `waterlogged="true"` for inherently submerged blocks
+/// (such as `seagrass` and `kelp`) unless explicitly configured otherwise (e.g. `waterlogged=false`).
 pub fn parse_block_name_and_props(state_str: &str) -> (String, BTreeMap<String, String>) {
+    let (name, mut props) = parse_raw_block_name_and_props(state_str);
+    if is_inherently_submerged_block(&name) && !props.contains_key("waterlogged") {
+        props.insert("waterlogged".to_string(), "true".to_string());
+    }
+    (name, props)
+}
+
+/// Raw parser extracting unnormalized block name and property map without default injection.
+fn parse_raw_block_name_and_props(state_str: &str) -> (String, BTreeMap<String, String>) {
     let trimmed = state_str.trim();
     if trimmed.is_empty() {
         return ("air".to_string(), BTreeMap::new());

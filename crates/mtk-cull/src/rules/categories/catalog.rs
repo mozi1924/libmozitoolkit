@@ -24,8 +24,6 @@ pub const INHERENTLY_WATERLOGGED_NAMES: &[&str] = &[
     "minecraft:seagrass",
     "tall_seagrass",
     "minecraft:tall_seagrass",
-    "sea_pickle",
-    "minecraft:sea_pickle",
     "bubble_column",
     "minecraft:bubble_column",
 ];

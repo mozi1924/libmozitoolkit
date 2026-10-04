@@ -382,8 +382,8 @@ fn test_waterlogged_isolated_block_meshing() {
     let mut world = VoxelStorage::new();
     world.set_bounds(0, 0, 0, 16, 16, 16);
 
-    // An isolated waterlogged kelp block in air at (2, 2, 2)
-    world.set_block(2, 2, 2, "minecraft:kelp[age=0,waterlogged=true]", None);
+    // An isolated kelp block in air at (2, 2, 2) (canonical vanilla state without explicit waterlogged)
+    world.set_block(2, 2, 2, "minecraft:kelp[age=0]", None);
     // An isolated waterlogged slab in air at (5, 5, 5)
     world.set_block(5, 5, 5, "minecraft:oak_slab[type=bottom,waterlogged=true]", None);
 
@@ -631,6 +631,50 @@ fn test_plant_position_offsets() {
         let fz = (pos[2] - pos[2].round()).abs();
         assert!(fx < 1e-4, "Expected integer X coordinates without offset, got {}", pos[0]);
         assert!(fz < 1e-4, "Expected integer Z coordinates without offset, got {}", pos[2]);
+    }
+}
+
+#[test]
+fn test_submerged_seagrass_and_kelp_seamless_meshing() {
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+
+    // Seabed: dirt at (1, 0, 1)
+    world.set_block(1, 0, 1, "minecraft:dirt", None);
+    // Seagrass at (1, 1, 1) (vanilla state string without waterlogged=true)
+    world.set_block(1, 1, 1, "minecraft:seagrass", None);
+    // Water above seagrass at (1, 2, 1)
+    world.set_block(1, 2, 1, "minecraft:water[level=0]", None);
+    // Water adjacent to seagrass at (1, 1, 2)
+    world.set_block(1, 1, 2, "minecraft:water[level=0]", None);
+
+    let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
+    let culler = FaceCuller::default();
+    let config = MesherConfig {
+        origin_centered: false,
+        weld_vertices: false,
+        mesh_fluids: true,
+        ..Default::default()
+    };
+
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+
+    // Seagrass at (1, 1, 1) must emit water geometry merged with water above and adjacent.
+    // The mutual face between seagrass (1, 1, 1) and water above (1, 2, 1) must be CULLED.
+    // The mutual face between seagrass (1, 1, 1) and water adjacent (1, 1, 2) must be CULLED.
+    assert!(mesh.face_count() > 0);
+
+    // Verify there is no horizontal water face at y=2.0 between seagrass and water above
+    for (i, norm) in mesh.normals.iter().enumerate().step_by(4) {
+        let p0 = mesh.positions[mesh.indices[i / 4 * 6] as usize];
+        // If normal is (0, 1, 0) or (0, -1, 0) and at x=1, z=1
+        if (p0[0] - 1.0).abs() < 0.1 && (p0[2] - 1.0).abs() < 0.1 {
+            // Internal horizontal boundary at y=2.0 between (1,1,1) and (1,2,1) MUST NOT exist
+            assert!(
+                !((p0[1] - 2.0).abs() < 1e-3 && norm[1].abs() > 0.9),
+                "Internal dividing water face at y=2.0 between seagrass and water above must be culled!"
+            );
+        }
     }
 }
 
