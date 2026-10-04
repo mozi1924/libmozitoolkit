@@ -225,4 +225,13 @@ impl AtlasAddressMap {
     pub fn get_chunks(&self) -> &[AtlasChunkMeta] {
         &self.chunks
     }
+
+    /// Returns the fallback chunk ID for unmapped textures (defaults to the first "blocks" chunk, or 0).
+    pub fn default_chunk_id(&self) -> u16 {
+        self.chunks
+            .iter()
+            .find(|c| c.category == "blocks")
+            .map(|c| c.chunk_id)
+            .unwrap_or(0)
+    }
 }

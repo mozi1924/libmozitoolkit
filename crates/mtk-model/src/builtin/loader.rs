@@ -63,9 +63,11 @@ impl MiExModelLoader {
             MIEX_SHULKER_BOX_JSON
         } else if short_name == "end_portal" {
             MIEX_END_PORTAL_JSON
-        } else if short_name.contains("sign") {
+        } else if short_name.contains("hanging_sign") {
+            MIEX_HANGING_SIGN_JSON
+        } else if short_name.ends_with("_sign") || short_name == "sign" || short_name.contains("_wall_sign") {
             MIEX_SIGN_JSON
-        } else if short_name.contains("head") || short_name.contains("skull") {
+        } else if (short_name.contains("head") || short_name.contains("skull")) && !short_name.contains("piston") {
             MIEX_SKULL_JSON
         } else {
             return None;
@@ -496,4 +498,39 @@ mod tests {
         let left_faces = &left_ear.faces;
         assert_ne!(right_faces.get("west").unwrap().uv, left_faces.get("west").unwrap().uv);
     }
+
+    #[test]
+    fn test_hanging_sign_load() {
+        let bs_standing = BlockState::parse("minecraft:oak_hanging_sign[attached=false,rotation=0]").unwrap();
+        let model_standing = MiExModelLoader::load_for_blockstate(&bs_standing).expect("Standing hanging sign must load");
+        let elems_standing = model_standing.elements.unwrap_or_default();
+        // Board (1) + 4 angled chains (4) = 5 elements. Absolutely NO vertical sign post!
+        assert_eq!(elems_standing.len(), 5, "Standing hanging sign without attachment must have board and 4 chains");
+        let tex = model_standing.textures.unwrap();
+        assert_eq!(
+            tex.get("texture").unwrap().as_str(),
+            "minecraft:entity/signs/hanging/oak"
+        );
+        for elem in &elems_standing {
+            // Confirm none of the elements are the vertical sign post (which had X in [7, 9], Y in [0, 9.333])
+            let is_post = elem.from[0] > 6.0 && elem.to[0] < 10.0 && elem.from[1] < 1.0 && elem.to[1] < 10.0;
+            assert!(!is_post, "Hanging sign must NOT contain vertical standing sign post!");
+        }
+
+        let bs_wall = BlockState::parse("minecraft:oak_wall_hanging_sign[facing=north]").unwrap();
+        let model_wall = MiExModelLoader::load_for_blockstate(&bs_wall).expect("Wall hanging sign must load");
+        let elems_wall = model_wall.elements.unwrap_or_default();
+        for (i, el) in elems_wall.iter().enumerate() {
+            println!("Wall elem {}: from={:?}, to={:?}", i, el.from, el.to);
+        }
+        // Board (1) + wall bracket (1) = 2 elements
+        assert_eq!(elems_wall.len(), 2, "Wall hanging sign must have board and bracket");
+
+        let bs_attached = BlockState::parse("minecraft:oak_hanging_sign[attached=true,rotation=0]").unwrap();
+        let model_attached = MiExModelLoader::load_for_blockstate(&bs_attached).expect("Attached hanging sign must load");
+        let elems_attached = model_attached.elements.unwrap_or_default();
+        // Board (1) + center chain (1) = 2 elements
+        assert_eq!(elems_attached.len(), 2, "Attached hanging sign must have board and center chain");
+    }
 }
+

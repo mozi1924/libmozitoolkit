@@ -394,7 +394,23 @@ impl BlockStateDefinition {
             return Some(list);
         }
 
-        if short_name.ends_with("_sign") || short_name.contains("hanging_sign") {
+        if short_name.contains("hanging_sign") {
+            let mut list = Vec::new();
+            if short_name.contains("_wall_") {
+                for f in ["north", "south", "east", "west"] {
+                    list.push(format!("{}[facing={}]", base_id, f));
+                }
+            } else {
+                for attached in ["false", "true"] {
+                    for r in 0..16 {
+                        list.push(format!("{}[attached={},rotation={}]", base_id, attached, r));
+                    }
+                }
+            }
+            return Some(list);
+        }
+
+        if short_name.ends_with("_sign") {
             let mut list = Vec::new();
             if short_name.contains("_wall_") {
                 for f in ["north", "south", "east", "west"] {

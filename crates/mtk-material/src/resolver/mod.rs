@@ -330,14 +330,43 @@ impl MaterialResolver {
             }
         }
 
-        if raw_material_name.contains("hanging") && raw_material_name.contains("sign") {
+        if raw_material_name.contains("sign") {
             let clean_raw = raw_material_name.strip_prefix("minecraft:").unwrap_or(raw_material_name);
-            let wood = clean_raw.rsplit('/').next().unwrap_or("");
-            let cand = format!("block/{}_hanging_sign", wood);
-            if let Some(sprite_loc) = address_map.lookup_str(&cand) {
-                let res_loc = ResourceLocation::parse(&cand)
-                    .unwrap_or_else(|_| ResourceLocation::new("minecraft", &cand));
-                return Some((res_loc, sprite_loc));
+            let raw_stem = clean_raw.rsplit('/').next().unwrap_or("");
+            let pure_wood = raw_stem
+                .strip_suffix("_wall_hanging_sign")
+                .or_else(|| raw_stem.strip_suffix("_hanging_sign"))
+                .or_else(|| raw_stem.strip_suffix("_wall_hanging"))
+                .or_else(|| raw_stem.strip_suffix("_hanging"))
+                .or_else(|| raw_stem.strip_suffix("_wall_sign"))
+                .or_else(|| raw_stem.strip_suffix("_sign"))
+                .unwrap_or(raw_stem);
+
+            let is_hanging = raw_material_name.contains("hanging");
+            let candidates = if is_hanging {
+                vec![
+                    format!("entity/signs/hanging/{}", pure_wood),
+                    format!("block/{}_hanging_sign", pure_wood),
+                    format!("entity/signs/{}", pure_wood),
+                    format!("block/{}_sign", pure_wood),
+                    format!("block/{}_planks", pure_wood),
+                ]
+            } else {
+                vec![
+                    format!("entity/signs/{}", pure_wood),
+                    format!("block/{}_sign", pure_wood),
+                    format!("entity/signs/hanging/{}", pure_wood),
+                    format!("block/{}_hanging_sign", pure_wood),
+                    format!("block/{}_planks", pure_wood),
+                ]
+            };
+
+            for cand in &candidates {
+                if let Some(sprite_loc) = address_map.lookup_str(cand) {
+                    let res_loc = ResourceLocation::parse(cand)
+                        .unwrap_or_else(|_| ResourceLocation::new("minecraft", cand));
+                    return Some((res_loc, sprite_loc));
+                }
             }
         }
 

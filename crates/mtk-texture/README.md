@@ -83,6 +83,10 @@ pub struct AtlasAddressMap {
     pub sprites: HashMap<ResourceLocation, AtlasSpriteLocation>,
     pub anim_sprites: HashMap<ResourceLocation, AtlasSpriteLocation>,
 }
+
+impl AtlasAddressMap {
+    pub fn default_chunk_id(&self) -> u16;
+}
 ```
 
 ---

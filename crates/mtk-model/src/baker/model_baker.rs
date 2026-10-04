@@ -138,6 +138,8 @@ impl ModelBaker {
         let mut baked_elements = Vec::new();
         let mut six_faces: [Option<BakedFace>; 6] = [None, None, None, None, None, None];
 
+        let allow_blockstate_builtin = variant_matches.len() == 1;
+
         for variant in variant_matches {
             let resolved = if let Some(external) = model_loader(&variant.model_id) {
                 let r = external.resolve_hierarchy(&variant.model_id, |id| {
@@ -147,11 +149,19 @@ impl ModelBaker {
                 let is_missing_bell_body = clean_block == "bell" && !r.textures.contains_key("bell_body");
                 if r.elements.is_empty() || is_missing_bell_body {
                     // External model is empty (e.g. vanilla Java BER dummy block/skull.json or chest).
-                    // Fallback to builtin model for this blockstate or variant ID.
-                    if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(&blockstate) {
-                        builtin.resolve_hierarchy(&variant.model_id, |id| {
-                            model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
-                        })?
+                    // Fallback to builtin model for this blockstate (if single variant) or variant ID.
+                    if allow_blockstate_builtin {
+                        if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(&blockstate) {
+                            builtin.resolve_hierarchy(&variant.model_id, |id| {
+                                model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                            })?
+                        } else if let Some(builtin) = BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id) {
+                            builtin.resolve_hierarchy(&variant.model_id, |id| {
+                                model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                            })?
+                        } else {
+                            r
+                        }
                     } else if let Some(builtin) = BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id) {
                         builtin.resolve_hierarchy(&variant.model_id, |id| {
                             model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
@@ -164,10 +174,18 @@ impl ModelBaker {
                 }
             } else {
                 // No external model found for variant.model_id.
-                if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(&blockstate) {
-                    builtin.resolve_hierarchy(&variant.model_id, |id| {
-                        model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
-                    })?
+                if allow_blockstate_builtin {
+                    if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(&blockstate) {
+                        builtin.resolve_hierarchy(&variant.model_id, |id| {
+                            model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                        })?
+                    } else if let Some(builtin) = BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id) {
+                        builtin.resolve_hierarchy(&variant.model_id, |id| {
+                            model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                        })?
+                    } else {
+                        ResolvedBlockModel::default()
+                    }
                 } else if let Some(builtin) = BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id) {
                     builtin.resolve_hierarchy(&variant.model_id, |id| {
                         model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))

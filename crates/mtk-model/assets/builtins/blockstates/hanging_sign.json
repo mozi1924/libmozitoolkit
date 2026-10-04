@@ -3,12 +3,12 @@
         "minecraft:acacia_hanging_sign", "minecraft:bamboo_hanging_sign", "minecraft:birch_hanging_sign",
         "minecraft:cherry_hanging_sign", "minecraft:crimson_hanging_sign", "minecraft:dark_oak_hanging_sign",
         "minecraft:jungle_hanging_sign", "minecraft:mangrove_hanging_sign", "minecraft:oak_hanging_sign",
-        "minecraft:spruce_hanging_sign", "minecraft:warped_hanging_sign",
+        "minecraft:spruce_hanging_sign", "minecraft:warped_hanging_sign", "minecraft:pale_oak_hanging_sign",
 
         "minecraft:acacia_wall_hanging_sign", "minecraft:bamboo_wall_hanging_sign", "minecraft:birch_wall_hanging_sign",
         "minecraft:cherry_wall_hanging_sign", "minecraft:crimson_wall_hanging_sign", "minecraft:dark_oak_wall_hanging_sign",
         "minecraft:jungle_wall_hanging_sign", "minecraft:mangrove_wall_hanging_sign", "minecraft:oak_wall_hanging_sign",
-        "minecraft:spruce_wall_hanging_sign", "minecraft:warped_wall_hanging_sign"
+        "minecraft:spruce_wall_hanging_sign", "minecraft:warped_wall_hanging_sign", "minecraft:pale_oak_wall_hanging_sign"
     ],
     "defaultTexture": "minecraft:entity/signs/oak",
     "handler": [
@@ -51,7 +51,7 @@
                     ]
                 },
                 {
-                    "condition": "attached",
+                    "condition": "!isWall && attached",
                     "elements": [
                         {
                             "from": [ 2, 10, 8 ],
@@ -69,7 +69,7 @@
                     ]
                 },
                 {
-                    "condition": "!attached",
+                    "condition": "!isWall && !attached",
                     "elements": [
                         {
                             "from": [ 2, 10, 8 ],

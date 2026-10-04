@@ -202,10 +202,11 @@ fn resolve_model_face(
                     atlas_loc.texture_id,
                 )
             } else {
-                (face.texture.clone(), None, 0, 0, 0)
+                let default_chunk = atlas.default_chunk_id();
+                (face.texture.clone(), None, default_chunk, default_chunk as i32, 0u32)
             }
         } else {
-            (face.texture.clone(), None, 0, 0, 0)
+            (face.texture.clone(), None, 0u16, 0i32, 0u32)
         };
 
     let (tint_data, tint_color, colormap_uv) = compute_face_tint(
