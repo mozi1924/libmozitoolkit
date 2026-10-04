@@ -133,6 +133,7 @@ pub struct VoxelStorage {
 - **选区裁剪与接缝脏标记**：调用 `set_bounds(...)` 自动修剪越界区块，并将边界接缝处的区块自动加入 `dirty_sections` 以便更新交界面遮挡。
 - **快照与增量更新**：`set_full_snapshot`、`set_section_snapshot`、`apply_delta_update`。
 - **清单比对**：`validate_manifest` 用于对比服务器端的区块 CRC32 列表，精准找出不同步的区块坐标。
+- **内嵌调试世界**：`create_debug_world() -> Result<Self, VoxelError>` 内置包含 529 区块切片与 32,539 方块状态的原版 Minecraft 调试世界快照（`debug_world_snapshot.json.gz`），内部采用 `OnceLock` 线程安全懒加载缓存，后续调用克隆仅需 <1ms。
 
 ---
 

@@ -31,7 +31,7 @@ pub use protocol::{decode_packet, encode_full_sync_request, encode_repair_reques
 pub use resource::{precompile_all_assets, PyPrecompileResult, PyResourcePackStack};
 pub use sync::PyLiveSyncSession;
 pub use texture::{PyAtlasBuilder, PyBakedAtlas, PyStandaloneBuilder, PyStandaloneResult};
-pub use voxel::{PyMesherConfig, PyVoxelStorage};
+pub use voxel::{create_debug_world_storage, PyMesherConfig, PyVoxelStorage};
 
 /// Unified high-performance mesh processing pipeline entrypoint.
 ///
@@ -106,6 +106,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // 3. Voxel Storage & Config
     m.add_class::<PyVoxelStorage>()?;
     m.add_class::<PyMesherConfig>()?;
+    m.add_function(wrap_pyfunction!(create_debug_world_storage, m)?)?;
 
     // 4. Meshing Generator
     m.add_class::<PySectionMesher>()?;

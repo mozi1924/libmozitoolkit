@@ -60,6 +60,7 @@ Python 模块名：`libmtk_py`
 
 ### 2.5 体素存储与网格化 (`voxel` & `mesher`)
 - **`VoxelStorage` (`PyVoxelStorage`)**：16x16x16 稀疏 Chunk Section 体素容器，带脏标记追踪。
+  - `create_debug_world()` / `create_debug_world_storage()`：一键加载内置嵌入的原版调试世界快照（529 sections, 32,539 blocks）。
   - `set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)`, `set_block(x, y, z, state, tint)`, `get_block(x, y, z)`
   - `dirty_section_count()`, `clear_dirty_sections()`
 - **`MesherConfig` (`PyMesherConfig`)**：网格化配置（AO 开关、流体曲面、坐标系转换、线程数、顶点焊接）。

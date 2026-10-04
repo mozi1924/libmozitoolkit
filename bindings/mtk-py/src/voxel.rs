@@ -24,6 +24,14 @@ impl PyVoxelStorage {
         }
     }
 
+    /// Loads the canonical embedded Minecraft debug world snapshot into a new `VoxelStorage`.
+    #[staticmethod]
+    pub fn create_debug_world() -> PyResult<Self> {
+        let storage = VoxelStorage::create_debug_world()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        Ok(Self { inner: storage })
+    }
+
     /// Sets the active 3D selection bounding box with incremental section pruning.
     pub fn set_bounds(
         &mut self,
@@ -489,4 +497,10 @@ impl PyMesherConfig {
             self.num_threads
         )
     }
+}
+
+/// Loads the canonical embedded Minecraft debug world snapshot into a new `VoxelStorage`.
+#[pyfunction]
+pub fn create_debug_world_storage() -> PyResult<PyVoxelStorage> {
+    PyVoxelStorage::create_debug_world()
 }

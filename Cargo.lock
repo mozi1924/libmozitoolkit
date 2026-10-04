@@ -738,6 +738,7 @@ dependencies = [
 name = "mtk-voxel"
 version = "0.1.0"
 dependencies = [
+ "flate2",
  "glam",
  "mtk-core",
  "mtk-cull",
