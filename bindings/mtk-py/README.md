@@ -63,6 +63,10 @@ Python 模块名：`libmtk_py`
   - `create_debug_world()` / `create_debug_world_storage()`：一键加载内置嵌入的原版调试世界快照（529 sections, 32,539 blocks）。
   - `set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)`, `set_block(x, y, z, state, tint)`, `get_block(x, y, z)`
   - `dirty_section_count()`, `clear_dirty_sections()`
+- **`VoxelWorld` (`PyVoxelWorld`)**：统一 3D 场景引擎，支持增量区块缓存与全量世界网格管理。
+  - `from_storage(storage, config=None, culler=None, model_db=None, unified_mesh=True, num_threads=None)`
+  - `create_debug_world(config=None, culler=None, model_db=None, unified_mesh=True, num_threads=None)`
+  - `rebuild_all() -> MeshData`, `rebuild_dirty() -> Dict`, `num_threads` (getter/setter)
 - **`MesherConfig` (`PyMesherConfig`)**：网格化配置（AO 开关、流体曲面、坐标系转换、线程数、顶点焊接）。
 - **`SectionMesher` (`PySectionMesher`)**：
   - `mesh_world(py, storage, config=None, culler=None, resolver=None) -> MeshData`

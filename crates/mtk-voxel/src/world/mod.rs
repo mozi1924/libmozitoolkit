@@ -76,12 +76,24 @@ impl VoxelWorld {
         model_db: Option<Arc<BakedModelDatabase>>,
         unified_mesh: bool,
     ) -> Self {
+        Self::from_storage_with_threads(storage, config, culler, model_db, unified_mesh, None)
+    }
+
+    /// Creates a `VoxelWorld` taking ownership of an existing `VoxelStorage` with explicit thread configuration.
+    pub fn from_storage_with_threads(
+        storage: VoxelStorage,
+        config: Option<MesherConfig>,
+        culler: Option<FaceCuller>,
+        model_db: Option<Arc<BakedModelDatabase>>,
+        unified_mesh: bool,
+        num_threads: Option<usize>,
+    ) -> Self {
         Self {
             storage,
             config: config.unwrap_or_default(),
             culler: culler.unwrap_or_default(),
             model_db,
-            num_threads: None,
+            num_threads,
             unified_mesh,
             section_mesh_cache: HashMap::new(),
             world_mesh: None,
@@ -96,8 +108,29 @@ impl VoxelWorld {
         model_db: Option<Arc<BakedModelDatabase>>,
         unified_mesh: bool,
     ) -> Result<Self, VoxelError> {
+        Self::create_debug_world_with_threads(config, culler, model_db, unified_mesh, None)
+    }
+
+    /// Loads the canonical embedded Minecraft debug world into a new `VoxelWorld` with explicit thread configuration.
+    pub fn create_debug_world_with_threads(
+        config: Option<MesherConfig>,
+        culler: Option<FaceCuller>,
+        model_db: Option<Arc<BakedModelDatabase>>,
+        unified_mesh: bool,
+        num_threads: Option<usize>,
+    ) -> Result<Self, VoxelError> {
         let storage = VoxelStorage::create_debug_world()?;
-        Ok(Self::from_storage(storage, config, culler, model_db, unified_mesh))
+        Ok(Self::from_storage_with_threads(storage, config, culler, model_db, unified_mesh, num_threads))
+    }
+
+    /// Sets the worker thread count for parallel meshing.
+    pub fn set_num_threads(&mut self, num_threads: Option<usize>) {
+        self.num_threads = num_threads;
+    }
+
+    /// Returns the configured worker thread count.
+    pub fn num_threads(&self) -> Option<usize> {
+        self.num_threads
     }
 
     /// Updates or replaces the prebaked model database.
@@ -254,11 +287,11 @@ impl VoxelWorld {
         }
     }
 
-    /// Re-assembles and welds the unified world mesh from the current section cache.
+    /// Re-assembles and welds the unified world mesh from the current section cache without cloning.
     fn assemble_world_mesh(&mut self) {
         if self.unified_mesh {
-            let meshes: Vec<_> = self.section_mesh_cache.values().cloned().collect();
-            let mut merged = MeshData::merge_all(&meshes);
+            let meshes: Vec<&MeshData> = self.section_mesh_cache.values().collect();
+            let mut merged = MeshData::merge_all_refs(&meshes);
             if self.config.weld_vertices {
                 merged.weld_spatial_vertices(1e-4);
             }
@@ -279,6 +312,19 @@ impl VoxelWorld {
             return Ok(self.world_mesh.as_ref().unwrap());
         }
 
+        #[cfg(feature = "parallel")]
+        let padded_sections: Vec<_> = {
+            use rayon::prelude::*;
+            mtk_core::constants::concurrency::execute_parallel(self.num_threads, || {
+                non_empty
+                    .par_iter()
+                    .map(|&coord| self.storage.get_section_padded_array(coord))
+                    .collect()
+            })
+            .map_err(VoxelError::ThreadPoolError)?
+        };
+
+        #[cfg(not(feature = "parallel"))]
         let padded_sections: Vec<_> = non_empty
             .iter()
             .map(|&coord| self.storage.get_section_padded_array(coord))

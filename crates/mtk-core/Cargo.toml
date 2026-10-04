@@ -13,6 +13,7 @@ glam = { workspace = true }
 serde = { workspace = true, optional = true }
 bitflags = { workspace = true }
 rayon = { workspace = true, optional = true }
+rustc-hash = { workspace = true }
 
 [features]
 default = ["std", "serde"]

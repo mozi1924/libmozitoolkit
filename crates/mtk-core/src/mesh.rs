@@ -224,16 +224,18 @@ impl MeshData {
         self.normals.extend_from_slice(&other.normals);
         self.uvs.extend_from_slice(&other.uvs);
 
-        self.indices.reserve(other.indices.len());
-        for &idx in &other.indices {
-            self.indices.push(base_idx + idx);
+        let old_idx_len = self.indices.len();
+        self.indices.extend_from_slice(&other.indices);
+        for idx in &mut self.indices[old_idx_len..] {
+            *idx += base_idx;
         }
 
         if let Some(ref o_quads) = other.quad_indices {
             let quads = self.quad_indices.get_or_insert_with(Vec::new);
-            quads.reserve(o_quads.len());
-            for &idx in o_quads {
-                quads.push(base_idx + idx);
+            let old_quad_len = quads.len();
+            quads.extend_from_slice(o_quads);
+            for idx in &mut quads[old_quad_len..] {
+                *idx += base_idx;
             }
         }
 
@@ -275,25 +277,30 @@ impl MeshData {
         }
     }
 
-    /// Efficiently merges multiple `MeshData` buffers into a single unified `MeshData`,
-    /// pre-allocating exact capacities upfront to eliminate vector reallocations.
-    pub fn merge_all(meshes: &[MeshData]) -> Self {
+    /// Efficiently merges multiple `MeshData` references into a single unified `MeshData`,
+    /// pre-allocating exact capacities upfront to eliminate vector reallocations and cloning.
+    pub fn merge_all_refs(meshes: &[&MeshData]) -> Self {
         if meshes.is_empty() {
             return Self::new();
         }
         if meshes.len() == 1 {
-            return meshes[0].clone();
+            return (*meshes[0]).clone();
         }
 
         let mut total_verts = 0;
+        let mut total_normals = 0;
+        let mut total_uvs = 0;
         let mut total_indices = 0;
         let mut total_quads = 0;
         let mut total_faces = 0;
         let mut has_sec_uvs = false;
         let mut has_colors = false;
+        let mut has_custom_attrs = false;
 
-        for m in meshes {
+        for &m in meshes {
             total_verts += m.positions.len();
+            total_normals += m.normals.len();
+            total_uvs += m.uvs.len();
             total_indices += m.indices.len();
             if let Some(ref q) = m.quad_indices {
                 total_quads += q.len();
@@ -305,12 +312,15 @@ impl MeshData {
             if m.colors.is_some() {
                 has_colors = true;
             }
+            if !m.custom_attributes.is_empty() {
+                has_custom_attrs = true;
+            }
         }
 
         let mut merged = Self {
             positions: Vec::with_capacity(total_verts),
-            normals: Vec::with_capacity(total_verts),
-            uvs: Vec::with_capacity(total_verts),
+            normals: Vec::with_capacity(total_normals),
+            uvs: Vec::with_capacity(total_uvs),
             secondary_uvs: if has_sec_uvs { Some(Vec::with_capacity(total_verts)) } else { None },
             colors: if has_colors { Some(Vec::with_capacity(total_verts)) } else { None },
             indices: Vec::with_capacity(total_indices),
@@ -320,11 +330,75 @@ impl MeshData {
             custom_attributes: HashMap::new(),
         };
 
-        for m in meshes {
-            merged.append_mesh(m);
+        for &m in meshes {
+            let base_idx = merged.positions.len() as u32;
+            merged.positions.extend_from_slice(&m.positions);
+            merged.normals.extend_from_slice(&m.normals);
+            merged.uvs.extend_from_slice(&m.uvs);
+
+            let old_idx_len = merged.indices.len();
+            merged.indices.extend_from_slice(&m.indices);
+            for idx in &mut merged.indices[old_idx_len..] {
+                *idx += base_idx;
+            }
+
+            if let Some(ref o_quads) = m.quad_indices {
+                let quads = merged.quad_indices.get_or_insert_with(Vec::new);
+                let old_quad_len = quads.len();
+                quads.extend_from_slice(o_quads);
+                for idx in &mut quads[old_quad_len..] {
+                    *idx += base_idx;
+                }
+            }
+
+            merged.face_materials.extend_from_slice(&m.face_materials);
+            merged.face_tint_indices.extend_from_slice(&m.face_tint_indices);
+
+            if let Some(ref other_sec) = m.secondary_uvs {
+                let sec = merged.secondary_uvs.get_or_insert_with(Vec::new);
+                sec.extend_from_slice(other_sec);
+            }
+
+            if let Some(ref other_col) = m.colors {
+                let col = merged.colors.get_or_insert_with(Vec::new);
+                col.extend_from_slice(other_col);
+            }
+
+            if has_custom_attrs {
+                for (name, attr) in &m.custom_attributes {
+                    if let Some(existing) = merged.custom_attributes.get_mut(name) {
+                        if existing.domain == attr.domain {
+                            match (&mut existing.data, &attr.data) {
+                                (AttributeData::Float(a), AttributeData::Float(b)) => a.extend_from_slice(b),
+                                (AttributeData::Float2(a), AttributeData::Float2(b)) => a.extend_from_slice(b),
+                                (AttributeData::Float3(a), AttributeData::Float3(b)) => a.extend_from_slice(b),
+                                (AttributeData::Float4(a), AttributeData::Float4(b)) => a.extend_from_slice(b),
+                                (AttributeData::Int8(a), AttributeData::Int8(b)) => a.extend_from_slice(b),
+                                (AttributeData::Int16(a), AttributeData::Int16(b)) => a.extend_from_slice(b),
+                                (AttributeData::Int32(a), AttributeData::Int32(b)) => a.extend_from_slice(b),
+                                (AttributeData::UInt8(a), AttributeData::UInt8(b)) => a.extend_from_slice(b),
+                                (AttributeData::UInt16(a), AttributeData::UInt16(b)) => a.extend_from_slice(b),
+                                (AttributeData::UInt32(a), AttributeData::UInt32(b)) => a.extend_from_slice(b),
+                                (AttributeData::Bool(a), AttributeData::Bool(b)) => a.extend_from_slice(b),
+                                (AttributeData::String(a), AttributeData::String(b)) => a.extend_from_slice(b),
+                                _ => {}
+                            }
+                        }
+                    } else {
+                        merged.custom_attributes.insert(name.clone(), attr.clone());
+                    }
+                }
+            }
         }
 
         merged
+    }
+
+    /// Efficiently merges multiple `MeshData` buffers into a single unified `MeshData`,
+    /// pre-allocating exact capacities upfront to eliminate vector reallocations.
+    pub fn merge_all(meshes: &[MeshData]) -> Self {
+        let refs: Vec<&MeshData> = meshes.iter().collect();
+        Self::merge_all_refs(&refs)
     }
 
     /// Welds co-located vertices within `tolerance` distance into shared topology,
@@ -335,7 +409,10 @@ impl MeshData {
         }
 
         let inv_dist = 1.0 / tolerance;
-        let mut coord_map: HashMap<[i32; 3], u32> = HashMap::with_capacity(self.positions.len());
+        let mut coord_map = rustc_hash::FxHashMap::<[i32; 3], u32>::with_capacity_and_hasher(
+            self.positions.len(),
+            Default::default(),
+        );
         let mut remap: Vec<u32> = Vec::with_capacity(self.positions.len());
         let mut new_positions: Vec<[f32; 3]> = Vec::with_capacity(self.positions.len());
         let mut new_normals: Vec<[f32; 3]> = Vec::with_capacity(self.normals.len());
@@ -358,6 +435,11 @@ impl MeshData {
                     new_normals.push(norm);
                 }
             }
+        }
+
+        // Fast-path: If all vertices were already unique, no indices need modification
+        if new_positions.len() == self.positions.len() {
+            return;
         }
 
         // Remap triangle/polygon indices

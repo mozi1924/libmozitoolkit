@@ -47,11 +47,6 @@ impl PySectionMesher {
             return Ok(PyMeshData::new());
         }
 
-        let padded_sections: Vec<_> = non_empty
-            .into_iter()
-            .map(|coord| storage.inner.get_section_padded_array(coord))
-            .collect();
-
         let model_db_opt = model_db.map(|db| db.inner.clone());
         let model_lookup = move |state: &str| -> mtk_voxel::mesher::ModelSource {
             if let Some(ref db) = model_db_opt {
@@ -66,6 +61,24 @@ impl PySectionMesher {
         };
 
         let merged_mesh = py.allow_threads(|| -> Result<mtk_core::mesh::MeshData, String> {
+            let padded_sections = mtk_core::constants::concurrency::execute_parallel(num_threads, || {
+                #[cfg(feature = "parallel")]
+                {
+                    use rayon::prelude::*;
+                    non_empty
+                        .par_iter()
+                        .map(|&coord| storage.inner.get_section_padded_array(coord))
+                        .collect::<Vec<_>>()
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    non_empty
+                        .iter()
+                        .map(|&coord| storage.inner.get_section_padded_array(coord))
+                        .collect::<Vec<_>>()
+                }
+            })?;
+
             let results = SectionMesher::mesh_sections_parallel_with_source(
                 &padded_sections,
                 cul,
@@ -75,8 +88,8 @@ impl PySectionMesher {
             )
             .map_err(|e| e.to_string())?;
 
-            let section_meshes: Vec<_> = results.into_iter().map(|(_, m)| m).collect();
-            let mut merged = mtk_core::mesh::MeshData::merge_all(&section_meshes);
+            let section_meshes: Vec<_> = results.iter().map(|(_, m)| m).collect();
+            let mut merged = mtk_core::mesh::MeshData::merge_all_refs(&section_meshes);
 
             if cfg.weld_vertices {
                 merged.weld_spatial_vertices(1e-4);
@@ -119,11 +132,6 @@ impl PySectionMesher {
             return Ok(dict);
         }
 
-        let padded_sections: Vec<_> = non_empty
-            .into_iter()
-            .map(|coord| storage.inner.get_section_padded_array(coord))
-            .collect();
-
         let model_db_opt = model_db.map(|db| db.inner.clone());
         let model_lookup = move |state: &str| -> mtk_voxel::mesher::ModelSource {
             if let Some(ref db) = model_db_opt {
@@ -137,7 +145,25 @@ impl PySectionMesher {
             mtk_voxel::mesher::ModelSource::None
         };
 
-        let results = py.allow_threads(|| {
+        let results = py.allow_threads(|| -> Result<Vec<(glam::IVec3, mtk_core::mesh::MeshData)>, String> {
+            let padded_sections = mtk_core::constants::concurrency::execute_parallel(num_threads, || {
+                #[cfg(feature = "parallel")]
+                {
+                    use rayon::prelude::*;
+                    non_empty
+                        .par_iter()
+                        .map(|&coord| storage.inner.get_section_padded_array(coord))
+                        .collect::<Vec<_>>()
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    non_empty
+                        .iter()
+                        .map(|&coord| storage.inner.get_section_padded_array(coord))
+                        .collect::<Vec<_>>()
+                }
+            })?;
+
             SectionMesher::mesh_sections_parallel_with_source(
                 &padded_sections,
                 cul,
@@ -145,8 +171,9 @@ impl PySectionMesher {
                 &cfg,
                 num_threads,
             )
+            .map_err(|e| e.to_string())
         })
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e))?;
 
         for (coord, mesh) in results {
             let key = (coord.x, coord.y, coord.z);

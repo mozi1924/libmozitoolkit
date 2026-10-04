@@ -24,11 +24,13 @@ mtk-sync = { workspace = true }
 glam = { workspace = true }
 serde_json = { workspace = true }
 pyo3 = { workspace = true, features = ["abi3-py311"] }
+rayon = { workspace = true, optional = true }
 
 [features]
-default = ["zip"]
+default = ["zip", "parallel"]
 extension-module = ["pyo3/extension-module"]
 zip = ["mtk-resource/zip"]
+parallel = ["dep:rayon", "libmtk/parallel", "mtk-core/parallel", "mtk-voxel/parallel"]
 
 [dev-dependencies]
 pyo3 = { workspace = true, features = ["auto-initialize"] }

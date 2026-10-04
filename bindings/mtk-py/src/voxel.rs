@@ -556,43 +556,60 @@ impl PyVoxelWorld {
 
     /// Creates a `VoxelWorld` taking initial data from an existing `VoxelStorage`.
     #[staticmethod]
-    #[pyo3(signature = (storage, config=None, culler=None, model_db=None, unified_mesh=true))]
+    #[pyo3(signature = (storage, config=None, culler=None, model_db=None, unified_mesh=true, num_threads=None))]
     pub fn from_storage(
         storage: &PyVoxelStorage,
         config: Option<&PyMesherConfig>,
         culler: Option<&crate::cull::PyFaceCuller>,
         model_db: Option<&crate::model::PyBakedModelDatabase>,
         unified_mesh: bool,
+        num_threads: Option<usize>,
     ) -> Self {
         let cfg = config.map(|c| c.inner.clone());
         let cul = culler.map(|c| c.inner.clone());
         let mdb = model_db.map(|db| db.inner.clone());
+        let threads = num_threads.or_else(|| config.and_then(|c| c.num_threads));
         Self {
-            inner: mtk_voxel::VoxelWorld::from_storage(
+            inner: mtk_voxel::VoxelWorld::from_storage_with_threads(
                 storage.inner.clone(),
                 cfg,
                 cul,
                 mdb,
                 unified_mesh,
+                threads,
             ),
         }
     }
 
     /// Loads the canonical embedded Minecraft debug world into a new `VoxelWorld`.
     #[staticmethod]
-    #[pyo3(signature = (config=None, culler=None, model_db=None, unified_mesh=true))]
+    #[pyo3(signature = (config=None, culler=None, model_db=None, unified_mesh=true, num_threads=None))]
     pub fn create_debug_world(
         config: Option<&PyMesherConfig>,
         culler: Option<&crate::cull::PyFaceCuller>,
         model_db: Option<&crate::model::PyBakedModelDatabase>,
         unified_mesh: bool,
+        num_threads: Option<usize>,
     ) -> PyResult<Self> {
         let cfg = config.map(|c| c.inner.clone());
         let cul = culler.map(|c| c.inner.clone());
         let mdb = model_db.map(|db| db.inner.clone());
-        let world = mtk_voxel::VoxelWorld::create_debug_world(cfg, cul, mdb, unified_mesh)
+        let threads = num_threads.or_else(|| config.and_then(|c| c.num_threads));
+        let world = mtk_voxel::VoxelWorld::create_debug_world_with_threads(cfg, cul, mdb, unified_mesh, threads)
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         Ok(Self { inner: world })
+    }
+
+    /// Gets the number of worker threads configured for meshing.
+    #[getter]
+    pub fn num_threads(&self) -> Option<usize> {
+        self.inner.num_threads()
+    }
+
+    /// Sets the number of worker threads configured for meshing.
+    #[setter]
+    pub fn set_num_threads(&mut self, val: Option<usize>) {
+        self.inner.set_num_threads(val);
     }
 
     /// Re-meshes all non-empty sections in parallel and returns the unified `MeshData`.
