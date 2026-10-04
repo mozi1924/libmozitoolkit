@@ -393,6 +393,41 @@ mod tests {
         let side_uvs = uv::get_fluid_side_uvs(0.8, 0.2);
         assert_eq!(side_uvs.len(), 4);
         assert!((side_uvs[0].1 - 0.1).abs() < 1e-6);
+
+        // Test batch_repair_fluid_uv with Python list & zero-copy buffer
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let verts_flat = pyo3::types::PyList::new(py, &[
+                0.0f32, 0.0, 1.0,
+                0.0, 0.0, 0.0,
+                0.0, 0.2, 0.0,
+                0.0, 0.8, 1.0,
+            ]).unwrap();
+            let uvs_flat = pyo3::types::PyList::new(py, &[
+                1.0f32, 0.0,
+                0.0, 0.0,
+                0.0, 0.8,
+                1.0, 0.2,
+            ]).unwrap();
+            let (count, out_uvs) = uv::batch_repair_fluid_uv(py, verts_flat.as_any(), uvs_flat.as_any(), None, false, 0.005).unwrap();
+            assert_eq!(count, 1);
+            let out_vec: Vec<f32> = out_uvs.extract().unwrap();
+            assert!((out_vec[5] - 0.2).abs() < 1e-5);
+            assert!((out_vec[7] - 0.8).abs() < 1e-5);
+
+            // Test with zero-copy array.array('f') buffer
+            let py_code = "import array\nverts = array.array('f', [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.8, 1.0])\nuvs = array.array('f', [1.0, 0.0, 0.0, 0.0, 0.0, 0.8, 1.0, 0.2])\n";
+            let locals = pyo3::types::PyDict::new(py);
+            py.run(&std::ffi::CString::new(py_code).unwrap(), None, Some(&locals)).unwrap();
+            let py_verts = locals.get_item("verts").unwrap().unwrap();
+            let py_uvs = locals.get_item("uvs").unwrap().unwrap();
+            let (b_count, _) = uv::batch_repair_fluid_uv(py, &py_verts, &py_uvs, None, false, 0.005).unwrap();
+            let uvs_after: Vec<f32> = py_uvs.extract().unwrap();
+            assert_eq!(b_count, 1);
+            // Verify in-place mutation
+            assert!((uvs_after[5] - 0.2).abs() < 1e-5);
+            assert!((uvs_after[7] - 0.8).abs() < 1e-5);
+        });
     }
 
     #[test]

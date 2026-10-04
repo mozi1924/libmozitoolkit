@@ -150,19 +150,134 @@ pub fn repair_quad_fluid_uv(
 
 #[pyfunction]
 #[pyo3(signature = (verts_flat, uvs_flat, normals_flat=None, force=false, min_slope_threshold=0.005))]
-pub fn batch_repair_fluid_uv(
-    py: Python<'_>,
-    verts_flat: Vec<f32>,
-    mut uvs_flat: Vec<f32>,
-    normals_flat: Option<Vec<f32>>,
+pub fn batch_repair_fluid_uv<'py>(
+    py: Python<'py>,
+    verts_flat: &Bound<'py, PyAny>,
+    uvs_flat: &Bound<'py, PyAny>,
+    normals_flat: Option<&Bound<'py, PyAny>>,
     force: bool,
     min_slope_threshold: f32,
-) -> (usize, Vec<f32>) {
-    let n_slice = normals_flat.as_deref();
-    let count = py.allow_threads(|| {
-        mtk_voxel::fluid_uv::batch_repair_fluid_uv(&verts_flat, &mut uvs_flat, n_slice, force, min_slope_threshold)
-    });
-    (count, uvs_flat)
+) -> PyResult<(usize, Bound<'py, PyAny>)> {
+    use pyo3::buffer::PyBuffer;
+    use pyo3::types::PyList;
+
+    // 1. Resolve verts_flat buffer or Vec
+    let py_buf_verts_f32 = PyBuffer::<f32>::get(verts_flat).ok();
+    let py_buf_verts_u8 = if py_buf_verts_f32.is_none() {
+        PyBuffer::<u8>::get(verts_flat).ok()
+    } else {
+        None
+    };
+    let verts_vec: Vec<f32>;
+    let verts_slice: &[f32] = if let Some(ref buf) = py_buf_verts_f32 {
+        if buf.is_c_contiguous() {
+            unsafe { std::slice::from_raw_parts(buf.buf_ptr() as *const f32, buf.item_count()) }
+        } else {
+            verts_vec = verts_flat.extract()?;
+            &verts_vec
+        }
+    } else if let Some(ref buf) = py_buf_verts_u8 {
+        let ptr = buf.buf_ptr();
+        let len_bytes = buf.len_bytes();
+        let is_aligned = (ptr as usize) % std::mem::align_of::<f32>() == 0;
+        let is_len_valid = len_bytes % std::mem::size_of::<f32>() == 0;
+        if is_aligned && is_len_valid && buf.is_c_contiguous() {
+            unsafe { std::slice::from_raw_parts(ptr as *const f32, len_bytes / 4) }
+        } else {
+            verts_vec = verts_flat.extract()?;
+            &verts_vec
+        }
+    } else {
+        verts_vec = verts_flat.extract()?;
+        &verts_vec
+    };
+
+    // 2. Resolve normals_flat buffer or Vec
+    let py_buf_normals_f32 = normals_flat.and_then(|n| PyBuffer::<f32>::get(n).ok());
+    let py_buf_normals_u8 = if py_buf_normals_f32.is_none() {
+        normals_flat.and_then(|n| PyBuffer::<u8>::get(n).ok())
+    } else {
+        None
+    };
+    let normals_vec: Option<Vec<f32>>;
+    let normals_slice: Option<&[f32]> = if let Some(ref buf) = py_buf_normals_f32 {
+        if buf.is_c_contiguous() {
+            normals_vec = None;
+            Some(unsafe { std::slice::from_raw_parts(buf.buf_ptr() as *const f32, buf.item_count()) })
+        } else {
+            normals_vec = normals_flat.map(|n| n.extract()).transpose()?;
+            normals_vec.as_deref()
+        }
+    } else if let Some(ref buf) = py_buf_normals_u8 {
+        let ptr = buf.buf_ptr();
+        let len_bytes = buf.len_bytes();
+        let is_aligned = (ptr as usize) % std::mem::align_of::<f32>() == 0;
+        let is_len_valid = len_bytes % std::mem::size_of::<f32>() == 0;
+        if is_aligned && is_len_valid && buf.is_c_contiguous() {
+            normals_vec = None;
+            Some(unsafe { std::slice::from_raw_parts(ptr as *const f32, len_bytes / 4) })
+        } else {
+            normals_vec = normals_flat.map(|n| n.extract()).transpose()?;
+            normals_vec.as_deref()
+        }
+    } else if let Some(n) = normals_flat {
+        normals_vec = Some(n.extract()?);
+        normals_vec.as_deref()
+    } else {
+        normals_vec = None;
+        None
+    };
+    let _ = &normals_vec;
+
+    // 3. Resolve uvs_flat buffer (mutable in-place) or fallback to Vec
+    let py_buf_uvs_f32 = PyBuffer::<f32>::get(uvs_flat).ok();
+    if let Some(ref buf) = py_buf_uvs_f32 {
+        if !buf.readonly() && buf.is_c_contiguous() {
+            let uvs_mut: &mut [f32] = unsafe {
+                std::slice::from_raw_parts_mut(buf.buf_ptr() as *mut f32, buf.item_count())
+            };
+            let count = mtk_voxel::fluid_uv::batch_repair_fluid_uv(
+                verts_slice,
+                uvs_mut,
+                normals_slice,
+                force,
+                min_slope_threshold,
+            );
+            return Ok((count, uvs_flat.clone()));
+        }
+    }
+    let py_buf_uvs_u8 = PyBuffer::<u8>::get(uvs_flat).ok();
+    if let Some(ref buf) = py_buf_uvs_u8 {
+        let ptr = buf.buf_ptr();
+        let len_bytes = buf.len_bytes();
+        let is_aligned = (ptr as usize) % std::mem::align_of::<f32>() == 0;
+        let is_len_valid = len_bytes % std::mem::size_of::<f32>() == 0;
+        if !buf.readonly() && is_aligned && is_len_valid && buf.is_c_contiguous() {
+            let uvs_mut: &mut [f32] = unsafe {
+                std::slice::from_raw_parts_mut(ptr as *mut f32, len_bytes / 4)
+            };
+            let count = mtk_voxel::fluid_uv::batch_repair_fluid_uv(
+                verts_slice,
+                uvs_mut,
+                normals_slice,
+                force,
+                min_slope_threshold,
+            );
+            return Ok((count, uvs_flat.clone()));
+        }
+    }
+
+    // Fallback path: copy into Vec<f32> and construct PyList
+    let mut uvs_vec: Vec<f32> = uvs_flat.extract()?;
+    let count = mtk_voxel::fluid_uv::batch_repair_fluid_uv(
+        verts_slice,
+        &mut uvs_vec,
+        normals_slice,
+        force,
+        min_slope_threshold,
+    );
+    let py_list = PyList::new(py, &uvs_vec)?;
+    Ok((count, py_list.into_any()))
 }
 
 #[pyfunction]
