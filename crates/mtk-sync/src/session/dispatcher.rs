@@ -22,6 +22,8 @@ pub fn event_worker_loop(
     let mut stream_total_sections: usize = 0;
     let mut stream_received_sections: usize = 0;
     let mut pending_non_streaming_updates = false;
+    let mut pending_stream_mesh_rebuild = false;
+    let mut last_sync_request_time: Option<std::time::Instant> = None;
 
     while running.load(Ordering::Relaxed) {
         match msg_receiver.recv_timeout(std::time::Duration::from_millis(50)) {
@@ -34,6 +36,7 @@ pub fn event_worker_loop(
             }
             Ok(ClientMessage::PacketReceived(packet)) => {
                 let is_sec_snapshot = matches!(packet, Packet::SectionSnapshot { .. });
+                let is_stream_end = matches!(packet, Packet::StreamEnd { .. });
                 let more_pending = !msg_receiver.is_empty();
                 handle_packet(
                     packet,
@@ -49,10 +52,15 @@ pub fn event_worker_loop(
                 if is_sec_snapshot && stream_id_atomic.load(Ordering::SeqCst) == 0 {
                     pending_non_streaming_updates = true;
                 }
+                if is_stream_end && more_pending {
+                    pending_stream_mesh_rebuild = true;
+                }
             }
             Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
                 if pending_non_streaming_updates {
                     pending_non_streaming_updates = false;
+                    sync_requested.store(false, Ordering::SeqCst);
+                    last_sync_request_time = None;
                     let (unified, world_mesh) = {
                         let mut w = world.write().unwrap();
                         let _ = w.rebuild_dirty();
@@ -65,6 +73,30 @@ pub fn event_worker_loop(
                         }
                     }
                 }
+                if pending_stream_mesh_rebuild {
+                    pending_stream_mesh_rebuild = false;
+                    let (unified, world_mesh) = {
+                        let mut w = world.write().unwrap();
+                        let m = w.rebuild_all().cloned().unwrap_or_default();
+                        (w.unified_mesh, m)
+                    };
+                    if unified && !world_mesh.is_empty() {
+                        let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
+                    }
+                }
+                // Auto-expire sync_requested latch after silence to recover from dropped packets
+                if sync_requested.load(Ordering::SeqCst) && stream_id_atomic.load(Ordering::SeqCst) == 0 {
+                    if let Some(t) = last_sync_request_time {
+                        if t.elapsed() > std::time::Duration::from_millis(1500) {
+                            sync_requested.store(false, Ordering::SeqCst);
+                            last_sync_request_time = None;
+                        }
+                    } else {
+                        last_sync_request_time = Some(std::time::Instant::now());
+                    }
+                } else {
+                    last_sync_request_time = None;
+                }
                 continue;
             }
             Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
@@ -73,6 +105,8 @@ pub fn event_worker_loop(
         // If a batch of non-streaming section snapshots finished and channel is now quiet, remesh once
         if pending_non_streaming_updates && msg_receiver.is_empty() {
             pending_non_streaming_updates = false;
+            sync_requested.store(false, Ordering::SeqCst);
+            last_sync_request_time = None;
             let (unified, world_mesh) = {
                 let mut w = world.write().unwrap();
                 let _ = w.rebuild_dirty();
@@ -83,6 +117,19 @@ pub fn event_worker_loop(
                 if let Some(mesh) = world_mesh {
                     let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
                 }
+            }
+        }
+
+        // If consecutive stream batches finished and channel is now quiet, remesh all once
+        if pending_stream_mesh_rebuild && msg_receiver.is_empty() {
+            pending_stream_mesh_rebuild = false;
+            let (unified, world_mesh) = {
+                let mut w = world.write().unwrap();
+                let m = w.rebuild_all().cloned().unwrap_or_default();
+                (w.unified_mesh, m)
+            };
+            if unified && !world_mesh.is_empty() {
+                let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
             }
         }
     }
@@ -133,6 +180,7 @@ pub fn handle_packet(
             biome_palette,
             biome_indices,
         } => {
+            sync_requested.store(false, Ordering::SeqCst);
             let identical = {
                 let w = world.read().unwrap();
                 w.storage.is_snapshot_identical(
@@ -239,7 +287,8 @@ pub fn handle_packet(
             } else if !more_pending {
                 let (unified, section_mesh, world_mesh) = {
                     let mut w = world.write().unwrap();
-                    let s_mesh = w.rebuild_single_section(sec_coord);
+                    let _ = w.rebuild_dirty();
+                    let s_mesh = w.get_section_cache().get(&sec_coord).cloned().unwrap_or_default();
                     let w_mesh = if w.unified_mesh { w.get_world_mesh().cloned() } else { None };
                     (w.unified_mesh, s_mesh, w_mesh)
                 };
@@ -336,11 +385,11 @@ pub fn handle_packet(
                 let is_streaming = stream_id_atomic.load(Ordering::SeqCst) != 0;
                 if let Some(sender) = cmd_sender {
                     if !is_streaming && !sync_requested.load(Ordering::SeqCst) {
-                        if is_storage_empty || mismatched.len() > 64 || mismatched.len() == raw_entries.len() {
+                        if is_storage_empty || mismatched.len() == raw_entries.len() {
                             let _ = sender.send(ClientCommand::Send(encode_full_sync_request()));
                             sync_requested.store(true, Ordering::SeqCst);
                         } else {
-                            for packet in encode_repair_requests(&mismatched, 64) {
+                            for packet in encode_repair_requests(&mismatched, 512) {
                                 let _ = sender.send(ClientCommand::Send(packet));
                             }
                             sync_requested.store(true, Ordering::SeqCst);
@@ -374,6 +423,16 @@ pub fn handle_packet(
             stream_id_atomic.store(0, Ordering::SeqCst);
             sync_requested.store(false, Ordering::SeqCst);
 
+            let built = *stream_received_sections;
+            let _ = event_sender.send(SyncEvent::StreamFinished {
+                stream_id,
+                built_sections: built,
+            });
+
+            if more_pending {
+                return;
+            }
+
             let (total, unified, mesh) = {
                 let mut w = world.write().unwrap();
                 let m = w.rebuild_all().cloned().unwrap_or_default();
@@ -394,11 +453,6 @@ pub fn handle_packet(
                     });
                 }
             }
-
-            let _ = event_sender.send(SyncEvent::StreamFinished {
-                stream_id,
-                built_sections: total,
-            });
         }
 
         _ => {}

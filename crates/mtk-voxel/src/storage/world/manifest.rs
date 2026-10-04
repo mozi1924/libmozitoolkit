@@ -2,19 +2,48 @@ use std::collections::HashSet;
 
 use glam::IVec3;
 
-use crate::storage::SectionStorage;
 use super::container::VoxelStorage;
 
 impl VoxelStorage {
-    /// Computes and caches CRC32 for a single section.
+    /// Computes and caches CRC32 for a single section, clamped to active selection bounds.
     pub fn calculate_and_store_section_crc(&mut self, coord: IVec3) -> u32 {
-        let default_sec = SectionStorage::new(coord);
+        let (start_x, start_y, start_z, sx, sy, sz) = self.get_section_block_bounds(coord);
+        let total_blocks = (sx * sy * sz) as usize;
+        if total_blocks == 0 {
+            self.section_crc_map.insert(coord, 0);
+            return 0;
+        }
+
+        let is_full_section = sx == 16 && sy == 16 && sz == 16;
         let sec = self.sections.get_mut(&coord);
+
         let crc = if let Some(s) = sec {
-            s.compute_crc()
+            if s.is_empty() {
+                crate::crc::get_empty_section_crc(total_blocks)
+            } else if is_full_section {
+                s.compute_crc()
+            } else {
+                let end_x = start_x + sx - 1;
+                let end_y = start_y + sy - 1;
+                let end_z = start_z + sz - 1;
+                let mut crc_val = 0u32;
+                for x in start_x..=end_x {
+                    let lx = (x & 15) as usize;
+                    for y in start_y..=end_y {
+                        let ly = (y & 15) as usize;
+                        for z in start_z..=end_z {
+                            let lz = (z & 15) as usize;
+                            let st = s.get_local_state(lx, ly, lz);
+                            crc_val = crate::crc::crc32_update(crc_val, st.as_bytes());
+                        }
+                    }
+                }
+                crc_val
+            }
         } else {
-            default_sec.cached_crc.unwrap_or(crate::crc::EMPTY_SECTION_CRC)
+            crate::crc::get_empty_section_crc(total_blocks)
         };
+
         self.section_crc_map.insert(coord, crc);
         crc
     }
@@ -22,9 +51,9 @@ impl VoxelStorage {
     /// Recomputes CRC32 for all sections currently loaded.
     pub fn recalculate_all_section_crcs(&mut self) {
         self.section_crc_map.clear();
-        for (&coord, sec) in self.sections.iter_mut() {
-            let crc = sec.compute_crc();
-            self.section_crc_map.insert(coord, crc);
+        let coords: Vec<IVec3> = self.sections.keys().copied().collect();
+        for coord in coords {
+            self.calculate_and_store_section_crc(coord);
         }
     }
 

@@ -169,6 +169,7 @@ impl VoxelWorld {
             self.section_mesh_cache.clear();
             self.world_mesh = None;
             self.used_chunk_ids.clear();
+            self.storage.mark_all_sections_dirty();
         }
         bounds_changed
     }
@@ -279,10 +280,17 @@ impl VoxelWorld {
 
     /// Synchronizes selection bounds if origin centering is enabled.
     fn sync_selection_bounds(&mut self) {
-        if self.config.origin_centered && self.config.selection_bounds.is_none() {
+        if self.config.origin_centered {
             let (min_x, min_y, min_z, sz_x, sz_y, sz_z) = self.storage.get_bounds();
             if sz_x > 0 && sz_y > 0 && sz_z > 0 {
-                self.config.selection_bounds = Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]));
+                let new_bounds = Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]));
+                if self.config.selection_bounds != new_bounds {
+                    self.config.selection_bounds = new_bounds;
+                    self.section_mesh_cache.clear();
+                    self.world_mesh = None;
+                    self.used_chunk_ids.clear();
+                    self.storage.mark_all_sections_dirty();
+                }
             }
         }
     }

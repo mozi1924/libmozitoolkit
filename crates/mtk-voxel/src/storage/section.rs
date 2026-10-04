@@ -81,6 +81,14 @@ impl SectionStorage {
         }
     }
 
+    /// Resets the section to empty air.
+    pub fn clear(&mut self) {
+        self.palette.truncate(1);
+        self.voxels.fill(0);
+        self.non_air_count = 0;
+        self.cached_crc = Some(EMPTY_SECTION_CRC);
+    }
+
     /// Creates a section pre-populated from a 4096-element blockstate slice.
     pub fn from_slice(coord: IVec3, states: &[&str]) -> Self {
         let mut section = Self::new(coord);

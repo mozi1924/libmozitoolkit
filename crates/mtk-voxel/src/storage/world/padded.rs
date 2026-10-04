@@ -20,6 +20,22 @@ impl VoxelStorage {
             self.get_block(wx, wy, wz).to_string()
         });
 
+        if self.has_explicit_bounds {
+            for lx in 0..16 {
+                let wx = sec_wx + lx as i32;
+                for ly in 0..16 {
+                    let wy = sec_wy + ly as i32;
+                    for lz in 0..16 {
+                        let wz = sec_wz + lz as i32;
+                        if !self.contains(wx, wy, wz) {
+                            let p_idx = (lx + 1) * 324 + (ly + 1) * 18 + (lz + 1);
+                            padded.padded_voxels[p_idx] = 0;
+                        }
+                    }
+                }
+            }
+        }
+
         if !padded.is_empty && (!self.biome_map.is_empty() || self.primary_biome.is_some()) {
             let mut biome_cols = Vec::with_capacity(256);
             let (min_x, _, min_z, size_x, _, size_z) = self.get_bounds();

@@ -284,6 +284,25 @@ impl VoxelStorage {
             x >= min_x && x <= new_max_x && z >= min_z && z <= new_max_z
         });
 
+        // Prune out-of-bounds section CRC cache and known empty sections
+        self.section_crc_map.retain(|coord, _| {
+            coord.x >= new_min_sec_x
+                && coord.x <= new_max_sec_x
+                && coord.y >= new_min_sec_y
+                && coord.y <= new_max_sec_y
+                && coord.z >= new_min_sec_z
+                && coord.z <= new_max_sec_z
+        });
+
+        self.known_empty_sections.retain(|coord| {
+            coord.x >= new_min_sec_x
+                && coord.x <= new_max_sec_x
+                && coord.y >= new_min_sec_y
+                && coord.y <= new_max_sec_y
+                && coord.z >= new_min_sec_z
+                && coord.z <= new_max_sec_z
+        });
+
         self.min_x = min_x;
         self.min_y = min_y;
         self.min_z = min_z;
@@ -293,8 +312,8 @@ impl VoxelStorage {
         self.has_explicit_bounds = true;
         self.advance_generation();
 
-        // Mark boundary seam sections dirty
-        for coord in self.sections.keys() {
+        // Clear out-of-bounds voxels in boundary sections and mark dirty
+        for (&coord, sec) in self.sections.iter_mut() {
             let is_boundary = coord.x == new_min_sec_x
                 || coord.x == new_max_sec_x
                 || coord.y == new_min_sec_y
@@ -302,7 +321,22 @@ impl VoxelStorage {
                 || coord.z == new_min_sec_z
                 || coord.z == new_max_sec_z;
             if is_boundary {
-                self.dirty_sections.insert(*coord);
+                self.dirty_sections.insert(coord);
+                let base_x = coord.x << 4;
+                let base_y = coord.y << 4;
+                let base_z = coord.z << 4;
+                for lx in 0..16 {
+                    let wx = base_x + lx as i32;
+                    for ly in 0..16 {
+                        let wy = base_y + ly as i32;
+                        for lz in 0..16 {
+                            let wz = base_z + lz as i32;
+                            if wx < min_x || wx > new_max_x || wy < min_y || wy > new_max_y || wz < min_z || wz > new_max_z {
+                                sec.set_local(lx, ly, lz, "minecraft:air");
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -339,6 +373,9 @@ impl VoxelStorage {
 
     /// Gets the blockstate string at world coordinate `(x, y, z)`.
     pub fn get_block(&self, x: i32, y: i32, z: i32) -> &str {
+        if self.has_explicit_bounds && !self.contains(x, y, z) {
+            return "minecraft:air";
+        }
         let sec_coord = IVec3::new(x >> 4, y >> 4, z >> 4);
         if let Some(sec) = self.sections.get(&sec_coord) {
             let lx = (x & 15) as usize;

@@ -178,48 +178,60 @@ impl VoxelStorage {
         }
 
         let sec_coord = IVec3::new(sec_x, sec_y, sec_z);
-        let sec = self
-            .sections
-            .entry(sec_coord)
-            .or_insert_with(|| SectionStorage::new(sec_coord));
+        {
+            let sec = self
+                .sections
+                .entry(sec_coord)
+                .or_insert_with(|| SectionStorage::new(sec_coord));
+            sec.clear();
 
-        for idx in 0..total_blocks {
-            let p_idx = grid_indices[idx] as usize;
-            if p_idx >= p_len {
-                continue;
+            for idx in 0..total_blocks {
+                let p_idx = grid_indices[idx] as usize;
+                if p_idx >= p_len {
+                    continue;
+                }
+                let state = &palette[p_idx];
+
+                let rem = idx % (size_y * size_z) as usize;
+                let lx = idx / (size_y * size_z) as usize;
+                let ly = rem / size_z as usize;
+                let lz = rem % size_z as usize;
+
+                let wx = start_x + lx as i32;
+                let wy = start_y + ly as i32;
+                let wz = start_z + lz as i32;
+
+                let blx = (wx & 15) as usize;
+                let bly = (wy & 15) as usize;
+                let blz = (wz & 15) as usize;
+
+                sec.set_local(blx, bly, blz, state);
             }
-            let state = &palette[p_idx];
+        }
 
-            let rem = idx % (size_y * size_z) as usize;
-            let lx = idx / (size_y * size_z) as usize;
-            let ly = rem / size_z as usize;
-            let lz = rem % size_z as usize;
-
-            let wx = start_x + lx as i32;
-            let wy = start_y + ly as i32;
-            let wz = start_z + lz as i32;
-
-            let blx = (wx & 15) as usize;
-            let bly = (wy & 15) as usize;
-            let blz = (wz & 15) as usize;
-
-            sec.set_local(blx, bly, blz, state);
-
-            if has_biomes {
-                if let (Some(bp), Some(bi)) = (biome_palette, biome_indices) {
-                    if bp.len() > 1 && ly == 0 && idx < bi.len() {
-                        let b_idx = bi[idx] as usize;
-                        if b_idx < bp.len() {
-                            self.biome_column_map.insert([wx, wz], bp[b_idx].clone());
+        if has_biomes {
+            if let (Some(bp), Some(bi)) = (biome_palette, biome_indices) {
+                if bp.len() > 1 {
+                    for idx in 0..total_blocks.min(bi.len()) {
+                        let rem = idx % (size_y * size_z) as usize;
+                        let ly = rem / size_z as usize;
+                        if ly == 0 {
+                            let lx = idx / (size_y * size_z) as usize;
+                            let lz = rem % size_z as usize;
+                            let wx = start_x + lx as i32;
+                            let wz = start_z + lz as i32;
+                            let b_idx = bi[idx] as usize;
+                            if b_idx < bp.len() {
+                                self.biome_column_map.insert([wx, wz], bp[b_idx].clone());
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Compute section CRC and mark dirty with 3x3x3 neighborhood halo
-        let crc = sec.compute_crc();
-        self.section_crc_map.insert(sec_coord, crc);
+        // Compute section CRC (clamped to selection bounds) and mark dirty with 3x3x3 neighborhood halo
+        self.calculate_and_store_section_crc(sec_coord);
 
         for dx in -1..=1 {
             for dy in -1..=1 {
