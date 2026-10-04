@@ -11,35 +11,8 @@ use crate::math::{bake_face_exact, rotate_direction};
 use crate::model_json::{BlockModelJson, ResolvedBlockModel};
 use crate::obj::{ModObjLoader, WavefrontObjParser};
 
-/// White-list of natively light-emitting blocks in Minecraft.
-const EMISSIVE_BLOCKS: &[&str] = &[
-    "glowstone",
-    "sea_lantern",
-    "shroomlight",
-    "magma_block",
-    "magma",
-    "crying_obsidian",
-    "jack_o_lantern",
-    "beacon",
-    "end_rod",
-    "lantern",
-    "soul_lantern",
-    "torch",
-    "soul_torch",
-    "wall_torch",
-    "soul_wall_torch",
-    "lava",
-    "flowing_lava",
-    "fire",
-    "soul_fire",
-    "conduit",
-    "sculk_catalyst",
-    "ochre_froglight",
-    "pearlescent_froglight",
-    "verdant_froglight",
-    "end_portal",
-    "end_gateway",
-];
+use super::emissive::{get_block_emissive_level, is_block_emissive};
+
 
 const KNOWN_NON_CUBES: &[&str] = &[
     "glass_pane", "pane", "fence", "door", "trapdoor", "bars", "chain", "lantern",
@@ -59,69 +32,6 @@ const NON_OPAQUE_SUBSTRINGS: &[&str] = &[
     "comparator", "cauldron", "hopper", "bell", "anvil", "stand",
     "frame", "portal", "conduit", "grindstone", "cutter", "piston",
 ];
-
-/// Checks if a blockstate is emissive based on identifier and properties.
-pub fn is_block_emissive(blockstate: &BlockState) -> bool {
-    let short_name = blockstate.name.as_str();
-    if EMISSIVE_BLOCKS.contains(&short_name) || short_name.ends_with("_froglight") {
-        return true;
-    }
-    let p = &blockstate.properties;
-    let is_lit = p.get("lit").map(|s| s == "true").unwrap_or(false);
-    if is_lit
-        && matches!(
-            short_name,
-            "furnace"
-                | "blast_furnace"
-                | "smoker"
-                | "redstone_lamp"
-                | "campfire"
-                | "soul_campfire"
-                | "redstone_ore"
-                | "deepslate_redstone_ore"
-        )
-    {
-        return true;
-    }
-    if matches!(short_name, "redstone_torch" | "redstone_wall_torch") {
-        return p.get("lit").map(|s| s == "true").unwrap_or(true);
-    }
-    if short_name == "respawn_anchor" {
-        if let Some(charges) = p.get("charges").and_then(|s| s.parse::<i32>().ok()) {
-            return charges > 0;
-        }
-    }
-    if short_name == "redstone_wire" {
-        if let Some(power) = p.get("power").and_then(|s| s.parse::<i32>().ok()) {
-            return power > 0;
-        }
-    }
-    false
-}
-
-/// Returns the normalized emission level (0.0 .. 1.0) for a blockstate.
-pub fn get_block_emissive_level(blockstate: &BlockState) -> f32 {
-    let short_name = blockstate.name.as_str();
-    let p = &blockstate.properties;
-
-    if short_name == "redstone_wire" {
-        if let Some(power) = p.get("power").and_then(|s| s.parse::<f32>().ok()) {
-            return (power / 15.0).clamp(0.0, 1.0);
-        }
-        return 0.0;
-    }
-    if short_name == "respawn_anchor" {
-        if let Some(charges) = p.get("charges").and_then(|s| s.parse::<f32>().ok()) {
-            return (charges / 4.0).clamp(0.0, 1.0);
-        }
-        return 0.0;
-    }
-    if is_block_emissive(blockstate) {
-        1.0
-    } else {
-        0.0
-    }
-}
 
 /// Universal, headless Minecraft Model Baker.
 ///
@@ -605,84 +515,6 @@ impl ModelBaker {
         Ok(baked_model)
     }
 
-    /// Calculates a conservative default thread count for parallel operations.
-    ///
-    /// Strategy: min(4, max(1, available_parallelism / 2)).
-    /// This leaves at least half of the CPU cores free for Blender UI, viewport rendering,
-    /// or host system responsiveness.
-    pub fn determine_conservative_threads() -> usize {
-        mtk_core::constants::concurrency::determine_conservative_threads(4)
-    }
-
-    /// Bakes a batch of BlockStates.
-    ///
-    /// - When `feature = "parallel"` is enabled: parallelizes across worker threads.
-    /// - When compiled for WASM or single-threaded mode: falls back to sequential iteration.
-    pub fn bake_batch<S, SF, MF>(
-        states: &[S],
-        state_loader: SF,
-        model_loader: MF,
-    ) -> Result<Vec<(String, Result<BakedModel, ModelError>)>, ModelError>
-    where
-        S: AsRef<str> + Sync,
-        SF: Fn(&str) -> Option<BlockStateDefinition> + Sync + Send,
-        MF: Fn(&str) -> Option<BlockModelJson> + Sync + Send,
-    {
-        #[cfg(feature = "parallel")]
-        {
-            use rayon::prelude::*;
-            let results = states
-                .par_iter()
-                .map(|state_ref| {
-                    let state_str = state_ref.as_ref();
-                    let mut local_baker = ModelBaker::new();
-                    let res = (|| -> Result<BakedModel, ModelError> {
-                        let bs = BlockState::parse(state_str)?;
-                        let bs_def = state_loader(&bs.name);
-                        local_baker.bake_blockstate(state_str, bs_def.as_ref(), |id| model_loader(id))
-                    })();
-                    (state_str.to_string(), res)
-                })
-                .collect();
-            Ok(results)
-        }
-
-        #[cfg(not(feature = "parallel"))]
-        {
-            let results = states
-                .iter()
-                .map(|state_ref| {
-                    let state_str = state_ref.as_ref();
-                    let mut local_baker = ModelBaker::new();
-                    let res = (|| -> Result<BakedModel, ModelError> {
-                        let bs = BlockState::parse(state_str)?;
-                        let bs_def = state_loader(&bs.name);
-                        local_baker.bake_blockstate(state_str, bs_def.as_ref(), |id| model_loader(id))
-                    })();
-                    (state_str.to_string(), res)
-                })
-                .collect();
-            Ok(results)
-        }
-    }
-
-    /// Backwards-compatible batch baker with optional explicit thread pool configuration.
-    pub fn bake_batch_parallel<S, SF, MF>(
-        states: &[S],
-        num_threads: Option<usize>,
-        state_loader: SF,
-        model_loader: MF,
-    ) -> Result<Vec<(String, Result<BakedModel, ModelError>)>, ModelError>
-    where
-        S: AsRef<str> + Sync,
-        SF: Fn(&str) -> Option<BlockStateDefinition> + Sync + Send,
-        MF: Fn(&str) -> Option<BlockModelJson> + Sync + Send,
-    {
-        mtk_core::constants::concurrency::execute_parallel(num_threads, || {
-            Self::bake_batch(states, state_loader, model_loader)
-        })
-        .map_err(ModelError::ThreadPoolError)?
-    }
 }
 
 #[cfg(test)]
@@ -764,42 +596,4 @@ f 1/1 2/2 3/3
         assert_eq!(mesh.vertex_count(), 3);
     }
 
-    #[test]
-    #[cfg(feature = "parallel")]
-    fn test_bake_batch_parallel() {
-        let model_json = r##"{
-            "textures": { "all": "minecraft:block/stone" },
-            "elements": [{
-                "from": [0, 0, 0], "to": [16, 16, 16],
-                "faces": {
-                    "down":  { "texture": "#all" }, "up":    { "texture": "#all" },
-                    "north": { "texture": "#all" }, "south": { "texture": "#all" },
-                    "west":  { "texture": "#all" }, "east":  { "texture": "#all" }
-                }
-            }]
-        }"##;
-        let model: BlockModelJson = serde_json::from_str(model_json).unwrap();
-
-        let states = vec![
-            "minecraft:stone".to_string(),
-            "minecraft:stone[variant=smooth]".to_string(),
-            "minecraft:stone[variant=rough]".to_string(),
-        ];
-
-        let results = ModelBaker::bake_batch_parallel(
-            &states,
-            Some(2),
-            |_name| None,
-            |_id| Some(model.clone()),
-        )
-        .unwrap();
-
-        assert_eq!(results.len(), 3);
-        for (st, res) in results {
-            let baked = res.unwrap();
-            assert!(baked.is_cube);
-            assert_eq!(baked.elements.len(), 1);
-            assert!(states.contains(&st));
-        }
-    }
 }

@@ -143,7 +143,7 @@ pub fn repair_quad_fluid_uv(
     ];
     let norm = normal.map(|(x, y, z)| glam::Vec3::new(x, y, z));
 
-    let repaired = uv::repair_quad_fluid_uv(&v_arr, &mut uv_arr, norm, force, min_slope_threshold);
+    let repaired = mtk_voxel::fluid_uv::repair_quad_fluid_uv(&v_arr, &mut uv_arr, norm, force, min_slope_threshold);
     let out_uvs = vec2_to_tuples(&uv_arr);
     Ok((repaired, out_uvs))
 }
@@ -160,7 +160,7 @@ pub fn batch_repair_fluid_uv(
 ) -> (usize, Vec<f32>) {
     let n_slice = normals_flat.as_deref();
     let count = py.allow_threads(|| {
-        uv::batch_repair_fluid_uv(&verts_flat, &mut uvs_flat, n_slice, force, min_slope_threshold)
+        mtk_voxel::fluid_uv::batch_repair_fluid_uv(&verts_flat, &mut uvs_flat, n_slice, force, min_slope_threshold)
     });
     (count, uvs_flat)
 }
@@ -168,13 +168,13 @@ pub fn batch_repair_fluid_uv(
 #[pyfunction]
 #[pyo3(signature = (is_flowing=true, rotation=0.0))]
 pub fn get_fluid_top_uvs(is_flowing: bool, rotation: f32) -> Vec<(f32, f32)> {
-    let arr = uv::get_fluid_top_uvs(is_flowing, rotation);
+    let arr = mtk_voxel::fluid_uv::get_fluid_top_uvs_vec2(is_flowing, rotation);
     vec2_to_tuples(&arr)
 }
 
 #[pyfunction]
 pub fn get_fluid_side_uvs(h_left_top: f32, h_right_top: f32) -> Vec<(f32, f32)> {
-    let arr = uv::get_fluid_side_uvs(h_left_top, h_right_top);
+    let arr = mtk_voxel::fluid_uv::get_fluid_side_uvs_vec2(h_left_top, h_right_top);
     vec2_to_tuples(&arr)
 }
 
