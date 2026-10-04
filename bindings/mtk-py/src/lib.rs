@@ -9,6 +9,7 @@ pub mod material;
 pub mod mesh;
 pub mod mesher;
 pub mod model;
+pub mod point_cloud;
 pub mod protocol;
 pub mod resource;
 pub mod subdivide;
@@ -27,6 +28,7 @@ pub use material::{
 pub use mesh::{PyAttributeDomain, PyMeshData};
 pub use mesher::PySectionMesher;
 pub use model::{PyBakedModelDatabase, PyModelBaker};
+pub use point_cloud::PyVoxelPointCloud;
 pub use protocol::{decode_packet, encode_full_sync_request, encode_repair_requests, encode_sync_config};
 pub use resource::{precompile_all_assets, PyPrecompileResult, PyResourcePackStack};
 pub use sync::PyLiveSyncSession;
@@ -103,10 +105,11 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyFaceCuller>()?;
     m.add_function(wrap_pyfunction!(cull::cull_mesh_faces, m)?)?;
 
-    // 3. Voxel Storage & Config & World
+    // 3. Voxel Storage & Config & World & Point Cloud
     m.add_class::<PyVoxelStorage>()?;
     m.add_class::<PyMesherConfig>()?;
     m.add_class::<PyVoxelWorld>()?;
+    m.add_class::<PyVoxelPointCloud>()?;
     m.add_function(wrap_pyfunction!(create_debug_world_storage, m)?)?;
 
     // 4. Meshing Generator

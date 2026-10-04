@@ -59,11 +59,18 @@ Python 模块名：`libmtk_py`
   - `repair_quad_fluid_uv(...)`、`batch_repair_fluid_uv(...)`、`get_fluid_top_uvs()`、`get_fluid_side_uvs()`
 
 ### 2.5 体素存储与网格化 (`voxel` & `mesher`)
+- **`VoxelPointCloud` (`PyVoxelPointCloud`)**：全量无剔除 3D 体素点云容器，支持 Blender 点网格 attributes 往返和零拷贝内存视图。
+  - `to_mesh_data() -> MeshData`, `from_mesh_data(mesh) -> VoxelPointCloud`
+  - `to_storage() -> VoxelStorage`, `from_arrays(...)`
+  - `positions_memoryview()`, `block_x_memoryview()`, `block_y_memoryview()`, `block_z_memoryview()`, `light_levels_memoryview()`
+  - `get_block_states()`, `get_biomes()`, `get_block_positions()`
 - **`VoxelStorage` (`PyVoxelStorage`)**：16x16x16 稀疏 Chunk Section 体素容器，带脏标记追踪。
+  - `to_point_cloud(config=None) -> VoxelPointCloud`, `from_point_cloud(cloud) -> VoxelStorage`, `load_from_point_cloud(cloud)`
   - `create_debug_world()` / `create_debug_world_storage()`：一键加载内置嵌入的原版调试世界快照（529 sections, 32,539 blocks）。
   - `set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)`, `set_block(x, y, z, state, tint)`, `get_block(x, y, z)`
   - `dirty_section_count()`, `clear_dirty_sections()`
 - **`VoxelWorld` (`PyVoxelWorld`)**：统一 3D 场景引擎，支持增量区块缓存与全量世界网格管理。
+  - `to_point_cloud() -> VoxelPointCloud`, `load_from_point_cloud(cloud)`
   - `from_storage(storage, config=None, culler=None, model_db=None, unified_mesh=True, num_threads=None)`
   - `create_debug_world(config=None, culler=None, model_db=None, unified_mesh=True, num_threads=None)`
   - `rebuild_all() -> MeshData`, `rebuild_dirty() -> Dict`, `num_threads` (getter/setter)

@@ -70,6 +70,7 @@
 | :--- | :--- |
 | **`storage::section`** | 16×16×16 单区块切片存储 (`SectionStorage`)，密集调色板映射与 non-air 数量追踪。 |
 | **`storage::world`** | 3D 稀疏区块世界容器 (`VoxelStorage`)、选区包围盒裁剪、CRC32 清单比对与原子版本控制。 |
+| **`storage::point_cloud`** | 全量无剔除体素点云存储 (`VoxelPointCloud`)，支持点网格 Attributes 双向重建与雕刻编辑源 (`PointCloudVoxelSource`)。 |
 | **`storage::crc`** | 快速 CRC32 计算器、规范 BlockState 字符串提取器与空区块 CRC 表。 |
 | **`source`** | 统一体素源抽象 Trait：`VoxelReader`、`VoxelWriter`、`VoxelSource` 及批量灌流管线 `ingest_from_source`。 |
 | **`mesher::section_mesher`**| 高性能区块网格化器 (`SectionMesher`)，集成遮挡判定、AO、着色元数据绑定与顶点空间焊接。 |
@@ -135,6 +136,23 @@ pub struct VoxelStorage {
 - **快照与增量更新**：`set_full_snapshot`、`set_section_snapshot`、`apply_delta_update`。
 - **清单比对**：`validate_manifest` 用于对比服务器端的区块 CRC32 列表，精准找出不同步的区块坐标。
 - **内嵌调试世界**：`create_debug_world() -> Result<Self, VoxelError>` 内置包含 529 区块切片与 32,539 方块状态的原版 Minecraft 调试世界快照（`debug_world_snapshot.json.gz`），内部采用 `OnceLock` 线程安全懒加载缓存，后续调用克隆仅需 <1ms。
+
+#### `VoxelPointCloud` 与 `PointCloudVoxelSource`
+全量无剔除的体素点云数据结构，专用于持久化场景存储、Blender 点网格属性桥接与用户交互式雕刻挖洞重构：
+```rust
+pub struct VoxelPointCloud {
+    pub positions: Vec<f32>,     // 3D 浮点坐标 [x, y, z]（已对齐目标坐标系与原点居中）
+    pub block_x: Vec<i32>,       // 绝对离散整数世界坐标
+    pub block_y: Vec<i32>,
+    pub block_z: Vec<i32>,
+    pub block_states: Vec<String>, // 原版规范方块状态字符串
+    pub biomes: Vec<String>,       // 生物群系标识符
+    pub light_levels: Vec<u8>,     // 复合光照等级
+}
+```
+- `to_point_cloud(config) -> VoxelPointCloud`：全量提取所有非空体素（**绝对不参与任何面遮挡剔除**，内部实心方块 100% 完整保留）。
+- `from_point_cloud(cloud) -> VoxelStorage`：从点云无损重建 `VoxelStorage`，支持用户手动删除局部点后自动生成空腔和露出内表面。
+- `to_mesh_data() / from_mesh_data()`：与标准纯点 `MeshData`（无多边形面）互转，无缝桥接 DCC 属性。
 
 ---
 

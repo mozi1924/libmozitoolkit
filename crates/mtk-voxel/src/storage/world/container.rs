@@ -5,7 +5,8 @@ use glam::IVec3;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::storage::SectionStorage;
+use crate::storage::{SectionStorage, VoxelPointCloud};
+use crate::types::MesherConfig;
 
 #[cfg(feature = "serde")]
 mod serde_atomic_u64 {
@@ -493,6 +494,21 @@ impl VoxelStorage {
             .filter(|(_, sec)| !sec.is_empty())
             .map(|(coord, _)| *coord)
             .collect()
+    }
+
+    /// Extracts an unculled point cloud containing every populated voxel point.
+    pub fn to_point_cloud(&self, config: &MesherConfig) -> VoxelPointCloud {
+        VoxelPointCloud::extract_from_storage(self, config)
+    }
+
+    /// Reconstructs a `VoxelStorage` from an unculled point cloud.
+    pub fn from_point_cloud(point_cloud: &VoxelPointCloud) -> Self {
+        point_cloud.reconstruct_storage()
+    }
+
+    /// Replaces current storage state by reconstructing from a point cloud.
+    pub fn load_from_point_cloud(&mut self, point_cloud: &VoxelPointCloud) {
+        *self = point_cloud.reconstruct_storage();
     }
 }
 

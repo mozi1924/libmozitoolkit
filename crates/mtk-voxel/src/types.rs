@@ -146,4 +146,6 @@ pub enum VoxelError {
     OutOfBounds(i32, i32, i32),
     #[error("Malformed snapshot data: {0}")]
     MalformedSnapshot(String),
+    #[error("Invalid point cloud data: {0}")]
+    InvalidPointCloud(String),
 }

@@ -470,6 +470,20 @@ impl VoxelWorld {
         }
     }
 
+    /// Extracts an unculled point cloud representation of the current world geometry.
+    pub fn to_point_cloud(&self) -> crate::storage::VoxelPointCloud {
+        self.storage.to_point_cloud(&self.config)
+    }
+
+    /// Reconstructs world storage from a point cloud and clears cached meshes.
+    pub fn load_from_point_cloud(&mut self, point_cloud: &crate::storage::VoxelPointCloud) {
+        self.storage.load_from_point_cloud(point_cloud);
+        self.section_mesh_cache.clear();
+        self.world_mesh = None;
+        self.used_chunk_ids.clear();
+        self.sync_selection_bounds();
+    }
+
     /// Clears all sections, cache, and world mesh.
     pub fn clear(&mut self) {
         self.storage.clear();

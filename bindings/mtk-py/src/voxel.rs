@@ -315,6 +315,28 @@ impl PyVoxelStorage {
         list
     }
 
+    /// Extracts an unculled point cloud containing every populated voxel point.
+    #[pyo3(signature = (config=None))]
+    pub fn to_point_cloud(&self, config: Option<&PyMesherConfig>) -> crate::point_cloud::PyVoxelPointCloud {
+        let mesher_cfg = config.map(|c| c.inner.clone()).unwrap_or_default();
+        crate::point_cloud::PyVoxelPointCloud {
+            inner: self.inner.to_point_cloud(&mesher_cfg),
+        }
+    }
+
+    /// Reconstructs a `VoxelStorage` from an unculled point cloud.
+    #[staticmethod]
+    pub fn from_point_cloud(point_cloud: &crate::point_cloud::PyVoxelPointCloud) -> Self {
+        Self {
+            inner: VoxelStorage::from_point_cloud(&point_cloud.inner),
+        }
+    }
+
+    /// Replaces current storage state by reconstructing from a point cloud.
+    pub fn load_from_point_cloud(&mut self, point_cloud: &crate::point_cloud::PyVoxelPointCloud) {
+        self.inner.load_from_point_cloud(&point_cloud.inner);
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "<VoxelStorage bounds=({}, {}, {}, size={}x{}x{}) sections={} dirty={}>",
@@ -739,6 +761,18 @@ impl PyVoxelWorld {
     /// Returns a copy of the underlying VoxelStorage.
     pub fn get_storage(&self) -> PyVoxelStorage {
         PyVoxelStorage { inner: self.inner.storage.clone() }
+    }
+
+    /// Extracts an unculled point cloud representation of the current world geometry.
+    pub fn to_point_cloud(&self) -> crate::point_cloud::PyVoxelPointCloud {
+        crate::point_cloud::PyVoxelPointCloud {
+            inner: self.inner.to_point_cloud(),
+        }
+    }
+
+    /// Reconstructs world storage from a point cloud and clears cached meshes.
+    pub fn load_from_point_cloud(&mut self, point_cloud: &crate::point_cloud::PyVoxelPointCloud) {
+        self.inner.load_from_point_cloud(&point_cloud.inner);
     }
 
     /// Clears world storage and meshes.
