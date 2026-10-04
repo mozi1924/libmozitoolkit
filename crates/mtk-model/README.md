@@ -121,11 +121,34 @@ pub struct BakedModel {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct BakedModelDatabase {
     pub models: HashMap<String, BakedModel>,
+    pub variant_groups: HashMap<String, BakedVariantGroup>,
 }
 ```
-- `db.get(state: &str) -> Option<&BakedModel>`: 多级智能回退寻址查询。
-- `db.deduplicate_all() -> usize`: 批量对库中所有模型执行面消重。
-- `db.remap_to_atlas_with(lookup_fn)`: 离线对库中所有模型注入图集坐标。
+- `db.get(state: &str) -> Option<&BakedModel>`: 多级智能回退寻址查询单体模型。
+- `db.get_variant_group(state: &str) -> Option<&BakedVariantGroup>`: 解析 BlockState 对应的预烘焙离散变体模型组（支持 1:1 随机旋转采样）。
+- `db.get_with_pos(state: &str, x: i32, y: i32, z: i32) -> Option<&BakedModel>`: 基于三维世界坐标确定性采样变体模型。
+- `db.deduplicate_all() -> usize`: 批量对库中所有模型及变体组执行面消重。
+- `db.remap_to_atlas_with(lookup_fn)`: 离线对库中所有模型及变体组注入图集坐标。
+
+---
+
+### 2.6 预烘焙模型变体组 (`baker/baked_model/variant_group.rs`)
+```rust
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BakedVariantGroup {
+    pub base_state: String,
+    pub models: Vec<BakedModel>,
+    pub weights: Vec<u32>,
+    pub total_weight: u32,
+}
+```
+- `BakedVariantGroup::new(base_state, models, weights) -> Self`: 创建带权重的离散多变体模型组。
+- `BakedVariantGroup::single(base_state, model) -> Self`: 创建单模型平凡变体组（权重 = 1）。
+- `group.select_by_pos(x: i32, y: i32, z: i32) -> &BakedModel`: 1:1 对齐 Java 版 `Mth.getSeed` + `JavaRandom` 空间坐标确定性采样变体。
+- `group.select_index_by_pos(x: i32, y: i32, z: i32) -> usize`: 空间坐标采样变体索引。
+- `group.select_by_seed(seed: i64) -> &BakedModel`: 依据 64 位整型种子采样变体。
+- `group.select_index_by_seed(seed: i64) -> usize`: 种子采样变体索引。
+- `group.select_primary() -> &BakedModel`: 获取最高权重/默认基准模型（当关闭 Alternate Blocks 时回退）。
 
 ---
 
@@ -136,11 +159,13 @@ pub struct BakedModelDatabase {
 | :--- | :--- |
 | `BlockState::parse(s: &str) -> Result<BlockState, ModelError>` | 解析方块状态字符串。 |
 | `BlockStateResolver::resolve(def, state) -> Vec<VariantMatch>` | 评估匹配方块状态对应的模型变体。 |
+| `BlockStateResolver::resolve_variants(def, state) -> Vec<(Vec<VariantMatch>, u32)>` | 提取离散变体分支及其相对权重（用于 Alternate Blocks 预烘焙）。 |
 | `get_builtin_blockstate_def(name) -> Option<BlockStateDefinition>` | 获取内置原版 Java BER 实体方块 BlockState 定义（箱子、潜影盒、钟、头颅、饰纹陶罐、末地传送门等无 JSON 几何之方块）。 |
 | `get_builtin_model_by_id(model_id) -> Option<BlockModelJson>` | 获取内置原版标准 Blockbench 兼容模型 JSON（箱子各形态、潜影盒、钟各悬挂态、头颅/龙首/猪灵首、陶罐、传送门）。 |
 | `get_builtin_model_for_state(blockstate) -> Option<BlockModelJson>` | 依据方块状态获取对应的内置实体回退模型并自动映射材质。 |
 | `ModelBaker::new() -> Self` | 创建通用模型烘焙器。 |
 | `baker.bake_blockstate(state_str, def, model_loader) -> Result<BakedModel, ModelError>` | 端到端烘焙指定方块状态为 `BakedModel`。 |
+| `baker.bake_blockstate_variants(state_str, def, model_loader) -> Result<BakedVariantGroup, ModelError>` | 端到端烘焙离散变体分支组为 `BakedVariantGroup`。 |
 | `is_block_emissive(state: &BlockState) -> bool` | 判断方块是否为自发光方块。 |
 | `get_block_emissive_level(state: &BlockState) -> f32` | 计算发光方块与红石引线（`power / 15.0`）的发光强度等级。 |
 | `WavefrontObjParser::parse_str(text, filter) -> Vec<ObjRawFace>` | 解析通用 Wavefront OBJ 文本。 |

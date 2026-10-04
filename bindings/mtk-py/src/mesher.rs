@@ -4,7 +4,6 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use mtk_cull::FaceCuller;
-use mtk_model::baked::BakedModel;
 use mtk_voxel::delta_mesher::DeltaMesher;
 use mtk_voxel::mesher::SectionMesher;
 use mtk_voxel::types::MesherConfig;
@@ -54,12 +53,20 @@ impl PySectionMesher {
             .collect();
 
         let model_db_opt = model_db.map(|db| db.inner.clone());
-        let model_lookup = move |state: &str| -> Option<Arc<BakedModel>> {
-            model_db_opt.as_ref().and_then(|db| db.get(state).cloned().map(Arc::new))
+        let model_lookup = move |state: &str| -> mtk_voxel::mesher::ModelSource {
+            if let Some(ref db) = model_db_opt {
+                if let Some(group) = db.get_variant_group(state) {
+                    return mtk_voxel::mesher::ModelSource::Variant(Arc::new(group.clone()));
+                }
+                if let Some(model) = db.get(state) {
+                    return mtk_voxel::mesher::ModelSource::Single(Arc::new(model.clone()));
+                }
+            }
+            mtk_voxel::mesher::ModelSource::None
         };
 
         let merged_mesh = py.allow_threads(|| -> Result<mtk_core::mesh::MeshData, String> {
-            let results = SectionMesher::mesh_sections_parallel(
+            let results = SectionMesher::mesh_sections_parallel_with_source(
                 &padded_sections,
                 cul,
                 model_lookup,
@@ -118,12 +125,20 @@ impl PySectionMesher {
             .collect();
 
         let model_db_opt = model_db.map(|db| db.inner.clone());
-        let model_lookup = move |state: &str| -> Option<Arc<BakedModel>> {
-            model_db_opt.as_ref().and_then(|db| db.get(state).cloned().map(Arc::new))
+        let model_lookup = move |state: &str| -> mtk_voxel::mesher::ModelSource {
+            if let Some(ref db) = model_db_opt {
+                if let Some(group) = db.get_variant_group(state) {
+                    return mtk_voxel::mesher::ModelSource::Variant(Arc::new(group.clone()));
+                }
+                if let Some(model) = db.get(state) {
+                    return mtk_voxel::mesher::ModelSource::Single(Arc::new(model.clone()));
+                }
+            }
+            mtk_voxel::mesher::ModelSource::None
         };
 
         let results = py.allow_threads(|| {
-            SectionMesher::mesh_sections_parallel(
+            SectionMesher::mesh_sections_parallel_with_source(
                 &padded_sections,
                 cul,
                 model_lookup,
@@ -167,12 +182,20 @@ impl PySectionMesher {
         let cul = culler.map(|c| &c.inner).unwrap_or(&default_culler);
 
         let model_db_opt = model_db.map(|db| db.inner.clone());
-        let model_lookup = move |state: &str| -> Option<Arc<BakedModel>> {
-            model_db_opt.as_ref().and_then(|db| db.get(state).cloned().map(Arc::new))
+        let model_lookup = move |state: &str| -> mtk_voxel::mesher::ModelSource {
+            if let Some(ref db) = model_db_opt {
+                if let Some(group) = db.get_variant_group(state) {
+                    return mtk_voxel::mesher::ModelSource::Variant(Arc::new(group.clone()));
+                }
+                if let Some(model) = db.get(state) {
+                    return mtk_voxel::mesher::ModelSource::Single(Arc::new(model.clone()));
+                }
+            }
+            mtk_voxel::mesher::ModelSource::None
         };
 
         let results = py.allow_threads(|| {
-            DeltaMesher::rebuild_dirty_sections(
+            DeltaMesher::rebuild_dirty_sections_with_source(
                 &mut storage.inner,
                 cul,
                 model_lookup,

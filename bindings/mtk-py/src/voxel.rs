@@ -356,7 +356,7 @@ use crate::texture::PyBakedAtlas;
 #[pymethods]
 impl PyMesherConfig {
     #[new]
-    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, origin_centered=true, weld_vertices=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None))]
+    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, origin_centered=true, weld_vertices=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None, enable_alternate_blocks=true, enable_random_offsets=true))]
     pub fn new(
         enable_ao: bool,
         mesh_fluids: bool,
@@ -367,6 +367,8 @@ impl PyMesherConfig {
         atlas: Option<&PyBakedAtlas>,
         biome_resolver: Option<&PyBiomeResolver>,
         custom_aliases: Option<HashMap<String, Vec<String>>>,
+        enable_alternate_blocks: bool,
+        enable_random_offsets: bool,
     ) -> Self {
         let mut config = MesherConfig::default();
         config.enable_ao = enable_ao;
@@ -381,6 +383,8 @@ impl PyMesherConfig {
         config.atlas_address_map = atlas.map(|a| Arc::new(a.inner.address_map.clone()));
         config.biome_resolver = biome_resolver.map(|r| Arc::new(r.inner.clone()));
         config.custom_aliases = custom_aliases.map(Arc::new);
+        config.enable_alternate_blocks = enable_alternate_blocks;
+        config.enable_random_offsets = enable_random_offsets;
         Self {
             inner: config,
             num_threads,
@@ -450,6 +454,26 @@ impl PyMesherConfig {
     #[setter]
     pub fn set_weld_vertices(&mut self, val: bool) {
         self.inner.weld_vertices = val;
+    }
+
+    #[getter]
+    pub fn enable_alternate_blocks(&self) -> bool {
+        self.inner.enable_alternate_blocks
+    }
+
+    #[setter]
+    pub fn set_enable_alternate_blocks(&mut self, val: bool) {
+        self.inner.enable_alternate_blocks = val;
+    }
+
+    #[getter]
+    pub fn enable_random_offsets(&self) -> bool {
+        self.inner.enable_random_offsets
+    }
+
+    #[setter]
+    pub fn set_enable_random_offsets(&mut self, val: bool) {
+        self.inner.enable_random_offsets = val;
     }
 
     /// Sets explicit bounding box `(min_x, min_y, min_z, size_x, size_y, size_z)` for origin centering.

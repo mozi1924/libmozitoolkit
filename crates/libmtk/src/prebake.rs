@@ -338,21 +338,21 @@ pub fn prebake_all_models(
 
     // 3. Bake all states concurrently
     #[cfg(feature = "parallel")]
-    let baked_pairs: Vec<(String, mtk_model::BakedModel)> = blockstate_defs
+    let baked_pairs: Vec<(String, mtk_model::BakedVariantGroup)> = blockstate_defs
         .par_iter()
         .flat_map(|(loc, def)| {
             let states = def.enumerate_all_states(&loc.as_string());
             let mut local_baker = ModelBaker::new();
             let mut pairs = Vec::new();
             for state_str in states {
-                if let Ok(mut baked) = local_baker.bake_blockstate(&state_str, Some(def), |id| get_model(id)) {
+                if let Ok(mut group) = local_baker.bake_blockstate_variants(&state_str, Some(def), |id| get_model(id)) {
                     if let Some(atlas) = atlas_map {
-                        baked.remap_to_atlas_with(|tex| {
+                        group.remap_to_atlas_with(|tex| {
                             MaterialResolver::resolve(tex, None, atlas)
                                 .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
                         });
                     }
-                    pairs.push((state_str, baked));
+                    pairs.push((state_str, group));
                 }
             }
             pairs
@@ -360,21 +360,21 @@ pub fn prebake_all_models(
         .collect();
 
     #[cfg(not(feature = "parallel"))]
-    let baked_pairs: Vec<(String, mtk_model::BakedModel)> = blockstate_defs
+    let baked_pairs: Vec<(String, mtk_model::BakedVariantGroup)> = blockstate_defs
         .iter()
         .flat_map(|(loc, def)| {
             let states = def.enumerate_all_states(&loc.as_string());
             let mut local_baker = ModelBaker::new();
             let mut pairs = Vec::new();
             for state_str in states {
-                if let Ok(mut baked) = local_baker.bake_blockstate(&state_str, Some(def), |id| get_model(id)) {
+                if let Ok(mut group) = local_baker.bake_blockstate_variants(&state_str, Some(def), |id| get_model(id)) {
                     if let Some(atlas) = atlas_map {
-                        baked.remap_to_atlas_with(|tex| {
+                        group.remap_to_atlas_with(|tex| {
                             MaterialResolver::resolve(tex, None, atlas)
                                 .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
                         });
                     }
-                    pairs.push((state_str, baked));
+                    pairs.push((state_str, group));
                 }
             }
             pairs
@@ -382,8 +382,8 @@ pub fn prebake_all_models(
         .collect();
 
     let mut db = BakedModelDatabase::new();
-    for (state_str, baked) in baked_pairs {
-        db.insert(state_str, baked);
+    for (state_str, group) in baked_pairs {
+        db.insert_variant_group(state_str, group);
     }
     db.deduplicate_all();
 

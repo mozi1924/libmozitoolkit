@@ -191,6 +191,8 @@ pub struct MesherConfig {
     pub atlas_address_map: Option<Arc<AtlasAddressMap>>, // 图集 UV 映射表
     pub biome_resolver: Option<Arc<BiomeResolver>>,      // 生物群系解析器
     pub custom_aliases: Option<Arc<HashMap<String, Vec<String>>>>,
+    pub enable_alternate_blocks: bool,       // 是否启用原版交替模型随机旋转（泥土、石头、睡莲等）
+    pub enable_random_offsets: bool,         // 是否启用植物三维空间确定性抖动（花草、竹子等）
 }
 ```
 
@@ -252,6 +254,20 @@ pub const BIOME_KERNEL_R2: &[(i32, i32, f32)] = &[
 在运行时发生方块放置或破坏时，调用 `DeltaMesher::rebuild_dirty_sections`：
 - 仅提取 `world.dirty_sections` 标记的区块进行邻域重建；
 - 支持 `find_affected_sections`：对于普通方块变动，自动扩散并脏化相邻的 6 向邻域区块；对于流体变动，自动将脏标记扩展至 $3\times 3\times 3$ 邻域。
+
+---
+
+### 4.6 预烘焙交替模型随机旋转与植物位置确定性抖动 (Alternate Blocks & Plant Offsets)
+
+1:1 逆向并严格对齐 Minecraft Java 原版客户端渲染行为，完全基于纯算术空间坐标哈希，网络包无需传输任何多余状态数据：
+
+1. **交替方块模型 (Alternate Blocks)**：
+   - 自然方块（如 `dirt`, `stone`, `sand`, `grass_block`, `lily_pad` 等）预先由 `mtk-model` 离线预烘焙为 4 种独立正交旋转分桶（0°、90°、180°、270°），存储于 `BakedVariantGroup`；
+   - 网格化热循环内以 `Mth.getSeed(x, y, z)`（包含 Y 轴，确保垂直堆叠方块朝向错开）配合 48 位 LCG `JavaRandom` 采样，直接检索预烘焙分桶，**彻底杜绝热循环内的实时矩阵旋转与 JSON 计算**。
+2. **植物三维空间确定性抖动 (Plant Offsets)**：
+   - 原版植物（花草、蕨类、枯竹等）在世界生成时沿 X/Z 轴微调 $\pm 0.25$（竹子等 `XYZ` 沿 Y 轴额外向下偏移 $\approx -0.2$）；
+   - 严格遵循原版规范以 `Mth.getSeed(x, 0, z)`（**Y 轴恒为 0**）计算种子，确保高草丛、向日葵等两格高双层植物的上下层植物茎秆水平位移绝对对齐；
+   - 在网格顶点发射阶段以零拷贝连续向量偏移 `(wx + dx, wy + dy, wz + dz)` 注入，开箱即用。
 
 ---
 

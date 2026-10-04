@@ -3,22 +3,57 @@ use std::collections::{BTreeMap, HashMap};
 use serde::{Deserialize, Serialize};
 
 use super::model::BakedModel;
+use super::variant_group::BakedVariantGroup;
 
 /// In-memory database of baked models keyed by canonical BlockState strings.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct BakedModelDatabase {
     pub models: HashMap<String, BakedModel>,
+    #[serde(default)]
+    pub variant_groups: HashMap<String, BakedVariantGroup>,
 }
 
 impl BakedModelDatabase {
     pub fn new() -> Self {
         Self {
             models: HashMap::new(),
+            variant_groups: HashMap::new(),
         }
     }
 
     pub fn insert(&mut self, state: String, model: BakedModel) {
+        self.variant_groups
+            .entry(state.clone())
+            .or_insert_with(|| BakedVariantGroup::single(state.clone(), model.clone()));
         self.models.insert(state, model);
+    }
+
+    /// Inserts a multi-variant group, registering its primary model into `self.models`.
+    pub fn insert_variant_group(&mut self, state: String, group: BakedVariantGroup) {
+        self.models.insert(state.clone(), group.select_primary().clone());
+        self.variant_groups.insert(state, group);
+    }
+
+    /// Resolves the variant group for a BlockState if available.
+    pub fn get_variant_group(&self, state: &str) -> Option<&BakedVariantGroup> {
+        if let Some(group) = self.variant_groups.get(state) {
+            return Some(group);
+        }
+        if let Ok(parsed) = crate::parser::blockstate::BlockState::parse(state) {
+            let canon = parsed.to_canonical_string();
+            if let Some(group) = self.variant_groups.get(&canon) {
+                return Some(group);
+            }
+        }
+        None
+    }
+
+    /// Resolves a baked model deterministically using 3D world integer coordinates.
+    pub fn get_with_pos(&self, state: &str, x: i32, y: i32, z: i32) -> Option<&BakedModel> {
+        if let Some(group) = self.get_variant_group(state) {
+            return Some(group.select_by_pos(x, y, z));
+        }
+        self.get(state)
     }
 
     /// Eliminates overlapping, duplicate, and interior coplanar contacting faces
@@ -27,6 +62,9 @@ impl BakedModelDatabase {
         let mut total = 0;
         for model in self.models.values_mut() {
             total += model.deduplicate_faces();
+        }
+        for group in self.variant_groups.values_mut() {
+            total += group.deduplicate_faces();
         }
         total
     }
@@ -38,6 +76,9 @@ impl BakedModelDatabase {
     {
         for model in self.models.values_mut() {
             model.remap_to_atlas_with(&mut lookup_fn);
+        }
+        for group in self.variant_groups.values_mut() {
+            group.remap_to_atlas_with(&mut lookup_fn);
         }
     }
 

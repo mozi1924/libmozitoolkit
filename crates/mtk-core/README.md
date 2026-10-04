@@ -60,6 +60,16 @@
 | `process_flat_mesh_extrude_repair` | `(mesh: &FlatPolygonMesh, ...) -> ExtrudeMeshOutput`：基于扁平连续内存网格的高性能挤出修复。 |
 | `process_random_extrude_mesh` | `(input: &RandomExtrudeMeshInput) -> RandomExtrudeMeshOutput`：单批次完成离散面随机挤出、3D 噪声位移与侧面拓扑 UV 缝合。 |
 
+### 5. 确定性随机与植被偏移 (`random`)
+
+| 函数 / 结构体 | 描述 |
+| :--- | :--- |
+| `mc_coordinate_seed` | `(x: i32, y: i32, z: i32) -> i64`：1:1 对标原版 `Mth.getSeed`，基于世界绝对整数坐标计算确定性 64 位哈希种子。 |
+| [`JavaRandom`](src/random.rs) | 1:1 对标 Java 标准 48 位线性同余随机数发生器（LCG），提供 `next_int(bound)`、`next_float()` 等。 |
+| [`OffsetType`](src/random.rs) | `None`, `XZ`（花草水平偏移）, `XYZ`（草丛/蕨类/树根 3D 偏移与微下沉）。 |
+| `get_block_offset` | `(offset_type, x, y, z) -> Vec3`：1:1 计算植被在方块内的连续位置抖动偏移量。 |
+| `determine_block_offset_type` | `(block_id_or_state: &str) -> OffsetType`：依据原版规则判定方块标识符的植被偏移类型。 |
+
 ---
 
 ## 快速上手 (Quick Start)

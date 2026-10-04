@@ -8,7 +8,7 @@ use std::sync::Arc;
 use glam::{IVec3, Vec2};
 use mtk_core::direction::Direction;
 use mtk_material::MaterialResolver;
-use mtk_model::baked::{BakedFace, BakedModel};
+use mtk_model::baked::{BakedFace, BakedModel, BakedVariantGroup};
 
 use crate::biome::SmoothedBiomeColumn;
 use crate::mesher::heuristic::get_unit_cube_texture_candidates;
@@ -37,11 +37,81 @@ pub struct PreResolvedModelFace {
     pub pre: PreResolvedFace,
 }
 
-/// Pre-resolved meshing data for a palette entry (either complex BakedModel or simple UnitCube).
+/// Pre-resolved face buckets for a single model or model variant.
+#[derive(Clone, Debug, Default)]
+pub struct ModelFaceBuckets {
+    pub culled_faces: [Vec<PreResolvedModelFace>; 6],
+    pub unculled_faces: Vec<PreResolvedModelFace>,
+}
+
+/// Source representation of a block model (single model, multi-variant group, or unit cube fallback).
+#[derive(Clone, Debug)]
+pub enum ModelSource {
+    None,
+    Single(Arc<BakedModel>),
+    Variant(Arc<BakedVariantGroup>),
+}
+
+impl ModelSource {
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        matches!(self, ModelSource::None)
+    }
+
+    #[inline]
+    pub fn primary_model(&self) -> Option<&BakedModel> {
+        match self {
+            ModelSource::None => None,
+            ModelSource::Single(m) => Some(m),
+            ModelSource::Variant(g) => Some(g.select_primary()),
+        }
+    }
+}
+
+impl From<Option<Arc<BakedModel>>> for ModelSource {
+    #[inline]
+    fn from(opt: Option<Arc<BakedModel>>) -> Self {
+        match opt {
+            Some(m) => ModelSource::Single(m),
+            None => ModelSource::None,
+        }
+    }
+}
+
+impl From<Arc<BakedModel>> for ModelSource {
+    #[inline]
+    fn from(m: Arc<BakedModel>) -> Self {
+        ModelSource::Single(m)
+    }
+}
+
+impl From<Option<Arc<BakedVariantGroup>>> for ModelSource {
+    #[inline]
+    fn from(opt: Option<Arc<BakedVariantGroup>>) -> Self {
+        match opt {
+            Some(g) => ModelSource::Variant(g),
+            None => ModelSource::None,
+        }
+    }
+}
+
+impl From<Arc<BakedVariantGroup>> for ModelSource {
+    #[inline]
+    fn from(g: Arc<BakedVariantGroup>) -> Self {
+        ModelSource::Variant(g)
+    }
+}
+
+/// Pre-resolved meshing data for a palette entry (either complex BakedModel, VariantGroup, or simple UnitCube).
 pub enum PaletteMeshingData {
     Model {
         culled_faces: [Vec<PreResolvedModelFace>; 6],
         unculled_faces: Vec<PreResolvedModelFace>,
+    },
+    VariantModel {
+        variants: Vec<ModelFaceBuckets>,
+        weights: Vec<u32>,
+        total_weight: u32,
     },
     UnitCube {
         faces: [PreResolvedFace; 6],
@@ -62,19 +132,144 @@ pub struct ResolvedFaceShading {
     pub emission: f32,
 }
 
+fn resolve_model_face(
+    face: &BakedFace,
+    state_str: &str,
+    emission: f32,
+    config: &MesherConfig,
+) -> PreResolvedModelFace {
+    let (final_tex_key, override_uvs, mat_slot, chunk_id, tex_id) =
+        if let Some(ref atlas_uvs) = face.atlas_uvs {
+            (
+                face.texture.clone(),
+                Some(*atlas_uvs),
+                face.atlas_chunk_id.unwrap_or(0),
+                face.atlas_chunk_id.unwrap_or(0) as i32,
+                face.atlas_texture_id.unwrap_or(0),
+            )
+        } else if let Some(atlas) = &config.atlas_address_map {
+            let base_loc = if !face.texture.is_empty() {
+                mtk_resource::ResourceLocation::parse(&face.texture).ok()
+            } else {
+                None
+            };
+            let resolved = if let Some(ref loc) = base_loc {
+                MaterialResolver::resolve(
+                    &loc.as_string(),
+                    config.custom_aliases.as_deref(),
+                    atlas,
+                )
+                .or_else(|| atlas.lookup(loc).map(|sp| ((*loc).clone(), sp)))
+            } else {
+                None
+            }
+            .or_else(|| {
+                MaterialResolver::resolve(
+                    &face.texture,
+                    config.custom_aliases.as_deref(),
+                    atlas,
+                )
+            });
+
+            if let Some((res_loc, atlas_loc)) = resolved {
+                let u_min = atlas_loc.frame_0_uv_bounds[0];
+                let v_min = atlas_loc.frame_0_uv_bounds[1];
+                let u_span = atlas_loc.frame_0_uv_bounds[2] - u_min;
+                let v_span = atlas_loc.frame_0_uv_bounds[3] - v_min;
+                let remapped = [
+                    Vec2::new(
+                        u_min + face.uvs[0].x * u_span,
+                        v_min + (1.0 - face.uvs[0].y) * v_span,
+                    ),
+                    Vec2::new(
+                        u_min + face.uvs[1].x * u_span,
+                        v_min + (1.0 - face.uvs[1].y) * v_span,
+                    ),
+                    Vec2::new(
+                        u_min + face.uvs[2].x * u_span,
+                        v_min + (1.0 - face.uvs[2].y) * v_span,
+                    ),
+                    Vec2::new(
+                        u_min + face.uvs[3].x * u_span,
+                        v_min + (1.0 - face.uvs[3].y) * v_span,
+                    ),
+                ];
+                (
+                    res_loc.as_string(),
+                    Some(remapped),
+                    atlas_loc.chunk_id,
+                    atlas_loc.chunk_id as i32,
+                    atlas_loc.texture_id,
+                )
+            } else {
+                (face.texture.clone(), None, 0, 0, 0)
+            }
+        } else {
+            (face.texture.clone(), None, 0, 0, 0)
+        };
+
+    let (tint_data, tint_color, colormap_uv) = compute_face_tint(
+        &final_tex_key,
+        state_str,
+        face.tint_index,
+        config.biome_resolver.as_deref(),
+    );
+
+    PreResolvedModelFace {
+        face: face.clone(),
+        pre: PreResolvedFace {
+            source_texture_key: final_tex_key,
+            override_uvs,
+            mat_slot,
+            chunk_id,
+            tex_id,
+            tint_data,
+            tint_color,
+            colormap_uv,
+            emission,
+        },
+    }
+}
+
+fn resolve_model_buckets(
+    baked: &BakedModel,
+    emission: f32,
+    state_str: &str,
+    config: &MesherConfig,
+) -> ModelFaceBuckets {
+    let (c_buckets, u_bucket) = baked.get_face_buckets();
+    let mut culled_faces: [Vec<PreResolvedModelFace>; 6] = Default::default();
+    for dir in Direction::ALL {
+        let idx = dir.to_index();
+        culled_faces[idx] = c_buckets[idx]
+            .iter()
+            .map(|f| resolve_model_face(f, state_str, emission, config))
+            .collect();
+    }
+    let unculled_faces = u_bucket
+        .iter()
+        .map(|f| resolve_model_face(f, state_str, emission, config))
+        .collect();
+
+    ModelFaceBuckets {
+        culled_faces,
+        unculled_faces,
+    }
+}
+
 /// Pre-resolves palette meshing data (Atlas UVs, material slots, tint) outside the meshing hot loop.
 pub fn build_palette_meshing_data(
     padded: &PaddedVoxelArray,
-    palette_models: &[Option<Arc<BakedModel>>],
+    palette_sources: &[ModelSource],
     config: &MesherConfig,
 ) -> Vec<PaletteMeshingData> {
     padded
         .palette
         .iter()
-        .zip(palette_models.iter())
-        .map(|(state_str, model_opt)| {
+        .zip(palette_sources.iter())
+        .map(|(state_str, source)| {
             let clean_block = mtk_resource::extract_block_name(state_str);
-            let emission = if let Some(ref baked) = model_opt {
+            let emission = if let Some(baked) = source.primary_model() {
                 baked.emissive_level
             } else {
                 mtk_model::baker::get_block_emissive_level(
@@ -82,116 +277,36 @@ pub fn build_palette_meshing_data(
                 )
             };
 
-            if let Some(baked) = model_opt {
-                let (c_buckets, u_bucket) = baked.get_face_buckets();
-
-                let resolve_face = |face: &BakedFace| -> PreResolvedModelFace {
-                    let (final_tex_key, override_uvs, mat_slot, chunk_id, tex_id) =
-                        if let Some(ref atlas_uvs) = face.atlas_uvs {
-                            (
-                                face.texture.clone(),
-                                Some(*atlas_uvs),
-                                face.atlas_chunk_id.unwrap_or(0),
-                                face.atlas_chunk_id.unwrap_or(0) as i32,
-                                face.atlas_texture_id.unwrap_or(0),
-                            )
-                        } else if let Some(atlas) = &config.atlas_address_map {
-                            let base_loc = if !face.texture.is_empty() {
-                                mtk_resource::ResourceLocation::parse(&face.texture).ok()
-                            } else {
-                                None
-                            };
-                            let resolved = if let Some(ref loc) = base_loc {
-                                MaterialResolver::resolve(
-                                    &loc.as_string(),
-                                    config.custom_aliases.as_deref(),
-                                    atlas,
-                                )
-                                .or_else(|| atlas.lookup(loc).map(|sp| ((*loc).clone(), sp)))
-                            } else {
-                                None
-                            }
-                            .or_else(|| {
-                                MaterialResolver::resolve(
-                                    &face.texture,
-                                    config.custom_aliases.as_deref(),
-                                    atlas,
-                                )
-                            });
-
-                            if let Some((res_loc, atlas_loc)) = resolved {
-                                let u_min = atlas_loc.frame_0_uv_bounds[0];
-                                let v_min = atlas_loc.frame_0_uv_bounds[1];
-                                let u_span = atlas_loc.frame_0_uv_bounds[2] - u_min;
-                                let v_span = atlas_loc.frame_0_uv_bounds[3] - v_min;
-                                let remapped = [
-                                    Vec2::new(
-                                        u_min + face.uvs[0].x * u_span,
-                                        v_min + (1.0 - face.uvs[0].y) * v_span,
-                                    ),
-                                    Vec2::new(
-                                        u_min + face.uvs[1].x * u_span,
-                                        v_min + (1.0 - face.uvs[1].y) * v_span,
-                                    ),
-                                    Vec2::new(
-                                        u_min + face.uvs[2].x * u_span,
-                                        v_min + (1.0 - face.uvs[2].y) * v_span,
-                                    ),
-                                    Vec2::new(
-                                        u_min + face.uvs[3].x * u_span,
-                                        v_min + (1.0 - face.uvs[3].y) * v_span,
-                                    ),
-                                ];
-                                (
-                                    res_loc.as_string(),
-                                    Some(remapped),
-                                    atlas_loc.chunk_id,
-                                    atlas_loc.chunk_id as i32,
-                                    atlas_loc.texture_id,
-                                )
-                            } else {
-                                (face.texture.clone(), None, 0, 0, 0)
-                            }
-                        } else {
-                            (face.texture.clone(), None, 0, 0, 0)
-                        };
-
-                    let (tint_data, tint_color, colormap_uv) = compute_face_tint(
-                        &final_tex_key,
-                        state_str,
-                        face.tint_index,
-                        config.biome_resolver.as_deref(),
-                    );
-
-                    PreResolvedModelFace {
-                        face: face.clone(),
-                        pre: PreResolvedFace {
-                            source_texture_key: final_tex_key,
-                            override_uvs,
-                            mat_slot,
-                            chunk_id,
-                            tex_id,
-                            tint_data,
-                            tint_color,
-                            colormap_uv,
-                            emission,
-                        },
+            match source {
+                ModelSource::Single(baked) => {
+                    let b = resolve_model_buckets(baked, emission, state_str, config);
+                    PaletteMeshingData::Model {
+                        culled_faces: b.culled_faces,
+                        unculled_faces: b.unculled_faces,
                     }
-                };
-
-                let mut culled_faces: [Vec<PreResolvedModelFace>; 6] = Default::default();
-                for dir in Direction::ALL {
-                    let idx = dir.to_index();
-                    culled_faces[idx] = c_buckets[idx].iter().map(&resolve_face).collect();
                 }
-                let unculled_faces: Vec<PreResolvedModelFace> =
-                    u_bucket.iter().map(&resolve_face).collect();
-
-                PaletteMeshingData::Model {
-                    culled_faces,
-                    unculled_faces,
+                ModelSource::Variant(group) => {
+                    if group.len() <= 1 || !config.enable_alternate_blocks {
+                        let primary = group.select_primary();
+                        let b = resolve_model_buckets(primary, emission, state_str, config);
+                        PaletteMeshingData::Model {
+                            culled_faces: b.culled_faces,
+                            unculled_faces: b.unculled_faces,
+                        }
+                    } else {
+                        let variants = group
+                            .models
+                            .iter()
+                            .map(|m| resolve_model_buckets(m, emission, state_str, config))
+                            .collect();
+                        PaletteMeshingData::VariantModel {
+                            variants,
+                            weights: group.weights.clone(),
+                            total_weight: group.total_weight,
+                        }
+                    }
                 }
-            } else {
+                ModelSource::None => {
                 let clean_sub = clean_block
                     .strip_prefix("minecraft:")
                     .unwrap_or(clean_block);
@@ -258,19 +373,30 @@ pub fn build_palette_meshing_data(
                     });
                 }
 
-                PaletteMeshingData::UnitCube {
-                    faces: [
-                        faces[0].take().unwrap(),
-                        faces[1].take().unwrap(),
-                        faces[2].take().unwrap(),
-                        faces[3].take().unwrap(),
-                        faces[4].take().unwrap(),
-                        faces[5].take().unwrap(),
-                    ],
+                    PaletteMeshingData::UnitCube {
+                        faces: [
+                            faces[0].take().unwrap(),
+                            faces[1].take().unwrap(),
+                            faces[2].take().unwrap(),
+                            faces[3].take().unwrap(),
+                            faces[4].take().unwrap(),
+                            faces[5].take().unwrap(),
+                        ],
+                    }
                 }
             }
         })
         .collect()
+}
+
+/// Backwards-compatible helper to pre-resolve palette meshing data from optional BakedModels.
+pub fn build_palette_meshing_data_from_models(
+    padded: &PaddedVoxelArray,
+    palette_models: &[Option<Arc<BakedModel>>],
+    config: &MesherConfig,
+) -> Vec<PaletteMeshingData> {
+    let sources: Vec<ModelSource> = palette_models.iter().map(|m| m.clone().into()).collect();
+    build_palette_meshing_data(padded, &sources, config)
 }
 
 /// Dynamically resolves CTM overrides for a BakedModel face, falling back to pre-resolved shading.

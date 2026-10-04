@@ -122,3 +122,20 @@ cache_output_dir/
 │   └── blocks_0_s.png      # Specular 镜面高光图集
 └── models/                 # 烘焙完成的预解析二进制方块几何库
 ```
+
+---
+
+### 2.6 1:1 Minecraft 原版视觉对齐契约 (Alternate Blocks & Plant Offsets)
+为了在无多余网络开销的前提下完美还原原版世界视觉效果，系统采用客户端纯算术空间坐标哈希管线：
+- **核心空间哈希与随机数生成器** (`mtk_core::random`):
+  - `mc_coordinate_seed(x, y, z) -> i64`: 1:1 对齐 Java 原版 `Mth.getSeed(x, y, z)`。
+  - `JavaRandom`: 48 位线性同余伪随机数生成器 (`java.util.Random` / `SingleThreadedRandomSource`)。
+- **预烘焙交替模型组** (`mtk_model::baked::BakedVariantGroup`):
+  - 针对自然方块（泥土、石头、沙子、草方块、睡莲等）的多旋转分支预烘焙为离散模型，支持按空间坐标种子快速抽样 (`select_by_pos`)。
+- **植物空间确定性抖动** (`mtk_core::random::OffsetType`):
+  - 对花草、蕨类 (`OffsetType::XZ`) 及竹子 (`OffsetType::XYZ`) 依 `Mth.getSeed(x, 0, z)` 沿水平轴进行 $\pm 0.25$ 偏移，两格高植物上下层茎秆水平位移严格保持一致。
+- **网格化源抽象与配置** (`mtk_voxel`):
+  - `ModelSource`: 统一表征单模型 (`Single`)、预烘焙变体组 (`Variant`) 或纯方块回退 (`None`)。
+  - `MesherConfig.enable_alternate_blocks` (默认 `true`): 控制是否启用交替模型采样。
+  - `MesherConfig.enable_random_offsets` (默认 `true`): 控制是否启用植物坐标抖动。
+

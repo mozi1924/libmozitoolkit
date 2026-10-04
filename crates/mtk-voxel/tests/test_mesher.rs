@@ -459,4 +459,179 @@ fn test_waterlogged_isolated_block_with_baked_model() {
     assert_eq!(mesh.face_count(), 7);
 }
 
+#[test]
+fn test_alternate_blocks_variant_sampling() {
+    use std::sync::Arc;
+    use mtk_model::baked::{BakedElement, BakedFace, BakedModel, BakedVariantGroup};
+    use mtk_voxel::mesher::ModelSource;
+
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+
+    // Place 16 dirt blocks along a row
+    for x in 0..16 {
+        world.set_block(x, 0, 0, "minecraft:dirt", None);
+    }
+
+    // Create 4 distinct variants of a unit cube model, distinguished by texture
+    let mut variants = Vec::new();
+    for i in 0..4 {
+        let mut faces_map = std::collections::HashMap::new();
+        faces_map.insert(
+            mtk_core::Direction::Up,
+            BakedFace {
+                direction: mtk_core::Direction::Up,
+                cullface: Some(mtk_core::Direction::Up),
+                texture: format!("minecraft:block/dirt_var_{}", i),
+                vertices: [
+                    glam::Vec3::new(0.0, 1.0, 0.0),
+                    glam::Vec3::new(0.0, 1.0, 1.0),
+                    glam::Vec3::new(1.0, 1.0, 1.0),
+                    glam::Vec3::new(1.0, 1.0, 0.0),
+                ],
+                uvs: [
+                    glam::Vec2::new(0.0, 0.0),
+                    glam::Vec2::new(0.0, 1.0),
+                    glam::Vec2::new(1.0, 1.0),
+                    glam::Vec2::new(1.0, 0.0),
+                ],
+                ..Default::default()
+            },
+        );
+        let mut m = BakedModel {
+            block_state: "minecraft:dirt".to_string(),
+            elements: vec![BakedElement {
+                from_pos: [0.0, 0.0, 0.0],
+                to_pos: [16.0, 16.0, 16.0],
+                faces: faces_map,
+            }],
+            obj_faces: Vec::new(),
+            faces: std::array::from_fn(|_| BakedFace::default()),
+            is_cube: true,
+            is_opaque: true,
+            is_emissive: false,
+            emissive_level: 0.0,
+            cull_meta: None,
+            culled_faces: Default::default(),
+            unculled_faces: Vec::new(),
+        };
+        m.rebuild_face_buckets();
+        variants.push(m);
+    }
+
+    let group = Arc::new(BakedVariantGroup::new(
+        "minecraft:dirt".to_string(),
+        variants,
+        vec![1, 1, 1, 1],
+    ));
+
+    let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
+    let culler = FaceCuller::default();
+    let config = MesherConfig {
+        origin_centered: false,
+        weld_vertices: false,
+        enable_alternate_blocks: true,
+        ..Default::default()
+    };
+
+    let group_clone = group.clone();
+    let mesh = SectionMesher::mesh_section_with_source(
+        &padded,
+        &culler,
+        move |_| ModelSource::Variant(group_clone.clone()),
+        &config,
+    );
+
+    let tex_attr = mesh.get_custom_attribute("mtk_source_texture_key").expect("Must have mtk_source_texture_key");
+    let sampled_textures: std::collections::HashSet<String> = match &tex_attr.data {
+        mtk_core::attributes::AttributeData::String(v) => v.iter().cloned().collect(),
+        _ => panic!("Expected String attribute"),
+    };
+
+    // Out of 16 blocks, multiple variants must have been sampled (not just 1 static variant!)
+    assert!(sampled_textures.len() > 1, "Expected multiple variants to be sampled across 16 blocks, got {:?}", sampled_textures);
+
+    // When enable_alternate_blocks is FALSE, only primary variant (dirt_var_0) must be sampled
+    let disabled_config = MesherConfig {
+        origin_centered: false,
+        weld_vertices: false,
+        enable_alternate_blocks: false,
+        ..Default::default()
+    };
+    let group_clone2 = group.clone();
+    let mesh_disabled = SectionMesher::mesh_section_with_source(
+        &padded,
+        &culler,
+        move |_| ModelSource::Variant(group_clone2.clone()),
+        &disabled_config,
+    );
+    let disabled_attr = mesh_disabled.get_custom_attribute("mtk_source_texture_key").expect("Must have mtk_source_texture_key");
+    let disabled_textures: std::collections::HashSet<String> = match &disabled_attr.data {
+        mtk_core::attributes::AttributeData::String(v) => v.iter().cloned().collect(),
+        _ => panic!("Expected String attribute"),
+    };
+    assert_eq!(disabled_textures.len(), 1);
+    assert!(disabled_textures.contains("minecraft:block/dirt_var_0"));
+}
+
+#[test]
+fn test_plant_position_offsets() {
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+
+    // Place a flower at (3, 5, 7) and a vertical duplicate at (3, 6, 7)
+    world.set_block(3, 5, 7, "minecraft:poppy", None);
+    world.set_block(3, 6, 7, "minecraft:poppy", None);
+    world.set_block(8, 5, 2, "minecraft:poppy", None);
+
+    let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
+    let culler = FaceCuller::default();
+
+    // 1. With plant offsets enabled
+    let config_enabled = MesherConfig {
+        origin_centered: false,
+        weld_vertices: false,
+        enable_random_offsets: true,
+        ..Default::default()
+    };
+    let mesh_enabled = SectionMesher::mesh_section(&padded, &culler, |_| None, &config_enabled);
+
+    // Poppy at (3, 5, 7) and (3, 6, 7):
+    let offset_3_7 = mtk_core::random::get_block_offset(mtk_core::random::OffsetType::XZ, 3, 5, 7);
+    assert!(offset_3_7.x.abs() > 0.001 || offset_3_7.z.abs() > 0.001);
+    assert!(offset_3_7.x >= -0.25 && offset_3_7.x <= 0.25);
+    assert!(offset_3_7.z >= -0.25 && offset_3_7.z <= 0.25);
+    assert_eq!(offset_3_7.y, 0.0);
+
+    // Check that vertices at (3, 5, 7) are shifted by offset_3_7
+    let mut found_shifted = false;
+    for pos in &mesh_enabled.positions {
+        if (pos[1] - 5.0).abs() < 1.01 {
+            let frac_x = pos[0] - 3.0;
+            if (frac_x - (0.0 + offset_3_7.x)).abs() < 1e-4 || (frac_x - (1.0 + offset_3_7.x)).abs() < 1e-4 {
+                found_shifted = true;
+                break;
+            }
+        }
+    }
+    assert!(found_shifted, "Plant vertices should be shifted by offset_3_7");
+
+    // 2. With plant offsets disabled
+    let config_disabled = MesherConfig {
+        origin_centered: false,
+        weld_vertices: false,
+        enable_random_offsets: false,
+        ..Default::default()
+    };
+    let mesh_disabled = SectionMesher::mesh_section(&padded, &culler, |_| None, &config_disabled);
+
+    // All vertex fractional coordinates must be exact integers (0.0 or 1.0 relative to block pos)
+    for pos in &mesh_disabled.positions {
+        let fx = (pos[0] - pos[0].round()).abs();
+        let fz = (pos[2] - pos[2].round()).abs();
+        assert!(fx < 1e-4, "Expected integer X coordinates without offset, got {}", pos[0]);
+        assert!(fz < 1e-4, "Expected integer Z coordinates without offset, got {}", pos[2]);
+    }
+}
+
 

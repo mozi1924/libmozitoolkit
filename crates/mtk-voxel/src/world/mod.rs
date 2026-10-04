@@ -14,7 +14,7 @@ use std::sync::Arc;
 use glam::IVec3;
 use mtk_core::mesh::MeshData;
 use mtk_cull::FaceCuller;
-use mtk_model::baked::{BakedModel, BakedModelDatabase};
+use mtk_model::baked::BakedModelDatabase;
 
 use crate::mesher::{DeltaMesher, SectionMesher};
 use crate::source::VoxelSource;
@@ -285,11 +285,19 @@ impl VoxelWorld {
             .collect();
 
         let db_opt = self.model_db.clone();
-        let model_lookup = move |state: &str| -> Option<Arc<BakedModel>> {
-            db_opt.as_ref().and_then(|db| db.get(state).cloned().map(Arc::new))
+        let model_lookup = move |state: &str| -> crate::mesher::ModelSource {
+            if let Some(ref db) = db_opt {
+                if let Some(group) = db.get_variant_group(state) {
+                    return crate::mesher::ModelSource::Variant(Arc::new(group.clone()));
+                }
+                if let Some(model) = db.get(state) {
+                    return crate::mesher::ModelSource::Single(Arc::new(model.clone()));
+                }
+            }
+            crate::mesher::ModelSource::None
         };
 
-        let results = SectionMesher::mesh_sections_parallel(
+        let results = SectionMesher::mesh_sections_parallel_with_source(
             &padded_sections,
             &self.culler,
             model_lookup,
@@ -320,11 +328,19 @@ impl VoxelWorld {
         self.sync_selection_bounds();
 
         let db_opt = self.model_db.clone();
-        let model_lookup = move |state: &str| -> Option<Arc<BakedModel>> {
-            db_opt.as_ref().and_then(|db| db.get(state).cloned().map(Arc::new))
+        let model_lookup = move |state: &str| -> crate::mesher::ModelSource {
+            if let Some(ref db) = db_opt {
+                if let Some(group) = db.get_variant_group(state) {
+                    return crate::mesher::ModelSource::Variant(Arc::new(group.clone()));
+                }
+                if let Some(model) = db.get(state) {
+                    return crate::mesher::ModelSource::Single(Arc::new(model.clone()));
+                }
+            }
+            crate::mesher::ModelSource::None
         };
 
-        let rebuilt = DeltaMesher::rebuild_dirty_sections(
+        let rebuilt = DeltaMesher::rebuild_dirty_sections_with_source(
             &mut self.storage,
             &self.culler,
             model_lookup,
@@ -350,11 +366,19 @@ impl VoxelWorld {
 
         let padded = self.storage.get_section_padded_array(sec_coord);
         let db_opt = self.model_db.clone();
-        let model_lookup = move |state: &str| -> Option<Arc<BakedModel>> {
-            db_opt.as_ref().and_then(|db| db.get(state).cloned().map(Arc::new))
+        let model_lookup = move |state: &str| -> crate::mesher::ModelSource {
+            if let Some(ref db) = db_opt {
+                if let Some(group) = db.get_variant_group(state) {
+                    return crate::mesher::ModelSource::Variant(Arc::new(group.clone()));
+                }
+                if let Some(model) = db.get(state) {
+                    return crate::mesher::ModelSource::Single(Arc::new(model.clone()));
+                }
+            }
+            crate::mesher::ModelSource::None
         };
 
-        let mesh = SectionMesher::mesh_section(&padded, &self.culler, model_lookup, &self.config);
+        let mesh = SectionMesher::mesh_section_with_source(&padded, &self.culler, model_lookup, &self.config);
         if mesh.is_empty() {
             self.section_mesh_cache.remove(&sec_coord);
         } else {

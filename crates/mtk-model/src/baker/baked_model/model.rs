@@ -194,8 +194,34 @@ impl BakedModel {
         self.culled_faces = culled;
         self.unculled_faces = unculled;
     }
+}
 
-    /// Eliminates overlapping, duplicate, and interior coplanar contacting faces from the model's elements.
+impl Default for BakedModel {
+    fn default() -> Self {
+        Self {
+            block_state: String::new(),
+            elements: Vec::new(),
+            obj_faces: Vec::new(),
+            faces: [
+                BakedFace::default(),
+                BakedFace::default(),
+                BakedFace::default(),
+                BakedFace::default(),
+                BakedFace::default(),
+                BakedFace::default(),
+            ],
+            is_cube: false,
+            is_opaque: false,
+            is_emissive: false,
+            emissive_level: 0.0,
+            cull_meta: None,
+            culled_faces: [Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new()],
+            unculled_faces: Vec::new(),
+        }
+    }
+}
+
+impl BakedModel {
     ///
     /// Automatically rebuilds `culled_faces` and `unculled_faces` buckets.
     /// Returns the number of removed faces.

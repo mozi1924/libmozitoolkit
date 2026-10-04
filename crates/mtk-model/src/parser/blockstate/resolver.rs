@@ -60,6 +60,42 @@ impl BlockStateResolver {
         vec![Self::heuristic_match(blockstate)]
     }
 
+    /// Resolves all discrete model variants from a BlockState definition with their weights.
+    ///
+    /// For multi-variant definitions (such as rotated dirt, stone, sand, lily pads),
+    /// returns each variant as a separate `(Vec<VariantMatch>, weight)` pair.
+    pub fn resolve_variants(
+        definition: &BlockStateDefinition,
+        blockstate: &BlockState,
+    ) -> Vec<(Vec<VariantMatch>, u32)> {
+        let namespace = &blockstate.namespace;
+        let props = &blockstate.properties;
+
+        // 1. Check variants
+        if let Some(ref variants) = definition.variants {
+            let matched_entry = Self::match_variant_entry(variants, props)
+                .or_else(|| variants.get(""))
+                .or_else(|| variants.values().next());
+
+            if let Some(entry) = matched_entry {
+                match entry {
+                    VariantEntry::Single(m) => {
+                        return vec![(vec![Self::model_to_match(m, namespace, props)], m.weight)];
+                    }
+                    VariantEntry::List(list) => {
+                        return list
+                            .iter()
+                            .map(|m| (vec![Self::model_to_match(m, namespace, props)], m.weight))
+                            .collect();
+                    }
+                }
+            }
+        }
+
+        // 2. Multipart or fallback heuristic: returns standard single resolution
+        vec![(Self::resolve(definition, blockstate), 1)]
+    }
+
     /// Evaluates a `MultipartCondition` against the given properties.
     pub fn evaluate_condition(
         condition: &MultipartCondition,
@@ -108,11 +144,10 @@ impl BlockStateResolver {
         }
     }
 
-    fn match_variants(
-        variants: &HashMap<String, VariantEntry>,
+    fn match_variant_entry<'a>(
+        variants: &'a HashMap<String, VariantEntry>,
         props: &BTreeMap<String, String>,
-        namespace: &str,
-    ) -> Option<VariantMatch> {
+    ) -> Option<&'a VariantEntry> {
         // Fast path: exact sorted key
         let exact_key = props
             .iter()
@@ -120,7 +155,7 @@ impl BlockStateResolver {
             .collect::<Vec<_>>()
             .join(",");
         if let Some(entry) = variants.get(&exact_key) {
-            return Some(Self::model_to_match(entry.select_primary(), namespace, props));
+            return Some(entry);
         }
 
         // Match variants by scoring compatibility against props matching Python blockstate_resolver
@@ -190,7 +225,16 @@ impl BlockStateResolver {
             }
         }
 
-        best_entry.map(|entry| Self::model_to_match(entry.select_primary(), namespace, props))
+        best_entry
+    }
+
+    fn match_variants(
+        variants: &HashMap<String, VariantEntry>,
+        props: &BTreeMap<String, String>,
+        namespace: &str,
+    ) -> Option<VariantMatch> {
+        Self::match_variant_entry(variants, props)
+            .map(|entry| Self::model_to_match(entry.select_primary(), namespace, props))
     }
 
     fn model_to_match(

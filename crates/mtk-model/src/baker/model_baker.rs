@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use glam::{Vec2, Vec3};
 use mtk_core::direction::Direction;
 
-use crate::baked::{BakedElement, BakedFace, BakedModel};
-use crate::blockstate::{BlockState, BlockStateDefinition, BlockStateResolver};
+use crate::baked::{BakedElement, BakedFace, BakedModel, BakedVariantGroup};
+use crate::blockstate::{BlockState, BlockStateDefinition, BlockStateResolver, VariantMatch};
 use crate::builtin::BuiltinModelRegistry;
 use crate::error::ModelError;
 use crate::math::{bake_face_exact, rotate_direction};
@@ -85,10 +85,60 @@ impl ModelBaker {
             vec![BlockStateResolver::heuristic_match(&blockstate)]
         };
 
+        let baked_model = self.bake_matches(&canonical_str, &blockstate, &variant_matches, &mut model_loader)?;
+        self.bake_cache.insert(canonical_str, baked_model.clone());
+        Ok(baked_model)
+    }
+
+    /// Bakes all discrete variants of a BlockState into a `BakedVariantGroup`.
+    pub fn bake_blockstate_variants<F>(
+        &mut self,
+        state_str: &str,
+        blockstate_def: Option<&BlockStateDefinition>,
+        mut model_loader: F,
+    ) -> Result<BakedVariantGroup, ModelError>
+    where
+        F: FnMut(&str) -> Option<BlockModelJson>,
+    {
+        let blockstate = BlockState::parse(state_str)?;
+        let canonical_str = blockstate.to_canonical_string();
+
+        let variant_specs = if let Some(def) = blockstate_def {
+            BlockStateResolver::resolve_variants(def, &blockstate)
+        } else if let Some(builtin_def) =
+            BuiltinModelRegistry::get_builtin_blockstate_def(&blockstate.name)
+        {
+            BlockStateResolver::resolve_variants(&builtin_def, &blockstate)
+        } else {
+            vec![(vec![BlockStateResolver::heuristic_match(&blockstate)], 1)]
+        };
+
+        let mut models = Vec::with_capacity(variant_specs.len());
+        let mut weights = Vec::with_capacity(variant_specs.len());
+
+        for (matches, weight) in variant_specs {
+            let model = self.bake_matches(&canonical_str, &blockstate, &matches, &mut model_loader)?;
+            models.push(model);
+            weights.push(weight);
+        }
+
+        Ok(BakedVariantGroup::new(canonical_str, models, weights))
+    }
+
+    fn bake_matches<F>(
+        &mut self,
+        canonical_str: &str,
+        blockstate: &BlockState,
+        variant_matches: &[VariantMatch],
+        model_loader: &mut F,
+    ) -> Result<BakedModel, ModelError>
+    where
+        F: FnMut(&str) -> Option<BlockModelJson>,
+    {
         let mut baked_elements = Vec::new();
         let mut six_faces: [Option<BakedFace>; 6] = [None, None, None, None, None, None];
 
-        for variant in &variant_matches {
+        for variant in variant_matches {
             let resolved = if let Some(external) = model_loader(&variant.model_id) {
                 let r = external.resolve_hierarchy(&variant.model_id, |id| {
                     model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
@@ -389,7 +439,7 @@ impl ModelBaker {
         let cull_meta = mtk_cull::compute_block_cull_meta(&canonical_str, quads_slice, Some(is_opaque));
 
         let mut baked_model = BakedModel {
-            block_state: canonical_str.clone(),
+            block_state: canonical_str.to_string(),
             elements: baked_elements,
             obj_faces: Vec::new(),
             faces: final_six_faces,
@@ -403,7 +453,6 @@ impl ModelBaker {
         };
         baked_model.rebuild_face_buckets();
 
-        self.bake_cache.insert(canonical_str, baked_model.clone());
         Ok(baked_model)
     }
 
@@ -594,6 +643,50 @@ f 1/1 2/2 3/3
         let mesh = baked.to_mesh(false);
         assert_eq!(mesh.triangle_count(), 1);
         assert_eq!(mesh.vertex_count(), 3);
+    }
+
+    #[test]
+    fn test_bake_blockstate_variants() {
+        let mut baker = ModelBaker::new();
+
+        let model_json = r##"{
+            "textures": { "all": "minecraft:block/dirt" },
+            "elements": [{
+                "from": [0, 0, 0],
+                "to": [16, 16, 16],
+                "faces": {
+                    "up": { "texture": "#all", "cullface": "up" }
+                }
+            }]
+        }"##;
+        let parsed_model: BlockModelJson = serde_json::from_str(model_json).unwrap();
+
+        let bs_def_json = r##"{
+            "variants": {
+                "": [
+                    { "model": "minecraft:block/dirt" },
+                    { "model": "minecraft:block/dirt", "y": 90 },
+                    { "model": "minecraft:block/dirt", "y": 180 },
+                    { "model": "minecraft:block/dirt", "y": 270 }
+                ]
+            }
+        }"##;
+        let bs_def: BlockStateDefinition = serde_json::from_str(bs_def_json).unwrap();
+
+        let group = baker
+            .bake_blockstate_variants("minecraft:dirt", Some(&bs_def), |_id| {
+                Some(parsed_model.clone())
+            })
+            .unwrap();
+
+        assert_eq!(group.len(), 4);
+        assert_eq!(group.weights, vec![1, 1, 1, 1]);
+        assert_eq!(group.total_weight, 4);
+
+        assert_eq!(group.models[0].get_face(Direction::Up).uv_rot, 0.0);
+        assert_eq!(group.models[1].get_face(Direction::Up).uv_rot, 90.0);
+        assert_eq!(group.models[2].get_face(Direction::Up).uv_rot, 180.0);
+        assert_eq!(group.models[3].get_face(Direction::Up).uv_rot, 270.0);
     }
 
 }

@@ -10,17 +10,38 @@ use super::model::{BakedElement, BakedFace, BakedModel};
 #[cfg(feature = "std")]
 impl BakedModelDatabase {
     pub fn to_bincode(&self) -> Result<Vec<u8>, bincode::Error> {
-        bincode::serialize(&self.models)
+        bincode::serialize(self)
     }
 
     pub fn from_bincode(bytes: &[u8]) -> Result<Self, bincode::Error> {
+        // 1. Current full format with variant_groups
+        if let Ok(mut db) = bincode::deserialize::<BakedModelDatabase>(bytes) {
+            for bm in db.models.values_mut() {
+                if bm.culled_faces.iter().all(|v| v.is_empty()) && bm.unculled_faces.is_empty() && !bm.elements.is_empty() {
+                    bm.rebuild_face_buckets();
+                }
+            }
+            for vg in db.variant_groups.values_mut() {
+                for bm in &mut vg.models {
+                    if bm.culled_faces.iter().all(|v| v.is_empty()) && bm.unculled_faces.is_empty() && !bm.elements.is_empty() {
+                        bm.rebuild_face_buckets();
+                    }
+                }
+            }
+            return Ok(db);
+        }
+
+        // 2. Legacy models-only HashMap fallback
         if let Ok(mut models) = bincode::deserialize::<HashMap<String, BakedModel>>(bytes) {
             for bm in models.values_mut() {
                 if bm.culled_faces.iter().all(|v| v.is_empty()) && bm.unculled_faces.is_empty() && !bm.elements.is_empty() {
                     bm.rebuild_face_buckets();
                 }
             }
-            return Ok(Self { models });
+            return Ok(Self {
+                models,
+                variant_groups: HashMap::new(),
+            });
         }
 
         #[derive(Deserialize)]
@@ -59,7 +80,10 @@ impl BakedModelDatabase {
                 bm.rebuild_face_buckets();
                 models.insert(st, bm);
             }
-            return Ok(Self { models });
+            return Ok(Self {
+                models,
+                variant_groups: HashMap::new(),
+            });
         }
 
         #[derive(Clone, Deserialize)]
@@ -167,7 +191,10 @@ impl BakedModelDatabase {
                 bm.rebuild_face_buckets();
                 models.insert(st, bm);
             }
-            return Ok(Self { models });
+            return Ok(Self {
+                models,
+                variant_groups: HashMap::new(),
+            });
         }
 
         if let Ok(legacy_v0) = bincode::deserialize::<HashMap<String, LegacyModelV0>>(bytes) {
@@ -211,7 +238,10 @@ impl BakedModelDatabase {
                 bm.rebuild_face_buckets();
                 models.insert(st, bm);
             }
-            return Ok(Self { models });
+            return Ok(Self {
+                models,
+                variant_groups: HashMap::new(),
+            });
         }
 
         let mut models: HashMap<String, BakedModel> = bincode::deserialize(bytes)?;
@@ -220,6 +250,9 @@ impl BakedModelDatabase {
                 bm.rebuild_face_buckets();
             }
         }
-        Ok(Self { models })
+        Ok(Self {
+            models,
+            variant_groups: HashMap::new(),
+        })
     }
 }

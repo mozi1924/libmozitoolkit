@@ -51,6 +51,10 @@ pub struct MesherConfig {
     /// Optional custom material/texture alias map.
     #[cfg_attr(feature = "serde", serde(skip))]
     pub custom_aliases: Option<Arc<std::collections::HashMap<String, Vec<String>>>>,
+    /// Whether to enable vanilla alternate block models (deterministic random rotation for dirt, stone, sand, etc.).
+    pub enable_alternate_blocks: bool,
+    /// Whether to enable deterministic position offsets for plants (flowers, tall grass, roots, etc.).
+    pub enable_random_offsets: bool,
 }
 
 impl Default for MesherConfig {
@@ -67,6 +71,8 @@ impl Default for MesherConfig {
             atlas_address_map: None,
             biome_resolver: None,
             custom_aliases: None,
+            enable_alternate_blocks: true,
+            enable_random_offsets: true,
         }
     }
 }

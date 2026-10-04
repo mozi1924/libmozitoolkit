@@ -41,6 +41,71 @@ impl PyBakedModelDatabase {
         self.inner.keys().cloned().collect()
     }
 
+    /// Total number of multi-variant groups in the database.
+    pub fn variant_group_count(&self) -> usize {
+        self.inner.variant_groups.len()
+    }
+
+    /// Checks if a variant group is registered for the specified blockstate.
+    pub fn has_variant_group(&self, state_str: &str) -> bool {
+        self.inner.get_variant_group(state_str).is_some()
+    }
+
+    /// Returns the number of discrete variants for the specified blockstate (0 if absent).
+    pub fn variant_count(&self, state_str: &str) -> usize {
+        self.inner
+            .get_variant_group(state_str)
+            .map(|g| g.len())
+            .unwrap_or(0)
+    }
+
+    /// Deterministically selects a variant index by world integer position (x, y, z).
+    pub fn select_variant_index(&self, state_str: &str, x: i32, y: i32, z: i32) -> Option<usize> {
+        self.inner
+            .get_variant_group(state_str)
+            .map(|g| g.select_index_by_pos(x, y, z))
+    }
+
+    /// Bakes and registers a variant group for a specific blockstate on-demand.
+    #[pyo3(signature = (stack, state_str, atlas=None))]
+    pub fn bake_and_register_variant_group(
+        &mut self,
+        stack: &PyResourcePackStack,
+        state_str: &str,
+        atlas: Option<&crate::texture::PyBakedAtlas>,
+    ) -> PyResult<usize> {
+        let bs = BlockState::parse(state_str)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        let bs_path = format!("assets/{}/blockstates/{}.json", bs.namespace, bs.name);
+        let bs_def = stack.inner.open_asset_raw(&bs_path).and_then(|bytes| {
+            serde_json::from_slice::<BlockStateDefinition>(&bytes).ok()
+        });
+
+        let mut baker = ModelBaker::new();
+        let mut group = baker
+            .bake_blockstate_variants(state_str, bs_def.as_ref(), |model_id| {
+                if let Some(bytes) = stack.inner.open_model_raw(model_id) {
+                    serde_json::from_slice::<BlockModelJson>(&bytes).ok()
+                } else {
+                    None
+                }
+            })
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        if let Some(atlas) = atlas {
+            let atlas_map = &atlas.inner.address_map;
+            group.remap_to_atlas_with(|tex| {
+                mtk_material::MaterialResolver::resolve(tex, None, atlas_map)
+                    .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
+            });
+        }
+
+        let count = group.len();
+        let db = Arc::make_mut(&mut self.inner);
+        db.insert_variant_group(state_str.to_string(), group);
+        Ok(count)
+    }
+
     /// Retrieves baked mesh geometry and texture list for a given canonical blockstate string.
     #[pyo3(signature = (state_str, clip_hidden=true))]
     pub fn get_mesh(&self, state_str: &str, clip_hidden: bool) -> Option<(PyMeshData, Vec<String>)> {

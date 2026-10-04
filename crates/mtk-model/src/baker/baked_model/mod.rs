@@ -7,9 +7,11 @@ pub mod database;
 pub mod legacy;
 pub mod model;
 pub mod to_mesh;
+pub mod variant_group;
 
 pub use database::*;
 pub use model::*;
+pub use variant_group::*;
 
 #[cfg(test)]
 mod tests {

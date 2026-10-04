@@ -90,7 +90,13 @@ Python 模块名：`libmtk_py`
 
 ### 2.9 模型烘焙 (`model`)
 - **`ModelBaker` (`PyModelBaker`)**：无头 1.21+ BlockState 模型烘焙引擎。
+  - `bake_all(stack, atlas=None)`：并行烘焙所有 BlockState 模型并返回 `BakedModelDatabase`。
+  - `bake_blockstate(stack, state_str, clip_hidden=true)`：烘焙单个 BlockState 几何网格与贴图列表。
 - **`BakedModelDatabase` (`PyBakedModelDatabase`)**：预编译方块几何模型库。
+  - `variant_group_count()`, `has_variant_group(state_str)`, `variant_count(state_str)`：变体分支群组查询。
+  - `select_variant_index(state_str, x, y, z)`：按 3D 坐标种子确定性确定变体索引（对齐原版 Java LCG）。
+  - `bake_and_register_variant_group(stack, state_str, atlas=None)`：按需解析 BlockState JSON 烘焙全部旋转分支并自动重映射图集。
+  - `get_mesh(state_str, clip_hidden=true)`, `to_bincode_bytes()`, `from_bincode_bytes(bytes)`, `remap_to_atlas(atlas)`
 
 ---
 

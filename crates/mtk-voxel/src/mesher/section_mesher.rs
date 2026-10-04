@@ -4,6 +4,7 @@ use std::sync::Arc;
 use glam::IVec3;
 use mtk_core::direction::Direction;
 use mtk_core::mesh::MeshData;
+use mtk_core::random::{determine_block_offset_type, get_block_offset, mc_coordinate_seed, JavaRandom, OffsetType};
 use mtk_cull::types::BlockCullMeta;
 use mtk_cull::FaceCuller;
 use mtk_model::baked::BakedModel;
@@ -19,14 +20,14 @@ use super::collector::FaceAttributesCollector;
 use super::emitter::{emit_baked_face, emit_unit_cube_face};
 use super::shading::{
     build_palette_meshing_data, resolve_model_face_shading, resolve_unit_cube_face_shading,
-    sample_biome_tint, PaletteMeshingData, PreResolvedModelFace,
+    sample_biome_tint, ModelSource, PaletteMeshingData, PreResolvedModelFace,
 };
 
 /// High-performance mesh generator for individual and batch chunk sections.
 pub struct SectionMesher;
 
 impl SectionMesher {
-    /// Meshes a single `PaddedVoxelArray` into a complete `MeshData` buffer.
+    /// Meshes a single `PaddedVoxelArray` into a complete `MeshData` buffer using a simple BakedModel lookup.
     pub fn mesh_section<F>(
         padded: &PaddedVoxelArray,
         culler: &FaceCuller,
@@ -36,6 +37,24 @@ impl SectionMesher {
     where
         F: FnMut(&str) -> Option<Arc<BakedModel>>,
     {
+        Self::mesh_section_with_source(
+            padded,
+            culler,
+            |st| get_baked_model(st).into(),
+            config,
+        )
+    }
+
+    /// Meshes a single `PaddedVoxelArray` into a complete `MeshData` buffer using a unified `ModelSource` lookup.
+    pub fn mesh_section_with_source<F>(
+        padded: &PaddedVoxelArray,
+        culler: &FaceCuller,
+        mut get_model_source: F,
+        config: &MesherConfig,
+    ) -> MeshData
+    where
+        F: FnMut(&str) -> ModelSource,
+    {
         if padded.is_empty {
             return MeshData::new();
         }
@@ -43,21 +62,21 @@ impl SectionMesher {
         let mut mesh = MeshData::with_capacity(1024, 1536, 512);
         let mut collector = FaceAttributesCollector::with_capacity(512);
 
-        // Pre-resolve baked models FIRST
-        let mut palette_models: Vec<Option<Arc<BakedModel>>> =
+        // Pre-resolve model sources FIRST
+        let mut palette_sources: Vec<ModelSource> =
             Vec::with_capacity(padded.palette.len());
         for st in &padded.palette {
-            palette_models.push(get_baked_model(st));
+            palette_sources.push(get_model_source(st));
         }
 
         // Pre-resolve palette metadata using baked models (fast path: pre-baked cull_meta)
         let palette_metas: Vec<Arc<BlockCullMeta>> = padded
             .palette
             .iter()
-            .zip(palette_models.iter())
-            .map(|(st, model_opt)| {
+            .zip(palette_sources.iter())
+            .map(|(st, source)| {
                 let runtime_meta = culler.get_meta(st, None, None);
-                if let Some(model) = model_opt {
+                if let Some(model) = source.primary_model() {
                     let mut meta = model.get_or_compute_cull_meta();
                     // Runtime states in voxel storage (e.g. waterlogged) must take precedence
                     // over baked model base state cull_meta
@@ -76,9 +95,9 @@ impl SectionMesher {
         let palette_emissive: Vec<bool> = padded
             .palette
             .iter()
-            .zip(palette_models.iter())
-            .map(|(st, model_opt)| {
-                if let Some(model) = model_opt {
+            .zip(palette_sources.iter())
+            .map(|(st, source)| {
+                if let Some(model) = source.primary_model() {
                     model.is_emissive
                 } else {
                     BlockState::parse(st).as_ref().map(is_block_emissive).unwrap_or(false)
@@ -86,8 +105,19 @@ impl SectionMesher {
             })
             .collect();
 
+        // Pre-resolve palette plant offset types outside hot loop
+        let palette_offsets: Vec<OffsetType> = if config.enable_random_offsets {
+            padded
+                .palette
+                .iter()
+                .map(|st| determine_block_offset_type(st))
+                .collect()
+        } else {
+            vec![OffsetType::None; padded.palette.len()]
+        };
+
         // Pre-resolve palette meshing data outside hot loop
-        let palette_meshing_data = build_palette_meshing_data(padded, &palette_models, config);
+        let palette_meshing_data = build_palette_meshing_data(padded, &palette_sources, config);
 
         let world_offset_x = (padded.coord.x * 16) as f32;
         let world_offset_y = (padded.coord.y * 16) as f32;
@@ -181,8 +211,15 @@ impl SectionMesher {
                         }
                     }
 
+                    let offset_type = palette_offsets[pal_idx];
+                    let plant_offset = if offset_type != OffsetType::None {
+                        get_block_offset(offset_type, block_pos.x, block_pos.y, block_pos.z)
+                    } else {
+                        glam::Vec3::ZERO
+                    };
+
                     // 2. Solid Block / Baked Model Meshing
-                    let baked_opt = &palette_models[pal_idx];
+                    let source = &palette_sources[pal_idx];
                     let is_emissive = palette_emissive[pal_idx];
 
                     let get_padded_neighbor_state = |target_pos: IVec3| -> Option<&str> {
@@ -196,9 +233,24 @@ impl SectionMesher {
                         }
                     };
 
-                    if let Some(_baked) = baked_opt {
+                    if !source.is_none() {
                         let (culled_faces, unculled_faces) = match &palette_meshing_data[pal_idx] {
                             PaletteMeshingData::Model { culled_faces, unculled_faces } => (culled_faces, unculled_faces),
+                            PaletteMeshingData::VariantModel { variants, weights, total_weight } => {
+                                let seed = mc_coordinate_seed(block_pos.x, block_pos.y, block_pos.z);
+                                let mut rng = JavaRandom::new(seed);
+                                let mut target = rng.next_int(*total_weight);
+                                let mut chosen = 0;
+                                for (i, &w) in weights.iter().enumerate() {
+                                    if target < w {
+                                        chosen = i;
+                                        break;
+                                    }
+                                    target = target.saturating_sub(w);
+                                }
+                                let b = &variants[chosen];
+                                (&b.culled_faces, &b.unculled_faces)
+                            }
                             _ => unreachable!(),
                         };
 
@@ -241,9 +293,9 @@ impl SectionMesher {
                             emit_baked_face(
                                 &mut mesh,
                                 face,
-                                wx,
-                                wy,
-                                wz,
+                                wx + plant_offset.x,
+                                wy + plant_offset.y,
+                                wz + plant_offset.z,
                                 ao_levels,
                                 config,
                                 &mut collector,
@@ -366,9 +418,9 @@ impl SectionMesher {
                             emit_unit_cube_face(
                                 &mut mesh,
                                 dir,
-                                wx,
-                                wy,
-                                wz,
+                                wx + plant_offset.x,
+                                wy + plant_offset.y,
+                                wz + plant_offset.z,
                                 ao_levels,
                                 config,
                                 &mut collector,
@@ -403,13 +455,31 @@ impl SectionMesher {
     where
         F: Fn(&str) -> Option<Arc<BakedModel>> + Sync + Send,
     {
+        Self::mesh_sections_with_source(
+            sections,
+            culler,
+            |st| model_provider(st).into(),
+            config,
+        )
+    }
+
+    /// Meshes a batch of `PaddedVoxelArray`s using a unified `ModelSource` provider.
+    pub fn mesh_sections_with_source<F>(
+        sections: &[PaddedVoxelArray],
+        culler: &FaceCuller,
+        model_provider: F,
+        config: &MesherConfig,
+    ) -> Result<Vec<(IVec3, MeshData)>, VoxelError>
+    where
+        F: Fn(&str) -> ModelSource + Sync + Send,
+    {
         #[cfg(feature = "parallel")]
         {
             use rayon::prelude::*;
             let results = sections
                 .par_iter()
                 .map(|sec| {
-                    let mesh = Self::mesh_section(sec, culler, |st| model_provider(st), config);
+                    let mesh = Self::mesh_section_with_source(sec, culler, |st| model_provider(st), config);
                     (sec.coord, mesh)
                 })
                 .collect();
@@ -421,7 +491,7 @@ impl SectionMesher {
             let results = sections
                 .iter()
                 .map(|sec| {
-                    let mesh = Self::mesh_section(sec, culler, |st| model_provider(st), config);
+                    let mesh = Self::mesh_section_with_source(sec, culler, |st| model_provider(st), config);
                     (sec.coord, mesh)
                 })
                 .collect();
@@ -440,8 +510,28 @@ impl SectionMesher {
     where
         F: Fn(&str) -> Option<Arc<BakedModel>> + Sync + Send,
     {
+        Self::mesh_sections_parallel_with_source(
+            sections,
+            culler,
+            |st| model_provider(st).into(),
+            config,
+            num_threads,
+        )
+    }
+
+    /// Meshes a batch of `PaddedVoxelArray`s with optional explicit thread pool count using a unified `ModelSource` provider.
+    pub fn mesh_sections_parallel_with_source<F>(
+        sections: &[PaddedVoxelArray],
+        culler: &FaceCuller,
+        model_provider: F,
+        config: &MesherConfig,
+        num_threads: Option<usize>,
+    ) -> Result<Vec<(IVec3, MeshData)>, VoxelError>
+    where
+        F: Fn(&str) -> ModelSource + Sync + Send,
+    {
         mtk_core::constants::concurrency::execute_parallel(num_threads, || {
-            Self::mesh_sections(sections, culler, model_provider, config)
+            Self::mesh_sections_with_source(sections, culler, model_provider, config)
         })
         .map_err(VoxelError::ThreadPoolError)?
     }
