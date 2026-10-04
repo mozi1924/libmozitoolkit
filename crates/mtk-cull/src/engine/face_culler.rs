@@ -200,12 +200,7 @@ impl FaceCuller {
 
         // 2. Neighbor full solid face check (neighborFaceShape == Shapes.block())
         if neighbor_meta.has_full_face(opp_dir) {
-            if state_meta.category == CullCategory::Fluid && direction == Direction::Up {
-                // Fluid top face (direction == Up) is physically below upper boundary (< 1.0 height).
-                // Solid ceiling above does not occlude fluid top surface.
-            } else {
-                return false;
-            }
+            return false;
         }
 
         // 3. Custom skipRendering check (glass, leaves, fluid, snow, roots)

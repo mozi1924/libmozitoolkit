@@ -156,8 +156,8 @@ fn test_fluid_culling() {
     // Water touching Lava: rendered (different fluid)
     assert!(culler.should_render_face(&water, Some(&lava), Direction::East, None, None, None));
 
-    // Water under Stone ceiling: water UP face rendered because water height is < 1.0 (8/9)
-    assert!(culler.should_render_face(&water, Some(&stone), Direction::Up, None, None, None));
+    // Water under Stone ceiling: water UP face is culled by solid ceiling
+    assert!(!culler.should_render_face(&water, Some(&stone), Direction::Up, None, None, None));
     // Stone bottom face facing water: rendered
     assert!(culler.should_render_face(&stone, Some(&water), Direction::Down, None, None, None));
 
