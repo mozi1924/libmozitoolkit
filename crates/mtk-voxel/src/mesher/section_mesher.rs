@@ -4,6 +4,7 @@ use std::sync::Arc;
 use glam::IVec3;
 use mtk_core::direction::Direction;
 use mtk_core::mesh::MeshData;
+use mtk_core::progress::{ProgressCallback, ProgressThrottler};
 use mtk_core::random::{determine_block_offset_type, get_block_offset, mc_coordinate_seed, JavaRandom, OffsetType};
 use mtk_cull::types::BlockCullMeta;
 use mtk_cull::FaceCuller;
@@ -473,6 +474,23 @@ impl SectionMesher {
     where
         F: Fn(&str) -> ModelSource + Sync + Send,
     {
+        Self::mesh_sections_with_source_and_progress(sections, culler, model_provider, config, None)
+    }
+
+    /// Meshes a batch of `PaddedVoxelArray`s with optional progress feedback.
+    pub fn mesh_sections_with_source_and_progress<F>(
+        sections: &[PaddedVoxelArray],
+        culler: &FaceCuller,
+        model_provider: F,
+        config: &MesherConfig,
+        progress: Option<ProgressCallback>,
+    ) -> Result<Vec<(IVec3, MeshData)>, VoxelError>
+    where
+        F: Fn(&str) -> ModelSource + Sync + Send,
+    {
+        let throttler = ProgressThrottler::new("meshing_sections", sections.len(), progress)
+            .with_prefix("Meshing chunk");
+
         #[cfg(feature = "parallel")]
         {
             use rayon::prelude::*;
@@ -480,6 +498,7 @@ impl SectionMesher {
                 .par_iter()
                 .map(|sec| {
                     let mesh = Self::mesh_section_with_source(sec, culler, |st| model_provider(st), config);
+                    throttler.inc();
                     (sec.coord, mesh)
                 })
                 .collect();
@@ -492,6 +511,7 @@ impl SectionMesher {
                 .iter()
                 .map(|sec| {
                     let mesh = Self::mesh_section_with_source(sec, culler, |st| model_provider(st), config);
+                    throttler.inc();
                     (sec.coord, mesh)
                 })
                 .collect();
@@ -530,9 +550,32 @@ impl SectionMesher {
     where
         F: Fn(&str) -> ModelSource + Sync + Send,
     {
+        Self::mesh_sections_parallel_with_source_and_progress(
+            sections,
+            culler,
+            model_provider,
+            config,
+            num_threads,
+            None,
+        )
+    }
+
+    /// Meshes a batch of `PaddedVoxelArray`s with optional thread pool count and progress feedback.
+    pub fn mesh_sections_parallel_with_source_and_progress<F>(
+        sections: &[PaddedVoxelArray],
+        culler: &FaceCuller,
+        model_provider: F,
+        config: &MesherConfig,
+        num_threads: Option<usize>,
+        progress: Option<ProgressCallback>,
+    ) -> Result<Vec<(IVec3, MeshData)>, VoxelError>
+    where
+        F: Fn(&str) -> ModelSource + Sync + Send,
+    {
         mtk_core::constants::concurrency::execute_parallel(num_threads, || {
-            Self::mesh_sections_with_source(sections, culler, model_provider, config)
+            Self::mesh_sections_with_source_and_progress(sections, culler, model_provider, config, progress)
         })
         .map_err(VoxelError::ThreadPoolError)?
     }
 }
+

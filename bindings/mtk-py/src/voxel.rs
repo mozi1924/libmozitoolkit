@@ -683,10 +683,28 @@ impl PyVoxelWorld {
     }
 
     /// Re-meshes all non-empty sections in parallel and returns the unified `MeshData`.
-    pub fn rebuild_all(&mut self, py: Python<'_>) -> PyResult<crate::mesh::PyMeshData> {
-        let mesh = py.allow_threads(|| {
-            self.inner.rebuild_all().map(|m| m.clone())
-        }).map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+    #[pyo3(signature = (callback=None))]
+    pub fn rebuild_all(&mut self, py: Python<'_>, callback: Option<PyObject>) -> PyResult<crate::mesh::PyMeshData> {
+        let mesh = if let Some(cb) = callback {
+            let cb_ref = &cb;
+            py.allow_threads(|| {
+                self.inner.rebuild_all_with_progress(Some(&|prog| {
+                    Python::with_gil(|py| {
+                        let dict = pyo3::types::PyDict::new(py);
+                        let _ = dict.set_item("stage", prog.stage);
+                        let _ = dict.set_item("current", prog.current);
+                        let _ = dict.set_item("total", prog.total);
+                        let _ = dict.set_item("message", &prog.message);
+                        let _ = dict.set_item("percent", prog.percent());
+                        let _ = cb_ref.call1(py, (dict,));
+                    });
+                })).map(|m| m.clone())
+            })
+        } else {
+            py.allow_threads(|| {
+                self.inner.rebuild_all().map(|m| m.clone())
+            })
+        }.map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         Ok(crate::mesh::PyMeshData { inner: mesh })
     }
 

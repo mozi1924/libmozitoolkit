@@ -218,15 +218,19 @@ pub fn handle_packet(
                     biome_indices.as_deref(),
                 );
                 let total = w.storage.get_all_non_empty_sections().len();
-                let m = w.rebuild_all().cloned().unwrap_or_default();
+                let sender = event_sender.clone();
+                let m = w
+                    .rebuild_all_with_progress(Some(&|p| {
+                        let _ = sender.send(SyncEvent::StreamProgress {
+                            current: p.current,
+                            total: p.total,
+                            message: p.message,
+                        });
+                    }))
+                    .cloned()
+                    .unwrap_or_default();
                 (total, w.unified_mesh, m)
             };
-
-            let _ = event_sender.send(SyncEvent::StreamProgress {
-                current: total_sections,
-                total: total_sections,
-                message: format!("Meshing {} sections...", total_sections),
-            });
 
             if unified {
                 let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
@@ -435,7 +439,17 @@ pub fn handle_packet(
 
             let (total, unified, mesh) = {
                 let mut w = world.write().unwrap();
-                let m = w.rebuild_all().cloned().unwrap_or_default();
+                let sender = event_sender.clone();
+                let m = w
+                    .rebuild_all_with_progress(Some(&|p| {
+                        let _ = sender.send(SyncEvent::StreamProgress {
+                            current: p.current,
+                            total: p.total,
+                            message: p.message,
+                        });
+                    }))
+                    .cloned()
+                    .unwrap_or_default();
                 let total_sections = w.get_section_cache().len();
                 (total_sections, w.unified_mesh, m)
             };

@@ -151,3 +151,15 @@ cache_output_dir/
   - `load_box_into_storage(save_dir, dimension, min_block, max_block, &mut storage)`: 依据用户 3D 边界盒直接定位所需相交的 Region / Chunk / Section，仅加载并填充所选区域进入 `VoxelStorage`，彻底杜绝数十 GB 全图扫描。
   - `AnvilWorldSource`: 遵循统一 `VoxelSource` 接口，支持向 `VoxelWorld` 持续提供体素切片流。
 
+---
+
+### 2.8 真实物理进度上报与节流契约 (Physical Progress Reporting & Throttling)
+为彻底杜绝长耗时计算中的黑盒假死与估算假进度，底层内核在 `mtk-core` 建立了通用的真实物理进度上报契约：
+- **`ProgressReport`**: 包含阶段标识符 `stage`（如 `"meshing_sections"`、`"assembling_world_mesh"`）、真实物理已完成计数 `current`、总任务数 `total`、描述文本 `message` 与百分比计算 `percent()`。
+- **`ProgressCallback`**: 跨线程回调契约 `&dyn Fn(ProgressReport) + Send + Sync`。
+- **`ProgressThrottler`**: 面向多线程（Rayon）高频任务的原子无锁节流器，通过 `inc()` / `inc_by()` 配合步进控制（默认 1% 或每完成 $N$ 项触发一次），杜绝跨语言锁争抢并 100% 确保终态触发。
+- **底层体素构建整合 (`mtk-voxel` & `mtk-sync`)**:
+  - `VoxelWorld::rebuild_all_with_progress(callback)`: 在 Rayon 并行重构体素网格时，实时将各 Chunk Section 的真实烘焙进度向外派发。
+  - `mtk-sync`: 实时将网格烘焙进度转化为 `SyncEvent::StreamProgress` 并向前端推送，配合 Blender 宿主状态栏 API（`wm.progress_*` 与 `workspace.status_text_set`）实现全链路底栏真实进度条。
+
+

@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use glam::IVec3;
 use mtk_core::mesh::MeshData;
+use mtk_core::progress::{ProgressCallback, ProgressReport};
 use mtk_cull::FaceCuller;
 use mtk_model::baked::BakedModelDatabase;
 
@@ -344,6 +345,14 @@ impl VoxelWorld {
 
     /// Re-meshes all non-empty sections in parallel and updates the section cache.
     pub fn rebuild_all(&mut self) -> Result<&MeshData, VoxelError> {
+        self.rebuild_all_with_progress(None)
+    }
+
+    /// Re-meshes all non-empty sections in parallel with progress reporting and updates the section cache.
+    pub fn rebuild_all_with_progress(
+        &mut self,
+        progress: Option<ProgressCallback>,
+    ) -> Result<&MeshData, VoxelError> {
         self.sync_selection_bounds();
 
         let non_empty = self.storage.get_all_non_empty_sections();
@@ -351,6 +360,9 @@ impl VoxelWorld {
             self.section_mesh_cache.clear();
             self.world_mesh = Some(MeshData::new());
             self.used_chunk_ids.clear();
+            if let Some(cb) = progress {
+                cb(ProgressReport::new("meshing_sections", 0, 0, "No sections to mesh"));
+            }
             return Ok(self.world_mesh.as_ref().unwrap());
         }
 
@@ -385,12 +397,13 @@ impl VoxelWorld {
             crate::mesher::ModelSource::None
         };
 
-        let results = SectionMesher::mesh_sections_parallel_with_source(
+        let results = SectionMesher::mesh_sections_parallel_with_source_and_progress(
             &padded_sections,
             &self.culler,
             model_lookup,
             &self.config,
             self.num_threads,
+            progress,
         )?;
 
         self.section_mesh_cache.clear();
@@ -398,6 +411,16 @@ impl VoxelWorld {
             if !mesh.is_empty() {
                 self.section_mesh_cache.insert(coord, mesh);
             }
+        }
+
+        if let Some(cb) = progress {
+            let total = non_empty.len();
+            cb(ProgressReport::new(
+                "assembling_world_mesh",
+                total,
+                total,
+                format!("Assembled world mesh from {} chunks", total),
+            ));
         }
 
         self.assemble_world_mesh();

@@ -88,6 +88,14 @@
 | `get_block_offset` | `(offset_type, x, y, z) -> Vec3`：1:1 计算植被在方块内的连续位置抖动偏移量。 |
 | `determine_block_offset_type` | `(block_id_or_state: &str) -> OffsetType`：依据原版规则判定方块标识符的植被偏移类型。 |
 
+### 2.6 真实物理进度上报与节流 (`progress`)
+
+| 类型 / 结构体 | 描述 |
+| :--- | :--- |
+| [`ProgressReport`](src/progress.rs) | 核心进度里程碑描述结构，包含阶段标识符 `stage`、真实已处理计数 `current`、总任务数 `total`、描述文本 `message` 与百分比计算 `percent()`。 |
+| `ProgressCallback` | 跨线程/跨语言进度回调契约：`&dyn Fn(ProgressReport) + Send + Sync`。 |
+| [`ProgressThrottler`](src/progress.rs) | 面向多线程（Rayon）与高频循环的高吞吐原子节流器，支持步进过滤 `with_step()`，保证 100% 触发终态汇报并杜绝锁竞争。 |
+
 ---
 
 ## 3. 快速上手示例 (Quick Start)

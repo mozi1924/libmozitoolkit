@@ -32,3 +32,29 @@ fn test_voxel_world_lifecycle_and_used_chunks() {
     let mapping = world.compact_world_mesh_materials();
     assert_eq!(mapping, vec![0]);
 }
+
+#[test]
+fn test_voxel_world_rebuild_with_progress() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use mtk_core::progress::ProgressReport;
+
+    let mut world = VoxelWorld::new(None, None, None, true);
+    world.set_bounds(0, 0, 0, 32, 16, 16);
+    world.set_block(0, 0, 0, "minecraft:stone", None);
+    world.set_block(16, 0, 0, "minecraft:stone", None);
+
+    let progress_events = Arc::new(AtomicUsize::new(0));
+    let pe_clone = Arc::clone(&progress_events);
+
+    let cb = move |r: ProgressReport| {
+        pe_clone.fetch_add(1, Ordering::SeqCst);
+        assert!(r.current <= r.total);
+    };
+
+    let mesh = world.rebuild_all_with_progress(Some(&cb)).unwrap();
+    assert!(!mesh.is_empty());
+    // Should have reported progress for meshing and assembly
+    assert!(progress_events.load(Ordering::SeqCst) >= 2);
+}
+
