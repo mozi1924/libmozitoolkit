@@ -12,6 +12,7 @@ pub mod model;
 pub mod point_cloud;
 pub mod protocol;
 pub mod resource;
+pub mod save;
 pub mod subdivide;
 pub mod sync;
 pub mod texture;
@@ -21,6 +22,7 @@ pub mod voxel;
 use pyo3::prelude::*;
 
 pub use cull::PyFaceCuller;
+pub use save::PyLevelData;
 pub use material::{
     blend_biome_colors, classify_tint_category, compute_biome_tint_attributes, get_all_biomes,
     get_biome_meta, sample_colormap_pixel, PyBiomeResolver, PyGridAtlasSpec, PyMaterialResolver,
@@ -175,7 +177,13 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(extrude::process_flat_mesh_extrude_repair, m)?)?;
     m.add_function(wrap_pyfunction!(extrude::process_random_extrude_mesh, m)?)?;
 
-    // 10. Metadata
+    // 10. Minecraft Save Loader
+    m.add_class::<save::PyLevelData>()?;
+    m.add_function(wrap_pyfunction!(save::inspect_minecraft_save, m)?)?;
+    m.add_function(wrap_pyfunction!(save::load_minecraft_save_storage, m)?)?;
+    m.add_function(wrap_pyfunction!(save::load_and_mesh_minecraft_save, m)?)?;
+
+    // 11. Metadata
     m.add_function(wrap_pyfunction!(version, m)?)?;
 
     Ok(())
@@ -468,6 +476,21 @@ mod tests {
             assert!(!faces.is_empty());
             assert_eq!(pos.len(), out_uvs.len());
             assert_eq!(pos.len(), params.len());
+        });
+    }
+
+    #[test]
+    fn test_python_save_bindings() {
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|_py| {
+            let test_path = "/home/mozi/.minecraft/versions/26.2-Fabric/saves/New World";
+            if std::path::Path::new(test_path).exists() {
+                let info = save::inspect_minecraft_save(test_path).unwrap();
+                assert_eq!(info.level_name(), "New World");
+                assert!(info.data_version() >= 2844);
+                assert!(!info.dimensions().is_empty());
+                println!("Python save inspect: {:?}", info);
+            }
         });
     }
 }

@@ -15,6 +15,8 @@ pub use mtk_voxel as voxel;
 pub use mtk_resource as resource;
 pub use mtk_texture as texture;
 pub use mtk_material as material;
+#[cfg(feature = "save")]
+pub use mtk_save as save;
 
 use thiserror::Error;
 
@@ -35,6 +37,10 @@ pub enum MtkError {
 
     #[error("Material error: {0}")]
     Material(#[from] mtk_material::MaterialError),
+
+    #[cfg(feature = "save")]
+    #[error("Save error: {0}")]
+    Save(#[from] mtk_save::SaveError),
 
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),

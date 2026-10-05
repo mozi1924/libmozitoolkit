@@ -17,6 +17,7 @@ mtk-resource = { workspace = true }
 mtk-texture = { workspace = true }
 mtk-material = { workspace = true }
 mtk-sync = { workspace = true, optional = true }
+mtk-save = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 bincode = { workspace = true, optional = true }
@@ -24,7 +25,7 @@ rayon = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
 [features]
-default = ["std", "parallel", "sync"]
+default = ["std", "parallel", "sync", "save"]
 std = [
     "mtk-core/std",
     "mtk-cull/std",
@@ -46,6 +47,9 @@ parallel = [
 ]
 sync = [
     "dep:mtk-sync",
+]
+save = [
+    "dep:mtk-save",
 ]
 
 [dev-dependencies]
