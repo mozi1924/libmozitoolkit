@@ -132,12 +132,13 @@ pub fn inspect_minecraft_save(world_dir: &str) -> PyResult<PyLevelData> {
 
 /// Loads a bounded 3D selection box from a Minecraft save directly into a `VoxelStorage`.
 #[pyfunction]
-#[pyo3(signature = (world_dir, dimension="overworld", min_block=(-64, -64, -64), max_block=(64, 320, 64)))]
+#[pyo3(signature = (world_dir, dimension="overworld", min_block=(-64, -64, -64), max_block=(64, 320, 64), callback=None))]
 pub fn load_minecraft_save_storage(
     world_dir: &str,
     dimension: &str,
     min_block: (i32, i32, i32),
     max_block: (i32, i32, i32),
+    callback: Option<PyObject>,
 ) -> PyResult<(PyVoxelStorage, PyLevelData)> {
     let path = Path::new(world_dir);
     let level_data = SaveLoader::read_level_data(path)
@@ -147,8 +148,25 @@ pub fn load_minecraft_save_storage(
     let min_coord = IVec3::new(min_block.0, min_block.1, min_block.2);
     let max_coord = IVec3::new(max_block.0, max_block.1, max_block.2);
 
+    let cb_opt = callback.as_ref();
+    let on_progress = cb_opt.map(|cb| {
+        move |prog: mtk_core::progress::ProgressReport| {
+            Python::with_gil(|py| {
+                let dict = PyDict::new(py);
+                let _ = dict.set_item("stage", prog.stage);
+                let _ = dict.set_item("current", prog.current);
+                let _ = dict.set_item("total", prog.total);
+                let _ = dict.set_item("message", &prog.message);
+                let _ = dict.set_item("percent", prog.percent());
+                let _ = cb.call1(py, (dict,));
+            });
+        }
+    });
+    let progress_ref: Option<mtk_core::progress::ProgressCallback<'_>> =
+        on_progress.as_ref().map(|f| f as &(dyn Fn(mtk_core::progress::ProgressReport) + Send + Sync));
+
     let mut storage = VoxelStorage::new();
-    SaveLoader::load_box_into_storage(path, dimension, min_coord, max_coord, &mut storage)
+    SaveLoader::load_box_into_storage_with_progress(path, dimension, min_coord, max_coord, &mut storage, progress_ref)
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
     Ok((
@@ -163,7 +181,7 @@ pub fn load_minecraft_save_storage(
 /// End-to-end pipeline: Loads bounded 3D world selection from save, feeds into `VoxelWorld`,
 /// and meshes into `PyMeshData` with Atlas UVs and Ambient Occlusion.
 #[pyfunction]
-#[pyo3(signature = (world_dir, dimension="overworld", min_block=(-64, -64, -64), max_block=(64, 320, 64), config=None, culler=None, model_db=None, num_threads=None))]
+#[pyo3(signature = (world_dir, dimension="overworld", min_block=(-64, -64, -64), max_block=(64, 320, 64), config=None, culler=None, model_db=None, num_threads=None, callback=None))]
 pub fn load_and_mesh_minecraft_save(
     py: Python<'_>,
     world_dir: &str,
@@ -174,6 +192,7 @@ pub fn load_and_mesh_minecraft_save(
     culler: Option<&PyFaceCuller>,
     model_db: Option<&PyBakedModelDatabase>,
     num_threads: Option<usize>,
+    callback: Option<PyObject>,
 ) -> PyResult<(PyMeshData, PyLevelData, PyVoxelStorage)> {
     let path = Path::new(world_dir);
     let level_data = SaveLoader::read_level_data(path)
@@ -183,8 +202,25 @@ pub fn load_and_mesh_minecraft_save(
     let min_coord = IVec3::new(min_block.0, min_block.1, min_block.2);
     let max_coord = IVec3::new(max_block.0, max_block.1, max_block.2);
 
+    let cb_opt = callback.as_ref();
+    let on_progress = cb_opt.map(|cb| {
+        move |prog: mtk_core::progress::ProgressReport| {
+            Python::with_gil(|py| {
+                let dict = PyDict::new(py);
+                let _ = dict.set_item("stage", prog.stage);
+                let _ = dict.set_item("current", prog.current);
+                let _ = dict.set_item("total", prog.total);
+                let _ = dict.set_item("message", &prog.message);
+                let _ = dict.set_item("percent", prog.percent());
+                let _ = cb.call1(py, (dict,));
+            });
+        }
+    });
+    let progress_ref: Option<mtk_core::progress::ProgressCallback<'_>> =
+        on_progress.as_ref().map(|f| f as &(dyn Fn(mtk_core::progress::ProgressReport) + Send + Sync));
+
     let mut storage = VoxelStorage::new();
-    SaveLoader::load_box_into_storage(path, dimension, min_coord, max_coord, &mut storage)
+    SaveLoader::load_box_into_storage_with_progress(path, dimension, min_coord, max_coord, &mut storage, progress_ref)
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
     let cfg = config.map(|c| c.inner.clone());
@@ -202,7 +238,7 @@ pub fn load_and_mesh_minecraft_save(
     );
 
     let mesh = py
-        .allow_threads(|| world.rebuild_all().map(|m| m.clone()))
+        .allow_threads(|| world.rebuild_all_with_progress(progress_ref).map(|m| m.clone()))
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
     Ok((

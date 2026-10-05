@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use glam::IVec3;
+use mtk_core::progress::{ProgressCallback, ProgressReport, ProgressThrottler};
 use mtk_voxel::source::VoxelWriter;
 use mtk_voxel::storage::VoxelStorage;
 
@@ -186,6 +187,18 @@ impl SaveLoader {
         max_block: IVec3,
         storage: &mut VoxelStorage,
     ) -> Result<usize, SaveError> {
+        Self::load_box_into_storage_with_progress(save_dir, dimension, min_block, max_block, storage, None)
+    }
+
+    /// Loads only the required chunk sections within `[min_block, max_block]` into a target `VoxelStorage` with progress reporting.
+    pub fn load_box_into_storage_with_progress(
+        save_dir: &Path,
+        dimension: &str,
+        min_block: IVec3,
+        max_block: IVec3,
+        storage: &mut VoxelStorage,
+        progress: Option<ProgressCallback>,
+    ) -> Result<usize, SaveError> {
         let region_dir = Self::resolve_dimension_region_dir(save_dir, dimension)
             .ok_or_else(|| SaveError::RegionDirNotFound(save_dir.to_path_buf()))?;
 
@@ -205,6 +218,10 @@ impl SaveLoader {
         let min_reg_z = min_sec_z >> 5;
         let max_reg_z = max_sec_z >> 5;
 
+        let total_chunks = (((max_sec_x - min_sec_x + 1).max(1)) * ((max_sec_z - min_sec_z + 1).max(1))) as usize;
+        let throttler = ProgressThrottler::new("load_chunks", total_chunks, progress)
+            .with_prefix("Loading chunk");
+
         let mut loaded_sections = 0usize;
 
         // 2. Iterate only over regions that overlap the bounding box
@@ -212,12 +229,26 @@ impl SaveLoader {
             for rz in min_reg_z..=max_reg_z {
                 let mca_path = region_dir.join(format!("r.{}.{}.mca", rx, rz));
                 if !mca_path.exists() {
+                    let chunk_start_x = (rx * 32).max(min_sec_x);
+                    let chunk_end_x = (rx * 32 + 31).min(max_sec_x);
+                    let chunk_start_z = (rz * 32).max(min_sec_z);
+                    let chunk_end_z = (rz * 32 + 31).min(max_sec_z);
+                    let skipped = ((chunk_end_x - chunk_start_x + 1).max(0) * (chunk_end_z - chunk_start_z + 1).max(0)) as usize;
+                    throttler.inc_by(skipped);
                     continue;
                 }
 
                 let mut region_file = match RegionFile::open(&mca_path) {
                     Ok(rf) => rf,
-                    Err(_) => continue,
+                    Err(_) => {
+                        let chunk_start_x = (rx * 32).max(min_sec_x);
+                        let chunk_end_x = (rx * 32 + 31).min(max_sec_x);
+                        let chunk_start_z = (rz * 32).max(min_sec_z);
+                        let chunk_end_z = (rz * 32 + 31).min(max_sec_z);
+                        let skipped = ((chunk_end_x - chunk_start_x + 1).max(0) * (chunk_end_z - chunk_start_z + 1).max(0)) as usize;
+                        throttler.inc_by(skipped);
+                        continue;
+                    }
                 };
 
                 let chunk_start_x = (rx * 32).max(min_sec_x);
@@ -228,12 +259,16 @@ impl SaveLoader {
                 for cx in chunk_start_x..=chunk_end_x {
                     for cz in chunk_start_z..=chunk_end_z {
                         if !region_file.has_chunk(cx, cz) {
+                            throttler.inc();
                             continue;
                         }
 
                         let decompressed = match region_file.read_chunk_decompressed(cx, cz)? {
                             Some(d) => d,
-                            None => continue,
+                            None => {
+                                throttler.inc();
+                                continue;
+                            }
                         };
 
                         let sections = ChunkParser::parse_chunk_sections(
@@ -249,6 +284,8 @@ impl SaveLoader {
                             storage.set_section(sec_x, sec_y, sec_z, section);
                             loaded_sections += 1;
                         }
+
+                        throttler.inc();
                     }
                 }
             }
@@ -259,6 +296,15 @@ impl SaveLoader {
         let size_y = (true_max.y - true_min.y + 1).max(1);
         let size_z = (true_max.z - true_min.z + 1).max(1);
         storage.set_bounds(true_min.x, true_min.y, true_min.z, size_x, size_y, size_z);
+
+        if let Some(cb) = progress {
+            cb(ProgressReport::new(
+                "load_chunks",
+                total_chunks,
+                total_chunks,
+                format!("Loaded {} chunk sections from {} chunks", loaded_sections, total_chunks),
+            ));
+        }
 
         Ok(loaded_sections)
     }

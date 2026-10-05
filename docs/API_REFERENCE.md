@@ -158,8 +158,9 @@ cache_output_dir/
 - **`ProgressReport`**: 包含阶段标识符 `stage`（如 `"meshing_sections"`、`"assembling_world_mesh"`）、真实物理已完成计数 `current`、总任务数 `total`、描述文本 `message` 与百分比计算 `percent()`。
 - **`ProgressCallback`**: 跨线程回调契约 `&dyn Fn(ProgressReport) + Send + Sync`。
 - **`ProgressThrottler`**: 面向多线程（Rayon）高频任务的原子无锁节流器，通过 `inc()` / `inc_by()` 配合步进控制（默认 1% 或每完成 $N$ 项触发一次），杜绝跨语言锁争抢并 100% 确保终态触发。
-- **底层体素构建整合 (`mtk-voxel` & `mtk-sync`)**:
+- **全链路模块接入 (`mtk-voxel`, `mtk-sync`, `mtk-save`)**:
   - `VoxelWorld::rebuild_all_with_progress(callback)`: 在 Rayon 并行重构体素网格时，实时将各 Chunk Section 的真实烘焙进度向外派发。
   - `mtk-sync`: 实时将网格烘焙进度转化为 `SyncEvent::StreamProgress` 并向前端推送，配合 Blender 宿主状态栏 API（`wm.progress_*` 与 `workspace.status_text_set`）实现全链路底栏真实进度条。
+  - `SaveLoader::load_box_into_storage_with_progress(...)`: 在遍历 Anvil MCA 区域与解压 Chunk NBT 期间实时汇报 `load_chunks` 物理进度，使世界存档导入在 MCA 解压与网格构建全流程透明可见。
 
 

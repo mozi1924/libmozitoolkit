@@ -150,6 +150,7 @@ pub struct SaveLoader;
 ```
 - `SaveLoader::read_level_data(save_dir: impl AsRef<Path>) -> Result<LevelData, SaveError>`: 快速读取并审阅世界配置。
 - `SaveLoader::load_box_into_storage(...) -> Result<usize, SaveError>`: 给定世界目录、维度名称与 3D 轴对齐空间范围 $[P_{\min}, P_{\max}]$，精确裁剪提取相交区块并灌入 `VoxelStorage`。
+- `SaveLoader::load_box_into_storage_with_progress(..., progress: Option<ProgressCallback>) -> Result<usize, SaveError>`: 带实时物理进度节流汇报的空间切片加载器。
 
 ---
 
@@ -174,6 +175,7 @@ pub struct AnvilWorldSource {
 | :--- | :--- |
 | `SaveLoader::read_level_data` | `(save_dir: impl AsRef<Path>) -> Result<LevelData, SaveError>`：读取世界元数据。 |
 | `SaveLoader::load_box_into_storage` | `(save_dir, dimension, min_coord, max_coord, &mut storage) -> Result<usize, SaveError>`：按 3D 边界范围切片加载体素。 |
+| `SaveLoader::load_box_into_storage_with_progress` | `(..., &mut storage, progress: Option<ProgressCallback>) -> Result<usize, SaveError>`：带进度汇报的切片加载。 |
 | `RegionFile::open` | `(path: impl AsRef<Path>) -> Result<Self, SaveError>`：解析 Anvil 区域文件寻址头。 |
 | `RegionFile::read_chunk_decompressed` | `(&mut self, cx, cz) -> Result<Option<Vec<u8>>, SaveError>`：直接解压单区块 NBT。 |
 | `ChunkParser::parse_chunk_sections` | `(bytes: &[u8]) -> Result<HashMap<i8, SectionData>, SaveError>`：解密区块内所有 Section。 |
