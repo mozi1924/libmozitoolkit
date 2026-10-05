@@ -89,9 +89,22 @@ pub fn precompile_all_assets(
     config: &PrecompileConfig,
 ) -> Result<PrecompileResult, MtkError>;
 
+pub fn precompile_all_assets_with_progress(
+    stack: &ResourcePackStack,
+    cache_dir: impl AsRef<Path>,
+    config: &PrecompileConfig,
+    progress_callback: Option<ProgressCallback>,
+) -> Result<PrecompileResult, MtkError>;
+
 pub fn prebake_all_models(
     stack: &ResourcePackStack,
     atlas_map: Option<&AtlasAddressMap>,
+) -> Result<BakedModelDatabase, MtkError>;
+
+pub fn prebake_all_models_with_progress(
+    stack: &ResourcePackStack,
+    atlas_map: Option<&AtlasAddressMap>,
+    progress_callback: Option<ProgressCallback>,
 ) -> Result<BakedModelDatabase, MtkError>;
 
 // 3. 高级网格处理管线

@@ -11,6 +11,7 @@ use std::path::Path;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use mtk_core::progress::{ProgressCallback, ProgressReport, ProgressThrottler};
 use mtk_material::{BiomeResolver, MaterialResolver};
 use mtk_model::{BakedModelDatabase, BlockModelJson, BlockStateDefinition, ModelBaker};
 use mtk_resource::{AtlasCategory, ResourceLocation, ResourcePackStack};
@@ -86,23 +87,34 @@ impl CacheManifest {
     }
 }
 
+/// Executes unified end-to-end asset precompilation directly to disk with physical progress reporting.
+pub fn precompile_all_assets_with_progress(
+    stack: &ResourcePackStack,
+    cache_dir: impl AsRef<Path>,
+    config: &PrecompileConfig,
+    progress_callback: Option<ProgressCallback>,
+) -> Result<PrecompileResult, MtkError> {
+    let base_path = cache_dir.as_ref();
+    mtk_core::constants::concurrency::execute_parallel(config.num_threads, || {
+        precompile_all_assets_inner(stack, base_path, config, progress_callback)
+    })
+    .map_err(MtkError::ThreadPool)?
+}
+
 /// Executes unified end-to-end asset precompilation directly to disk.
 pub fn precompile_all_assets(
     stack: &ResourcePackStack,
     cache_dir: impl AsRef<Path>,
     config: &PrecompileConfig,
 ) -> Result<PrecompileResult, MtkError> {
-    let base_path = cache_dir.as_ref();
-    mtk_core::constants::concurrency::execute_parallel(config.num_threads, || {
-        precompile_all_assets_inner(stack, base_path, config)
-    })
-    .map_err(MtkError::ThreadPool)?
+    precompile_all_assets_with_progress(stack, cache_dir, config, None)
 }
 
 fn precompile_all_assets_inner(
     stack: &ResourcePackStack,
     base_path: &Path,
     config: &PrecompileConfig,
+    progress_callback: Option<ProgressCallback>,
 ) -> Result<PrecompileResult, MtkError> {
     let atlas_dir = base_path.join("atlas");
     let standalone_dir = base_path.join("standalone");
@@ -116,6 +128,15 @@ fn precompile_all_assets_inner(
     fs::create_dir_all(&colormaps_dir)?;
 
     // 0. Discover Biome Tinting, Model tintindex, and Overlay Pairs (Save biome_mapping.json)
+    if let Some(cb) = progress_callback {
+        cb(ProgressReport::new(
+            "prebake_biome",
+            0,
+            1,
+            "Extracting biome mappings and colormaps...",
+        ));
+    }
+
     let mut biome_resolver = BiomeResolver::new();
     biome_resolver.load_from_pack_stack(stack);
     if let Ok(biome_json) = biome_resolver.to_json() {
@@ -131,6 +152,15 @@ fn precompile_all_assets_inner(
         }
     }
 
+    if let Some(cb) = progress_callback {
+        cb(ProgressReport::new(
+            "prebake_biome",
+            1,
+            1,
+            "Extracted biome mappings and colormaps",
+        ));
+    }
+
     let mut chunk_count = 0;
     let mut sa_count = 0;
     let mut baked_count = 0;
@@ -138,6 +168,15 @@ fn precompile_all_assets_inner(
 
     // 1. Atlas Baking & File Persistence (Multi-Category)
     if config.compile_atlas {
+        if let Some(cb) = progress_callback {
+            cb(ProgressReport::new(
+                "prebake_atlas",
+                0,
+                1,
+                "Packing sprite textures into atlases...",
+            ));
+        }
+
         let mut def_list: Vec<(String, mtk_resource::AtlasDefinition)> = Vec::new();
         let mut seen_cats = std::collections::HashSet::new();
 
@@ -179,6 +218,14 @@ fn precompile_all_assets_inner(
         let mapping_json = baked_atlas.address_map.to_json()?;
         fs::write(atlas_dir.join("atlas_mapping.json"), mapping_json)?;
 
+        let atlas_throttler = ProgressThrottler::new(
+            "prebake_atlas",
+            chunk_count.max(1),
+            progress_callback,
+        )
+        .with_step(1)
+        .with_prefix("Writing atlas chunk textures");
+
         #[cfg(feature = "parallel")]
         {
             baked_atlas.chunks.par_iter().try_for_each(|chunk| -> Result<(), MtkError> {
@@ -200,6 +247,7 @@ fn precompile_all_assets_inner(
                     let overlay_bytes = overlay.to_png_bytes()?;
                     fs::write(atlas_dir.join(format!("{}_overlay.png", stem)), overlay_bytes)?;
                 }
+                atlas_throttler.inc();
                 Ok(())
             })?;
         }
@@ -225,6 +273,7 @@ fn precompile_all_assets_inner(
                     let overlay_bytes = overlay.to_png_bytes()?;
                     fs::write(atlas_dir.join(format!("{}_overlay.png", stem)), overlay_bytes)?;
                 }
+                atlas_throttler.inc();
             }
         }
 
@@ -233,16 +282,34 @@ fn precompile_all_assets_inner(
 
     // 2. Standalone Baking
     if config.compile_standalone {
+        if let Some(cb) = progress_callback {
+            cb(ProgressReport::new(
+                "prebake_standalone",
+                0,
+                1,
+                "Aligning standalone PBR textures...",
+            ));
+        }
+
         let sa_cfg = StandaloneConfig::default();
         let sa_builder = StandaloneBuilder::new(sa_cfg);
         let sa_res = sa_builder.build_to_dir(stack, &standalone_dir)?;
         sa_count = sa_res.texture_count;
+
+        if let Some(cb) = progress_callback {
+            cb(ProgressReport::new(
+                "prebake_standalone",
+                sa_count,
+                sa_count.max(1),
+                format!("Aligned {} standalone textures", sa_count),
+            ));
+        }
     }
 
     // 3. Full-Scale Model Baking & Bincode Persistence (with Atlas UV Pre-baking)
     if config.compile_models {
         let atlas_map = baked_atlas_opt.as_ref().map(|a| &a.address_map);
-        let model_db = prebake_all_models(stack, atlas_map)?;
+        let model_db = prebake_all_models_with_progress(stack, atlas_map, progress_callback)?;
         baked_count = model_db.len();
         let bin_bytes = model_db.to_bincode()?;
         fs::write(models_dir.join("models.bin"), bin_bytes)?;
@@ -267,6 +334,15 @@ fn precompile_all_assets_inner(
     let manifest_json = serde_json::to_string_pretty(&manifest)?;
     fs::write(base_path.join("cache_manifest.json"), manifest_json)?;
 
+    if let Some(cb) = progress_callback {
+        cb(ProgressReport::new(
+            "prebake_manifest",
+            1,
+            1,
+            "Saved cache manifest and completed precompilation",
+        ));
+    }
+
     Ok(PrecompileResult {
         success: true,
         pack_count: stack.len(),
@@ -278,12 +354,22 @@ fn precompile_all_assets_inner(
     })
 }
 
-/// Prebakes all blockstates discovered across all active resource packs in the stack.
-pub fn prebake_all_models(
+/// Prebakes all blockstates discovered across all active resource packs in the stack with physical progress reporting.
+pub fn prebake_all_models_with_progress(
     stack: &ResourcePackStack,
     atlas_map: Option<&AtlasAddressMap>,
+    progress_callback: Option<ProgressCallback>,
 ) -> Result<BakedModelDatabase, MtkError> {
     let blockstate_locs = stack.list_all_blockstate_locations();
+
+    if let Some(cb) = progress_callback {
+        cb(ProgressReport::new(
+            "prebake_models",
+            0,
+            blockstate_locs.len().max(1),
+            "Indexing model definitions...",
+        ));
+    }
 
     // 1. Preload all model JSONs across packs into a fast lookup map
     let mut model_cache: HashMap<String, BlockModelJson> = HashMap::new();
@@ -336,6 +422,10 @@ pub fn prebake_all_models(
         }
     }
 
+    let total_defs = blockstate_defs.len();
+    let throttler = ProgressThrottler::new("prebake_models", total_defs.max(1), progress_callback)
+        .with_prefix("Baking block models");
+
     // 3. Bake all states concurrently
     #[cfg(feature = "parallel")]
     let baked_pairs: Vec<(String, mtk_model::BakedVariantGroup)> = blockstate_defs
@@ -355,6 +445,7 @@ pub fn prebake_all_models(
                     pairs.push((state_str, group));
                 }
             }
+            throttler.inc();
             pairs
         })
         .collect();
@@ -377,6 +468,7 @@ pub fn prebake_all_models(
                     pairs.push((state_str, group));
                 }
             }
+            throttler.inc();
             pairs
         })
         .collect();
@@ -387,6 +479,23 @@ pub fn prebake_all_models(
     }
     db.deduplicate_all();
 
+    if let Some(cb) = progress_callback {
+        cb(ProgressReport::new(
+            "prebake_models",
+            total_defs,
+            total_defs.max(1),
+            format!("Completed baking {} model variants", db.len()),
+        ));
+    }
+
     Ok(db)
+}
+
+/// Prebakes all blockstates discovered across all active resource packs in the stack.
+pub fn prebake_all_models(
+    stack: &ResourcePackStack,
+    atlas_map: Option<&AtlasAddressMap>,
+) -> Result<BakedModelDatabase, MtkError> {
+    prebake_all_models_with_progress(stack, atlas_map, None)
 }
 

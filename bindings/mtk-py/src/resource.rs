@@ -4,7 +4,7 @@
 
 use std::path::Path;
 use pyo3::prelude::*;
-use pyo3::types::PyBytes;
+use pyo3::types::{PyBytes, PyDict};
 
 use mtk_resource::{DirectoryPack, ResourceLocation, ResourcePackStack};
 #[cfg(feature = "zip")]
@@ -131,9 +131,9 @@ impl PyPrecompileResult {
 
 /// Executes unified end-to-end asset precompilation directly to persistent cache folder.
 ///
-/// Releases Python GIL during multi-threaded baking.
+/// Releases Python GIL during multi-threaded baking, re-acquiring for progress callbacks.
 #[pyfunction]
-#[pyo3(signature = (stack, cache_dir, atlas_category="blocks", max_atlas_width=4096, max_atlas_height=4096, compile_atlas=true, compile_standalone=true, compile_models=true, num_threads=None))]
+#[pyo3(signature = (stack, cache_dir, atlas_category="blocks", max_atlas_width=4096, max_atlas_height=4096, compile_atlas=true, compile_standalone=true, compile_models=true, num_threads=None, callback=None))]
 pub fn precompile_all_assets<'py>(
     py: Python<'py>,
     stack: &PyResourcePackStack,
@@ -145,6 +145,7 @@ pub fn precompile_all_assets<'py>(
     compile_standalone: bool,
     compile_models: bool,
     num_threads: Option<usize>,
+    callback: Option<PyObject>,
 ) -> PyResult<PyPrecompileResult> {
     let cfg = libmtk::PrecompileConfig {
         max_atlas_width,
@@ -156,8 +157,27 @@ pub fn precompile_all_assets<'py>(
         num_threads,
     };
 
+    let cb_opt = callback.as_ref();
+    let on_progress = cb_opt.map(|cb| {
+        move |prog: mtk_core::progress::ProgressReport| {
+            Python::with_gil(|py| {
+                let dict = PyDict::new(py);
+                let _ = dict.set_item("stage", prog.stage);
+                let _ = dict.set_item("current", prog.current);
+                let _ = dict.set_item("total", prog.total);
+                let _ = dict.set_item("message", &prog.message);
+                let _ = dict.set_item("percent", prog.percent());
+                let _ = cb.call1(py, (dict,));
+            });
+        }
+    });
+    let progress_ref: Option<mtk_core::progress::ProgressCallback<'_>> =
+        on_progress.as_ref().map(|f| f as &(dyn Fn(mtk_core::progress::ProgressReport) + Send + Sync));
+
     let res = py
-        .allow_threads(|| libmtk::precompile_all_assets(&stack.inner, cache_dir, &cfg))
+        .allow_threads(|| {
+            libmtk::precompile_all_assets_with_progress(&stack.inner, cache_dir, &cfg, progress_ref)
+        })
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
     Ok(PyPrecompileResult {

@@ -102,7 +102,8 @@ pub use pipeline::{
 
 pub mod prebake;
 pub use prebake::{
-    prebake_all_models, precompile_all_assets, CacheManifest, PrecompileConfig, PrecompileResult,
+    prebake_all_models, prebake_all_models_with_progress, precompile_all_assets,
+    precompile_all_assets_with_progress, CacheManifest, PrecompileConfig, PrecompileResult,
     ASSET_CACHE_FORMAT_VERSION,
 };
 pub use mtk_model::baker::{BakedModel, BakedModelDatabase, ModelBaker};
