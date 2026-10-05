@@ -1,10 +1,28 @@
 # mtk-cli (`mtk`)
 
-[![Rust](https://img.shields.io/badge/Rust-1.78%2B-orange.svg)](https://www.rust-lang.org)
+[![Crate](https://img.shields.io/badge/crate-mtk--cli-blue.svg)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
 [![CLI](https://img.shields.io/badge/CLI-Clap%20v4-blue.svg)](https://docs.rs/clap)
 [![Status](https://img.shields.io/badge/Roadmap%20Priority-P1%20Tooling-yellow.svg)]()
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
-`mtk-cli` 是 MoziToolKit 的独立跨平台统一命令行工具（二进制名称为 `mtk`），专为 Minecraft 3D 资产无头预编译、CTM 纹理规则求解、模型烘焙排查、OBJ 导出与面遮挡状态机验证而设计。
+**`mtk-cli`** 是 MoziToolKit (`libmtk`) 的独立跨平台统一命令行工具（二进制名称为 `mtk`），专为 Minecraft 3D 资产无头预编译、CTM 纹理规则求解、模型烘焙排查、OBJ 导出与面遮挡状态机验证而设计。
+
+---
+
+## 目录 (Table of Contents)
+
+- [1. 架构定位与演进优先级](#1-架构定位与演进优先级)
+- [2. 命令行子命令与参数详解](#2-命令行子命令与参数详解)
+  - [2.1 `mtk atlas` (图集与资产烘焙)](#21-mtk-atlas-图集与资产烘焙)
+  - [2.2 `mtk model` (模型烘焙与数据导出)](#22-mtk-model-模型烘焙与数据导出)
+  - [2.3 `mtk export` (Wavefront OBJ / MTL 导出)](#23-mtk-export-wavefront-obj--mtl-导出)
+  - [2.4 `mtk ctm` (OptiFine / Continuity 连接纹理测试)](#24-mtk-ctm-optifine--continuity-连接纹理测试)
+  - [2.5 `mtk verify` (规则校验)](#25-mtk-verify-规则校验)
+  - [2.6 `mtk bench` (性能基准测试)](#26-mtk-bench-性能基准测试)
+- [3. 构建与安装指南](#3-构建与安装指南)
+- [4. 终端实战命令示例](#4-终端实战命令示例)
+- [5. 开源协议 (License)](#5-开源协议-license)
 
 ---
 
@@ -141,3 +159,9 @@ mtk verify cull \
 ```bash
 mtk bench model --jar /home/mozi/26.2-Fabric.jar
 ```
+
+---
+
+## 5. 开源协议 (License)
+
+本项目遵循 [GNU General Public License v3.0 or later (GPL-3.0-or-later)](../../LICENSE) 开源协议。

@@ -1,6 +1,8 @@
 # mtk-voxel
 
 [![Crate](https://img.shields.io/badge/crate-mtk--voxel-blue.svg)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
+[![Rayon](https://img.shields.io/badge/Rayon-Parallel-red.svg)](https://github.com/rayon-rs/rayon)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
 **`mtk-voxel`** 是 `libmozitoolkit` (`libmtk`) 套件中的核心体素（Voxel）几何引擎与空间存储 Crate。遵循 **无宿主依赖 (Host-Agnostic)**、**纯数据输入输出 (Data-In, Data-Out)** 与 **多源解耦** 架构原则，提供高吞吐 16×16×16 Chunk Section 紧凑体素存储、3D 稀疏世界容器、物理流体网格重建、平滑环境光遮蔽 (Smooth AO)、多源体素抽象以及多线程高性能网格化器 (Mesher)。
@@ -26,6 +28,7 @@
   - [示例 2：增量修改与局部网格更新 (`DeltaMesher`)](#示例-2增量修改与局部网格更新-deltamesher)
   - [示例 3：实现自定义 `VoxelSource` 外部数据源](#示例-3实现自定义-voxelsource-外部数据源)
 - [6. Feature 开关与依赖](#6-feature-开关与依赖)
+- [7. 开源协议 (License)](#7-开源协议-license)
 
 ---
 
@@ -442,3 +445,10 @@ serde = ["dep:serde", "dep:serde_json", "mtk-core/serde", "mtk-cull/serde"]
 
 - **`parallel`** (默认开启)：引入 `rayon` 启用多区块切片并行网格化 (`SectionMesher::mesh_sections`)。
 - **`serde`** (默认开启)：为 `SectionStorage`、`VoxelStorage`、`MesherConfig`、`WorldMeshBuildResult` 等结构体提供序列化与反序列化支持。
+
+---
+
+## 7. 开源协议 (License)
+
+本项目遵循 [GNU General Public License v3.0 or later (GPL-3.0-or-later)](../../LICENSE) 开源协议。
+

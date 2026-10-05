@@ -1,11 +1,29 @@
 # mtk-wasm
 
-[![Rust](https://img.shields.io/badge/Rust-1.78%2B-orange.svg)](https://www.rust-lang.org)
+[![Crate](https://img.shields.io/badge/crate-mtk--wasm-blue.svg)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
 [![WebAssembly](https://img.shields.io/badge/WASM-wasm--bindgen-blue.svg)](https://rustwasm.github.io/docs/wasm-bindgen/)
 [![WebGPU](https://img.shields.io/badge/WebGPU-Ready-green.svg)](https://www.w3.org/TR/webgpu/)
 [![Status](https://img.shields.io/badge/Roadmap%20Priority-P2%20Future%20Prep-blueviolet.svg)]()
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
-`mtk-wasm` 是基于 [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen) 构建的高性能 WebAssembly 跨平台绑定库，为现代 Web 浏览器、Node.js 环境以及 WebGPU / Three.js 渲染管线提供体素网格化与遮挡剔除算力。
+**`mtk-wasm`** 是基于 [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen) 构建的高性能 WebAssembly 跨平台绑定库，为现代 Web 浏览器、Node.js 环境以及 WebGPU / Three.js 渲染管线提供体素网格化与遮挡剔除算力。
+
+---
+
+## 目录 (Table of Contents)
+
+- [1. 架构定位与演进优先级](#1-架构定位与演进优先级)
+- [2. 核心导出类型与 API 清单](#2-核心导出类型与-api-清单)
+  - [2.1 全局控制与诊断](#21-全局控制与诊断)
+  - [2.2 遮挡状态机 (`WasmFaceCuller`)](#22-遮挡状态机-wasmfaceculler)
+  - [2.3 体素世界与紧凑存储 (`WasmVoxelStorage`)](#23-体素世界与紧凑存储-wasmvoxelstorage)
+  - [2.4 高性能网格化器 (`WasmSectionMesher`)](#24-高性能网格化器-wasmsectionmesher)
+  - [2.5 几何网格结果与零拷贝内存视图 (`WasmMeshData`)](#25-几何网格结果与零拷贝内存视图-wasmmeshdata)
+- [3. 构建、编译与测试](#3-构建编译与测试)
+- [4. 真实调用示例](#4-真实调用示例)
+- [5. Feature 开关与依赖](#5-feature-开关与依赖)
+- [6. 开源协议 (License)](#6-开源协议-license)
 
 ---
 
@@ -156,3 +174,20 @@ async function run() {
 
 run();
 ```
+
+---
+
+## 5. Feature 开关与依赖
+
+`mtk-wasm` 在 `Cargo.toml` 中提供特性开关：
+
+| Feature | 默认启用 | 描述 |
+| :--- | :---: | :--- |
+| `std` | 是 | 启用标准库与各子模块的 WebAssembly 兼容子集。 |
+| `parallel` | 否 | 启用 `wasm-bindgen-rayon` 支持 Web Workers 线程池多核并行网格化。 |
+
+---
+
+## 6. 开源协议 (License)
+
+本项目遵循 [GNU General Public License v3.0 or later (GPL-3.0-or-later)](../../LICENSE) 开源协议。

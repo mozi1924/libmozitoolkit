@@ -1,6 +1,7 @@
 # mtk-sync
 
 [![Crate](https://img.shields.io/badge/crate-mtk--sync-blue.svg)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
 **`mtk-sync`** 是 `libmozitoolkit` (`libmtk`) 套件中的实时网络协同与二进制增量流客户端 Crate。遵循 **无宿主依赖 (Host-Agnostic)** 原则，专为建立 Minecraft（伴随模组/插件如 Yefira）与 3D DCC 宿主（如 Blender MoziToolKit 插件、WebGPU 视口或独立渲染器）之间的高性能双向二进制实时通信通道而设计。
@@ -29,6 +30,7 @@
   - [示例 2：手动解析二进制数据包与单包测试](#示例-2手动解析二进制数据包与单包测试)
   - [示例 3：编码并发送客户端同步控制指令](#示例-3编码并发送客户端同步控制指令)
 - [7. Feature 开关与依赖](#7-feature-开关与依赖)
+- [8. 开源协议 (License)](#8-开源协议-license)
 
 ---
 
@@ -412,3 +414,10 @@ serde = ["dep:serde", "dep:serde_json"]
 ```
 
 - **`serde`** (默认开启)：为 `Packet`、`SyncEvent`、`DeltaChange`、`ManifestSectionEntry` 等结构体提供序列化与反序列化支持。
+
+---
+
+## 8. 开源协议 (License)
+
+本项目遵循 [GNU General Public License v3.0 or later (GPL-3.0-or-later)](../../LICENSE) 开源协议。
+

@@ -1,14 +1,32 @@
 # mtk-core
 
-[![Crates.io](https://img.shields.io/badge/crates.io-mtk--core-orange.svg)](https://crates.io/crates/mtk-core)
-[![Documentation](https://docs.rs/mtk-core/badge.svg)](https://docs.rs/mtk-core)
-[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
+[![Crate](https://img.shields.io/badge/crate-mtk--core-blue.svg)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
 **`mtk-core`** 是 MoziToolKit (`libmtk`) 体系的底层几何计算核心与标准数据契约底座。该 Crate 纯 Rust 实现，严格遵循 **Host-Agnostic（宿主无关）** 与 **Data-In / Data-Out（纯数据输入输出）** 原则，为上层体素化、模型烘焙、材质映射与 DCC 宿主（如 Blender 扩展 `MoziToolKit`）提供高性能网格缓冲、6 向拓扑、自适应像素网格切分以及智能挤出侧面 UV 修复算子。
 
 ---
 
-## 核心特性 (Key Features)
+## 目录 (Table of Contents)
+
+- [1. 核心特性与职责边界](#1-核心特性与职责边界)
+- [2. 模块结构与核心 API](#2-模块结构与核心-api)
+  - [2.1 几何缓冲与基元 (`mesh`, `geometry`, `attributes`)](#21-几何缓冲与基元-mesh-geometry-attributes)
+  - [2.2 6 向拓扑与坐标系 (`direction`, `geometry`)](#22-6-向拓扑与坐标系-direction-geometry)
+  - [2.3 自适应像素切分 (`subdivide`)](#23-自适应像素切分-subdivide)
+  - [2.4 智能挤出与 UV 修复 (`extrude`, `extrude_mesh`)](#24-智能挤出与-uv-修复-extrude-extrude_mesh)
+  - [2.5 确定性随机与植被偏移 (`random`)](#25-确定性随机与植被偏移-random)
+- [3. 快速上手示例 (Quick Start)](#3-快速上手示例-quick-start)
+  - [示例 1：构建基础单位立方体网格](#示例-1构建基础单位立方体网格)
+  - [示例 2：执行自适应像素网格细分](#示例-2执行自适应像素网格细分)
+  - [示例 3：空间坐标系变换](#示例-3空间坐标系变换)
+- [4. Feature 开关与依赖](#4-feature-开关与依赖)
+- [5. 开源协议 (License)](#5-开源协议-license)
+
+---
+
+## 1. 核心特性与职责边界
 
 - **扁平连续几何缓冲 (`MeshData`)**：零堆碎片化的连续顶点、法线、UV、四边形索引 (`quad_indices`) 与通用层级自定义属性 (`MeshAttribute`) 容器，天然适配 GPU 缓冲区与 NumPy / DCC 零拷贝映射。
 - **高性能多边形拓扑容器 (`FlatPolygonMesh`)**：针对多边形网格（N-gon / Quad / Tri）提供展平的 1D 循环缓冲区（Loop Buffers），消除成千上万个嵌套 `Vec<Vec<T>>` 堆分配开销。
@@ -18,9 +36,9 @@
 
 ---
 
-## 模块结构与核心 API (Architecture & Core Types)
+## 2. 模块结构与核心 API
 
-### 1. 几何缓冲与基元 (`mesh`, `geometry`, `attributes`)
+### 2.1 几何缓冲与基元 (`mesh`, `geometry`, `attributes`)
 
 | 类型 / 结构体 | 说明 |
 | :--- | :--- |
@@ -31,7 +49,7 @@
 | [`FaceAttributes`](src/attributes.rs) | 面属性包，包含 `material_slot: MaterialSlotId` 与 `tint_index: TintIndex`。 |
 | [`MeshAttribute`](src/attributes.rs) | 通用动态属性层，支持 `Point`, `Corner`, `Face`, `Mesh` 作用域及多种数值类型（`AttributeData`）。 |
 
-### 2. 6 向拓扑与坐标系 (`direction`, `geometry`)
+### 2.2 6 向拓扑与坐标系 (`direction`, `geometry`)
 
 | 函数 / 枚举 | 签名 / 描述 |
 | :--- | :--- |
@@ -40,7 +58,7 @@
 | `mc_local_to_centered_z_up` | `(lx: f32, ly: f32, lz: f32) -> Vec3`：将 Minecraft 局部体素坐标转换为以方块中心为原点的右手 Z-Up 坐标。 |
 | `mc_world_to_z_up` | `(wx: f32, wy: f32, wz: f32) -> Vec3`：将 Minecraft 世界坐标 (+X East, +Y Up, +Z South) 转换为标准右手 Z-Up 坐标 (+X East, +Y North, +Z Up)。 |
 
-### 3. 自适应像素切分 (`subdivide`)
+### 2.3 自适应像素切分 (`subdivide`)
 
 | 函数 | 描述 |
 | :--- | :--- |
@@ -49,7 +67,7 @@
 | `adaptive_pixel_split_mesh` | `(mesh, face_resolutions, default_res, pixels_per_face, max_subdiv, weld_dist) -> MeshData`：全网格批量自适应像素细分，支持多边形属性双线性插值与顶点焊接。 |
 | `weld_mesh_vertices` | `(mesh, threshold) -> MeshData`：基于空间哈希的高性能顶点焊接去重。 |
 
-### 4. 智能挤出与 UV 修复 (`extrude`, `extrude_mesh`)
+### 2.4 智能挤出与 UV 修复 (`extrude`, `extrude_mesh`)
 
 | 函数 / 枚举 | 描述 |
 | :--- | :--- |
@@ -60,7 +78,7 @@
 | `process_flat_mesh_extrude_repair` | `(mesh: &FlatPolygonMesh, ...) -> ExtrudeMeshOutput`：基于扁平连续内存网格的高性能挤出修复。 |
 | `process_random_extrude_mesh` | `(input: &RandomExtrudeMeshInput) -> RandomExtrudeMeshOutput`：单批次完成离散面随机挤出、3D 噪声位移与侧面拓扑 UV 缝合。 |
 
-### 5. 确定性随机与植被偏移 (`random`)
+### 2.5 确定性随机与植被偏移 (`random`)
 
 | 函数 / 结构体 | 描述 |
 | :--- | :--- |
@@ -72,7 +90,7 @@
 
 ---
 
-## 快速上手 (Quick Start)
+## 3. 快速上手示例 (Quick Start)
 
 在 `Cargo.toml` 中添加依赖：
 
@@ -82,7 +100,7 @@ mtk-core = { version = "0.1.0" }
 glam = "0.29"
 ```
 
-### 1. 构建基础单位立方体网格
+### 示例 1：构建基础单位立方体网格
 
 ```rust
 use glam::{Vec2, Vec3};
@@ -110,7 +128,7 @@ fn main() {
 }
 ```
 
-### 2. 执行自适应像素网格细分
+### 示例 2：执行自适应像素网格细分
 
 ```rust
 use mtk_core::mesh::MeshData;
@@ -142,7 +160,7 @@ fn main() {
 }
 ```
 
-### 3. 空间坐标系变换
+### 示例 3：空间坐标系变换
 
 ```rust
 use mtk_core::geometry::{mc_local_to_centered_z_up, mc_world_to_z_up};
@@ -161,7 +179,9 @@ fn main() {
 
 ---
 
-## Feature Flags
+## 4. Feature 开关与依赖
+
+`mtk-core` 在 `Cargo.toml` 中提供特性开关：
 
 | Feature | 默认启用 | 描述 |
 | :--- | :---: | :--- |
@@ -171,6 +191,6 @@ fn main() {
 
 ---
 
-## 许可证 (License)
+## 5. 开源协议 (License)
 
-本项目采用 [MIT OR Apache-2.0](LICENSE) 双重开源许可证。
+本项目遵循 [GNU General Public License v3.0 or later (GPL-3.0-or-later)](../../LICENSE) 开源协议。

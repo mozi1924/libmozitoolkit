@@ -1,14 +1,31 @@
 # libmtk
 
-[![Crates.io](https://img.shields.io/badge/crates.io-libmtk-orange.svg)](https://crates.io/crates/libmtk)
-[![Documentation](https://docs.rs/libmtk/badge.svg)](https://docs.rs/libmtk)
-[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
+[![Crate](https://img.shields.io/badge/crate-libmtk-blue.svg)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
+[![Rayon](https://img.shields.io/badge/Rayon-Parallel-red.svg)](https://github.com/rayon-rs/rayon)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
 **`libmtk`** 是 MoziToolKit 2.0 的统一顶层门面（Unified Facade）与端到端资产编译引擎。纯 Rust 实现，严格遵循 **Host-Agnostic（宿主无关）** 架构设计，汇聚并编排所有底层领域子 Crate，对外提供一致的资产预编译（Asset Prebake）、高级几何处理管线（Mesh Pipeline）与统一错误处理系统。
 
 ---
 
-## 架构拓扑 (Sub-Crates Topology)
+## 目录 (Table of Contents)
+
+- [1. 架构拓扑 (Sub-Crates Topology)](#1-架构拓扑-sub-crates-topology)
+- [2. 核心特性与顶层功能 (Top-Level Features)](#2-核心特性与顶层功能-top-level-features)
+  - [2.1 端到端无头资产预编译 (`libmtk::prebake`)](#21-端到端无头资产预编译-libmtkprebake)
+  - [2.2 高级网格处理管线 (`libmtk::pipeline`)](#22-高级网格处理管线-libmtkpipeline)
+  - [2.3 统一错误系统 (`MtkError`)](#23-统一错误系统-mtkerror)
+- [3. 核心 API 清单 (Core API Reference)](#3-核心-api-清单-core-api-reference)
+- [4. 快速上手示例 (Quick Start)](#4-快速上手示例-quick-start)
+  - [示例 1：执行全量资源包预编译](#示例-1执行全量资源包预编译)
+  - [示例 2：高级网格处理流水线](#示例-2高级网格处理流水线)
+- [5. Feature 开关与依赖](#5-feature-开关与依赖)
+- [6. 开源协议 (License)](#6-开源协议-license)
+
+---
+
+## 1. 架构拓扑 (Sub-Crates Topology)
 
 `libmtk` 作为顶层入口，完整汇聚并按模块重导出以下领域 Crate：
 
@@ -16,18 +33,19 @@
 | :--- | :--- | :--- |
 | **`libmtk::core`** | [`mtk-core`](../mtk-core/) | 基础几何基元、连续网格缓冲 (`MeshData`)、6 向拓扑与自适应像素细分/智能挤出算子。 |
 | **`libmtk::cull`** | [`mtk-cull`](../mtk-cull/) | 原版 1.21+ 邻域面遮挡判定器 (`FaceCuller`)、2D 矩形差集切分与 `MeshSanitizer` 叠面净化。 |
-| **`libmtk::model`** | `mtk-model` | BlockState 解析、1.21+ Block Model JSON 递归继承展开、模型烘焙数据库 (`BakedModelDatabase`)。 |
-| **`libmtk::voxel`** | `mtk-voxel` | 16x16x16 Section 体素存储、平滑 AO 计算、5x5 生物群系平滑核与无头区块网格化器 (`SectionMesher`)。 |
-| **`libmtk::resource`**| `mtk-resource` | 虚拟文件系统 (VFS, `ResourcePackStack`)、.mcmeta 动图解析与 CTM 17/47 连接纹理求解器。 |
-| **`libmtk::texture`** | `mtk-texture` | 2D 矩形装箱 (`Stitcher`)、多类别 PBR 图集烘焙、Overlay 贴图合成与 Standalone 资产对齐。 |
-| **`libmtk::material`**| `mtk-material` | 66 种原版生物群系调色板引擎 (SSOT)、`BiomeResolver` 映射提取与 Rayon 并行 UV 重映射。 |
-| **`libmtk::sync`** | `mtk-sync` | 原生 WebSocket 实时协同客户端 (`LiveSyncSession`) 与 Yefira 二进制小端序协议编解码器。 |
+| **`libmtk::model`** | [`mtk-model`](../mtk-model/) | BlockState 解析、1.21+ Block Model JSON 递归继承展开、模型烘焙数据库 (`BakedModelDatabase`)。 |
+| **`libmtk::voxel`** | [`mtk-voxel`](../mtk-voxel/) | 16x16x16 Section 体素存储、平滑 AO 计算、5x5 生物群系平滑核与无头区块网格化器 (`SectionMesher`)。 |
+| **`libmtk::resource`**| [`mtk-resource`](../mtk-resource/) | 虚拟文件系统 (VFS, `ResourcePackStack`)、.mcmeta 动图解析与 CTM 17/47 连接纹理求解器。 |
+| **`libmtk::texture`** | [`mtk-texture`](../mtk-texture/) | 2D 矩形装箱 (`Stitcher`)、多类别 PBR 图集烘焙、Overlay 贴图合成与 Standalone 资产对齐。 |
+| **`libmtk::material`**| [`mtk-material`](../mtk-material/) | 66 种原版生物群系调色板引擎 (SSOT)、`BiomeResolver` 映射提取与 Rayon 并行 UV 重映射。 |
+| **`libmtk::sync`** | [`mtk-sync`](../mtk-sync/) | 原生 WebSocket 实时协同客户端 (`LiveSyncSession`) 与 Yefira 二进制小端序协议编解码器。 |
+| **`libmtk::save`** | [`mtk-save`](../mtk-save/) | 现代 Minecraft 存档加载核心：基于 `simdnbt` 零拷贝 NBT、Anvil `.mca` 寻址与按需空间切片流。 |
 
 ---
 
-## 核心特性与顶层功能 (Top-Level Features)
+## 2. 核心特性与顶层功能 (Top-Level Features)
 
-### 1. 端到端无头资产预编译 (`libmtk::prebake`)
+### 2.1 端到端无头资产预编译 (`libmtk::prebake`)
 
 一键将离线资源包栈（Vanilla + 材质包）全量烘焙为运行时持久化高速缓存（受 `ASSET_CACHE_FORMAT_VERSION` 版本约束）：
 - **多类别图集烘焙**：自动装箱 Blocks、Items、ArmorTrims、Beds 等图集大图，并行编码 PNG 并落盘；
@@ -35,20 +53,20 @@
 - **模型图集 UV 预解算**：多线程全量烘焙模型，将图集 UV 坐标与 Chunk/Texture ID 预先注入 `BakedModelDatabase` 并序列化为二进制快照 (`models.bin`)；
 - **调色板与生物群系映射**：提取 `biome_mapping.json` 供运行时极速着色。
 
-### 2. 高级网格处理管线 (`libmtk::pipeline`)
+### 2.2 高级网格处理管线 (`libmtk::pipeline`)
 
 提供单次调用、数据输入输出（Data-In Data-Out）的外部网格处理入口 `process_mesh`：
 - 材质名称清洗与别名规范化解析；
 - 多线程 Rayon 并行 Atlas 与 Standalone 归一化 [0, 1] 双 UV 重映射；
 - 生成结构化的网格统计与材质分配元数据。
 
-### 3. 统一错误系统 (`MtkError`)
+### 2.3 统一错误系统 (`MtkError`)
 
 使用 `thiserror` 统一封装模型、体素、贴图、资源、材质、I/O 与并发线程池错误。
 
 ---
 
-## 核心 API 清单 (Core API Reference)
+## 3. 核心 API 清单 (Core API Reference)
 
 ```rust
 // 1. 统一错误类型
@@ -87,7 +105,7 @@ pub fn process_mesh(
 
 ---
 
-## 快速上手 (Quick Start)
+## 4. 快速上手示例 (Quick Start)
 
 在 `Cargo.toml` 中添加依赖：
 
@@ -96,7 +114,7 @@ pub fn process_mesh(
 libmtk = { version = "0.1.0" }
 ```
 
-### 1. 执行全量资源包预编译
+### 示例 1：执行全量资源包预编译
 
 ```rust
 use std::path::Path;
@@ -145,7 +163,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### 2. 高级网格处理流水线
+### 示例 2：高级网格处理流水线
 
 ```rust
 use libmtk::{process_mesh, MeshData, MeshPipelineConfig};
@@ -172,16 +190,19 @@ fn main() {
 
 ---
 
-## Feature Flags
+## 5. Feature 开关与依赖
+
+`libmtk` 在 `Cargo.toml` 中提供特性开关：
 
 | Feature | 默认启用 | 描述 |
 | :--- | :---: | :--- |
 | `std` | 是 | 启用标准库与各子模块的标准实现支持。 |
 | `parallel` | 是 | 启用 `rayon` 多线程并发加速（图集编码、模型烘焙、UV 重映射等）。 |
 | `sync` | 是 | 启用原生 WebSocket 实时同步客户端与网络协议编解码 (`mtk-sync`)。 |
+| `save` | 是 | 启用现代 Minecraft 存档加载与空间切片引擎 (`mtk-save`)。 |
 
 ---
 
-## 许可证 (License)
+## 6. 开源协议 (License)
 
-本项目采用 [MIT OR Apache-2.0](LICENSE) 双重开源许可证。
+本项目遵循 [GNU General Public License v3.0 or later (GPL-3.0-or-later)](../../LICENSE) 开源协议。

@@ -1,14 +1,30 @@
 # mtk-cull
 
-[![Crates.io](https://img.shields.io/badge/crates.io-mtk--cull-orange.svg)](https://crates.io/crates/mtk-cull)
-[![Documentation](https://docs.rs/mtk-cull/badge.svg)](https://docs.rs/mtk-cull)
-[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
+[![Crate](https://img.shields.io/badge/crate-mtk--cull-blue.svg)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
 **`mtk-cull`** 是 MoziToolKit (`libmtk`) 体系的微观遮挡剔除与几何消重引擎。专注于 Minecraft 邻域面遮挡判定、2D 矩形差集切分（Occlusion Boolean Operations）、隐藏体素体裁剪，以及对外部导入网格（如 Mineways、jmc2obj、Blockbench OBJ）进行高精度的共面叠面消除与不可见面剔除。
 
 ---
 
-## 核心特性 (Key Features)
+## 目录 (Table of Contents)
+
+- [1. 核心特性与职责边界](#1-核心特性与职责边界)
+- [2. 模块结构与核心 API](#2-模块结构与核心-api)
+  - [2.1 邻域面剔除引擎 (`engine`, `rules`, `types`)](#21-邻域面剔除引擎-engine-rules-types)
+  - [2.2 2D 矩形布尔与遮挡检测 (`geometry::rect_ops`)](#22-2d-矩形布尔与遮挡检测-geometryrect_ops)
+  - [2.3 共面分析与几何消重 (`sanitizer`, `mesh_cull`, `geometry::coplanar`)](#23-共面分析与几何消重-sanitizer-mesh_cull-geometrycoplanar)
+- [3. 快速上手示例 (Quick Start)](#3-快速上手示例-quick-start)
+  - [示例 1：使用 `FaceCuller` 进行方块面可见性判定](#示例-1使用-faceculler-进行方块面可见性判定)
+  - [示例 2：2D 矩形差集切分 (半砖/局部遮挡)](#示例-22d-矩形差集切分-半砖局部遮挡)
+  - [示例 3：网格几何叠面与重复面净化 (`MeshSanitizer`)](#示例-3网格几何叠面与重复面净化-meshsanitizer)
+- [4. Feature 开关与依赖](#4-feature-开关与依赖)
+- [5. 开源协议 (License)](#5-开源协议-license)
+
+---
+
+## 1. 核心特性与职责边界
 
 - **邻域面遮挡状态机 (`FaceCuller`)**：原版 1.21+ 规范的 6 向邻域剔除判定，内置实心不透明体 (`SolidOpaque`)、半透明玻璃 (`GlassTranslucent`)、镂空树叶 (`CutoutLeaves`)、异形方块 (`PartialShape`)、流体 (`Fluid`) 与非遮挡装饰 (`NonOccluding`) 的全状态分类决策。
 - **2D 矩形差集切分算法 (`subtract_rect`)**：极速微观 2D 矩形布尔差集运算（`SmallVec<[Aabb2d; 4]>` 无堆分配优化），精准解算半砖 (Slabs)、楼梯 (Stairs)、活板门 (Trapdoors) 与地毯等异形方块的局部遮挡面。
@@ -17,9 +33,9 @@
 
 ---
 
-## 模块结构与核心 API (Architecture & Core Types)
+## 2. 模块结构与核心 API
 
-### 1. 邻域面剔除引擎 (`engine`, `rules`, `types`)
+### 2.1 邻域面剔除引擎 (`engine`, `rules`, `types`)
 
 | 类型 / 结构体 | 说明 |
 | :--- | :--- |
@@ -31,7 +47,7 @@
 | [`is_inherently_submerged_block`](src/rules/categories/meta.rs) | `(name: &str) -> bool`：判定原版中无 `waterlogged` 属性但实质恒定处于水下的方块（水草 `seagrass`、海带 `kelp` 等）。在属性解析时自动注入 `waterlogged=true` 作为普通含水方块处理。 |
 | `should_skip_rendering` | `(curr_cat, neighbor_cat, ...) -> bool`：基于类别与方块属性的快速渲染跳过规则。 |
 
-### 2. 2D 矩形布尔与遮挡检测 (`geometry::rect_ops`)
+### 2.2 2D 矩形布尔与遮挡检测 (`geometry::rect_ops`)
 
 | 函数 | 签名 / 描述 |
 | :--- | :--- |
@@ -40,7 +56,7 @@
 | `is_face_completely_occluded` | `(subjects: &[Aabb2d], occluders: &[Aabb2d]) -> bool`：判定一组目标矩形面是否被遮挡矩形集合完全覆盖。 |
 | `extract_quad_face_occlusion_rect` | `(vertices: &[Vec3; 4], dir: Direction) -> Option<Aabb2d>`：从 3D 四边形中投影提取 2D 单位面上的轴对齐遮挡矩形。 |
 
-### 3. 共面分析与几何消重 (`sanitizer`, `mesh_cull`, `geometry::coplanar`)
+### 2.3 共面分析与几何消重 (`sanitizer`, `mesh_cull`, `geometry::coplanar`)
 
 | 类型 / 函数 | 说明 |
 | :--- | :--- |
@@ -52,7 +68,7 @@
 
 ---
 
-## 快速上手 (Quick Start)
+## 3. 快速上手示例 (Quick Start)
 
 在 `Cargo.toml` 中添加依赖：
 
@@ -63,7 +79,7 @@ mtk-core = { version = "0.1.0" }
 glam = "0.29"
 ```
 
-### 1. 使用 `FaceCuller` 进行方块面可见性判定
+### 示例 1：使用 `FaceCuller` 进行方块面可见性判定
 
 ```rust
 use mtk_cull::{FaceCuller, GlassCullMode, LeavesCullMode, CullCategory};
@@ -103,7 +119,7 @@ fn main() {
 }
 ```
 
-### 2. 2D 矩形差集切分 (半砖/局部遮挡)
+### 示例 2：2D 矩形差集切分 (半砖/局部遮挡)
 
 ```rust
 use mtk_core::geometry::Aabb2d;
@@ -126,7 +142,7 @@ fn main() {
 }
 ```
 
-### 3. 网格几何叠面与重复面净化 (`MeshSanitizer`)
+### 示例 3：网格几何叠面与重复面净化 (`MeshSanitizer`)
 
 ```rust
 use mtk_core::mesh::MeshData;
@@ -154,7 +170,9 @@ fn main() {
 
 ---
 
-## Feature Flags
+## 4. Feature 开关与依赖
+
+`mtk-cull` 在 `Cargo.toml` 中提供特性开关：
 
 | Feature | 默认启用 | 描述 |
 | :--- | :---: | :--- |
@@ -163,6 +181,6 @@ fn main() {
 
 ---
 
-## 许可证 (License)
+## 5. 开源协议 (License)
 
-本项目采用 [MIT OR Apache-2.0](LICENSE) 双重开源许可证。
+本项目遵循 [GNU General Public License v3.0 or later (GPL-3.0-or-later)](../../LICENSE) 开源协议。

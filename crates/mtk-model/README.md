@@ -1,6 +1,33 @@
 # mtk-model
 
-Headless Minecraft BlockState parser, 1.21+ Block Model JSON hierarchy baking engine, BakedModelDatabase, and Wavefront OBJ loader for libmtk.
+[![Crate](https://img.shields.io/badge/crate-mtk--model-blue.svg)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
+[![Rayon](https://img.shields.io/badge/Rayon-Parallel-red.svg)](https://github.com/rayon-rs/rayon)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
+
+**`mtk-model`** 是 `libmozitoolkit` (`libmtk`) 体系中的无头方块状态机 (BlockState) 解析器、1.21+ Block Model JSON 递归继承展开与几何烘焙核心引擎。纯 Rust 实现，严格遵循 **Host-Agnostic（宿主无关）** 原则，为上层体素网格化 (`mtk-voxel`)、端到端预编译 (`libmtk`) 与 DCC 宿主提供精确的原版模型烘焙、变体多条件判定 (Variants/Multipart)、实体方块参数化回退以及 Wavefront OBJ 加载能力。
+
+---
+
+## 目录 (Table of Contents)
+
+- [1. 架构定位与职责边界 (Architecture & Responsibilities)](#1-架构定位与职责边界-architecture--responsibilities)
+- [2. 核心数据结构与枚举 (Core Structures & Enums)](#2-核心数据结构与枚举-core-structures--enums)
+  - [2.1 BlockState 状态表示 (`parser/blockstate/state.rs`)](#21-blockstate-状态表示-parserblockstatestaters)
+  - [2.2 状态机定义与变体匹配 (`parser/blockstate/definition.rs`)](#22-状态机定义与变体匹配-parserblockstatedefinitionrs)
+  - [2.3 原版 Model JSON 结构 (`parser/model_json.rs`)](#23-原版-model-json-结构-parsermodel_jsonrs)
+  - [2.4 烘焙几何结构体 (`baker/baked_model/`)](#24-烘焙几何结构体-bakerbaked_model)
+  - [2.5 烘焙模型数据库 (`baker/baked_model/database.rs`)](#25-烘焙模型数据库-bakerbaked_modeldatabasers)
+  - [2.6 预烘焙模型变体组 (`baker/baked_model/variant_group.rs`)](#26-预烘焙模型变体组-bakerbaked_modelvariant_grouprs)
+- [3. 核心公共 API 清单 (Public APIs)](#3-核心公共-api-清单-public-apis)
+  - [3.1 模型烘焙与状态机工具](#31-模型烘焙与状态机工具)
+- [4. 快速上手示例 (Quick Start)](#4-快速上手示例-quick-start)
+  - [示例 1：解析 BlockState 字符串并规范化](#示例-1解析-blockstate-字符串并规范化)
+  - [示例 2：使用 `ModelBaker` 烘焙楼梯方块几何模型](#示例-2使用-modelbaker-烘焙楼梯方块几何模型)
+  - [示例 3：构建 `BakedModelDatabase` 并利用多级回退智能寻址](#示例-3构建-bakedmodeldatabase-并利用多级回退智能寻址)
+  - [示例 4：烘焙内置红石引线并提取发光与染色属性](#示例-4烘焙内置红石引线并提取发光与染色属性)
+- [5. Feature 开关与依赖](#5-feature-开关与依赖)
+- [6. 开源协议 (License)](#6-开源协议-license)
 
 ---
 
@@ -309,3 +336,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+---
+
+## 5. Feature 开关与依赖
+
+`mtk-model` 在 `Cargo.toml` 中提供特性开关：
+
+| Feature | 默认启用 | 描述 |
+| :--- | :---: | :--- |
+| `std` | 是 | 启用标准库与 `mtk-core/std`、`mtk-cull/std`、`serde/std`、`bincode`。 |
+| `parallel` | 是 | 启用 `rayon` 多线程并发加速（如批量方块状态展开与模型烘焙）。 |
+
+---
+
+## 6. 开源协议 (License)
+
+本项目遵循 [GNU General Public License v3.0 or later (GPL-3.0-or-later)](../../LICENSE) 开源协议。

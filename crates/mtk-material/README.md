@@ -1,6 +1,32 @@
 # mtk-material
 
-High-performance, host-agnostic material name resolution, external alias mapping, grid-based atlas unscrambling, canonical 66-biome palettes & color math (SSOT), and multi-threaded Rayon UV re-addressing to libmtk AtlasAddressMaps.
+[![Crate](https://img.shields.io/badge/crate-mtk--material-blue.svg)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
+[![Rayon](https://img.shields.io/badge/Rayon-Parallel-red.svg)](https://github.com/rayon-rs/rayon)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
+
+**`mtk-material`** 是 `libmozitoolkit` (`libmtk`) 体系中的材质名称解析、外部别名映射、Mineways 网格图集反混淆、原版规范 66 生物群系调色板与线性色彩数学引擎唯一权威事实源 (SSOT)、以及基于 Rayon 的多线程图集 UV 批量重映射核心。遵循 **Host-Agnostic（宿主无关）** 原则，为上层网格处理、预编译管线与 DCC 宿主提供精确的材质与群系色彩着色属性。
+
+---
+
+## 目录 (Table of Contents)
+
+- [1. 架构定位与职责边界 (Architecture & Responsibilities)](#1-架构定位与职责边界-architecture--responsibilities)
+- [2. 核心数据结构与枚举 (Core Structures & Enums)](#2-核心数据结构与枚举-core-structures--enums)
+  - [2.1 生物群系与调色板 (`biome/palettes.rs` & `hardcoded.rs`)](#21-生物群系与调色板-biomepalettesrs--hardcodedrs)
+  - [2.2 生物群系解析器与网格面属性生成 (`biome/resolver/` & `batch.rs`)](#22-生物群系解析器与网格面属性生成-biomeresolver--batchrs)
+  - [2.3 材质解析器与网格图集规范 (`resolver/` & `types.rs`)](#23-材质解析器与网格图集规范-resolver--typesrs)
+  - [2.4 多通道 UV 批量重映射结果 (`types.rs`)](#24-多通道-uv-批量重映射结果-typesrs)
+- [3. 核心公共 API 清单 (Public APIs)](#3-核心公共-api-清单-public-apis)
+  - [3.1 色彩数学与生物群系工具](#31-色彩数学与生物群系工具)
+  - [3.2 材质与 UV 重映射](#32-材质与-uv-重映射)
+- [4. 快速上手示例 (Quick Start)](#4-快速上手示例-quick-start)
+  - [示例 1：查询权威生物群系调色板与色彩空间转换](#示例-1查询权威生物群系调色板与色彩空间转换)
+  - [示例 2：Rayon 并行计算网格面生物群系着色属性](#示例-2rayon-并行计算网格面生物群系着色属性)
+  - [示例 3：全网格多通道 UV 并行重映射 (Atlas UV + Local UV)](#示例-3全网格多通道-uv-并行重映射-atlas-uv--local-uv)
+  - [示例 4：查询红石引线信号强度动态硬编码染色](#示例-4查询红石引线信号强度动态硬编码染色)
+- [5. Feature 开关与依赖](#5-feature-开关与依赖)
+- [6. 开源协议 (License)](#6-开源协议-license)
 
 ---
 
@@ -257,4 +283,21 @@ fn main() {
     assert_eq!(tint.hardcoded_hex.as_deref(), Some("#FF2600"));
 }
 ```
+
+---
+
+## 5. Feature 开关与依赖
+
+`mtk-material` 在 `Cargo.toml` 中提供特性开关：
+
+| Feature | 默认启用 | 描述 |
+| :--- | :---: | :--- |
+| `std` | 是 | 启用标准库与 `mtk-core/std`、`mtk-resource/std`、`mtk-texture/std`、`zip`。 |
+| `parallel` | 是 | 启用 `rayon` 多线程并发加速（如大批量面群系属性计算与 UV 重映射）。 |
+
+---
+
+## 6. 开源协议 (License)
+
+本项目遵循 [GNU General Public License v3.0 or later (GPL-3.0-or-later)](../../LICENSE) 开源协议。
 

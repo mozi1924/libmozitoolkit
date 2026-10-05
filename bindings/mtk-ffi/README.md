@@ -1,10 +1,26 @@
 # mtk-ffi
 
-[![Rust](https://img.shields.io/badge/Rust-1.78%2B-orange.svg)](https://www.rust-lang.org)
+[![Crate](https://img.shields.io/badge/crate-mtk--ffi-blue.svg)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
 [![C-ABI](https://img.shields.io/badge/C--ABI-C99%20Compatible-blue.svg)](https://en.wikipedia.org/wiki/C99)
 [![Status](https://img.shields.io/badge/Roadmap%20Priority-P2%20Future%20Prep-blueviolet.svg)]()
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
-`mtk-ffi` 提供纯 C 兼容二进制应用编程接口（Pure C-ABI），产出标准动态链接库（`.so` / `.dll` / `.dylib`）、静态库（`.a` / `.lib`）与 C 语言头文件（`mtk.h`）。
+**`mtk-ffi`** 提供纯 C 兼容二进制应用编程接口（Pure C-ABI），产出标准动态链接库（`.so` / `.dll` / `.dylib`）、静态库（`.a` / `.lib`）与 C 语言头文件（`mtk.h`）。
+
+---
+
+## 目录 (Table of Contents)
+
+- [1. 架构定位与演进优先级](#1-架构定位与演进优先级)
+- [2. 核心数据类型与 C-ABI 函数](#2-核心数据类型与-c-abi-函数)
+  - [2.1 数据结构](#21-数据结构)
+  - [2.2 C-ABI 函数契约](#22-c-abi-函数契约)
+- [3. 构建、编译与头文件生成](#3-构建编译与头文件生成)
+- [4. 真实调用示例](#4-真实调用示例)
+  - [4.1 C/C++ 宿主调用示例](#41-cc-宿主调用示例)
+  - [4.2 C# (Unity / .NET P/Invoke) 调用示例](#42-c-unity--net-pinvoke-调用示例)
+- [5. 开源协议 (License)](#5-开源协议-license)
 
 ---
 
@@ -155,3 +171,9 @@ public static class MtkNative
     public static extern MtkMeshView GetView(IntPtr buffer);
 }
 ```
+
+---
+
+## 5. 开源协议 (License)
+
+本项目遵循 [GNU General Public License v3.0 or later (GPL-3.0-or-later)](../../LICENSE) 开源协议。

@@ -1,10 +1,24 @@
 # mtk-bench
 
-[![Rust](https://img.shields.io/badge/Rust-1.78%2B-orange.svg)](https://www.rust-lang.org)
+[![Crate](https://img.shields.io/badge/crate-mtk--bench-blue.svg)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
 [![Rayon](https://img.shields.io/badge/Rayon-Parallel-red.svg)](https://github.com/rayon-rs/rayon)
 [![Status](https://img.shields.io/badge/Roadmap%20Priority-P1%20Benchmark-yellow.svg)]()
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
-`mtk-bench` 是 `libmozitoolkit` 的底层性能基准测试与极限压力测试套件，专为验证核心算法吞吐量、多核 Rayon 并发加速比与内存分配效率而设计。
+**`mtk-bench`** 是 `libmozitoolkit` (`libmtk`) 的底层性能基准测试与极限压力测试套件，专为验证核心算法吞吐量、多核 Rayon 并发加速比与内存分配效率而设计。
+
+---
+
+## 目录 (Table of Contents)
+
+- [1. 架构定位与演进优先级](#1-架构定位与演进优先级)
+- [2. 压测套件清单 (Benchmark Suites)](#2-压测套件清单-benchmark-suites)
+  - [2.1 `bench_culling` (面遮挡状态机吞吐量压测)](#21-bench_culling-面遮挡状态机吞吐量压测)
+  - [2.2 `bench_4000_chunks` (4,000+ 区块多核网格化压测)](#22-bench_4000_chunks-4000-区块多核网格化压测)
+- [3. 运行基准测试](#3-运行基准测试)
+- [4. 典型性能指标参考](#4-典型性能指标参考)
+- [5. 开源协议 (License)](#5-开源协议-license)
 
 ---
 
@@ -63,3 +77,9 @@ cargo bench -p mtk-bench --bench bench_4000_chunks
 | **`bench_4000_chunks` (8核)** | 8 Cores | 4,096 Sections (16.7M Voxels) | **~95,000+ sections/sec** | **~10 µs / section** |
 
 > **多核加速比**：在 8 核心配置下，`SectionMesher::mesh_sections_parallel` 可达成 **~6.5x+ 线性加速比**。
+
+---
+
+## 5. 开源协议 (License)
+
+本项目遵循 [GNU General Public License v3.0 or later (GPL-3.0-or-later)](../../LICENSE) 开源协议。

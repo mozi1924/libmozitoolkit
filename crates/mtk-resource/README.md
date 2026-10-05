@@ -1,6 +1,32 @@
 # mtk-resource
 
-Headless Minecraft resource pack virtual file system (VFS), asset identifier specification, `.png.mcmeta` animation metadata parser, vanilla `atlases/*.json` data models, and OptiFine / Continuity CTM rule engine.
+[![Crate](https://img.shields.io/badge/crate-mtk--resource-blue.svg)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
+[![Rayon](https://img.shields.io/badge/Rayon-Parallel-red.svg)](https://github.com/rayon-rs/rayon)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
+
+**`mtk-resource`** 是 `libmozitoolkit` (`libmtk`) 体系中的无头资源包虚拟文件系统 (VFS)、原版资产标识符规范、`.png.mcmeta` 动图元数据解析、原版 `atlases/*.json` 数据模型与 CTM 连接纹理规则引擎。遵循 **Host-Agnostic（宿主无关）** 原则，为上层图集装箱 (`mtk-texture`)、模型烘焙 (`mtk-model`) 与预编译管线提供统一的多源资产读取与覆盖层叠抽象。
+
+---
+
+## 目录 (Table of Contents)
+
+- [1. 架构定位与职责边界 (Architecture & Responsibilities)](#1-架构定位与职责边界-architecture--responsibilities)
+- [2. 核心数据结构与枚举 (Core Structures & Enums)](#2-核心数据结构与枚举-core-structures--enums)
+  - [2.1 标识符系统 (`identifier.rs`)](#21-标识符系统-identifierrs)
+  - [2.2 虚拟文件系统与多层资源栈 (`pack/`)](#22-虚拟文件系统与多层资源栈-pack)
+  - [2.3 纹理动图元数据 (`meta.rs`)](#23-纹理动图元数据-metars)
+  - [2.4 原版图集配置规范 (`atlas.rs`)](#24-原版图集配置规范-atlasrs)
+  - [2.5 CTM 规则与解算器 (`ctm/`)](#25-ctm-规则与解算器-ctm)
+- [3. 核心公共 API 清单 (Public APIs)](#3-核心公共-api-清单-public-apis)
+  - [3.1 `ResourcePackStack` 常用方法](#31-resourcepackstack-常用方法)
+  - [3.2 CTM 解算方法](#32-ctm-解算方法)
+- [4. 快速上手示例 (Quick Start)](#4-快速上手示例-quick-start)
+  - [示例 1：构建多层资源栈并解算 PBR 伴随贴图](#示例-1构建多层资源栈并解算-pbr-伴随贴图)
+  - [示例 2：加载图集定义与收集待烘焙精灵](#示例-2加载图集定义与收集待烘焙精灵)
+  - [示例 3：解析 CTM 规则并执行邻域连接解算](#示例-3解析-ctm-规则并执行邻域连接解算)
+- [5. Feature 开关与依赖](#5-feature-开关与依赖)
+- [6. 开源协议 (License)](#6-开源协议-license)
 
 ---
 
@@ -275,3 +301,21 @@ tiles=0 1 2 3
     }
 }
 ```
+
+---
+
+## 5. Feature 开关与依赖
+
+`mtk-resource` 在 `Cargo.toml` 中提供特性开关：
+
+| Feature | 默认启用 | 描述 |
+| :--- | :---: | :--- |
+| `std` | 是 | 启用标准库与 `mtk-core/std`、`serde/std`、`zip`。 |
+| `zip` | 是 | 启用 `zip` crate 支持直接读取 `.zip` / `.jar` 资源包文件。 |
+| `parallel` | 是 | 启用 `rayon` 多线程并发加速（如大批量文件扫描与 CTM 规则预加载）。 |
+
+---
+
+## 6. 开源协议 (License)
+
+本项目遵循 [GNU General Public License v3.0 or later (GPL-3.0-or-later)](../../LICENSE) 开源协议。

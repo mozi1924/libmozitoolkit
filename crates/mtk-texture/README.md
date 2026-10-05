@@ -1,6 +1,31 @@
 # mtk-texture
 
-Vanilla-style binary partitioning Stitcher, parallel image decoding and processing, PalettedPermutations baking, edge padding, and PBR-synced Atlas generator.
+[![Crate](https://img.shields.io/badge/crate-mtk--texture-blue.svg)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
+[![Rayon](https://img.shields.io/badge/Rayon-Parallel-red.svg)](https://github.com/rayon-rs/rayon)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
+
+**`mtk-texture`** 是 `libmozitoolkit` (`libmtk`) 体系中的无头图像处理、2D 空间二叉装箱图集生成器 (Stitcher)、多通道 PBR 伴随贴图对齐与 Standalone 独立材质库导出核心。遵循 **Host-Agnostic（宿主无关）** 原则，为上层材质映射 (`mtk-material`)、端到端预编译 (`libmtk`) 与 DCC 宿主提供极速像素处理、静态/动态双图集装箱与边缘抗渗色保护。
+
+---
+
+## 目录 (Table of Contents)
+
+- [1. 架构定位与职责边界 (Architecture & Responsibilities)](#1-架构定位与职责边界-architecture--responsibilities)
+- [2. 核心数据结构与枚举 (Core Structures & Enums)](#2-核心数据结构与枚举-core-structures--enums)
+  - [2.1 像素图像缓冲与处理 (`image/`)](#21-像素图像缓冲与处理-image)
+  - [2.2 图集地址映射表与元数据 (`atlas/address_map.rs`)](#22-图集地址映射表与元数据-atlasaddress_maprs)
+  - [2.3 图集构建器与装箱器 (`atlas/builder/` & `stitcher/`)](#23-图集构建器与装箱器-atlasbuilder--stitcher)
+  - [2.4 Standalone 独立材质库导出 (`standalone/`)](#24-standalone-独立材质库导出-standalone)
+- [3. 核心公共 API 清单 (Public APIs)](#3-核心公共-api-清单-public-apis)
+  - [3.1 `AtlasBuilder` 与 `AtlasAddressMap`](#31-atlasbuilder-与-atlasaddressmap)
+  - [3.2 图像与调色板工具](#32-图像与调色板工具)
+- [4. 快速上手示例 (Quick Start)](#4-快速上手示例-quick-start)
+  - [示例 1：烘焙带 PBR 伴随层的多图集并查询 UV](#示例-1烘焙带-pbr-伴随层的多图集并查询-uv)
+  - [示例 2：实时烘焙盔甲纹饰调色板 (Armor Trim Permutation)](#示例-2实时烘焙盔甲纹饰调色板-armor-trim-permutation)
+  - [示例 3：多线程预编译 Standalone PBR 材质库](#示例-3多线程预编译-standalone-pbr-材质库)
+- [5. Feature 开关与依赖](#5-feature-开关与依赖)
+- [6. 开源协议 (License)](#6-开源协议-license)
 
 ---
 
@@ -258,3 +283,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+---
+
+## 5. Feature 开关与依赖
+
+`mtk-texture` 在 `Cargo.toml` 中提供特性开关：
+
+| Feature | 默认启用 | 描述 |
+| :--- | :---: | :--- |
+| `std` | 是 | 启用标准库与 `mtk-core/std`、`mtk-resource/std`、`serde/std`。 |
+| `parallel` | 是 | 启用 `rayon` 多线程并发加速（如图像编解码与多图集并发渲染）。 |
+
+---
+
+## 6. 开源协议 (License)
+
+本项目遵循 [GNU General Public License v3.0 or later (GPL-3.0-or-later)](../../LICENSE) 开源协议。

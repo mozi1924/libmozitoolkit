@@ -1,11 +1,27 @@
 # mtk-py (`libmtk_py`)
 
-[![Rust](https://img.shields.io/badge/Rust-1.78%2B-orange.svg)](https://www.rust-lang.org)
+[![Crate](https://img.shields.io/badge/crate-mtk--py-blue.svg)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
 [![Python](https://img.shields.io/badge/Python-3.11%2B%20%28ABI3%29-blue.svg)](https://www.python.org)
-[![PyO3](https://img.shields.io/badge/PyO3-0.23%2B-green.svg)](https://pyo3.rs)
+[![PyO3](https://img.shields.io/badge/PyO3-0.24%2B-green.svg)](https://pyo3.rs)
 [![Status](https://img.shields.io/badge/Roadmap%20Priority-P0%20Core-brightgreen.svg)]()
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
 `mtk-py` 是基于 [PyO3](https://pyo3.rs) 与 CPython Stable ABI (`abi3-py311`) 构建的高性能 Python 扩展二进制模块（编译产物为 `libmtk_py`）。
+
+---
+
+## 目录 (Table of Contents)
+
+- [1. 架构定位与演进优先级](#1-架构定位与演进优先级)
+- [2. 核心导出模块与 API 清单](#2-核心导出模块与-api-清单)
+- [3. 构建、编译与测试指南](#3-构建编译与测试指南)
+- [4. 真实代码调用示例](#4-真实代码调用示例)
+  - [示例 1：零拷贝网格创建与 Blender 数据灌入](#示例-1零拷贝网格创建与-blender-数据灌入)
+  - [示例 2：使用 `process_mesh` 执行多通道 UV 重映射](#示例-2使用-process_mesh-执行多通道-uv-重映射)
+  - [示例 3：体素世界存储与多核并行网格化 (`SectionMesher`)](#示例-3体素世界存储与多核并行网格化-sectionmesher)
+- [5. Feature 开关与依赖](#5-feature-开关与依赖)
+- [6. 开源协议 (License)](#6-开源协议-license)
 
 ---
 
@@ -222,3 +238,21 @@ culler = libmtk_py.FaceCuller(leaves_cull_mode=0, glass_cull_mode=0)
 mesh = libmtk_py.SectionMesher.mesh_world(storage, config=config, culler=culler)
 print(f"Generated Voxel Mesh: {mesh.vertex_count} vertices, {mesh.triangle_count} triangles")
 ```
+
+---
+
+## 5. Feature 开关与依赖
+
+`mtk-py` 在 `Cargo.toml` 中提供特性开关：
+
+| Feature | 默认启用 | 描述 |
+| :--- | :---: | :--- |
+| `extension-module` | 否 | 由 `maturin` 在构建 Python C 扩展动态链接库时启用。 |
+| `zip` | 是 | 传递给 `mtk-resource`，支持直接读取 `.zip` / `.jar` 资源包。 |
+| `parallel` | 是 | 启用 `rayon` 多线程并发加速（模型展开、体素网格化、图像处理）。 |
+
+---
+
+## 6. 开源协议 (License)
+
+本项目遵循 [GNU General Public License v3.0 or later (GPL-3.0-or-later)](../../LICENSE) 开源协议。
