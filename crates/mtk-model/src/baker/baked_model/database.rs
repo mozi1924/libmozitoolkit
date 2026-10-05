@@ -6,11 +6,74 @@ use super::model::BakedModel;
 use super::variant_group::BakedVariantGroup;
 
 /// In-memory database of baked models keyed by canonical BlockState strings.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct BakedModelDatabase {
     pub models: HashMap<String, BakedModel>,
-    #[serde(default)]
     pub variant_groups: HashMap<String, BakedVariantGroup>,
+}
+
+#[derive(Serialize)]
+struct CompactDatabasePayload<'a> {
+    models: &'a HashMap<String, BakedModel>,
+    multi_variants: HashMap<String, &'a BakedVariantGroup>,
+}
+
+#[derive(Deserialize)]
+struct CompactDatabaseOwnedPayload {
+    models: HashMap<String, BakedModel>,
+    #[serde(default, alias = "multi_variants")]
+    variant_groups: HashMap<String, BakedVariantGroup>,
+}
+
+impl Serialize for BakedModelDatabase {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // Only store multi-variant groups with more than 1 variant in multi_variants.
+        // Single-variant groups are identical to the primary model in `models`.
+        let mut multi_variants = HashMap::new();
+        for (k, v) in &self.variant_groups {
+            if v.models.len() > 1 {
+                multi_variants.insert(k.clone(), v);
+            }
+        }
+        let payload = CompactDatabasePayload {
+            models: &self.models,
+            multi_variants,
+        };
+        payload.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for BakedModelDatabase {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let payload = CompactDatabaseOwnedPayload::deserialize(deserializer)?;
+        let mut models = payload.models;
+        let mut variant_groups = payload.variant_groups;
+
+        // Ensure every state in variant_groups is present in models
+        for (st, group) in &variant_groups {
+            if !models.contains_key(st) {
+                models.insert(st.clone(), group.select_primary().clone());
+            }
+        }
+
+        // Reconstruct single-variant groups for states present in models but not in multi_variants
+        for (st, model) in &models {
+            variant_groups.entry(st.clone()).or_insert_with(|| {
+                BakedVariantGroup::single(st.clone(), model.clone())
+            });
+        }
+
+        Ok(Self {
+            models,
+            variant_groups,
+        })
+    }
 }
 
 impl BakedModelDatabase {

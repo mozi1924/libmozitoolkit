@@ -47,6 +47,7 @@ crossbeam-channel = { version = "0.5.15", default-features = false, features = [
 url = { version = "2.5", default-features = false }
 flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
 rustc-hash = { version = "2.1", features = ["std"] }
+zstd = "0.13"
 
 # Internal workspace crates
 mtk-core = { path = "crates/mtk-core", version = "0.1.0" }

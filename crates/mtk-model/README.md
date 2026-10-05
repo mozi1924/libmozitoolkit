@@ -145,7 +145,7 @@ pub struct BakedModel {
 
 ### 2.5 烘焙模型数据库 (`baker/baked_model/database.rs`)
 ```rust
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct BakedModelDatabase {
     pub models: HashMap<String, BakedModel>,
     pub variant_groups: HashMap<String, BakedVariantGroup>,
@@ -156,6 +156,8 @@ pub struct BakedModelDatabase {
 - `db.get_with_pos(state: &str, x: i32, y: i32, z: i32) -> Option<&BakedModel>`: 基于三维世界坐标确定性采样变体模型。
 - `db.deduplicate_all() -> usize`: 批量对库中所有模型及变体组执行面消重。
 - `db.remap_to_atlas_with(lookup_fn)`: 离线对库中所有模型及变体组注入图集坐标。
+- `db.to_bincode() -> Result<Vec<u8>, bincode::Error>`: 序列化为紧凑二进制，采用单变体去重并透明应用 zstd 压缩。
+- `BakedModelDatabase::from_bincode(bytes) -> Result<Self, bincode::Error>`: 从二进制流反序列化，自动检测 zstd 魔数并透明解压，向下无缝兼容未压缩的旧版缓存格式。
 
 ---
 
