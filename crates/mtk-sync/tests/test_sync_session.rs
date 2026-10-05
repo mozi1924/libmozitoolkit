@@ -137,11 +137,13 @@ fn test_auto_sync_request_on_manifest_mismatch() {
 
     dispatcher::handle_packet(
         manifest_packet,
+        0,
         &session.world,
         &event_sender,
         &stream_id,
         &mut total_sec,
         &mut rec_sec,
+        &mut 0,
         Some(&cmd_sender),
         &sync_requested,
         false,

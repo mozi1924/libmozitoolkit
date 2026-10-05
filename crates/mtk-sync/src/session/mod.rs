@@ -146,6 +146,12 @@ impl LiveSyncSession {
     /// Sends a Full Sync Request (0x80) to Minecraft server.
     pub fn send_full_sync_request(&self) -> Result<(), String> {
         self.sync_requested.store(true, Ordering::SeqCst);
+        let _ = self.event_sender.send(SyncEvent::StreamProgress {
+            stage: "sync_request".to_string(),
+            current: 0,
+            total: 1,
+            message: "Requesting full snapshot from server...".to_string(),
+        });
         if let Some(ref client) = self.client {
             client.send_packet(encode_full_sync_request())
         } else {
@@ -156,6 +162,12 @@ impl LiveSyncSession {
     /// Sends Section Repair Requests (0x81) to Minecraft server.
     pub fn send_repair_request(&self, sections: &[IVec3]) -> Result<(), String> {
         self.sync_requested.store(true, Ordering::SeqCst);
+        let _ = self.event_sender.send(SyncEvent::StreamProgress {
+            stage: "sync_request".to_string(),
+            current: 0,
+            total: sections.len().max(1),
+            message: format!("Requesting repair for {} sections...", sections.len()),
+        });
         if let Some(ref client) = self.client {
             for packet in encode_repair_requests(sections, 64) {
                 client.send_packet(packet)?;
@@ -179,9 +191,11 @@ impl LiveSyncSession {
     pub fn process_packet_direct(&self, packet: Packet) {
         dispatcher::handle_packet(
             packet,
+            0,
             &self.world,
             &self.event_sender,
             &self.current_stream_id,
+            &mut 0,
             &mut 0,
             &mut 0,
             None,

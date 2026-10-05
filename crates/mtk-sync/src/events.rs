@@ -42,6 +42,7 @@ pub enum SyncEvent {
 
     /// Stream batch progress update.
     StreamProgress {
+        stage: String,
         current: usize,
         total: usize,
         message: String,

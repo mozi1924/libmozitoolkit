@@ -222,7 +222,7 @@ pub enum SyncEvent {
     Handshake { total_sections: u32, ... },    // 场景元数据就绪
     SectionMeshReady { coord: IVec3, mesh: MeshData }, // 单个切片网格就绪 (独立切片模式)
     WorldMeshReady { mesh: MeshData },         // 全局合并大网格就绪 (unified_mesh 模式)
-    StreamProgress { current: usize, total: usize, message: String }, // 批处理传输进度
+    StreamProgress { stage: String, current: usize, total: usize, message: String }, // 批处理传输与网格构建多阶段物理进度
     StreamFinished { stream_id: u32, built_sections: usize },         // 流传输结束
     DeltaApplied { change_count: usize, affected_sections: Vec<IVec3> }, // 增量修改已应用
     Verified { is_verified: bool, message: String }, // 校验结果
@@ -323,8 +323,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 SyncEvent::DeltaApplied { change_count, affected_sections } => {
                     println!("[增量变动]: {} 个方块修改, 影响 {} 个区块", change_count, affected_sections.len());
                 }
-                SyncEvent::StreamProgress { current, total, message } => {
-                    println!("[进度 ({}/{})]: {}", current, total, message);
+                SyncEvent::StreamProgress { stage, current, total, message } => {
+                    println!("[进度 - {} ({}/{})]: {}", stage, current, total, message);
                 }
                 SyncEvent::Verified { is_verified, message } => {
                     println!("[CRC 校验]: 验证结果 = {}, 信息 = {}", is_verified, message);

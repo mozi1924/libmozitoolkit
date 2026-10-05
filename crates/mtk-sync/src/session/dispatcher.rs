@@ -21,6 +21,7 @@ pub fn event_worker_loop(
 ) {
     let mut stream_total_sections: usize = 0;
     let mut stream_received_sections: usize = 0;
+    let mut stream_received_bytes: usize = 0;
     let mut pending_non_streaming_updates = false;
     let mut pending_stream_mesh_rebuild = false;
     let mut last_sync_request_time: Option<std::time::Instant> = None;
@@ -34,17 +35,19 @@ pub fn event_worker_loop(
                 let _ = event_sender.send(SyncEvent::StatusChange("DISCONNECTED".to_string()));
                 break;
             }
-            Ok(ClientMessage::PacketReceived(packet)) => {
+            Ok(ClientMessage::PacketReceived { packet, bytes }) => {
                 let is_sec_snapshot = matches!(packet, Packet::SectionSnapshot { .. });
                 let is_stream_end = matches!(packet, Packet::StreamEnd { .. });
                 let more_pending = !msg_receiver.is_empty();
                 handle_packet(
                     packet,
+                    bytes,
                     &world,
                     &event_sender,
                     &stream_id_atomic,
                     &mut stream_total_sections,
                     &mut stream_received_sections,
+                    &mut stream_received_bytes,
                     Some(&cmd_sender),
                     &sync_requested,
                     more_pending,
@@ -138,11 +141,13 @@ pub fn event_worker_loop(
 /// Dispatches a single packet into the session pipeline and triggers corresponding meshing and events.
 pub fn handle_packet(
     packet: Packet,
+    packet_bytes: usize,
     world: &Arc<RwLock<VoxelWorld>>,
     event_sender: &Sender<SyncEvent>,
     stream_id_atomic: &Arc<AtomicU32>,
     stream_total_sections: &mut usize,
     stream_received_sections: &mut usize,
+    stream_received_bytes: &mut usize,
     cmd_sender: Option<&Sender<ClientCommand>>,
     sync_requested: &Arc<AtomicBool>,
     more_pending: bool,
@@ -203,6 +208,17 @@ pub fn handle_packet(
                 return;
             }
 
+            let _ = event_sender.send(SyncEvent::StreamProgress {
+                stage: "sync_download".to_string(),
+                current: 1,
+                total: 1,
+                message: if packet_bytes > 0 {
+                    format!("Received full snapshot [{:.1} MB]", packet_bytes as f64 / (1024.0 * 1024.0))
+                } else {
+                    "Received full snapshot, rebuilding world mesh...".to_string()
+                },
+            });
+
             let (total_sections, unified, mesh) = {
                 let mut w = world.write().unwrap();
                 w.set_full_snapshot(
@@ -222,6 +238,7 @@ pub fn handle_packet(
                 let m = w
                     .rebuild_all_with_progress(Some(&|p| {
                         let _ = sender.send(SyncEvent::StreamProgress {
+                            stage: "sync_meshing".to_string(),
                             current: p.current,
                             total: p.total,
                             message: p.message,
@@ -239,6 +256,7 @@ pub fn handle_packet(
                 for (i, (&coord, s_mesh)) in w.get_section_cache().iter().enumerate() {
                     let _ = event_sender.send(SyncEvent::SectionMeshReady { coord, mesh: s_mesh.clone() });
                     let _ = event_sender.send(SyncEvent::StreamProgress {
+                        stage: "sync_meshing".to_string(),
                         current: i + 1,
                         total: total_sections,
                         message: format!("Meshed chunk ({}/{})", i + 1, total_sections),
@@ -283,10 +301,20 @@ pub fn handle_packet(
             let is_streaming = stream_id_atomic.load(Ordering::SeqCst) != 0;
             if is_streaming {
                 *stream_received_sections += 1;
+                *stream_received_bytes += packet_bytes;
+                let mb_str = if *stream_received_bytes > 0 {
+                    format!(" [{:.1} MB]", *stream_received_bytes as f64 / (1024.0 * 1024.0))
+                } else {
+                    String::new()
+                };
                 let _ = event_sender.send(SyncEvent::StreamProgress {
+                    stage: "sync_download".to_string(),
                     current: *stream_received_sections,
                     total: *stream_total_sections,
-                    message: format!("Receiving chunk ({}/{})", *stream_received_sections, *stream_total_sections),
+                    message: format!(
+                        "Receiving chunk ({}/{}){}",
+                        *stream_received_sections, *stream_total_sections, mb_str
+                    ),
                 });
             } else if !more_pending {
                 let (unified, section_mesh, world_mesh) = {
@@ -412,10 +440,12 @@ pub fn handle_packet(
             sync_requested.store(false, Ordering::SeqCst);
             *stream_total_sections = total_sections as usize;
             *stream_received_sections = 0;
+            *stream_received_bytes = 0;
             let _ = event_sender.send(SyncEvent::StreamProgress {
+                stage: "sync_download".to_string(),
                 current: 0,
                 total: *stream_total_sections,
-                message: format!("Receiving {} chunks...", *stream_total_sections),
+                message: format!("Receiving {} chunks from server...", *stream_total_sections),
             });
         }
 
@@ -443,6 +473,7 @@ pub fn handle_packet(
                 let m = w
                     .rebuild_all_with_progress(Some(&|p| {
                         let _ = sender.send(SyncEvent::StreamProgress {
+                            stage: "sync_meshing".to_string(),
                             current: p.current,
                             total: p.total,
                             message: p.message,
@@ -461,6 +492,7 @@ pub fn handle_packet(
                 for (i, (&coord, s_mesh)) in w.get_section_cache().iter().enumerate() {
                     let _ = event_sender.send(SyncEvent::SectionMeshReady { coord, mesh: s_mesh.clone() });
                     let _ = event_sender.send(SyncEvent::StreamProgress {
+                        stage: "sync_meshing".to_string(),
                         current: i + 1,
                         total,
                         message: format!("Meshed chunk ({}/{})", i + 1, total),

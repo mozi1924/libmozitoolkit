@@ -26,7 +26,10 @@ pub enum ClientCommand {
 #[derive(Debug, Clone)]
 pub enum ClientMessage {
     Status(String),
-    PacketReceived(Packet),
+    PacketReceived {
+        packet: Packet,
+        bytes: usize,
+    },
     Disconnected,
 }
 
@@ -143,17 +146,20 @@ impl SyncClient {
 
                         // Read incoming messages
                         match socket.read() {
-                            Ok(Message::Binary(bin)) => match decode_packet(&bin) {
-                                Ok(packet) => {
-                                    let _ = msg_sender.send(ClientMessage::PacketReceived(packet));
+                            Ok(Message::Binary(bin)) => {
+                                let bytes = bin.len();
+                                match decode_packet(&bin) {
+                                    Ok(packet) => {
+                                        let _ = msg_sender.send(ClientMessage::PacketReceived { packet, bytes });
+                                    }
+                                    Err(e) => {
+                                        let _ = msg_sender.send(ClientMessage::Status(format!(
+                                            "Packet decode error: {}",
+                                            e
+                                        )));
+                                    }
                                 }
-                                Err(e) => {
-                                    let _ = msg_sender.send(ClientMessage::Status(format!(
-                                        "Packet decode error: {}",
-                                        e
-                                    )));
-                                }
-                            },
+                            }
                             Ok(Message::Ping(payload)) => {
                                 let _ = socket.send(Message::Pong(payload));
                             }

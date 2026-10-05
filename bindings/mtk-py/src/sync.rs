@@ -116,14 +116,18 @@ impl PyLiveSyncSession {
                     dict.set_item("mesh", PyMeshData { inner: mesh })?;
                 }
                 SyncEvent::StreamProgress {
+                    stage,
                     current,
                     total,
                     message,
                 } => {
                     dict.set_item("type", "STREAM_PROGRESS")?;
+                    dict.set_item("stage", stage)?;
                     dict.set_item("current", current)?;
                     dict.set_item("total", total)?;
                     dict.set_item("message", message)?;
+                    let pct = if total > 0 { (current as f32 / total as f32) * 100.0 } else { 0.0 };
+                    dict.set_item("percent", pct)?;
                 }
                 SyncEvent::StreamFinished {
                     stream_id,
