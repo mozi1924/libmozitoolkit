@@ -643,3 +643,100 @@ pub fn sample_colormap_pixel(
     mtk_material::sample_colormap_pixel(image_pixels, width, height, temperature, downfall, channels)
 }
 
+/// Compute packed material properties `[emission, thin_wall, transmission, sticker_threshold]`
+/// for a list of face texture keys in parallel Rayon in Rust.
+#[pyfunction]
+#[pyo3(signature = (face_texture_keys, block_names=None))]
+pub fn compute_mesh_material_props(
+    py: Python<'_>,
+    face_texture_keys: Vec<String>,
+    block_names: Option<Vec<String>>,
+) -> PyResult<Vec<[f32; 4]>> {
+    let res = py.allow_threads(|| {
+        mtk_material::compute_mesh_material_props(&face_texture_keys, block_names.as_deref())
+    });
+    Ok(res)
+}
+
+/// Compute flat packed material properties (float array of length len * 4)
+/// for zero-copy memoryview / foreach_set injection into Blender Mesh.
+#[pyfunction]
+#[pyo3(signature = (face_texture_keys, block_names=None))]
+pub fn compute_flat_material_props(
+    py: Python<'_>,
+    face_texture_keys: Vec<String>,
+    block_names: Option<Vec<String>>,
+) -> PyResult<Vec<f32>> {
+    let res = py.allow_threads(|| {
+        let props = mtk_material::compute_mesh_material_props(&face_texture_keys, block_names.as_deref());
+        let mut flat = Vec::with_capacity(props.len() * 4);
+        for p in props {
+            flat.extend_from_slice(&p);
+        }
+        flat
+    });
+    Ok(res)
+}
+
+/// Query individual block material physical properties `[emission, thin_wall, transmission, sticker_threshold]`.
+#[pyfunction]
+#[pyo3(signature = (block_name="", texture_name=None))]
+pub fn get_material_props(
+    block_name: &str,
+    texture_name: Option<&str>,
+) -> [f32; 4] {
+    mtk_material::get_material_props(block_name, texture_name)
+}
+
+/// Query canonical emission strength for a block / texture (0.0 .. 15.0).
+#[pyfunction]
+#[pyo3(signature = (block_name="", properties=None, texture_name=None))]
+pub fn get_block_emission_strength(
+    block_name: &str,
+    properties: Option<HashMap<String, String>>,
+    texture_name: Option<&str>,
+) -> f32 {
+    mtk_material::properties::get_block_emission_strength(block_name, properties.as_ref(), texture_name)
+}
+
+/// Query whether a block or texture is thin wall foliage / vegetation.
+#[pyfunction]
+#[pyo3(signature = (block_name="", texture_name=None))]
+pub fn is_thin_wall_block(
+    block_name: &str,
+    texture_name: Option<&str>,
+) -> bool {
+    mtk_material::properties::is_thin_wall_block(block_name, texture_name)
+}
+
+/// Query whether a block or texture is a dielectric transmissive medium (glass, water, ice, etc.).
+#[pyfunction]
+#[pyo3(signature = (block_name="", texture_name=None))]
+pub fn is_transmissive_block(
+    block_name: &str,
+    texture_name: Option<&str>,
+) -> bool {
+    mtk_material::properties::is_transmissive_block(block_name, texture_name)
+}
+
+/// Query transmission weight (1.0 for glass/water/ice, 0.0 otherwise).
+#[pyfunction]
+#[pyo3(signature = (block_name="", texture_name=None))]
+pub fn get_block_transmission_weight(
+    block_name: &str,
+    texture_name: Option<&str>,
+) -> f32 {
+    mtk_material::properties::get_block_transmission_weight(block_name, texture_name)
+}
+
+/// Query alpha sticker threshold (0.55 for glass, 0.95 for water/ice/slime/honey).
+#[pyfunction]
+#[pyo3(signature = (block_name="", texture_name=None))]
+pub fn get_block_sticker_threshold(
+    block_name: &str,
+    texture_name: Option<&str>,
+) -> f32 {
+    mtk_material::properties::get_block_sticker_threshold(block_name, texture_name)
+}
+
+

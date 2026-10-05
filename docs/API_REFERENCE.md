@@ -91,7 +91,18 @@ pub struct FlatPolygonMesh {
 
 ---
 
-### 2.4 统一错误处理系统 (`MtkError`)
+### 2.4 材质物理属性与网格属性驱动单一事实源 (Material Properties SSOT)
+- **唯一权威来源**：`mtk-material::properties`。
+- **四元组物理属性 (`MaterialProps = [f32; 4]`)**：
+  - `emission`: 原版标准 0..15 级发光强度（支持营火、熔炉、红石火把、铜灯等状态机）；
+  - `thin_wall`: 树叶、作物、花草薄壁植被半透散射标志（0.0 或 1.0）；
+  - `transmission`: 玻璃、水体、冰块等介质物理透射权重（0.0 或 1.0）；
+  - `sticker_threshold`: 双层贴纸与折射分离阈值（玻璃 0.55，水体/流体 0.95）。
+- **Rayon 并行批处理**：提供 `compute_mesh_material_props` 与扁平数组 `compute_flat_material_props`，直通 Blender 网格 `mtk_material_props` 面域属性（Float4 / FloatColor）。
+
+---
+
+### 2.5 统一错误处理系统 (`MtkError`)
 所有对外公开的高阶 API 均返回 `Result<T, MtkError>`，杜绝 panic 崩溃：
 ```rust
 pub enum MtkError {

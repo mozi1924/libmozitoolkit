@@ -471,7 +471,11 @@ where
                 ([1.0, 1.0, 0.0, 0.0], [1.0, 1.0, 1.0, 1.0], [0.8, 0.4, 0.0])
             };
             let dir_code = dir.to_index() as u8;
-            let emission = if fluid_type == FluidType::Lava { 1.0 } else { 0.0 };
+            let (emission, mat_props) = if fluid_type == FluidType::Water {
+                (0.0, [0.0, 0.0, 1.0, 0.95])
+            } else {
+                (15.0, [15.0, 0.0, 0.0, 0.55])
+            };
             col.push_face(
                 source_key,
                 final_mat_slot as i32,
@@ -484,6 +488,7 @@ where
                 f_tint_color,
                 f_colormap_uv,
                 emission,
+                mat_props,
                 glam::IVec3::new(x, y, z),
                 dir_code,
             );

@@ -150,6 +150,14 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(material::get_colormap_uv, m)?)?;
     m.add_function(wrap_pyfunction!(material::srgb_to_linear, m)?)?;
     m.add_function(wrap_pyfunction!(material::linear_to_srgb, m)?)?;
+    m.add_function(wrap_pyfunction!(material::compute_mesh_material_props, m)?)?;
+    m.add_function(wrap_pyfunction!(material::compute_flat_material_props, m)?)?;
+    m.add_function(wrap_pyfunction!(material::get_material_props, m)?)?;
+    m.add_function(wrap_pyfunction!(material::get_block_emission_strength, m)?)?;
+    m.add_function(wrap_pyfunction!(material::is_thin_wall_block, m)?)?;
+    m.add_function(wrap_pyfunction!(material::is_transmissive_block, m)?)?;
+    m.add_function(wrap_pyfunction!(material::get_block_transmission_weight, m)?)?;
+    m.add_function(wrap_pyfunction!(material::get_block_sticker_threshold, m)?)?;
 
     // 8. Model Baker
     m.add_class::<PyModelBaker>()?;

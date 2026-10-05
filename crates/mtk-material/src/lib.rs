@@ -5,9 +5,16 @@
 
 pub mod biome;
 pub mod error;
+pub mod properties;
 pub mod remap;
 pub mod resolver;
 pub mod types;
+
+pub use properties::{
+    compute_mesh_material_props, get_block_emission_strength, get_block_sticker_threshold,
+    get_block_transmission_weight, get_material_props, is_thin_wall_block,
+    is_transmissive_block,
+};
 
 pub use biome::{
     blend_biome_colors, classify_tint_category, compute_mesh_biome_attributes,

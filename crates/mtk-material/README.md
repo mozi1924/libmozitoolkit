@@ -149,6 +149,20 @@ pub struct MeshMultiUvRemapResult {
 
 ---
 
+### 2.5 材质物理属性目录与并行批处理 (`properties/`)
+```rust
+/// 物理属性四元组: [发光强度 (0..15), 薄壁半透 (0/1), 介质透射 (0/1), 贴纸阈值 (0.55/0.95)]
+pub type MaterialProps = [f32; 4];
+
+/// Rayon 多线程全网格并行批处理属性生成
+pub fn compute_mesh_material_props(
+    face_texture_keys: &[String],
+    block_names: Option<&[String]>,
+) -> Vec<MaterialProps>;
+```
+
+---
+
 ## 3. 核心公共 API 清单 (Public APIs)
 
 ### 3.1 色彩数学与生物群系工具
@@ -175,6 +189,16 @@ pub struct MeshMultiUvRemapResult {
 | `straighten_diamond_quad_uv(uvs: &mut [[f32; 2]; 4]) -> bool` | 将 45 度菱形 UV 扶正为标准正交四边形。 |
 | `MaterialResolver::resolve(mat_name, aliases, address_map)` | 多级匹配解析材质名称到 `AtlasSpriteLocation`。 |
 | `remap_mesh_multi_uvs_parallel(...) -> MeshMultiUvRemapResult` | 批量并行生成图集 UV、局部 UV 与着色器路由模式。 |
+
+### 3.3 材质物理属性与着色器驱动
+| 函数签名 | 描述 |
+| :--- | :--- |
+| `get_block_emission_strength(block_name, properties, texture_name) -> f32` | 查询 0..15 级发光强度（支持营火/熔炉/红石灯动态状态机）。 |
+| `is_thin_wall_block(block_name, texture_name) -> bool` | 查询是否属于树叶/作物/花朵植被薄壁半透材质。 |
+| `is_transmissive_block(block_name, texture_name) -> bool` | 查询是否属于玻璃/水体/冰块介质透射材质。 |
+| `get_block_transmission_weight(block_name, texture_name) -> f32` | 查询透射权重（玻璃/水体为 1.0，普通方块为 0.0）。 |
+| `get_block_sticker_threshold(block_name, texture_name) -> f32` | 查询双层贴纸/折射分层透明度阈值（玻璃为 0.55，流体为 0.95）。 |
+| `compute_mesh_material_props(keys, block_names) -> Vec<[f32; 4]>` | Rayon 并行多核计算全网格逐面物理着色器属性。 |
 
 ---
 
