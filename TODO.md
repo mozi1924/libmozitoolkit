@@ -51,6 +51,8 @@
   - [ ] 贪婪网格化（Greedy Meshing）与多材质四边形合并。
   - [ ] 平滑环境光遮蔽 (Smooth AO) 与流体（水/岩浆）曲面重构。
   - [ ] 直接套用外部高精度材质包（Resourcepack）模型进行几何世界重构。
+- [ ] **动态资产热重载与区块网格缓存清空 (`mtk-voxel::world`)**
+  - [ ] 完善 `VoxelWorld::clear_cache()` 与动态热重载支持，避免材质包重新预编译后因脏区块网格缓存导致 UV/模型错位。
 
 ---
 
@@ -58,6 +60,8 @@
 - [ ] **小端序二进制增量同步协议 (`mtk-sync::protocol`)**
   - [ ] 完善 Block Update、Chunk Section Delta、Entity/Player Transform 事件编解码。
   - [ ] 高并发 WebSocket 客户端与无锁环形事件队列。
+- [ ] **跨平台连接健壮性与强制断开 (`mtk-sync::client`)**
+  - [ ] `SyncClient::stop()` 针对底层 TCP Stream 注入 `shutdown(Shutdown::Both)`，确保宿主工程切换或重连时套接字瞬间切断，消除服务端连接占位与挂起。
 - [ ] **体素元数据与属性映射**
   - [ ] 设计紧凑的高保真体素元数据表示（方块ID、状态、方向、附加 NBT 属性）。
   - [ ] 构建体素数据 $\leftrightarrow$ 点云（Point Cloud）/ 网格属性（Mesh Attributes）的双向元数据映射机制。
