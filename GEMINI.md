@@ -69,6 +69,10 @@
 ### 规则 11：架构设计与 CLI 一致性原则 (Feature & CLI Parity)
 - 根目录文档与架构手册中声明的 CLI 命令行工具（`mtk-cli`）命令（如 `precompile`、`inspect` 等），必须严格对齐底层真实实现或明确注明开发阶段，严禁在文档中宣称未实现的命令，杜绝设计脱节。
 
+### 规则 12：代码检索与构建目录过滤规范 (Code Search & Target Exclusion)
+- **优先使用 ripgrep (`rg`)**：在工作区检索代码、文本或符号时，**首选且尽量使用 `rg` (ripgrep)** 命令。`rg` 具备极高的检索性能且原生遵循 `.gitignore` 规则，自动忽略构建产物。
+- **使用 `grep` 时必须忽略 `target` 目录**：若在特定环境下使用 `grep`，**必须显式添加 `--exclude-dir=target`**（以及 `--exclude-dir=.git`、`--exclude-dir=.venv` 等冗余目录），严禁递归扫描庞大的 Rust 编译产物 `target/` 目录，杜绝海量输出干扰与性能浪费。
+
 ---
 
 ## 3. 核心领域架构与模块划分
