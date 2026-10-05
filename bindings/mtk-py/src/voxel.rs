@@ -24,10 +24,43 @@ impl PyVoxelStorage {
         }
     }
 
-    /// Loads the canonical embedded Minecraft debug world snapshot into a new `VoxelStorage`.
+    /// Pure-code generation of a canonical Minecraft debug world.
+    /// Can take an optional list of blockstates, a ResourcePackStack, or an unpack directory path.
     #[staticmethod]
-    pub fn create_debug_world() -> PyResult<Self> {
-        let storage = VoxelStorage::create_debug_world()
+    #[pyo3(signature = (states=None, stack=None, path=None))]
+    pub fn create_debug_world(
+        states: Option<Vec<String>>,
+        stack: Option<&crate::resource::PyResourcePackStack>,
+        path: Option<&str>,
+    ) -> PyResult<Self> {
+        let storage = if let Some(st) = states {
+            VoxelStorage::create_debug_world_from_states(&st)
+        } else if let Some(s) = stack {
+            VoxelStorage::create_debug_world_from_pack_stack(&s.inner)
+        } else if let Some(p) = path {
+            VoxelStorage::create_debug_world_from_dir(p)
+        } else {
+            VoxelStorage::create_debug_world()
+        }
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        Ok(Self { inner: storage })
+    }
+
+    /// Pure-code generation from an explicit slice of blockstate strings.
+    #[staticmethod]
+    pub fn create_debug_world_from_states(states: Vec<String>) -> PyResult<Self> {
+        let storage = VoxelStorage::create_debug_world_from_states(&states)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        Ok(Self { inner: storage })
+    }
+
+    /// Pure-code generation by enumerating blockstates across a ResourcePackStack.
+    #[staticmethod]
+    pub fn create_debug_world_from_pack_stack(
+        stack: &crate::resource::PyResourcePackStack,
+    ) -> PyResult<Self> {
+        let storage = VoxelStorage::create_debug_world_from_pack_stack(&stack.inner)
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         Ok(Self { inner: storage })
     }
@@ -545,10 +578,15 @@ impl PyMesherConfig {
     }
 }
 
-/// Loads the canonical embedded Minecraft debug world snapshot into a new `VoxelStorage`.
+/// Pure-code generation of a canonical Minecraft debug world into a new `VoxelStorage`.
 #[pyfunction]
-pub fn create_debug_world_storage() -> PyResult<PyVoxelStorage> {
-    PyVoxelStorage::create_debug_world()
+#[pyo3(signature = (states=None, stack=None, path=None))]
+pub fn create_debug_world_storage(
+    states: Option<Vec<String>>,
+    stack: Option<&crate::resource::PyResourcePackStack>,
+    path: Option<&str>,
+) -> PyResult<PyVoxelStorage> {
+    PyVoxelStorage::create_debug_world(states, stack, path)
 }
 
 /// Python wrapper for `VoxelWorld` 3D scene engine.
@@ -603,22 +641,32 @@ impl PyVoxelWorld {
         }
     }
 
-    /// Loads the canonical embedded Minecraft debug world into a new `VoxelWorld`.
+    /// Loads or generates the canonical Minecraft debug world into a new `VoxelWorld`.
     #[staticmethod]
-    #[pyo3(signature = (config=None, culler=None, model_db=None, unified_mesh=true, num_threads=None))]
+    #[pyo3(signature = (config=None, culler=None, model_db=None, unified_mesh=true, num_threads=None, states=None, stack=None))]
     pub fn create_debug_world(
         config: Option<&PyMesherConfig>,
         culler: Option<&crate::cull::PyFaceCuller>,
         model_db: Option<&crate::model::PyBakedModelDatabase>,
         unified_mesh: bool,
         num_threads: Option<usize>,
+        states: Option<Vec<String>>,
+        stack: Option<&crate::resource::PyResourcePackStack>,
     ) -> PyResult<Self> {
         let cfg = config.map(|c| c.inner.clone());
         let cul = culler.map(|c| c.inner.clone());
         let mdb = model_db.map(|db| db.inner.clone());
         let threads = num_threads.or_else(|| config.and_then(|c| c.num_threads));
-        let world = mtk_voxel::VoxelWorld::create_debug_world_with_threads(cfg, cul, mdb, unified_mesh, threads)
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        let world = if let Some(st) = states {
+            mtk_voxel::VoxelWorld::create_debug_world_from_states(&st, cfg, cul, mdb, unified_mesh, threads)
+        } else if let Some(s) = stack {
+            mtk_voxel::VoxelWorld::create_debug_world_from_pack_stack(&s.inner, cfg, cul, mdb, unified_mesh, threads)
+        } else {
+            mtk_voxel::VoxelWorld::create_debug_world_with_threads(cfg, cul, mdb, unified_mesh, threads)
+        }
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
         Ok(Self { inner: world })
     }
 
