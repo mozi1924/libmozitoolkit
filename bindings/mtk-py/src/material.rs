@@ -739,4 +739,53 @@ pub fn get_block_sticker_threshold(
     mtk_material::properties::get_block_sticker_threshold(block_name, texture_name)
 }
 
+/// Register / merge external material properties into the Rust global registry.
+/// Accepts either a JSON string or a Python dict.
+#[pyfunction]
+#[pyo3(signature = (properties))]
+pub fn register_material_properties(
+    py: Python<'_>,
+    properties: &Bound<'_, PyAny>,
+) -> PyResult<()> {
+    let json_str = if let Ok(s) = properties.extract::<String>() {
+        s
+    } else {
+        let json_mod = py.import("json")?;
+        let dumps = json_mod.getattr("dumps")?;
+        dumps.call1((properties,))?.extract::<String>()?
+    };
+
+    mtk_material::register_material_properties_json(&json_str).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!("Invalid material properties JSON: {}", e))
+    })?;
+    Ok(())
+}
+
+/// Fully replace the global material properties registry from a JSON string or Python dict.
+#[pyfunction]
+#[pyo3(signature = (properties))]
+pub fn load_material_properties_replace(
+    py: Python<'_>,
+    properties: &Bound<'_, PyAny>,
+) -> PyResult<()> {
+    let json_str = if let Ok(s) = properties.extract::<String>() {
+        s
+    } else {
+        let json_mod = py.import("json")?;
+        let dumps = json_mod.getattr("dumps")?;
+        dumps.call1((properties,))?.extract::<String>()?
+    };
+
+    mtk_material::load_material_properties_json_replace(&json_str).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!("Invalid material properties JSON: {}", e))
+    })?;
+    Ok(())
+}
+
+/// Reset the global material properties registry to built-in vanilla defaults.
+#[pyfunction]
+pub fn reset_material_properties_to_default() {
+    mtk_material::reset_material_properties_to_default();
+}
+
 

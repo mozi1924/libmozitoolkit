@@ -190,15 +190,18 @@ pub fn compute_mesh_material_props(
 | `MaterialResolver::resolve(mat_name, aliases, address_map)` | 多级匹配解析材质名称到 `AtlasSpriteLocation`。 |
 | `remap_mesh_multi_uvs_parallel(...) -> MeshMultiUvRemapResult` | 批量并行生成图集 UV、局部 UV 与着色器路由模式。 |
 
-### 3.3 材质物理属性与着色器驱动
+### 3.3 材质物理属性与数据驱动配置 (Data-Driven Properties)
 | 函数签名 | 描述 |
 | :--- | :--- |
-| `get_block_emission_strength(block_name, properties, texture_name) -> f32` | 查询 0..15 级发光强度（支持营火/熔炉/红石灯动态状态机）。 |
+| `register_material_properties_json(json_str: &str) -> Result<(), ...>` | 动态注入 / 增量合并外部 JSON 材质物理配置（免重编热更新）。 |
+| `load_material_properties_json_replace(json_str: &str) -> Result<(), ...>` | 全量替换全局材质物理属性注册表。 |
+| `reset_material_properties_to_default()` | 重置全局注册表为原版内置规范配置。 |
+| `get_block_emission_strength(block_name, properties, texture_name) -> f32` | 查询 0..15 级发光强度（支持营火/熔炉/红石灯动态状态机与外部覆盖）。 |
 | `is_thin_wall_block(block_name, texture_name) -> bool` | 查询是否属于树叶/作物/花朵植被薄壁半透材质。 |
 | `is_transmissive_block(block_name, texture_name) -> bool` | 查询是否属于玻璃/水体/冰块介质透射材质。 |
 | `get_block_transmission_weight(block_name, texture_name) -> f32` | 查询透射权重（玻璃/水体为 1.0，普通方块为 0.0）。 |
 | `get_block_sticker_threshold(block_name, texture_name) -> f32` | 查询双层贴纸/折射分层透明度阈值（玻璃为 0.55，流体为 0.95）。 |
-| `compute_mesh_material_props(keys, block_names) -> Vec<[f32; 4]>` | Rayon 并行多核计算全网格逐面物理着色器属性。 |
+| `compute_mesh_material_props(keys, block_names) -> Vec<[f32; 4]>` | Rayon 并行多核计算全网格逐面物理着色器属性（无锁并发读取）。 |
 
 ---
 

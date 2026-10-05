@@ -99,6 +99,10 @@ pub struct FlatPolygonMesh {
   - `transmission`: 玻璃、水体、冰块等介质物理透射权重（0.0 或 1.0）；
   - `sticker_threshold`: 双层贴纸与折射分离阈值（玻璃 0.55，水体/流体 0.95）。
 - **Rayon 并行批处理**：提供 `compute_mesh_material_props` 与扁平数组 `compute_flat_material_props`，直通 Blender 网格 `mtk_material_props` 面域属性（Float4 / FloatColor）。
+- **数据驱动配置与免编译动态注入 (Data-Driven Configuration)**：
+  - 核心物理属性表从编译期硬编码解耦为外部可配置的 JSON 规范文件（`assets/material_properties.json`）；
+  - 提供 `register_material_properties_json(json_str)` 与 `load_material_properties_json_replace(json_str)`，支持上层在运行时免重新编译增量覆盖或替换注册表；
+  - 提供 `reset_material_properties_to_default()` 随时复位为内置原版权威配置。
 
 ---
 

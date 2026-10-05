@@ -13,7 +13,10 @@ pub mod types;
 pub use properties::{
     compute_mesh_material_props, get_block_emission_strength, get_block_sticker_threshold,
     get_block_transmission_weight, get_material_props, is_thin_wall_block,
-    is_transmissive_block,
+    is_transmissive_block, load_material_properties_json_replace,
+    register_material_properties_json, reset_material_properties_to_default,
+    EmissionConfig, MaterialPropertyConfig, MaterialPropertyRegistry,
+    ThinWallConfig, TransmissiveConfig,
 };
 
 pub use biome::{

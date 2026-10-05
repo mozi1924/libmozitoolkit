@@ -158,6 +158,9 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(material::is_transmissive_block, m)?)?;
     m.add_function(wrap_pyfunction!(material::get_block_transmission_weight, m)?)?;
     m.add_function(wrap_pyfunction!(material::get_block_sticker_threshold, m)?)?;
+    m.add_function(wrap_pyfunction!(material::register_material_properties, m)?)?;
+    m.add_function(wrap_pyfunction!(material::load_material_properties_replace, m)?)?;
+    m.add_function(wrap_pyfunction!(material::reset_material_properties_to_default, m)?)?;
 
     // 8. Model Baker
     m.add_class::<PyModelBaker>()?;
