@@ -23,7 +23,7 @@
 | **[`mtk-resource`](crates/mtk-resource)** | 核心 | 无头资源包虚拟文件系统 (VFS)、.mcmeta 动图元数据、原版 atlases/*.json 规范解析与 CTM 47/17 连接纹理求解 | [📖 `crates/mtk-resource/README.md`](crates/mtk-resource/README.md) |
 | **[`mtk-texture`](crates/mtk-texture)** | 核心 | 矩形空间装箱 Stitcher、多类别 PBR 图集与 Companion Overlay 贴图烘焙、Standalone 资源层级规范对齐 | [📖 `crates/mtk-texture/README.md`](crates/mtk-texture/README.md) |
 | **[`mtk-material`](crates/mtk-material)** | 核心 | 66 种原版生物群系调色板与线性色彩数学引擎 (SSOT)、`BiomeResolver` 模型扫描与预编译映射、多线程并行 UV 重映射与外部别名解算 | [📖 `crates/mtk-material/README.md`](crates/mtk-material/README.md) |
-| **[`mtk-save`](crates/mtk-save)** | 核心 | 现代 Minecraft 存档加载核心：基于 `simdnbt` 的零拷贝 NBT 解码、Anvil `.mca` 区域文件直接寻址、384 高度世界 3D 生物群系与方块状态解包、按需空间切片流式数据源 (`VoxelSource`) | [📖 `crates/mtk-save/README.md`](crates/mtk-save/README.md) |
+| **[`mtk-save`](crates/mtk-save)** | 核心 | 现代 Minecraft 存档加载核心：基于内置零拷贝 NBT 解码、Anvil `.mca` 区域文件直接寻址、384 高度世界 3D 生物群系与方块状态解包、按需空间切片流式数据源 (`VoxelSource`) | [📖 `crates/mtk-save/README.md`](crates/mtk-save/README.md) |
 | **[`libmtk`](crates/libmtk)** | 核心 | 统一顶层门面 Crate，聚合各子模块并提供端到端高阶资产预编译管线 (`precompile`) 与统一错误处理 (`MtkError`) | [📖 `crates/libmtk/README.md`](crates/libmtk/README.md) |
 | **[`mtk-py`](bindings/mtk-py)** | **P0 (当前重点)** | 基于 PyO3 的 Python 扩展模块 (`libmtk_py`)，为 MoziToolKit Blender 插件提供零拷贝内存视图与极速批处理算子 | [📖 `bindings/mtk-py/README.md`](bindings/mtk-py/README.md) |
 | **[`mtk-cli`](crates/mtk-cli)** | **P1 (工具链)** | 独立命令行工具，支持资源包预编译 (`precompile`)、性能基准 (`bench`) 与资产缓存校验 (`inspect`) | [📖 `crates/mtk-cli/README.md`](crates/mtk-cli/README.md) |

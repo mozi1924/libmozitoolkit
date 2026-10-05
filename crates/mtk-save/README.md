@@ -2,10 +2,10 @@
 
 [![Crate](https://img.shields.io/badge/crate-mtk--save-blue.svg)](Cargo.toml)
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
-[![SIMD](https://img.shields.io/badge/NBT-simdnbt%20Zero--Copy-brightgreen.svg)](https://github.com/azalea-rs/simdnbt)
+[![NBT](https://img.shields.io/badge/NBT-Zero--Copy%20Builtin-brightgreen.svg)](src/nbt/mod.rs)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
-**`mtk-save`** 是 `libmozitoolkit` (`libmtk`) 套件中的现代 Minecraft Java 版存档加载与空间切片引擎。纯 Rust 实现，严格遵循 **Host-Agnostic（宿主无关）** 原则，基于 `simdnbt` 零拷贝 SIMD NBT 解码与 Anvil `.mca` 区域文件直接寻址，为上层体素网格化 (`mtk-voxel`)、实时协同与 Blender 插件提供极速的按需 3D 空间裁剪与流式数据源 (`VoxelSource`) 注入能力。
+**`mtk-save`** 是 `libmozitoolkit` (`libmtk`) 套件中的现代 Minecraft Java 版存档加载与空间切片引擎。纯 Safe Rust 实现，严格遵循 **Host-Agnostic（宿主无关）** 原则，基于内置零拷贝 NBT 解码器与 Anvil `.mca` 区域文件直接寻址，为上层体素网格化 (`mtk-voxel`)、实时协同与 Blender 插件提供极速的按需 3D 空间裁剪与流式数据源 (`VoxelSource`) 注入能力。
 
 ---
 
@@ -60,7 +60,7 @@
 │                                         ▼              │
 │                             ┌───────────────────────┐  │
 │                             │      ChunkParser      │  │
-│                             │  (simdnbt / 位解包)   │  │
+│                             │ (内置零拷贝 / 位解包)  │  │
 │                             └───────────┬───────────┘  │
 │                                         │ Section 字典 │
 │                             ┌───────────▼───────────┐  │
@@ -100,7 +100,7 @@ pub struct LevelData {
     pub thundering: bool,
 }
 ```
-- `LevelData::from_slice(bytes: &[u8]) -> Result<Self, SaveError>`: 基于 `simdnbt` 零拷贝从 `level.dat` NBT 字节流解包。
+- `LevelData::from_slice(bytes: &[u8]) -> Result<Self, SaveError>`: 基于内置零拷贝 NBT 从 `level.dat` 字节流解包。
 
 ---
 
@@ -136,7 +136,7 @@ pub struct RegionFile {
 ```rust
 pub struct ChunkParser;
 
-pub fn format_canonical_blockstate(name: &str, properties: &simdnbt::borrow::Compound) -> String;
+pub fn format_canonical_blockstate(block_comp: &NbtCompound) -> String;
 ```
 - `ChunkParser::parse_chunk_sections(bytes: &[u8]) -> Result<HashMap<i8, SectionData>, SaveError>`: 解密 Chunk NBT，逐 Section 解包 BlockStates 与 Biomes。
 - `format_canonical_blockstate`: 保证方块状态属性键值升序排列，生成全局一致的权威规范状态字符串。

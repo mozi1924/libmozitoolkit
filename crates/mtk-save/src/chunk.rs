@@ -2,7 +2,7 @@ use std::io::Cursor;
 use glam::IVec3;
 use mtk_core::constants::voxel::{block_index, SECTION_VOLUME};
 use mtk_voxel::storage::SectionStorage;
-use simdnbt::borrow::{Nbt, NbtCompound};
+use crate::nbt::{Nbt, NbtCompound};
 
 use crate::error::SaveError;
 
@@ -163,7 +163,7 @@ impl ChunkParser {
         min_section_y: i32,
         max_section_y: i32,
     ) -> Result<Vec<SectionStorage>, SaveError> {
-        let nbt = simdnbt::borrow::read(&mut Cursor::new(decompressed_bytes))?;
+        let nbt = crate::nbt::read(&mut Cursor::new(decompressed_bytes))?;
         let base = match nbt {
             Nbt::Some(b) => b,
             Nbt::None => return Ok(Vec::new()),

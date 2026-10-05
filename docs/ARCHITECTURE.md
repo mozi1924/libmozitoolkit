@@ -37,7 +37,7 @@ graph TD
         RESOURCE["mtk-resource (VFS / Pack Stack / CTM / Atlases)"]
         CULL["mtk-cull (Occlusion / Rect Difference / Mesh Cull / MeshSanitizer)"]
         MAT["mtk-material (66 Biomes SSOT / BiomeResolver / UV Remap)"]
-        SAVE["mtk-save (Anvil MCA / simdnbt / Spatial Slicer / LevelData)"]
+        SAVE["mtk-save (Anvil MCA / Builtin NBT / Spatial Slicer / LevelData)"]
     end
 
     subgraph Layer0_Core["Layer 0: 核心数据与几何基础设施 (Foundation)"]
@@ -86,7 +86,7 @@ graph TD
 | **`crates/mtk-voxel`**  | 纯体素核心：16x16x16 Chunk Section 体素存储、全量无剔除体素点云 (`VoxelPointCloud`)、平滑 AO 计算、网格化器 (Mesher)、物理流体曲面、统一体素源抽象 (`VoxelSource` / `VoxelReader` / `VoxelWriter`) | `mtk-core`, `mtk-cull`, `mtk-model`, `mtk-texture`, `mtk-resource`, `mtk-material` | `SectionStorage`, `VoxelStorage`, `VoxelPointCloud`, `SectionMesher`, `DeltaMesher`, `VoxelSource`, `WorldMeshBuildResult` |
 | **`crates/mtk-sync`**   | 实时网络协同：原生多线程 WebSocket 客户端、小端序二进制协议编解码、增量修复包生成、复合模型库注入与单一世界大网格 (`WorldMeshReady`) 会话管理 | `mtk-voxel`, `mtk-cull`, `mtk-model`, `mtk-core` | `LiveSyncSession`, `SyncClient`, `SyncEvent`, `decode_packet`, `encode_full_sync_request` |
 | **`crates/mtk-material`** | 66 种原版生物群系调色板与线性色彩数学引擎 (SSOT)、`BiomeResolver` 模型扫描与预编译映射、多线程 Rayon 并行 UV 重映射与外部别名解算 | `mtk-core` | `BiomePalette`, `BiomeResolver`, `compute_mesh_biome_attributes`, `MaterialResolver`, `MeshMultiUvRemapResult` |
-| **`crates/mtk-save`** | 现代 Minecraft 存档加载核心：基于 `simdnbt` 零拷贝 NBT、Anvil `.mca` 区域文件寻址、384 高度世界 3D 生物群系与方块状态解包、按需空间切片流式数据源 (`VoxelSource`) | `mtk-core`, `mtk-voxel` | `LevelData`, `RegionFile`, `ChunkParser`, `AnvilWorldSource`, `SaveLoader` |
+| **`crates/mtk-save`** | 现代 Minecraft 存档加载核心：基于内置零拷贝 NBT、Anvil `.mca` 区域文件寻址、384 高度世界 3D 生物群系与方块状态解包、按需空间切片流式数据源 (`VoxelSource`) | `mtk-core`, `mtk-voxel` | `LevelData`, `RegionFile`, `ChunkParser`, `AnvilWorldSource`, `SaveLoader` |
 | **`crates/libmtk`** | 顶层统一 Facade 库，提供开箱即用的高阶预编译管线 (`precompile_all_assets`) 与一站式统一错误处理 `MtkError` | 全部 Layer 1 Crates | 高阶 API、统一 Error 与 Pipeline、`CacheManifest` |
 | **`crates/mtk-bench`** | 性能基准测试套件，覆盖 4000 区块大规模网格化与复杂面剔除场景 | 全部核心 Crates | 基准测试报告与性能指标 |
 | **`crates/mtk-cli`** | 独立命令行终端工具，为无头环境与 CI/CD 提供资产预编译与检查能力 | `libmtk` | 命令行二进制 `mtk` |

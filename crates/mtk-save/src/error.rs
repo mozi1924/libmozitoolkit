@@ -8,12 +8,12 @@ pub enum SaveError {
     Io(#[from] std::io::Error),
 
     #[error("NBT decoding error: {0}")]
-    Nbt(#[from] simdnbt::Error),
+    Nbt(#[from] crate::nbt::NbtError),
 
-    #[error("level.dat not found at: {0}")]
+    #[error("level.dat not found at: {0:?}")]
     LevelDatNotFound(PathBuf),
 
-    #[error("Region directory not found at: {0}")]
+    #[error("Region directory not found at: {0:?}")]
     RegionDirNotFound(PathBuf),
 
     #[error("Invalid region file header: {0}")]

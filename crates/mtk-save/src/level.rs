@@ -6,7 +6,7 @@ use flate2::read::GzDecoder;
 use glam::IVec3;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use simdnbt::borrow::Nbt;
+use crate::nbt::Nbt;
 
 use crate::error::SaveError;
 
@@ -48,9 +48,9 @@ impl LevelData {
         Self::read_from_bytes(&decompressed)
     }
 
-    /// Parses decompressed bytes of `level.dat` via `simdnbt`.
+    /// Parses decompressed bytes of `level.dat` via lightweight NBT decoder.
     pub fn read_from_bytes(bytes: &[u8]) -> Result<Self, SaveError> {
-        let nbt = simdnbt::borrow::read(&mut Cursor::new(bytes))?;
+        let nbt = crate::nbt::read(&mut Cursor::new(bytes))?;
         let base = match nbt {
             Nbt::Some(b) => b,
             Nbt::None => {
