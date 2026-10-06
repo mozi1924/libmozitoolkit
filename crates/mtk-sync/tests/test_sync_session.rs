@@ -218,3 +218,94 @@ fn test_sync_session_status_and_rapid_stop() {
     assert!(!session.is_connected());
     assert_eq!(session.status(), "DISCONNECTED");
 }
+
+#[test]
+fn test_post_stream_manifest_verification_and_streaming_suppression() {
+    use glam::IVec3;
+    use mtk_sync::protocol::packet::{ManifestSectionEntry, Packet};
+    use mtk_sync::SyncEvent;
+
+    let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None, true);
+
+    // 1. Begin stream
+    session.process_packet_direct(Packet::StreamBegin {
+        stream_id: 100,
+        total_sections: 1,
+        flags: 0,
+    });
+
+    // 2. While streaming, receiving a manifest (e.g. before chunks finish) must NOT emit mismatch error
+    session.process_packet_direct(Packet::SectionManifest {
+        seq_id: 100,
+        sections: vec![ManifestSectionEntry {
+            coord: IVec3::new(0, 0, 0),
+            crc32: 0x12345678,
+        }],
+    });
+    let evts = session.poll_events();
+    let has_unverified = evts.iter().any(|e| {
+        matches!(
+            e,
+            SyncEvent::Verified {
+                is_verified: false,
+                ..
+            }
+        )
+    });
+    assert!(
+        !has_unverified,
+        "Must suppress false mismatch verification while streaming"
+    );
+
+    // 3. Snapshot arrives
+    let palette = vec!["minecraft:air".to_string(), "minecraft:stone".to_string()];
+    let mut grid = vec![0u16; 4096];
+    grid[0] = 1;
+    session.process_packet_direct(Packet::SectionSnapshot {
+        sec_coord: IVec3::new(0, 0, 0),
+        start_pos: IVec3::new(0, 0, 0),
+        size: IVec3::new(16, 16, 16),
+        palette,
+        grid_indices: grid,
+        biome_palette: None,
+        biome_indices: None,
+    });
+
+    // 4. Stream ends
+    session.process_packet_direct(Packet::StreamEnd {
+        stream_id: 100,
+        sent_sections: 1,
+        status: mtk_sync::protocol::constants::StreamStatus::Success,
+    });
+
+    // Calculate actual local CRC of the section we just ingested
+    let expected_crc = {
+        let mut w = session.world.write().unwrap();
+        w.storage
+            .calculate_and_store_section_crc(IVec3::new(0, 0, 0))
+    };
+
+    // 5. Post-stream Manifest arrives with matching CRC
+    session.process_packet_direct(Packet::SectionManifest {
+        seq_id: 100,
+        sections: vec![ManifestSectionEntry {
+            coord: IVec3::new(0, 0, 0),
+            crc32: expected_crc,
+        }],
+    });
+
+    let final_evts = session.poll_events();
+    let verified_event = final_evts.iter().find_map(|e| match e {
+        SyncEvent::Verified {
+            is_verified,
+            message,
+        } => Some((*is_verified, message.clone())),
+        _ => None,
+    });
+
+    assert_eq!(
+        verified_event,
+        Some((true, "100% in sync with scene".to_string())),
+        "Must verify 100% in sync upon receiving post-stream manifest"
+    );
+}

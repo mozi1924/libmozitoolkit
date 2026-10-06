@@ -443,6 +443,8 @@ pub fn handle_packet(
                 (mismatches, empty)
             };
 
+            let is_streaming = stream_id_atomic.load(Ordering::SeqCst) != 0;
+
             if mismatched.is_empty() {
                 let (rebuilt_mesh, is_unified) = {
                     let mut w = world.write().unwrap();
@@ -466,15 +468,14 @@ pub fn handle_packet(
                     is_verified: true,
                     message: "100% in sync with scene".to_string(),
                 });
-            } else {
+            } else if !is_streaming {
                 let _ = event_sender.send(SyncEvent::Verified {
                     is_verified: false,
                     message: format!("Detected {} out-of-sync sections", mismatched.len()),
                 });
 
-                let is_streaming = stream_id_atomic.load(Ordering::SeqCst) != 0;
                 if let Some(sender) = cmd_sender {
-                    if !is_streaming && !sync_requested.load(Ordering::SeqCst) {
+                    if !sync_requested.load(Ordering::SeqCst) {
                         if is_storage_empty || mismatched.len() == raw_entries.len() {
                             let _ = sender.send(ClientCommand::Send(encode_full_sync_request()));
                             sync_requested.store(true, Ordering::SeqCst);
