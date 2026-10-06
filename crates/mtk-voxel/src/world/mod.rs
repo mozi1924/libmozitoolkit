@@ -355,11 +355,14 @@ impl VoxelWorld {
     }
 
     /// Re-assembles and welds the unified world mesh from the current section cache without cloning.
-    fn assemble_world_mesh(&mut self) {
+    /// In incremental mode (`full_weld = false`), uses fast zero-copy buffer merge since individual
+    /// sections are already internally welded by SectionMesher. Full spatial welding is applied on
+    /// global rebuilds (`rebuild_all`).
+    fn assemble_world_mesh(&mut self, full_weld: bool) {
         if self.unified_mesh {
             let meshes: Vec<&MeshData> = self.section_mesh_cache.values().collect();
             let mut merged = MeshData::merge_all_refs(&meshes);
-            if self.config.weld_vertices {
+            if self.config.weld_vertices && full_weld {
                 merged.weld_spatial_vertices(1e-4);
             }
             self.used_chunk_ids = merged
@@ -456,7 +459,7 @@ impl VoxelWorld {
             ));
         }
 
-        self.assemble_world_mesh();
+        self.assemble_world_mesh(true);
         self.storage.clear_dirty_sections();
 
         Ok(self.world_mesh.as_ref().unwrap())
@@ -499,7 +502,7 @@ impl VoxelWorld {
             }
         }
 
-        self.assemble_world_mesh();
+        self.assemble_world_mesh(false);
 
         Ok(rebuilt)
     }
@@ -534,7 +537,7 @@ impl VoxelWorld {
             self.section_mesh_cache.insert(sec_coord, mesh.clone());
         }
 
-        self.assemble_world_mesh();
+        self.assemble_world_mesh(false);
         mesh
     }
 

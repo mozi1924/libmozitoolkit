@@ -49,6 +49,7 @@ pub fn event_worker_loop(
             }
             Ok(ClientMessage::PacketReceived { packet, bytes }) => {
                 let is_sec_snapshot = matches!(packet, Packet::SectionSnapshot { .. });
+                let is_delta_update = matches!(packet, Packet::DeltaUpdate { .. });
                 let is_stream_end = matches!(packet, Packet::StreamEnd { .. });
                 let more_pending = !msg_receiver.is_empty();
                 handle_packet(
@@ -64,7 +65,9 @@ pub fn event_worker_loop(
                     &sync_requested,
                     more_pending,
                 );
-                if is_sec_snapshot && stream_id_atomic.load(Ordering::SeqCst) == 0 {
+                if (is_sec_snapshot && stream_id_atomic.load(Ordering::SeqCst) == 0)
+                    || (is_delta_update && more_pending)
+                {
                     pending_non_streaming_updates = true;
                 }
                 if is_stream_end && more_pending {
@@ -397,6 +400,20 @@ pub fn handle_packet(
                     )
                 })
                 .collect();
+
+            if more_pending {
+                // Batching fast-path: Ingest delta into voxel memory immediately (<0.1ms),
+                // defer remeshing until incoming queue clears to coalesce rapid redstone bursts.
+                {
+                    let mut w = world.write().unwrap();
+                    w.apply_delta_update(min_pos.x, min_pos.y, min_pos.z, &borrowed_changes);
+                }
+                let _ = event_sender.send(SyncEvent::DeltaApplied {
+                    change_count: changes.len(),
+                    affected_sections: Vec::new(),
+                });
+                return;
+            }
 
             let (rebuilt, unified, world_mesh) = {
                 let mut w = world.write().unwrap();
