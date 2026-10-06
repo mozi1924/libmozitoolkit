@@ -71,6 +71,34 @@ impl LiveSyncSession {
         self.world.write().unwrap().set_unified_mesh(unified_mesh);
     }
 
+    /// Clears the cached section meshes and unified world mesh on the underlying VoxelWorld,
+    /// marking all sections dirty.
+    pub fn clear_cache(&self) {
+        self.world.write().unwrap().clear_cache();
+    }
+
+    /// Sets or updates the active mesher configuration on the underlying VoxelWorld.
+    pub fn set_config(&self, config: mtk_voxel::MesherConfig) {
+        self.world.write().unwrap().set_config(config);
+    }
+
+    /// Hot-reloads mesher configuration and model database on the underlying VoxelWorld,
+    /// purging all cached section meshes.
+    pub fn hot_reload(
+        &self,
+        config: Option<mtk_voxel::MesherConfig>,
+        model_db: Option<Arc<BakedModelDatabase>>,
+    ) {
+        let mut w = self.world.write().unwrap();
+        if let Some(cfg) = config {
+            w.set_config(cfg);
+        }
+        if let Some(db) = model_db {
+            w.set_model_db(Some(db));
+        }
+        w.clear_cache();
+    }
+
     /// Returns whether the background sync session worker is actively running.
     pub fn is_active(&self) -> bool {
         self.worker_running.load(Ordering::SeqCst)

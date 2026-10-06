@@ -895,6 +895,27 @@ impl PyVoxelWorld {
         self.inner.load_from_point_cloud(&point_cloud.inner);
     }
 
+    /// Clears the cached section meshes and unified world mesh, marking all storage sections as dirty.
+    pub fn clear_cache(&mut self) {
+        self.inner.clear_cache();
+    }
+
+    /// Hot-reloads mesher configuration and model database, clearing all cached section meshes.
+    #[pyo3(signature = (config=None, model_db=None))]
+    pub fn hot_reload(
+        &mut self,
+        config: Option<&PyMesherConfig>,
+        model_db: Option<&crate::model::PyBakedModelDatabase>,
+    ) {
+        if let Some(cfg) = config {
+            self.inner.set_config(cfg.inner.clone());
+        }
+        if let Some(mdb) = model_db {
+            self.inner.set_model_db(Some(mdb.inner.clone()));
+        }
+        self.inner.clear_cache();
+    }
+
     /// Clears world storage and meshes.
     pub fn clear(&mut self) {
         self.inner.clear();

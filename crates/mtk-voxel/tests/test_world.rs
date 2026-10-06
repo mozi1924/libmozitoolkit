@@ -59,3 +59,35 @@ fn test_voxel_world_rebuild_with_progress() {
     // Should have reported progress for meshing and assembly
     assert!(progress_events.load(Ordering::SeqCst) >= 2);
 }
+
+#[test]
+fn test_voxel_world_clear_cache_and_hot_reload() {
+    let mut world = VoxelWorld::new(None, None, None, true);
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+    world.set_block(0, 0, 0, "minecraft:stone", None);
+
+    let mesh = world.rebuild_all().unwrap();
+    assert!(!mesh.is_empty());
+    assert!(world.get_world_mesh().is_some());
+    assert!(!world.get_section_cache().is_empty());
+    assert!(world.storage.dirty_sections.is_empty());
+
+    // Clear cache
+    world.clear_cache();
+    assert!(world.get_world_mesh().is_none());
+    assert!(world.get_section_cache().is_empty());
+    assert!(world.used_chunk_ids().is_empty());
+    assert!(!world.storage.dirty_sections.is_empty());
+
+    // Incremental or full remesh rebuilds everything
+    let rebuilt = world.rebuild_dirty().unwrap();
+    assert_eq!(rebuilt.len(), 1);
+    assert!(world.get_world_mesh().is_some());
+    assert!(!world.get_section_cache().is_empty());
+
+    // Hot reload assets also purges mesh cache
+    world.hot_reload_assets(None, None, None);
+    assert!(world.get_world_mesh().is_none());
+    assert!(world.get_section_cache().is_empty());
+    assert!(!world.storage.dirty_sections.is_empty());
+}

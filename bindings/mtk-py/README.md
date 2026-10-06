@@ -89,7 +89,7 @@ Python 模块名：`libmtk_py`
   - `to_point_cloud() -> VoxelPointCloud`, `load_from_point_cloud(cloud)`
   - `from_storage(storage, config=None, culler=None, model_db=None, unified_mesh=True, num_threads=None)`
   - `create_debug_world(config=None, culler=None, model_db=None, unified_mesh=True, num_threads=None)`
-  - `rebuild_all() -> MeshData`, `rebuild_dirty() -> Dict`, `num_threads` (getter/setter)
+  - `rebuild_all() -> MeshData`, `rebuild_dirty() -> Dict`, `clear_cache()`, `hot_reload(config=None, model_db=None)`, `num_threads` (getter/setter)
 - **`MesherConfig` (`PyMesherConfig`)**：网格化配置（AO 开关、流体曲面、坐标系转换、线程数、顶点焊接）。
 - **`SectionMesher` (`PySectionMesher`)**：
   - `mesh_world(py, storage, config=None, culler=None, resolver=None) -> MeshData`
@@ -98,7 +98,7 @@ Python 模块名：`libmtk_py`
 
 ### 2.6 实时网络协同 (`sync` & `protocol`)
 - **`LiveSyncSession` (`PyLiveSyncSession`)**：原生 WebSocket 实时协同客户端。
-  - `connect()`, `disconnect()`, `is_connected()`, `poll_events()`
+  - `connect()`, `disconnect()`, `is_connected()`, `poll_events()`, `clear_cache()`, `set_config(config)`, `hot_reload(config=None, model_db=None)`
   - `send_block_update(x, y, z, block_state)`, `request_full_sync(min_pos, max_pos)`
 - **二进制协议编解码**：`decode_packet(bytes)`, `encode_full_sync_request(...)`, `encode_repair_requests(...)`, `encode_sync_config(...)`
 

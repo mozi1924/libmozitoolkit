@@ -43,6 +43,30 @@ impl PyLiveSyncSession {
         self.inner.set_unified_mesh(unified_mesh);
     }
 
+    /// Clears the cached section meshes and unified world mesh on the underlying VoxelWorld.
+    pub fn clear_cache(&self) {
+        self.inner.clear_cache();
+    }
+
+    /// Sets or updates the active mesher configuration on the underlying VoxelWorld.
+    pub fn set_config(&self, config: &PyMesherConfig) {
+        self.inner.set_config(config.inner.clone());
+    }
+
+    /// Hot-reloads mesher configuration and model database on the underlying VoxelWorld,
+    /// clearing all cached section meshes.
+    #[pyo3(signature = (config=None, model_db=None))]
+    pub fn hot_reload(
+        &self,
+        config: Option<&PyMesherConfig>,
+        model_db: Option<&PyBakedModelDatabase>,
+    ) {
+        self.inner.hot_reload(
+            config.map(|c| c.inner.clone()),
+            model_db.map(|db| db.inner.clone()),
+        );
+    }
+
     /// Meshes the entire active VoxelStorage volume and returns a unified `MeshData`.
     pub fn get_world_mesh(&self) -> PyMeshData {
         PyMeshData {

@@ -78,7 +78,7 @@ pub fn emit_baked_face(
     mesh.face_materials.push(shading.mat_slot);
     mesh.face_tint_indices.push(face.tint_index);
 
-    let mut mat_props = mtk_material::get_material_props("", Some(&shading.texture_key));
+    let mut mat_props = shading.material_props;
     if shading.emission > 0.0 {
         mat_props[0] = shading.emission;
     }
@@ -207,7 +207,7 @@ pub fn emit_unit_cube_face(
     mesh.face_materials.push(shading.mat_slot);
     mesh.face_tint_indices.push(-1);
 
-    let mut mat_props = mtk_material::get_material_props("", Some(&shading.texture_key));
+    let mut mat_props = shading.material_props;
     if shading.emission > 0.0 {
         mat_props[0] = shading.emission;
     }

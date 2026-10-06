@@ -582,6 +582,31 @@ impl VoxelWorld {
         self.sync_selection_bounds();
     }
 
+    /// Clears the cached section meshes and unified world mesh, and marks all storage sections dirty.
+    ///
+    /// Used when assets (Atlas, Models, Biomes) or mesher configurations change dynamically,
+    /// ensuring subsequent remeshing rebuilds all chunk sections with the updated definitions.
+    pub fn clear_cache(&mut self) {
+        self.section_mesh_cache.clear();
+        self.world_mesh = None;
+        self.used_chunk_ids.clear();
+        self.storage.mark_all_sections_dirty();
+    }
+
+    /// Hot-reloads asset databases (model DB, atlas address map, biome resolver)
+    /// and purges all cached section meshes so that future meshing immediately reflects new assets.
+    pub fn hot_reload_assets(
+        &mut self,
+        model_db: Option<Arc<BakedModelDatabase>>,
+        atlas_map: Option<Arc<mtk_texture::atlas::AtlasAddressMap>>,
+        biome_resolver: Option<Arc<mtk_material::BiomeResolver>>,
+    ) {
+        self.model_db = model_db;
+        self.config.atlas_address_map = atlas_map;
+        self.config.biome_resolver = biome_resolver;
+        self.clear_cache();
+    }
+
     /// Clears all sections, cache, and world mesh.
     pub fn clear(&mut self) {
         self.storage.clear();

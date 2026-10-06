@@ -203,6 +203,9 @@ pub struct LiveSyncSession {
 - `status() -> String`：获取当前连接状态文本（`"CONNECTED"`、`"CONNECTING..."`、`"DISCONNECTED"` 等）。
 - `poll_events() -> Vec<SyncEvent>`：非阻塞提取当前已就绪的所有高阶事件。
 - `get_world_mesh() -> MeshData`：主动并行网格化当前 `VoxelWorld` 内的所有区块并合并为焊接后的全局网格。
+- `clear_cache()`：清空底层 `VoxelWorld` 的区块网格缓存与全局网格，标记所有区块为脏。
+- `set_config(config)`：动态更新底层 `VoxelWorld` 的网格化配置（AO、流体、图集映射等）。
+- `hot_reload(config, model_db)`：动态更新配置/模型库并清空网格缓存，为重构世界做准备。
 - `send_full_sync_request()` / `send_repair_request(sections)` / `send_sync_config(...)`：向服务端下发控制指令。
 
 ---

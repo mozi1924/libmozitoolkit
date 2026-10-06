@@ -28,6 +28,9 @@ pub struct PreResolvedFace {
     pub tint_color: [f32; 4],
     pub colormap_uv: [f32; 3],
     pub emission: f32,
+    /// Packed material properties `[emission, thin_wall, transmission, sticker_threshold]`.
+    /// Precomputed per palette face to avoid per-face registry lookups in the meshing hot loop.
+    pub material_props: [f32; 4],
 }
 
 /// Pre-resolved model face bundling the original BakedFace geometry and pre-resolved shading.
@@ -130,6 +133,8 @@ pub struct ResolvedFaceShading {
     pub tint_color: [f32; 4],
     pub colormap_uv: [f32; 3],
     pub emission: f32,
+    /// Packed material properties `[emission, thin_wall, transmission, sticker_threshold]`.
+    pub material_props: [f32; 4],
 }
 
 fn resolve_model_face(
@@ -214,6 +219,8 @@ fn resolve_model_face(
         config.biome_resolver.as_deref(),
     );
 
+    let material_props = mtk_material::get_material_props("", Some(&final_tex_key));
+
     PreResolvedModelFace {
         face: face.clone(),
         pre: PreResolvedFace {
@@ -226,6 +233,7 @@ fn resolve_model_face(
             tint_color,
             colormap_uv,
             emission,
+            material_props,
         },
     }
 }
@@ -358,6 +366,8 @@ pub fn build_palette_meshing_data(
                             tint_idx,
                             config.biome_resolver.as_deref(),
                         );
+                        let material_props =
+                            mtk_material::get_material_props("", Some(&final_tex_key));
 
                         faces[dir.to_index()] = Some(PreResolvedFace {
                             source_texture_key: final_tex_key,
@@ -369,6 +379,7 @@ pub fn build_palette_meshing_data(
                             tint_color,
                             colormap_uv,
                             emission,
+                            material_props,
                         });
                     }
 
@@ -458,6 +469,7 @@ where
                         face.tint_index,
                         config.biome_resolver.as_deref(),
                     );
+                    let material_props = mtk_material::get_material_props("", Some(&ctm_key));
                     return ResolvedFaceShading {
                         texture_key: ctm_key,
                         override_uvs: Some(remapped),
@@ -468,6 +480,7 @@ where
                         tint_color: tc,
                         colormap_uv: c_uv,
                         emission: pre_face.emission,
+                        material_props,
                     };
                 }
             }
@@ -484,6 +497,7 @@ where
         tint_color: pre_face.tint_color,
         colormap_uv: pre_face.colormap_uv,
         emission: pre_face.emission,
+        material_props: pre_face.material_props,
     }
 }
 
@@ -532,6 +546,7 @@ where
                         -1,
                         config.biome_resolver.as_deref(),
                     );
+                    let material_props = mtk_material::get_material_props("", Some(&ctm_key));
                     return ResolvedFaceShading {
                         texture_key: ctm_key,
                         override_uvs: Some(remapped),
@@ -542,6 +557,7 @@ where
                         tint_color: tc,
                         colormap_uv: c_uv,
                         emission: pre_face.emission,
+                        material_props,
                     };
                 }
             }
@@ -558,6 +574,7 @@ where
         tint_color: pre_face.tint_color,
         colormap_uv: pre_face.colormap_uv,
         emission: pre_face.emission,
+        material_props: pre_face.material_props,
     }
 }
 

@@ -309,3 +309,38 @@ fn test_post_stream_manifest_verification_and_streaming_suppression() {
         "Must verify 100% in sync upon receiving post-stream manifest"
     );
 }
+
+#[test]
+fn test_sync_session_clear_cache_and_hot_reload() {
+    let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None, true);
+
+    {
+        let mut w = session.world.write().unwrap();
+        w.set_bounds(0, 0, 0, 16, 16, 16);
+        let palette = vec!["minecraft:air".to_string(), "minecraft:stone".to_string()];
+        let mut grid = vec![0u16; 4096];
+        grid[0] = 1;
+        w.set_section_snapshot(0, 0, 0, 0, 0, 0, 16, 16, 16, &palette, &grid, None, None);
+    }
+
+    let mesh = session.get_world_mesh();
+    assert!(!mesh.is_empty());
+    assert!(session.world.read().unwrap().get_world_mesh().is_some());
+
+    // Clear cache
+    session.clear_cache();
+    assert!(session.world.read().unwrap().get_world_mesh().is_none());
+
+    // Hot reload
+    let new_cfg = MesherConfig {
+        enable_ao: false,
+        ..Default::default()
+    };
+    session.hot_reload(Some(new_cfg), None);
+    assert!(!session.world.read().unwrap().config.enable_ao);
+    assert!(session.world.read().unwrap().get_world_mesh().is_none());
+
+    // Remesh
+    let re_mesh = session.get_world_mesh();
+    assert!(!re_mesh.is_empty());
+}
