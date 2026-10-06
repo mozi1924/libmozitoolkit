@@ -127,3 +127,6 @@ libmozitoolkit/
 - **公共 API 与核心抽象参考**：[`docs/API_REFERENCE.md`](docs/API_REFERENCE.md)
 - **跨语言绑定与胶水层规范**：[`docs/BINDINGS_DESIGN.md`](docs/BINDINGS_DESIGN.md)
 
+## 5.TODO
+
+- [TODO.md](./TODO.md)
