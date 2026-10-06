@@ -28,6 +28,8 @@ pub struct LiveSyncSession {
     event_receiver: Receiver<SyncEvent>,
 
     worker_running: Arc<AtomicBool>,
+    is_connected: Arc<AtomicBool>,
+    status: Arc<std::sync::RwLock<String>>,
     worker_handle: Option<JoinHandle<()>>,
 
     current_stream_id: Arc<AtomicU32>,
@@ -51,6 +53,8 @@ impl LiveSyncSession {
             event_sender,
             event_receiver,
             worker_running: Arc::new(AtomicBool::new(false)),
+            is_connected: Arc::new(AtomicBool::new(false)),
+            status: Arc::new(std::sync::RwLock::new("DISCONNECTED".to_string())),
             worker_handle: None,
             current_stream_id: Arc::new(AtomicU32::new(0)),
             sync_requested: Arc::new(AtomicBool::new(false)),
@@ -67,6 +71,21 @@ impl LiveSyncSession {
         self.world.write().unwrap().set_unified_mesh(unified_mesh);
     }
 
+    /// Returns whether the background sync session worker is actively running.
+    pub fn is_active(&self) -> bool {
+        self.worker_running.load(Ordering::SeqCst)
+    }
+
+    /// Returns whether the session is actively connected to the server.
+    pub fn is_connected(&self) -> bool {
+        self.is_connected.load(Ordering::SeqCst)
+    }
+
+    /// Returns the current connection status string ("CONNECTED", "CONNECTING...", "DISCONNECTED", etc.).
+    pub fn status(&self) -> String {
+        self.status.read().unwrap().clone()
+    }
+
     /// Starts the live sync session connecting to the given WebSocket `url`.
     pub fn start(
         &mut self,
@@ -75,6 +94,9 @@ impl LiveSyncSession {
         max_reconnect_attempts: usize,
     ) -> Result<(), String> {
         self.stop();
+
+        *self.status.write().unwrap() = "CONNECTING...".to_string();
+        self.is_connected.store(false, Ordering::SeqCst);
 
         let (msg_sender, msg_receiver) = crossbeam_channel::unbounded::<ClientMessage>();
         let client = SyncClient::connect(
@@ -91,6 +113,8 @@ impl LiveSyncSession {
         self.sync_requested.store(false, Ordering::SeqCst);
         let worker_running = Arc::new(AtomicBool::new(true));
         self.worker_running = worker_running.clone();
+        let is_connected_clone = self.is_connected.clone();
+        let status_clone = self.status.clone();
 
         let cmd_sender = client.get_cmd_sender();
         let handle = thread::spawn(move || {
@@ -102,6 +126,8 @@ impl LiveSyncSession {
                 stream_id_clone,
                 sync_requested_clone,
                 worker_running,
+                is_connected_clone,
+                status_clone,
             );
         });
 
@@ -113,9 +139,11 @@ impl LiveSyncSession {
         Ok(())
     }
 
-    /// Stops the live sync session cleanly.
+    /// Stops the live sync session cleanly and shuts down the underlying connection.
     pub fn stop(&mut self) {
         self.worker_running.store(false, Ordering::SeqCst);
+        self.is_connected.store(false, Ordering::SeqCst);
+        *self.status.write().unwrap() = "DISCONNECTED".to_string();
         if let Some(mut client) = self.client.take() {
             client.stop();
         }

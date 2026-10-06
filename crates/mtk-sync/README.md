@@ -197,9 +197,12 @@ pub struct LiveSyncSession {
 #### 关键方法
 - `new(config, culler, model_db, unified_mesh) -> Self`：创建会话实例。
 - `start(url, auto_reconnect, max_reconnect_attempts) -> Result<(), String>`：连接 Minecraft 服务端并启动后台 I/O 与网格化守护线程。
-- `stop()`：优雅终止网络连接与后台 Worker 线程。
+- `stop()`：优雅且强制终止网络连接（触发底层 TCP `shutdown(Shutdown::Both)` 瞬间释放端口）与后台 Worker 线程。
+- `is_active() -> bool`：查询后台会话线程是否处于活跃状态。
+- `is_connected() -> bool`：查询当前是否已建立有效网络连接。
+- `status() -> String`：获取当前连接状态文本（`"CONNECTED"`、`"CONNECTING..."`、`"DISCONNECTED"` 等）。
 - `poll_events() -> Vec<SyncEvent>`：非阻塞提取当前已就绪的所有高阶事件。
-- `get_world_mesh() -> MeshData`：主动并行网格化当前 `VoxelStorage` 内的所有区块并合并为焊接后的全局网格。
+- `get_world_mesh() -> MeshData`：主动并行网格化当前 `VoxelWorld` 内的所有区块并合并为焊接后的全局网格。
 - `send_full_sync_request()` / `send_repair_request(sections)` / `send_sync_config(...)`：向服务端下发控制指令。
 
 ---
@@ -207,7 +210,8 @@ pub struct LiveSyncSession {
 ### 4.2 原生 WebSocket 传输客户端 (`SyncClient`)
 
 基于 `tungstenite` 与 `crossbeam-channel` 实现，运行在独立 OS 线程中：
-- 支持指定重连次数上限与指数退避重连；
+- 支持指定重连次数上限与指数退避重连，并在重连等待期响应即时 `Stop` 指令实现毫秒级取消；
+- `stop()` 时对底层 TCP Stream 触发 `shutdown(Shutdown::Both)`，确保远端即时感应连接切断，杜绝工程切换时出现端口挂起与僵尸连接；
 - 设置底层 TCP Read Timeout（100ms），在接收网络数据的同时兼顾处理出站指令队列，杜绝线程死锁；
 - 自动响应 WebSocket Ping/Pong 保活心跳帧。
 

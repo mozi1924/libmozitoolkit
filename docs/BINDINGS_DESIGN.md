@@ -89,7 +89,7 @@ bindings/
 - `SectionMesher`:
   - `mesh_world(storage, config)`: 多线程并行世界网格化（支持 `num_threads` 指定并发工作线程数）。
   - `MesherConfig(enable_ao=True, mesh_fluids=True, z_up_coordinates=True, atlas=None, biome_resolver=None, custom_aliases=None, num_threads=None)`: 标准化 3D 几何坐标系与图集材质寻址/生物群系着色配置。
-- `LiveSyncSession`: 原生 WebSocket 后台协同管道。
+- `LiveSyncSession`: 原生 WebSocket 后台协同管道，提供 `start(url)`、`stop()`（底层 TCP 强制关闭）、`is_active`、`is_connected`、`status` 与非阻塞 `poll_events()`。
 
 #### Blender Python 极速灌入范式示例
 

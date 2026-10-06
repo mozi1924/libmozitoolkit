@@ -68,6 +68,24 @@ impl PyLiveSyncSession {
         self.inner.stop();
     }
 
+    /// Whether the background synchronization session worker is currently active.
+    #[getter]
+    pub fn is_active(&self) -> bool {
+        self.inner.is_active()
+    }
+
+    /// Whether the session is actively connected to the server.
+    #[getter]
+    pub fn is_connected(&self) -> bool {
+        self.inner.is_connected()
+    }
+
+    /// Current connection status string ("CONNECTED", "CONNECTING...", "DISCONNECTED", etc.).
+    #[getter]
+    pub fn status(&self) -> String {
+        self.inner.status()
+    }
+
     /// Polls all pending synchronization events from the background Rust engine (non-blocking).
     pub fn poll_events<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
         let events = self.inner.poll_events();

@@ -187,3 +187,34 @@ fn test_auto_sync_request_on_manifest_mismatch() {
         "sync_requested flag should be set"
     );
 }
+
+#[test]
+fn test_sync_session_status_and_rapid_stop() {
+    let mut session = LiveSyncSession::new(Some(MesherConfig::default()), None, None, true);
+    assert!(!session.is_active());
+    assert!(!session.is_connected());
+    assert_eq!(session.status(), "DISCONNECTED");
+
+    // Start session with non-existent port; should enter connecting state
+    let start_res = session.start("ws://127.0.0.1:59999", true, 5);
+    assert!(start_res.is_ok());
+    assert!(session.is_active());
+    assert!(!session.is_connected());
+
+    // Give it a tiny moment to attempt connect and enter reconnecting sleep
+    std::thread::sleep(std::time::Duration::from_millis(50));
+
+    let start_time = std::time::Instant::now();
+    session.stop();
+    let elapsed = start_time.elapsed();
+
+    // Verify rapid stop without waiting for full reconnect backoffs (1500ms)
+    assert!(
+        elapsed < std::time::Duration::from_millis(500),
+        "session.stop() took too long: {:?}",
+        elapsed
+    );
+    assert!(!session.is_active());
+    assert!(!session.is_connected());
+    assert_eq!(session.status(), "DISCONNECTED");
+}

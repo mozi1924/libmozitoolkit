@@ -67,8 +67,8 @@
   - [x] 完善 Block Update、Chunk Section Delta、选区变动、握手与两阶段流传输事件编解码。
   - [x] 原生 WebSocket 客户端与非阻塞事件队列（`LiveSyncSession`）。
   - [x] CRC32 清单比对与分批差量自愈修复机制。
-- [ ] **跨平台连接健壮性与强制断开 (`mtk-sync::client`)**
-  - [ ] `SyncClient::stop()` 针对底层 TCP Stream 注入 `shutdown(Shutdown::Both)`，确保宿主工程切换或重连时套接字瞬间切断，消除服务端连接占位与挂起。
+- [x] **跨平台连接健壮性与强制断开 (`mtk-sync::client`)**
+  - [x] `SyncClient::stop()` 针对底层 TCP Stream 注入 `shutdown(Shutdown::Both)`，确保宿主工程切换或重连时套接字瞬间切断，消除服务端连接占位与挂起。
 - [x] **体素元数据与属性映射**
   - [x] 设计紧凑的高保真体素元数据表示（方块ID、状态、绝对世界坐标、光照等级、生物群系）。
   - [x] 构建体素数据 $\leftrightarrow$ 点云（`VoxelPointCloud`）/ 网格属性（Mesh Attributes）的双向元数据映射机制。

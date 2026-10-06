@@ -2,8 +2,9 @@
 //!
 //! Dedicated background thread client using `tungstenite` with auto-reconnect and packet routing.
 
+use std::net::TcpStream;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -34,6 +35,7 @@ pub enum ClientMessage {
 pub struct SyncClient {
     running: Arc<AtomicBool>,
     cmd_sender: Sender<ClientCommand>,
+    active_tcp: Arc<Mutex<Option<TcpStream>>>,
     thread_handle: Option<JoinHandle<()>>,
 }
 
@@ -49,15 +51,18 @@ impl SyncClient {
             .map_err(|e| format!("Invalid WebSocket URL '{}': {}", url_str, e))?;
 
         let running = Arc::new(AtomicBool::new(true));
+        let active_tcp = Arc::new(Mutex::new(None));
         let (cmd_sender, cmd_receiver) = crossbeam_channel::unbounded::<ClientCommand>();
 
         let running_clone = running.clone();
+        let active_tcp_clone = active_tcp.clone();
         let handle = thread::spawn(move || {
             Self::run_loop(
                 url_str,
                 msg_sender,
                 cmd_receiver,
                 running_clone,
+                active_tcp_clone,
                 auto_reconnect,
                 max_reconnect_attempts,
             );
@@ -66,6 +71,7 @@ impl SyncClient {
         Ok(Self {
             running,
             cmd_sender,
+            active_tcp,
             thread_handle: Some(handle),
         })
     }
@@ -82,10 +88,15 @@ impl SyncClient {
         self.cmd_sender.clone()
     }
 
-    /// Stops the client thread cleanly.
+    /// Stops the client thread cleanly and immediately shuts down the underlying TCP connection.
     pub fn stop(&mut self) {
         self.running.store(false, Ordering::SeqCst);
         let _ = self.cmd_sender.send(ClientCommand::Stop);
+        if let Ok(mut guard) = self.active_tcp.lock() {
+            if let Some(stream) = guard.take() {
+                let _ = stream.shutdown(std::net::Shutdown::Both);
+            }
+        }
         if let Some(handle) = self.thread_handle.take() {
             let _ = handle.join();
         }
@@ -96,6 +107,7 @@ impl SyncClient {
         msg_sender: Sender<ClientMessage>,
         cmd_receiver: Receiver<ClientCommand>,
         running: Arc<AtomicBool>,
+        active_tcp: Arc<Mutex<Option<TcpStream>>>,
         auto_reconnect: bool,
         max_reconnect_attempts: usize,
     ) {
@@ -116,9 +128,14 @@ impl SyncClient {
                     attempts = 0;
                     let _ = msg_sender.send(ClientMessage::Status("CONNECTED".to_string()));
 
-                    // Set underlying TCP stream read timeout for non-blocking command checking
+                    // Set underlying TCP stream read timeout and store cloned handle for instant shutdown
                     if let tungstenite::stream::MaybeTlsStream::Plain(ref s) = socket.get_ref() {
                         let _ = s.set_read_timeout(Some(Duration::from_millis(100)));
+                        if let Ok(cloned) = s.try_clone() {
+                            if let Ok(mut guard) = active_tcp.lock() {
+                                *guard = Some(cloned);
+                            }
+                        }
                     }
 
                     while running.load(Ordering::Relaxed) {
@@ -136,6 +153,11 @@ impl SyncClient {
                                 }
                                 ClientCommand::Stop => {
                                     let _ = socket.close(None);
+                                    if let Ok(mut guard) = active_tcp.lock() {
+                                        if let Some(s) = guard.take() {
+                                            let _ = s.shutdown(std::net::Shutdown::Both);
+                                        }
+                                    }
                                     let _ = msg_sender.send(ClientMessage::Disconnected);
                                     return;
                                 }
@@ -177,6 +199,9 @@ impl SyncClient {
                                 continue;
                             }
                             Err(e) => {
+                                if !running.load(Ordering::Relaxed) {
+                                    break;
+                                }
                                 let _ = msg_sender.send(ClientMessage::Status(format!(
                                     "Connection error: {}",
                                     e
@@ -184,6 +209,11 @@ impl SyncClient {
                                 break;
                             }
                         }
+                    }
+
+                    // Clear active TCP reference on disconnect/loop exit
+                    if let Ok(mut guard) = active_tcp.lock() {
+                        *guard = None;
                     }
                 }
                 Err(e) => {
@@ -206,7 +236,19 @@ impl SyncClient {
                 && auto_reconnect
                 && attempts <= max_reconnect_attempts
             {
-                thread::sleep(Duration::from_millis(1500));
+                // Non-blocking backoff: wake up immediately if Stop command received
+                match cmd_receiver.recv_timeout(Duration::from_millis(1500)) {
+                    Ok(ClientCommand::Stop) => {
+                        let _ = msg_sender.send(ClientMessage::Disconnected);
+                        return;
+                    }
+                    Ok(ClientCommand::Send(_)) => {}
+                    Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
+                    Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
+                        let _ = msg_sender.send(ClientMessage::Disconnected);
+                        return;
+                    }
+                }
             } else {
                 break;
             }

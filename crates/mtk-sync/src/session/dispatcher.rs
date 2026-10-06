@@ -18,6 +18,8 @@ pub fn event_worker_loop(
     stream_id_atomic: Arc<AtomicU32>,
     sync_requested: Arc<AtomicBool>,
     running: Arc<AtomicBool>,
+    is_connected: Arc<AtomicBool>,
+    status_lock: Arc<std::sync::RwLock<String>>,
 ) {
     let mut stream_total_sections: usize = 0;
     let mut stream_received_sections: usize = 0;
@@ -29,9 +31,19 @@ pub fn event_worker_loop(
     while running.load(Ordering::Relaxed) {
         match msg_receiver.recv_timeout(std::time::Duration::from_millis(50)) {
             Ok(ClientMessage::Status(status)) => {
+                let conn = status == "CONNECTED";
+                is_connected.store(conn, Ordering::SeqCst);
+                if let Ok(mut guard) = status_lock.write() {
+                    *guard = status.clone();
+                }
                 let _ = event_sender.send(SyncEvent::StatusChange(status));
             }
             Ok(ClientMessage::Disconnected) => {
+                is_connected.store(false, Ordering::SeqCst);
+                if let Ok(mut guard) = status_lock.write() {
+                    *guard = "DISCONNECTED".to_string();
+                }
+                running.store(false, Ordering::SeqCst);
                 let _ = event_sender.send(SyncEvent::StatusChange("DISCONNECTED".to_string()));
                 break;
             }
@@ -145,6 +157,12 @@ pub fn event_worker_loop(
                 let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
             }
         }
+    }
+
+    running.store(false, Ordering::SeqCst);
+    is_connected.store(false, Ordering::SeqCst);
+    if let Ok(mut guard) = status_lock.write() {
+        *guard = "DISCONNECTED".to_string();
     }
 }
 
