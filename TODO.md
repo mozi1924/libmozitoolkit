@@ -89,3 +89,26 @@
 - [x] **跨语言 C-ABI FFI 与 WebAssembly 绑定 (`mtk-ffi` / `mtk-wasm` - P2)**
   - [x] 导出标准 C 头文件 (`mtk.h`)，为 Maya、Houdini、C# (Unity)、Godot 扩展预备。
   - [x] 导出 WebGPU / WebAssembly 零拷贝 TypedArray 视图，为 Web 端预览工具预备。
+
+---
+
+## 阶段六：通用二进制中间包与场景交换容器 (`mtk-package` / 规范已就绪 📋 / 待实现 🚧)
+- [x] **规范与容器架构设计（✅ 已落地）**
+  - [x] 确立统一 Header (64B) + 块级 Zstd 压缩 TOC + 64 字节内存对齐规范（详见 [`docs/PACKAGE_SPEC.md`](docs/PACKAGE_SPEC.md)）。
+  - [x] 确立两大业务 Profile：`AssetCache` (`.mtkcache`) 与 `SceneInterchange` (`.mtkscene`)。
+- [ ] **通用二进制容器编解码器 (`crates/mtk-resource::package` 或独立 crate)**
+  - [ ] 实现 `MtkPackageWriter`：流式 Chunk 写入、自动 64 字节边界 Padding、Zstd 块压缩与 xxHash64/CRC32 校验码计算。
+  - [ ] 实现 `MtkPackageReader`：基于 `memmap2` 零内存拷贝打开、Header 校验、TOC 解析与单 Chunk 懒加载。
+- [ ] **全量资产预编译缓存打包迁移 (`libmtk::prebake`)**
+  - [ ] `precompile_all_assets_to_package`：将图集切片、Standalone PBR 贴图、`models.bin`、Biome 映射表打包为单一 `.mtkcache` 文件。
+  - [ ] 提供解包/就地挂载能力，完全替代文件系统散文件展开，降低磁盘 I/O 碎片与复制开销。
+- [ ] **自包含轻量场景交换包管线 (`mtk-voxel::package`)**
+  - [ ] **导出端按需剪枝 (`export_scene_package`)**：
+    - [ ] 扫描所选体素世界的 BlockState，提取最小依赖模型与独立贴图闭包（Tree-shaking）。
+    - [ ] 稀疏 16×16×16 Section 游程编码 (RLE) 与位打包写入 `VOXL` Chunk。
+    - [ ] 独立贴图去重写入 `TXTR` Chunk（严禁存固化图集，保留原始高画质/PBR伴生图）。
+  - [ ] **导入端现场重构 (`import_scene_package`)**：
+    - [ ] 读取 `VOXL` 填充 `VoxelStorage`。
+    - [ ] 内存现场构建场景专属微型图集（On-the-fly Atlas）或独立材质槽。
+    - [ ] 执行 `SectionMesher` 动态重构世界几何并零拷贝灌入宿主网格。
+

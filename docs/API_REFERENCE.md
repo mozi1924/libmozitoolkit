@@ -180,4 +180,15 @@ cache_output_dir/
   - `SaveLoader::load_box_into_storage_with_progress(...)`: 在遍历 Anvil MCA 区域与解压 Chunk NBT 期间实时汇报 `load_chunks` 物理进度，使世界存档导入在 MCA 解压与网格构建全流程透明可见。
   - `libmtk::precompile_all_assets_with_progress(...)` / `prebake_all_models_with_progress(...)`: 在端到端材质与资产预编译流程中，按阶段分发真实物理计数（`prebake_biome`、`prebake_atlas`、`prebake_standalone`、`prebake_models`、`prebake_manifest`），使图集拼接、独立材质对齐与模型变体烘焙全流程实时反馈在 DCC 宿主底栏。
 
+---
+
+### 2.9 通用二进制包与场景交换契约 (`MTKP` / Package Specification)
+为了根除散文件磁盘 I/O 碎片，并在 Minecraft 场景交换中彻底避免传统 3D 网格的“几何爆炸”，系统定义了统一的通用二进制中间包契约：
+- **`Header & TOC` 架构**：固定 64 字节文件头、64 字节对齐分块、Zstd 块级压缩索引表，支持 `mmap` 零内存开销快速寻址。
+- **两大业务 Profile**：
+  1. **`AssetCache Profile` (`.mtkcache`)**：存储全量预烘焙图集、Standalone PBR 贴图库与全局模型数据库。
+  2. **`SceneInterchange Profile` (`.mtkscene`)**：轻量级自包含场景交换包。仅存储稀疏体素网格（`VOXL`）、场景实际引用的独立贴图（`TXTR`，非固化图集）与剪枝方块模型（`MODL`），由接收方现场根据宿主配置实时重构网格。
+- 完整规范定义参见：[**`docs/PACKAGE_SPEC.md`**](./PACKAGE_SPEC.md)。
+
+
 

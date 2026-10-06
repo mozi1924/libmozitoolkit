@@ -118,6 +118,16 @@ Rust 处理内核 (libmtk)
 
 宿主端通过指针与长度（或 Python Buffer Protocol `memoryview` / JS `TypedArray`）直接读取，并在宿主内部调用专有场景 API 批量构建，杜绝逐元素低效循环。
 
+### 4.2 二进制中间包与场景交换规范 (MTK Package Specification)
+
+为了解决全量散文件缓存的 I/O 碎片痛点，以及传统 3D 网格交换格式在 Minecraft 场景下的“几何膨胀”问题，系统定义了统一的 **MTK 二进制容器标准 (`.mtk` / `.mtkpack` / `.mtkscene`)**：
+- **统一底层物理布局**：固定 64 字节 Header + 64 字节对齐 Chunk Payloads + 块级 Zstd 压缩 TOC；
+- **两大业务 Profile**：
+  1. **`AssetCache Profile` (`.mtkcache`)**：承载全量预烘焙图集、Standalone PBR 贴图库与全局模型数据库；
+  2. **`SceneInterchange Profile` (`.mtkscene`)**：轻量场景交换格式。**不存全量网格**（仅存稀疏体素网格），**不存固化图集**（仅存场景引用的独立材质贴图），**按需剪枝模型**，由接收方现场根据宿主配置实时重构网格与生成图集。
+
+详细物理字段、Chunk 协议与重构管线参见专属技术规范：[**`docs/PACKAGE_SPEC.md`**](./PACKAGE_SPEC.md)。
+
 ---
 
 ## 5. 内部模块化解耦与文件组织规范 (Modularization Standards)
