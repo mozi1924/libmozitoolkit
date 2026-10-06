@@ -139,14 +139,8 @@ impl FlatPolygonMesh {
         face_loop_totals: Vec<u32>,
         face_materials: Vec<u32>,
     ) -> Self {
-        let positions = positions_flat
-            .chunks_exact(3)
-            .map(|c| [c[0], c[1], c[2]])
-            .collect();
-        let loop_uvs = loop_uvs_flat
-            .chunks_exact(2)
-            .map(|c| [c[0], c[1]])
-            .collect();
+        let positions = positions_flat.as_chunks::<3>().0.to_vec();
+        let loop_uvs = loop_uvs_flat.as_chunks::<2>().0.to_vec();
         Self {
             positions,
             loop_vertices,

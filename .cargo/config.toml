@@ -1,11 +1,38 @@
-# macOS: Python extension modules must not link libpython; resolve symbols
-# from the host interpreter (e.g. Blender) at load time.
+# ==============================================================================
+# Cross-Platform Python Extension Linking (PyO3 + Blender dev-mode)
+# ==============================================================================
+# macOS: Mach-O linker enforces two-level namespace resolution by default and
+# rejects undefined symbols. When building with pyo3/extension-module, libpython
+# is NOT linked. To allow symbols (e.g. PyType_Ready) to be resolved dynamically
+# from the host interpreter (Blender) at runtime via dlopen, we must supply
+# `-undefined dynamic_lookup`.
 [target.aarch64-apple-darwin]
 rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
 
 [target.x86_64-apple-darwin]
 rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
 
+# Linux: ELF shared objects (.so) default to `--allow-shlib-undefined`. Undefined
+# symbols are preserved in the dynamic symbol table and resolved by `ld.so` at
+# dlopen runtime from the host executable (Blender). No extra rustflags are required.
+
+# Windows: Windows PE/COFF (.dll) does not support undefined symbols. PyO3 handles
+# this via Rust's `raw-dylib` feature (`#[link(name = "python3", kind = "raw-dylib")]`)
+# linking to Blender's bundled `python3.dll`. Python requires the extension file
+# to be named `.pyd` (handled automatically by `MoziToolKit/dev/loader.py`).
+
+# ==============================================================================
+# WASM Configuration
+# ==============================================================================
 # getrandom 0.3 requires an explicit backend on wasm32-unknown-unknown.
 [target.wasm32-unknown-unknown]
 rustflags = ["--cfg", 'getrandom_backend="wasm_js"']
+
+# ==============================================================================
+# Standardized Developer Aliases
+# ==============================================================================
+[alias]
+# Builds the dev-mode Python extension module for direct symlinking into Blender
+build-py = "build --release -p mtk-py --features extension-module"
+build-py-dev = "build -p mtk-py --features extension-module"
+

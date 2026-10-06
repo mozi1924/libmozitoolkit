@@ -43,7 +43,7 @@
 - 当需要使用 `maturin` 编译 Python 绑定轮子（Wheel, `.whl`）或进行 Python 绑定调试时，**必须严格使用工作区内的虚拟环境（如 `./.venv`）**。
 - 若当前工作区内不存在虚拟环境，**必须首先在工作区根目录下创建专属虚拟环境**（如 `python3 -m venv .venv`），并在该虚拟环境中安装 `maturin`，严禁污染或依赖宿主系统全局环境。
 - **开发态直通与发布态隔离 (Dev Direct-Link vs Release Wheel Isolation)**：
-  - **日常开发态 (Dev Direct Link)**：`cargo build --release -p mtk-py --features extension-module` 产出 `target/release/liblibmtk_py.so`。通过软链接（`MoziToolKit/dev/lib/libmtk_py.so`）直接打通 Blender 宿主，代码改动后 Blender 重载插件即可即时生效，严禁在开发期频繁构建或安装轮子。
+  - **日常开发态 (Dev Direct Link)**：使用 `cargo build-py`（等价于 `cargo build --release -p mtk-py --features extension-module`）产出 `target/release/liblibmtk_py.so`。通过软链接（`MoziToolKit/dev/lib/libmtk_py.so`）直接打通 Blender 宿主，代码改动后 Blender 重载插件即可即时生效，严禁在开发期频繁构建或安装轮子。
   - **发布态 (Release Packaging)**：对外正式打包时通过 `maturin build --release` 产出符合 CPython 3.11+ 标准 ABI (`abi3`) 的规范 Wheel 包，由 `MoziToolKit/build.py` 在发布阶段统一装配并隔离。
   - **严禁将编译产物直接安装（`pip install`）到宿主系统的全局 Python 或 Blender 全局 `bpy` 环境中**，杜绝破坏环境隔离与沙箱完整性。
 
