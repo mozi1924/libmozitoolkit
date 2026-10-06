@@ -24,11 +24,8 @@ impl RgbaBuffer {
     /// Create a new buffer filled with a solid RGBA color.
     pub fn solid(width: u32, height: u32, r: u8, g: u8, b: u8, a: u8) -> Self {
         let mut buf = Self::new(width, height);
-        for chunk in buf.pixels.chunks_exact_mut(4) {
-            chunk[0] = r;
-            chunk[1] = g;
-            chunk[2] = b;
-            chunk[3] = a;
+        for chunk in buf.pixels.as_chunks_mut::<4>().0 {
+            *chunk = [r, g, b, a];
         }
         buf
     }

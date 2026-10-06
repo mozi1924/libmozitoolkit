@@ -94,3 +94,32 @@ jobs:
         run: |
           python -m pip install dist/*.whl
           python -c "import libmtk_py; print('libmtk_py', libmtk_py.version())"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libmtk-py-wheel
+          path: dist/*.whl
+
+  # Publishes the manylinux abi3 wheel to a rolling `ci-latest` pre-release so that
+  # downstream consumers (MoziToolKit CI) can fetch a real packaged artifact via a fast
+  # GitHub-internal download instead of rebuilding the Rust workspace.
+  publish-wheel:
+    name: Publish rolling ci-latest wheel
+    needs: python-wheel
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: libmtk-py-wheel
+          path: dist
+      - name: Upload wheel to ci-latest pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view ci-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create ci-latest --repo "$GITHUB_REPOSITORY" --prerelease \
+              --title "CI rolling wheel (ci-latest)" \
+              --notes "Automated abi3 wheel built from main. Not a published release."
+          gh release upload ci-latest dist/*.whl --repo "$GITHUB_REPOSITORY" --clobber
