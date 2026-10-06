@@ -22,7 +22,6 @@ pub mod voxel;
 use pyo3::prelude::*;
 
 pub use cull::PyFaceCuller;
-pub use save::PyLevelData;
 pub use material::{
     blend_biome_colors, classify_tint_category, compute_biome_tint_attributes, get_all_biomes,
     get_biome_meta, sample_colormap_pixel, PyBiomeResolver, PyGridAtlasSpec, PyMaterialResolver,
@@ -31,8 +30,11 @@ pub use mesh::{PyAttributeDomain, PyMeshData};
 pub use mesher::PySectionMesher;
 pub use model::{PyBakedModelDatabase, PyModelBaker};
 pub use point_cloud::PyVoxelPointCloud;
-pub use protocol::{decode_packet, encode_full_sync_request, encode_repair_requests, encode_sync_config};
+pub use protocol::{
+    decode_packet, encode_full_sync_request, encode_repair_requests, encode_sync_config,
+};
 pub use resource::{precompile_all_assets, PyPrecompileResult, PyResourcePackStack};
+pub use save::PyLevelData;
 pub use sync::PyLiveSyncSession;
 pub use texture::{PyAtlasBuilder, PyBakedAtlas, PyStandaloneBuilder, PyStandaloneResult};
 pub use voxel::{create_debug_world_storage, PyMesherConfig, PyVoxelStorage, PyVoxelWorld};
@@ -52,7 +54,11 @@ pub fn process_mesh<'py>(
     aliases: Option<std::collections::HashMap<String, Vec<String>>>,
     generate_secondary_uv: bool,
     grid_atlas_spec: Option<&PyGridAtlasSpec>,
-) -> PyResult<(PyMeshData, Bound<'py, pyo3::types::PyList>, Bound<'py, pyo3::types::PyDict>)> {
+) -> PyResult<(
+    PyMeshData,
+    Bound<'py, pyo3::types::PyList>,
+    Bound<'py, pyo3::types::PyDict>,
+)> {
     let cfg = libmtk::MeshPipelineConfig {
         custom_aliases: aliases,
         generate_secondary_uv,
@@ -60,7 +66,8 @@ pub fn process_mesh<'py>(
     };
 
     let addr_map = atlas.map(|a| &a.inner.address_map);
-    let output = py.allow_threads(|| libmtk::process_mesh(&mesh.inner, &material_names, addr_map, &cfg));
+    let output =
+        py.allow_threads(|| libmtk::process_mesh(&mesh.inner, &material_names, addr_map, &cfg));
 
     // Build material metadata list
     let mat_list = pyo3::types::PyList::empty(py);
@@ -99,7 +106,10 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMeshData>()?;
     m.add_function(wrap_pyfunction!(process_mesh, m)?)?;
     m.add_function(wrap_pyfunction!(subdivide::calculate_face_target_grid, m)?)?;
-    m.add_function(wrap_pyfunction!(subdivide::calculate_pixel_grid_cut_factors, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        subdivide::calculate_pixel_grid_cut_factors,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(subdivide::slice_face_by_pixel_grid, m)?)?;
     m.add_function(wrap_pyfunction!(subdivide::adaptive_pixel_split_mesh, m)?)?;
 
@@ -134,8 +144,14 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(precompile_all_assets, m)?)?;
     m.add_function(wrap_pyfunction!(texture::sample_uv_alpha_f32, m)?)?;
     m.add_function(wrap_pyfunction!(texture::is_face_transparent_f32, m)?)?;
-    m.add_function(wrap_pyfunction!(texture::batch_analyze_transparent_faces_f32, m)?)?;
-    m.add_function(wrap_pyfunction!(texture::batch_analyze_transparent_faces_u8, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        texture::batch_analyze_transparent_faces_f32,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        texture::batch_analyze_transparent_faces_u8,
+        m
+    )?)?;
 
     // 7. Material & UV Remapper & Biome
     m.add_class::<PyGridAtlasSpec>()?;
@@ -156,11 +172,20 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(material::get_block_emission_strength, m)?)?;
     m.add_function(wrap_pyfunction!(material::is_thin_wall_block, m)?)?;
     m.add_function(wrap_pyfunction!(material::is_transmissive_block, m)?)?;
-    m.add_function(wrap_pyfunction!(material::get_block_transmission_weight, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        material::get_block_transmission_weight,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(material::get_block_sticker_threshold, m)?)?;
     m.add_function(wrap_pyfunction!(material::register_material_properties, m)?)?;
-    m.add_function(wrap_pyfunction!(material::load_material_properties_replace, m)?)?;
-    m.add_function(wrap_pyfunction!(material::reset_material_properties_to_default, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        material::load_material_properties_replace,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        material::reset_material_properties_to_default,
+        m
+    )?)?;
 
     // 8. Model Baker
     m.add_class::<PyModelBaker>()?;
@@ -185,7 +210,10 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(uv::repair_extruded_side_uv, m)?)?;
     m.add_function(wrap_pyfunction!(uv::generate_random_extrude_heights, m)?)?;
     m.add_function(wrap_pyfunction!(extrude::process_mesh_extrude_repair, m)?)?;
-    m.add_function(wrap_pyfunction!(extrude::process_flat_mesh_extrude_repair, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        extrude::process_flat_mesh_extrude_repair,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(extrude::process_random_extrude_mesh, m)?)?;
 
     // 10. Minecraft Save Loader
@@ -199,7 +227,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -242,19 +269,31 @@ mod tests {
             assert_eq!(storage.dirty_section_count(), 1);
 
             let config = PyMesherConfig::default();
-            let mesh = PySectionMesher::mesh_world(py, &storage, Some(&config), None, None).unwrap();
+            let mesh =
+                PySectionMesher::mesh_world(py, &storage, Some(&config), None, None).unwrap();
             assert!(!mesh.is_empty());
             assert_eq!(mesh.vertex_count(), 8); // 8 vertices for welded unit cube
 
             let mut unwelded_config = PyMesherConfig::default();
             unwelded_config.inner.weld_vertices = false;
-            let unwelded_mesh = PySectionMesher::mesh_world(py, &storage, Some(&unwelded_config), None, None).unwrap();
+            let unwelded_mesh =
+                PySectionMesher::mesh_world(py, &storage, Some(&unwelded_config), None, None)
+                    .unwrap();
             assert_eq!(unwelded_mesh.vertex_count(), 24); // 6 faces * 4 verts for isolated unwelded block
 
-            let dict = PySectionMesher::mesh_sections_split(py, &storage, Some(&config), None, None).unwrap();
+            let dict =
+                PySectionMesher::mesh_sections_split(py, &storage, Some(&config), None, None)
+                    .unwrap();
             assert_eq!(dict.len(), 1);
 
-            let rebuilt = PySectionMesher::rebuild_dirty_sections(py, &mut storage, Some(&config), None, None).unwrap();
+            let rebuilt = PySectionMesher::rebuild_dirty_sections(
+                py,
+                &mut storage,
+                Some(&config),
+                None,
+                None,
+            )
+            .unwrap();
             assert_eq!(rebuilt.len(), 1);
             assert_eq!(storage.dirty_section_count(), 0);
         });
@@ -266,16 +305,18 @@ mod tests {
         Python::with_gil(|py| {
             // Test packet decode
             let pkt_bytes = [
-                0x4D, 0x43, 0x01, 0x01,
-                0x00, 0x00, 0x00, 0x00,
-                0x40, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00,
-                0x10, 0x00, 0x00, 0x00,
-                0x10, 0x00, 0x00, 0x00,
-                0x10, 0x00, 0x00, 0x00,
+                0x4D, 0x43, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00,
             ];
             let dict = decode_packet(py, &pkt_bytes).unwrap();
-            assert_eq!(dict.get_item("type").unwrap().unwrap().extract::<String>().unwrap(), "SELECTION_INFO");
+            assert_eq!(
+                dict.get_item("type")
+                    .unwrap()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "SELECTION_INFO"
+            );
 
             // Test session
             let session = PyLiveSyncSession::new(None, None, None, true);
@@ -288,18 +329,8 @@ mod tests {
     fn test_python_process_mesh_end_to_end() {
         pyo3::prepare_freethreaded_python();
         Python::with_gil(|py| {
-            let positions = vec![
-                0.0, 0.0, 0.0,
-                1.0, 0.0, 0.0,
-                1.0, 1.0, 0.0,
-                0.0, 1.0, 0.0,
-            ];
-            let uvs = vec![
-                0.0, 0.0,
-                1.0, 0.0,
-                1.0, 1.0,
-                0.0, 1.0,
-            ];
+            let positions = vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0];
+            let uvs = vec![0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0];
             let indices = vec![0, 1, 2, 0, 2, 3];
             let mesh = PyMeshData::from_raw_buffers(positions, uvs, indices, None, None).unwrap();
             assert_eq!(mesh.vertex_count(), 4);
@@ -339,19 +370,20 @@ mod tests {
             let atlas = PyBakedAtlas::from_mapping_json(mapping_json).unwrap();
             let mat_names = vec!["Tile_Stone".to_string(), "Tile_Stone".to_string()];
 
-            let (out_mesh, mats, stats) = process_mesh(
-                py,
-                &mesh,
-                mat_names,
-                Some(&atlas),
-                None,
-                true,
-                None,
-            ).unwrap();
+            let (out_mesh, mats, stats) =
+                process_mesh(py, &mesh, mat_names, Some(&atlas), None, true, None).unwrap();
 
             assert_eq!(out_mesh.vertex_count(), 4);
             assert_eq!(mats.len(), 2);
-            assert_eq!(stats.get_item("resolved_slots").unwrap().unwrap().extract::<usize>().unwrap(), 2);
+            assert_eq!(
+                stats
+                    .get_item("resolved_slots")
+                    .unwrap()
+                    .unwrap()
+                    .extract::<usize>()
+                    .unwrap(),
+                2
+            );
             let sec_uvs = out_mesh.secondary_uvs_memoryview(py).unwrap();
             assert!(sec_uvs.is_some());
         });
@@ -391,7 +423,10 @@ mod tests {
         assert_eq!(loc, (0.0, 0.0, 0.0));
 
         assert!(!uv::uv_requires_atlas_tiling(quad, 1e-4));
-        assert_eq!(uv::restore_atlas_tiling_uv(0.5, 0.5, (1.0, 1.0, 1.0), (0.0, 0.0, 0.0), 0.0), (0.5, 0.5));
+        assert_eq!(
+            uv::restore_atlas_tiling_uv(0.5, 0.5, (1.0, 1.0, 1.0), (0.0, 0.0, 0.0), 0.0),
+            (0.5, 0.5)
+        );
 
         let verts = vec![
             (0.0, 0.0, 1.0),
@@ -399,13 +434,9 @@ mod tests {
             (0.0, 0.2, 0.0),
             (0.0, 0.8, 1.0),
         ];
-        let inv_uvs = vec![
-            (1.0, 0.0),
-            (0.0, 0.0),
-            (0.0, 0.8),
-            (1.0, 0.2),
-        ];
-        let (repaired, out_uvs) = uv::repair_quad_fluid_uv(verts, inv_uvs, None, false, 0.005).unwrap();
+        let inv_uvs = vec![(1.0, 0.0), (0.0, 0.0), (0.0, 0.8), (1.0, 0.2)];
+        let (repaired, out_uvs) =
+            uv::repair_quad_fluid_uv(verts, inv_uvs, None, false, 0.005).unwrap();
         assert!(repaired);
         assert!((out_uvs[2].1 - 0.2).abs() < 1e-5);
         assert!((out_uvs[3].1 - 0.8).abs() < 1e-5);
@@ -421,19 +452,24 @@ mod tests {
         // Test batch_repair_fluid_uv with Python list & zero-copy buffer
         pyo3::prepare_freethreaded_python();
         Python::with_gil(|py| {
-            let verts_flat = pyo3::types::PyList::new(py, &[
-                0.0f32, 0.0, 1.0,
-                0.0, 0.0, 0.0,
-                0.0, 0.2, 0.0,
-                0.0, 0.8, 1.0,
-            ]).unwrap();
-            let uvs_flat = pyo3::types::PyList::new(py, &[
-                1.0f32, 0.0,
-                0.0, 0.0,
-                0.0, 0.8,
-                1.0, 0.2,
-            ]).unwrap();
-            let (count, out_uvs) = uv::batch_repair_fluid_uv(py, verts_flat.as_any(), uvs_flat.as_any(), None, false, 0.005).unwrap();
+            let verts_flat = pyo3::types::PyList::new(
+                py,
+                [
+                    0.0f32, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.8, 1.0,
+                ],
+            )
+            .unwrap();
+            let uvs_flat =
+                pyo3::types::PyList::new(py, [1.0f32, 0.0, 0.0, 0.0, 0.0, 0.8, 1.0, 0.2]).unwrap();
+            let (count, out_uvs) = uv::batch_repair_fluid_uv(
+                py,
+                verts_flat.as_any(),
+                uvs_flat.as_any(),
+                None,
+                false,
+                0.005,
+            )
+            .unwrap();
             assert_eq!(count, 1);
             let out_vec: Vec<f32> = out_uvs.extract().unwrap();
             assert!((out_vec[5] - 0.2).abs() < 1e-5);
@@ -442,10 +478,16 @@ mod tests {
             // Test with zero-copy array.array('f') buffer
             let py_code = "import array\nverts = array.array('f', [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.8, 1.0])\nuvs = array.array('f', [1.0, 0.0, 0.0, 0.0, 0.0, 0.8, 1.0, 0.2])\n";
             let locals = pyo3::types::PyDict::new(py);
-            py.run(&std::ffi::CString::new(py_code).unwrap(), None, Some(&locals)).unwrap();
+            py.run(
+                &std::ffi::CString::new(py_code).unwrap(),
+                None,
+                Some(&locals),
+            )
+            .unwrap();
             let py_verts = locals.get_item("verts").unwrap().unwrap();
             let py_uvs = locals.get_item("uvs").unwrap().unwrap();
-            let (b_count, _) = uv::batch_repair_fluid_uv(py, &py_verts, &py_uvs, None, false, 0.005).unwrap();
+            let (b_count, _) =
+                uv::batch_repair_fluid_uv(py, &py_verts, &py_uvs, None, false, 0.005).unwrap();
             let uvs_after: Vec<f32> = py_uvs.extract().unwrap();
             assert_eq!(b_count, 1);
             // Verify in-place mutation
@@ -477,13 +519,9 @@ mod tests {
                 [1.0, 1.0, 0.0],
                 [-1.0, 1.0, 0.0],
             ];
-            let uvs = vec![
-                [0.5, 0.0],
-                [1.0, 0.5],
-                [0.5, 1.0],
-                [0.0, 0.5],
-            ];
-            let (pos, out_uvs, faces, params) = subdivide::slice_face_by_pixel_grid(py, positions, uvs, 16, 16, 1.0, 64);
+            let uvs = vec![[0.5, 0.0], [1.0, 0.5], [0.5, 1.0], [0.0, 0.5]];
+            let (pos, out_uvs, faces, params) =
+                subdivide::slice_face_by_pixel_grid(py, positions, uvs, 16, 16, 1.0, 64);
             assert!(!faces.is_empty());
             assert_eq!(pos.len(), out_uvs.len());
             assert_eq!(pos.len(), params.len());
@@ -494,15 +532,16 @@ mod tests {
     fn test_python_save_bindings() {
         pyo3::prepare_freethreaded_python();
         Python::with_gil(|_py| {
-            let test_path = "/home/mozi/.minecraft/versions/26.2-Fabric/saves/New World";
-            if std::path::Path::new(test_path).exists() {
-                let info = save::inspect_minecraft_save(test_path).unwrap();
-                assert_eq!(info.level_name(), "New World");
-                assert!(info.data_version() >= 2844);
-                assert!(!info.dimensions().is_empty());
-                println!("Python save inspect: {:?}", info);
-            }
+            let Some(test_save_path) = mtk_testkit::save_world() else {
+                eprintln!("Skipping: no Minecraft save available (set MTK_TEST_SAVE)");
+                return;
+            };
+            let test_path = test_save_path.to_string_lossy().to_string();
+            let info = save::inspect_minecraft_save(&test_path).expect("Failed to inspect save");
+            assert!(!info.level_name().is_empty());
+            assert!(info.data_version() >= 2844);
+            assert!(!info.dimensions().is_empty());
+            println!("Python save inspect: {:?}", info);
         });
     }
 }
-

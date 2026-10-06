@@ -6,7 +6,10 @@ use pyo3::types::{PyBytes, PyList, PyMemoryView};
 use super::PyMeshData;
 
 /// Read-only memoryview of vertex positions as raw bytes (`float32 * 3` per vertex).
-pub fn positions_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+pub fn positions_memoryview<'py>(
+    mesh: &PyMeshData,
+    py: Python<'py>,
+) -> PyResult<Bound<'py, PyMemoryView>> {
     if mesh.inner.positions.is_empty() {
         let bytes = PyBytes::new(py, &[]);
         return PyMemoryView::from(&bytes);
@@ -22,7 +25,10 @@ pub fn positions_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult
 }
 
 /// Read-only memoryview of vertex normals as raw bytes (`float32 * 3` per vertex).
-pub fn normals_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+pub fn normals_memoryview<'py>(
+    mesh: &PyMeshData,
+    py: Python<'py>,
+) -> PyResult<Bound<'py, PyMemoryView>> {
     if mesh.inner.normals.is_empty() {
         let bytes = PyBytes::new(py, &[]);
         return PyMemoryView::from(&bytes);
@@ -38,7 +44,10 @@ pub fn normals_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<B
 }
 
 /// Read-only memoryview of vertex UV coordinates as raw bytes (`float32 * 2` per vertex).
-pub fn uvs_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+pub fn uvs_memoryview<'py>(
+    mesh: &PyMeshData,
+    py: Python<'py>,
+) -> PyResult<Bound<'py, PyMemoryView>> {
     if mesh.inner.uvs.is_empty() {
         let bytes = PyBytes::new(py, &[]);
         return PyMemoryView::from(&bytes);
@@ -54,7 +63,10 @@ pub fn uvs_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Bound
 }
 
 /// Read-only memoryview of secondary normalized [0, 1] vertex UVs (if generated).
-pub fn secondary_uvs_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
+pub fn secondary_uvs_memoryview<'py>(
+    mesh: &PyMeshData,
+    py: Python<'py>,
+) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
     if let Some(ref sec_uvs) = mesh.inner.secondary_uvs {
         if sec_uvs.is_empty() {
             return Ok(None);
@@ -73,7 +85,10 @@ pub fn secondary_uvs_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyRe
 }
 
 /// Flattened secondary vertex UVs `[u0, v0, u1, v1, ...]`.
-pub fn get_flat_secondary_uvs<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Option<Bound<'py, PyList>>> {
+pub fn get_flat_secondary_uvs<'py>(
+    mesh: &PyMeshData,
+    py: Python<'py>,
+) -> PyResult<Option<Bound<'py, PyList>>> {
     if let Some(ref sec_uvs) = mesh.inner.secondary_uvs {
         let mut flat = Vec::with_capacity(sec_uvs.len() * 2);
         for uv in sec_uvs {
@@ -87,7 +102,10 @@ pub fn get_flat_secondary_uvs<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResu
 }
 
 /// Read-only memoryview of triangle indices as raw bytes (`uint32` per index).
-pub fn indices_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+pub fn indices_memoryview<'py>(
+    mesh: &PyMeshData,
+    py: Python<'py>,
+) -> PyResult<Bound<'py, PyMemoryView>> {
     if mesh.inner.indices.is_empty() {
         let bytes = PyBytes::new(py, &[]);
         return PyMemoryView::from(&bytes);
@@ -103,7 +121,10 @@ pub fn indices_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<B
 }
 
 /// Read-only memoryview of quad indices as raw bytes (`uint32` per index) if quads are recorded.
-pub fn quad_indices_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
+pub fn quad_indices_memoryview<'py>(
+    mesh: &PyMeshData,
+    py: Python<'py>,
+) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
     if let Some(ref quads) = mesh.inner.quad_indices {
         if quads.is_empty() {
             return Ok(None);
@@ -123,7 +144,10 @@ pub fn quad_indices_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyRes
 
 /// Read-only memoryview of expanded per-loop UV coordinates (`float32 * 2` per loop)
 /// aligned directly with Blender's polygon loops.
-pub fn loop_uvs_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+pub fn loop_uvs_memoryview<'py>(
+    mesh: &PyMeshData,
+    py: Python<'py>,
+) -> PyResult<Bound<'py, PyMemoryView>> {
     let is_quad = mesh.inner.quad_indices.is_some()
         || (!mesh.inner.indices.is_empty()
             && mesh.inner.indices.len() % 6 == 0
@@ -152,7 +176,7 @@ pub fn loop_uvs_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<
         let byte_slice = unsafe {
             std::slice::from_raw_parts(
                 uvs_flat.as_ptr() as *const u8,
-                uvs_flat.len() * std::mem::size_of::<f32>(),
+                std::mem::size_of_val(uvs_flat),
             )
         };
         let bytes = PyBytes::new(py, byte_slice);
@@ -206,7 +230,10 @@ pub fn loop_uvs_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<
 }
 
 /// Read-only memoryview of polygon loop start offsets (`int32` per polygon) for Blender direct topology injection.
-pub fn loop_starts_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+pub fn loop_starts_memoryview<'py>(
+    mesh: &PyMeshData,
+    py: Python<'py>,
+) -> PyResult<Bound<'py, PyMemoryView>> {
     let is_quad = mesh.inner.quad_indices.is_some()
         || (!mesh.inner.indices.is_empty()
             && mesh.inner.indices.len() % 6 == 0
@@ -240,7 +267,10 @@ pub fn loop_starts_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResu
 }
 
 /// Read-only memoryview of polygon loop totals (`int32` per polygon: 4 for quads, 3 for triangles).
-pub fn loop_totals_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+pub fn loop_totals_memoryview<'py>(
+    mesh: &PyMeshData,
+    py: Python<'py>,
+) -> PyResult<Bound<'py, PyMemoryView>> {
     let is_quad = mesh.inner.quad_indices.is_some()
         || (!mesh.inner.indices.is_empty()
             && mesh.inner.indices.len() % 6 == 0
@@ -271,7 +301,10 @@ pub fn loop_totals_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResu
 }
 
 /// Read-only memoryview of face material slots (`uint16` per face).
-pub fn face_materials_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+pub fn face_materials_memoryview<'py>(
+    mesh: &PyMeshData,
+    py: Python<'py>,
+) -> PyResult<Bound<'py, PyMemoryView>> {
     if mesh.inner.face_materials.is_empty() {
         let bytes = PyBytes::new(py, &[]);
         return PyMemoryView::from(&bytes);
@@ -287,7 +320,10 @@ pub fn face_materials_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyR
 }
 
 /// Read-only memoryview of face tint indices (`int8` per face).
-pub fn face_tint_indices_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+pub fn face_tint_indices_memoryview<'py>(
+    mesh: &PyMeshData,
+    py: Python<'py>,
+) -> PyResult<Bound<'py, PyMemoryView>> {
     if mesh.inner.face_tint_indices.is_empty() {
         let bytes = PyBytes::new(py, &[]);
         return PyMemoryView::from(&bytes);
@@ -303,7 +339,10 @@ pub fn face_tint_indices_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> 
 }
 
 /// Read-only memoryview of vertex RGBA colors (`float32 * 4` per vertex) if present.
-pub fn colors_memoryview<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
+pub fn colors_memoryview<'py>(
+    mesh: &PyMeshData,
+    py: Python<'py>,
+) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
     if let Some(ref cols) = mesh.inner.colors {
         if cols.is_empty() {
             return Ok(None);

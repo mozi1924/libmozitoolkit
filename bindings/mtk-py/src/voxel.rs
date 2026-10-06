@@ -15,6 +15,12 @@ pub struct PyVoxelStorage {
     pub(crate) inner: VoxelStorage,
 }
 
+impl Default for PyVoxelStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[pymethods]
 impl PyVoxelStorage {
     #[new]
@@ -75,7 +81,8 @@ impl PyVoxelStorage {
         size_y: i32,
         size_z: i32,
     ) -> bool {
-        self.inner.set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)
+        self.inner
+            .set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)
     }
 
     /// Returns the active or calculated bounding box: `(min_x, min_y, min_z, size_x, size_y, size_z)`.
@@ -198,7 +205,9 @@ impl PyVoxelStorage {
 
     /// Marks a specific section as dirty.
     pub fn mark_section_dirty(&mut self, sec_x: i32, sec_y: i32, sec_z: i32) {
-        self.inner.dirty_sections.insert(glam::IVec3::new(sec_x, sec_y, sec_z));
+        self.inner
+            .dirty_sections
+            .insert(glam::IVec3::new(sec_x, sec_y, sec_z));
     }
 
     /// Marks all existing sections dirty for a full rebuild.
@@ -286,11 +295,12 @@ impl PyVoxelStorage {
         server_sections: Vec<(i32, i32, i32, u32)>,
         existing_section_meshes: Option<Vec<(i32, i32, i32)>>,
     ) -> Vec<(i32, i32, i32)> {
-        let set: Option<std::collections::HashSet<glam::IVec3>> = existing_section_meshes.map(|list| {
-            list.into_iter()
-                .map(|(x, y, z)| glam::IVec3::new(x, y, z))
-                .collect()
-        });
+        let set: Option<std::collections::HashSet<glam::IVec3>> =
+            existing_section_meshes.map(|list| {
+                list.into_iter()
+                    .map(|(x, y, z)| glam::IVec3::new(x, y, z))
+                    .collect()
+            });
 
         self.inner
             .validate_manifest(&server_sections, set.as_ref())
@@ -301,12 +311,14 @@ impl PyVoxelStorage {
 
     /// Checks if a CRC32 matches the canonical empty air CRC for this section's clamped volume.
     pub fn is_empty_section_crc(&self, sec_x: i32, sec_y: i32, sec_z: i32, crc_val: u32) -> bool {
-        self.inner.is_empty_section_crc(glam::IVec3::new(sec_x, sec_y, sec_z), crc_val)
+        self.inner
+            .is_empty_section_crc(glam::IVec3::new(sec_x, sec_y, sec_z), crc_val)
     }
 
     /// Computes and caches CRC32 for a single section.
     pub fn calculate_and_store_section_crc(&mut self, sec_x: i32, sec_y: i32, sec_z: i32) -> u32 {
-        self.inner.calculate_and_store_section_crc(glam::IVec3::new(sec_x, sec_y, sec_z))
+        self.inner
+            .calculate_and_store_section_crc(glam::IVec3::new(sec_x, sec_y, sec_z))
     }
 
     /// Recomputes CRC32 for all sections currently loaded.
@@ -350,7 +362,10 @@ impl PyVoxelStorage {
 
     /// Extracts an unculled point cloud containing every populated voxel point.
     #[pyo3(signature = (config=None))]
-    pub fn to_point_cloud(&self, config: Option<&PyMesherConfig>) -> crate::point_cloud::PyVoxelPointCloud {
+    pub fn to_point_cloud(
+        &self,
+        config: Option<&PyMesherConfig>,
+    ) -> crate::point_cloud::PyVoxelPointCloud {
         let mesher_cfg = config.map(|c| c.inner.clone()).unwrap_or_default();
         crate::point_cloud::PyVoxelPointCloud {
             inner: self.inner.to_point_cloud(&mesher_cfg),
@@ -387,19 +402,10 @@ impl PyVoxelStorage {
 
 /// Mesher generation configuration.
 #[pyclass(name = "MesherConfig")]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PyMesherConfig {
     pub(crate) inner: MesherConfig,
     pub(crate) num_threads: Option<usize>,
-}
-
-impl Default for PyMesherConfig {
-    fn default() -> Self {
-        Self {
-            inner: MesherConfig::default(),
-            num_threads: None,
-        }
-    }
 }
 
 use std::collections::HashMap;
@@ -425,21 +431,23 @@ impl PyMesherConfig {
         enable_alternate_blocks: bool,
         enable_random_offsets: bool,
     ) -> Self {
-        let mut config = MesherConfig::default();
-        config.enable_ao = enable_ao;
-        config.mesh_fluids = mesh_fluids;
-        config.origin_centered = origin_centered;
-        config.weld_vertices = weld_vertices;
-        config.coordinate_system = if z_up_coordinates {
-            CoordinateSystem::ZUpRightHanded
-        } else {
-            CoordinateSystem::Minecraft
+        let config = MesherConfig {
+            enable_ao,
+            mesh_fluids,
+            origin_centered,
+            weld_vertices,
+            coordinate_system: if z_up_coordinates {
+                CoordinateSystem::ZUpRightHanded
+            } else {
+                CoordinateSystem::Minecraft
+            },
+            atlas_address_map: atlas.map(|a| Arc::new(a.inner.address_map.clone())),
+            biome_resolver: biome_resolver.map(|r| Arc::new(r.inner.clone())),
+            custom_aliases: custom_aliases.map(Arc::new),
+            enable_alternate_blocks,
+            enable_random_offsets,
+            ..Default::default()
         };
-        config.atlas_address_map = atlas.map(|a| Arc::new(a.inner.address_map.clone()));
-        config.biome_resolver = biome_resolver.map(|r| Arc::new(r.inner.clone()));
-        config.custom_aliases = custom_aliases.map(Arc::new);
-        config.enable_alternate_blocks = enable_alternate_blocks;
-        config.enable_random_offsets = enable_random_offsets;
         Self {
             inner: config,
             num_threads,
@@ -532,7 +540,15 @@ impl PyMesherConfig {
     }
 
     /// Sets explicit bounding box `(min_x, min_y, min_z, size_x, size_y, size_z)` for origin centering.
-    pub fn set_bounds(&mut self, min_x: i32, min_y: i32, min_z: i32, size_x: i32, size_y: i32, size_z: i32) {
+    pub fn set_bounds(
+        &mut self,
+        min_x: i32,
+        min_y: i32,
+        min_z: i32,
+        size_x: i32,
+        size_y: i32,
+        size_z: i32,
+    ) {
         self.inner.selection_bounds = Some(([min_x, min_y, min_z], [size_x, size_y, size_z]));
     }
 
@@ -543,7 +559,10 @@ impl PyMesherConfig {
 
     #[getter]
     pub fn z_up_coordinates(&self) -> bool {
-        matches!(self.inner.coordinate_system, CoordinateSystem::ZUpRightHanded)
+        matches!(
+            self.inner.coordinate_system,
+            CoordinateSystem::ZUpRightHanded
+        )
     }
 
     #[setter]
@@ -659,11 +678,31 @@ impl PyVoxelWorld {
         let threads = num_threads.or_else(|| config.and_then(|c| c.num_threads));
 
         let world = if let Some(st) = states {
-            mtk_voxel::VoxelWorld::create_debug_world_from_states(&st, cfg, cul, mdb, unified_mesh, threads)
+            mtk_voxel::VoxelWorld::create_debug_world_from_states(
+                &st,
+                cfg,
+                cul,
+                mdb,
+                unified_mesh,
+                threads,
+            )
         } else if let Some(s) = stack {
-            mtk_voxel::VoxelWorld::create_debug_world_from_pack_stack(&s.inner, cfg, cul, mdb, unified_mesh, threads)
+            mtk_voxel::VoxelWorld::create_debug_world_from_pack_stack(
+                &s.inner,
+                cfg,
+                cul,
+                mdb,
+                unified_mesh,
+                threads,
+            )
         } else {
-            mtk_voxel::VoxelWorld::create_debug_world_with_threads(cfg, cul, mdb, unified_mesh, threads)
+            mtk_voxel::VoxelWorld::create_debug_world_with_threads(
+                cfg,
+                cul,
+                mdb,
+                unified_mesh,
+                threads,
+            )
         }
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
@@ -684,38 +723,49 @@ impl PyVoxelWorld {
 
     /// Re-meshes all non-empty sections in parallel and returns the unified `MeshData`.
     #[pyo3(signature = (callback=None))]
-    pub fn rebuild_all(&mut self, py: Python<'_>, callback: Option<PyObject>) -> PyResult<crate::mesh::PyMeshData> {
+    pub fn rebuild_all(
+        &mut self,
+        py: Python<'_>,
+        callback: Option<PyObject>,
+    ) -> PyResult<crate::mesh::PyMeshData> {
         let mesh = if let Some(cb) = callback {
             let cb_ref = &cb;
             py.allow_threads(|| {
-                self.inner.rebuild_all_with_progress(Some(&|prog| {
-                    Python::with_gil(|py| {
-                        let dict = pyo3::types::PyDict::new(py);
-                        let _ = dict.set_item("stage", prog.stage);
-                        let _ = dict.set_item("current", prog.current);
-                        let _ = dict.set_item("total", prog.total);
-                        let _ = dict.set_item("message", &prog.message);
-                        let _ = dict.set_item("percent", prog.percent());
-                        let _ = cb_ref.call1(py, (dict,));
-                    });
-                })).map(|m| m.clone())
+                self.inner
+                    .rebuild_all_with_progress(Some(&|prog| {
+                        Python::with_gil(|py| {
+                            let dict = pyo3::types::PyDict::new(py);
+                            let _ = dict.set_item("stage", prog.stage);
+                            let _ = dict.set_item("current", prog.current);
+                            let _ = dict.set_item("total", prog.total);
+                            let _ = dict.set_item("message", &prog.message);
+                            let _ = dict.set_item("percent", prog.percent());
+                            let _ = cb_ref.call1(py, (dict,));
+                        });
+                    }))
+                    .cloned()
             })
         } else {
-            py.allow_threads(|| {
-                self.inner.rebuild_all().map(|m| m.clone())
-            })
-        }.map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+            py.allow_threads(|| self.inner.rebuild_all().cloned())
+        }
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         Ok(crate::mesh::PyMeshData { inner: mesh })
     }
 
     /// Incrementally rebuilds only the modified/dirty sections and returns a dict mapping (sx, sy, sz) to PyMeshData.
-    pub fn rebuild_dirty<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
-        let rebuilt = py.allow_threads(|| {
-            self.inner.rebuild_dirty()
-        }).map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+    pub fn rebuild_dirty<'py>(
+        &mut self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+        let rebuilt = py
+            .allow_threads(|| self.inner.rebuild_dirty())
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         let dict = pyo3::types::PyDict::new(py);
         for (coord, mesh) in rebuilt {
-            dict.set_item((coord.x, coord.y, coord.z), crate::mesh::PyMeshData { inner: mesh })?;
+            dict.set_item(
+                (coord.x, coord.y, coord.z),
+                crate::mesh::PyMeshData { inner: mesh },
+            )?;
         }
         Ok(dict)
     }
@@ -746,7 +796,8 @@ impl PyVoxelWorld {
         size_y: i32,
         size_z: i32,
     ) -> bool {
-        self.inner.set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)
+        self.inner
+            .set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)
     }
 
     /// Returns the bounding box: (min_x, min_y, min_z, size_x, size_y, size_z).
@@ -806,7 +857,8 @@ impl PyVoxelWorld {
             .iter()
             .map(|(x, y, z, s)| (*x, *y, *z, s.as_str()))
             .collect();
-        self.inner.apply_delta_update(min_x, min_y, min_z, &borrowed)
+        self.inner
+            .apply_delta_update(min_x, min_y, min_z, &borrowed)
     }
 
     /// Updates mesher configuration.
@@ -826,7 +878,9 @@ impl PyVoxelWorld {
 
     /// Returns a copy of the underlying VoxelStorage.
     pub fn get_storage(&self) -> PyVoxelStorage {
-        PyVoxelStorage { inner: self.inner.storage.clone() }
+        PyVoxelStorage {
+            inner: self.inner.storage.clone(),
+        }
     }
 
     /// Extracts an unculled point cloud representation of the current world geometry.
@@ -846,4 +900,3 @@ impl PyVoxelWorld {
         self.inner.clear();
     }
 }
-

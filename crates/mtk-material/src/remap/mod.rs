@@ -140,10 +140,7 @@ pub fn face_uv_requires_atlas_tiling(uvs: &[[f32; 2]], epsilon: f32) -> bool {
 
 /// Normalize one face's local UV coordinates to [0, 1] and calculate Mapping inputs for MC_Atlas_UV_Tiling.
 /// Returns ([scale_u, scale_v, location_u, location_v], is_tiled).
-pub fn normalize_face_uv_for_atlas_tiling(
-    uvs: &mut [[f32; 2]],
-    epsilon: f32,
-) -> ([f32; 4], bool) {
+pub fn normalize_face_uv_for_atlas_tiling(uvs: &mut [[f32; 2]], epsilon: f32) -> ([f32; 4], bool) {
     if uvs.is_empty() || !face_uv_requires_atlas_tiling(uvs, 1e-4) {
         return ([1.0, 1.0, 0.0, 0.0], false);
     }
@@ -154,10 +151,18 @@ pub fn normalize_face_uv_for_atlas_tiling(
     let mut max_v = f32::NEG_INFINITY;
 
     for p in uvs.iter() {
-        if p[0] < min_u { min_u = p[0]; }
-        if p[0] > max_u { max_u = p[0]; }
-        if p[1] < min_v { min_v = p[1]; }
-        if p[1] > max_v { max_v = p[1]; }
+        if p[0] < min_u {
+            min_u = p[0];
+        }
+        if p[0] > max_u {
+            max_u = p[0];
+        }
+        if p[1] < min_v {
+            min_v = p[1];
+        }
+        if p[1] > max_v {
+            max_v = p[1];
+        }
     }
 
     let span_u = max_u - min_u;
@@ -167,8 +172,16 @@ pub fn normalize_face_uv_for_atlas_tiling(
     let safe_span_v = if span_v > epsilon { span_v } else { 1.0 };
 
     for p in uvs.iter_mut() {
-        p[0] = if span_u > epsilon { (p[0] - min_u) / safe_span_u } else { 0.0 };
-        p[1] = if span_v > epsilon { (p[1] - min_v) / safe_span_v } else { 0.0 };
+        p[0] = if span_u > epsilon {
+            (p[0] - min_u) / safe_span_u
+        } else {
+            0.0
+        };
+        p[1] = if span_v > epsilon {
+            (p[1] - min_v) / safe_span_v
+        } else {
+            0.0
+        };
     }
 
     // MC_Atlas_UV_Tiling subtracts/adds 0.5 around the Mapping node, hence

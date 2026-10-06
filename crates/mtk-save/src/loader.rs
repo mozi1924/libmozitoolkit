@@ -1,8 +1,8 @@
-use std::path::{Path, PathBuf};
 use glam::IVec3;
 use mtk_core::progress::{ProgressCallback, ProgressReport, ProgressThrottler};
 use mtk_voxel::source::VoxelWriter;
 use mtk_voxel::storage::VoxelStorage;
+use std::path::{Path, PathBuf};
 
 use crate::chunk::ChunkParser;
 use crate::error::SaveError;
@@ -17,7 +17,7 @@ impl SaveLoader {
     /// Attempts to locate `level.dat` given a root directory or child path.
     pub fn find_level_dat(path: &Path) -> Option<PathBuf> {
         if path.is_file() {
-            if path.file_name().map_or(false, |f| f == "level.dat") {
+            if path.file_name().is_some_and(|f| f == "level.dat") {
                 return Some(path.to_path_buf());
             }
             if let Some(parent) = path.parent() {
@@ -56,21 +56,27 @@ impl SaveLoader {
 
         // 1. Overworld check
         if save_dir.join("region").exists()
-            || save_dir.join("dimensions/minecraft/overworld/region").exists()
+            || save_dir
+                .join("dimensions/minecraft/overworld/region")
+                .exists()
         {
             dims.push("overworld".to_string());
         }
 
         // 2. The Nether check
         if save_dir.join("DIM-1/region").exists()
-            || save_dir.join("dimensions/minecraft/the_nether/region").exists()
+            || save_dir
+                .join("dimensions/minecraft/the_nether/region")
+                .exists()
         {
             dims.push("the_nether".to_string());
         }
 
         // 3. The End check
         if save_dir.join("DIM1/region").exists()
-            || save_dir.join("dimensions/minecraft/the_end/region").exists()
+            || save_dir
+                .join("dimensions/minecraft/the_end/region")
+                .exists()
         {
             dims.push("the_end".to_string());
         }
@@ -116,7 +122,7 @@ impl SaveLoader {
         let dim_clean = dimension.trim().to_lowercase();
 
         // If the path itself is already a region folder
-        if save_dir.is_dir() && save_dir.file_name().map_or(false, |f| f == "region") {
+        if save_dir.is_dir() && save_dir.file_name().is_some_and(|f| f == "region") {
             return Some(save_dir.to_path_buf());
         }
 
@@ -187,7 +193,9 @@ impl SaveLoader {
         max_block: IVec3,
         storage: &mut VoxelStorage,
     ) -> Result<usize, SaveError> {
-        Self::load_box_into_storage_with_progress(save_dir, dimension, min_block, max_block, storage, None)
+        Self::load_box_into_storage_with_progress(
+            save_dir, dimension, min_block, max_block, storage, None,
+        )
     }
 
     /// Loads only the required chunk sections within `[min_block, max_block]` into a target `VoxelStorage` with progress reporting.
@@ -218,7 +226,8 @@ impl SaveLoader {
         let min_reg_z = min_sec_z >> 5;
         let max_reg_z = max_sec_z >> 5;
 
-        let total_chunks = (((max_sec_x - min_sec_x + 1).max(1)) * ((max_sec_z - min_sec_z + 1).max(1))) as usize;
+        let total_chunks =
+            (((max_sec_x - min_sec_x + 1).max(1)) * ((max_sec_z - min_sec_z + 1).max(1))) as usize;
         let throttler = ProgressThrottler::new("load_chunks", total_chunks, progress)
             .with_prefix("Loading chunk");
 
@@ -233,7 +242,9 @@ impl SaveLoader {
                     let chunk_end_x = (rx * 32 + 31).min(max_sec_x);
                     let chunk_start_z = (rz * 32).max(min_sec_z);
                     let chunk_end_z = (rz * 32 + 31).min(max_sec_z);
-                    let skipped = ((chunk_end_x - chunk_start_x + 1).max(0) * (chunk_end_z - chunk_start_z + 1).max(0)) as usize;
+                    let skipped = ((chunk_end_x - chunk_start_x + 1).max(0)
+                        * (chunk_end_z - chunk_start_z + 1).max(0))
+                        as usize;
                     throttler.inc_by(skipped);
                     continue;
                 }
@@ -245,7 +256,9 @@ impl SaveLoader {
                         let chunk_end_x = (rx * 32 + 31).min(max_sec_x);
                         let chunk_start_z = (rz * 32).max(min_sec_z);
                         let chunk_end_z = (rz * 32 + 31).min(max_sec_z);
-                        let skipped = ((chunk_end_x - chunk_start_x + 1).max(0) * (chunk_end_z - chunk_start_z + 1).max(0)) as usize;
+                        let skipped = ((chunk_end_x - chunk_start_x + 1).max(0)
+                            * (chunk_end_z - chunk_start_z + 1).max(0))
+                            as usize;
                         throttler.inc_by(skipped);
                         continue;
                     }
@@ -271,11 +284,8 @@ impl SaveLoader {
                             }
                         };
 
-                        let sections = ChunkParser::parse_chunk_sections(
-                            &decompressed,
-                            min_sec_y,
-                            max_sec_y,
-                        )?;
+                        let sections =
+                            ChunkParser::parse_chunk_sections(&decompressed, min_sec_y, max_sec_y)?;
 
                         for section in sections {
                             let sec_x = section.coord.x;
@@ -302,7 +312,10 @@ impl SaveLoader {
                 "load_chunks",
                 total_chunks,
                 total_chunks,
-                format!("Loaded {} chunk sections from {} chunks", loaded_sections, total_chunks),
+                format!(
+                    "Loaded {} chunk sections from {} chunks",
+                    loaded_sections, total_chunks
+                ),
             ));
         }
 

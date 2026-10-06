@@ -1,9 +1,9 @@
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use std::collections::HashMap;
 #[cfg(not(feature = "std"))]
 use core::cell::RefCell;
+use std::collections::HashMap;
 
 use mtk_core::direction::Direction;
 use mtk_core::geometry::Aabb2d;
@@ -11,9 +11,7 @@ use mtk_core::{IVec3, Vec3};
 
 use crate::rect_ops::is_face_completely_occluded;
 use crate::rules::should_skip_rendering;
-use crate::types::{
-    BlockCullMeta, CullCategory, GlassCullMode, LeavesCullMode, FULL_FACE_RECT,
-};
+use crate::types::{BlockCullMeta, CullCategory, GlassCullMode, LeavesCullMode, FULL_FACE_RECT};
 
 pub use crate::rules::categories::*;
 
@@ -32,7 +30,11 @@ impl Clone for FaceCuller {
     fn clone(&self) -> Self {
         #[cfg(feature = "std")]
         {
-            let cache_clone = self.meta_cache.read().map(|g| g.clone()).unwrap_or_default();
+            let cache_clone = self
+                .meta_cache
+                .read()
+                .map(|g| g.clone())
+                .unwrap_or_default();
             Self {
                 leaves_cull_mode: self.leaves_cull_mode,
                 glass_cull_mode: self.glass_cull_mode,
@@ -183,8 +185,7 @@ impl FaceCuller {
 
         // 1. Solid / glass blocks must never have external faces culled by adjacent non-full / partial blocks
         let is_snow_cover = direction == Direction::Up
-            && (neighbor_meta.block_name == "snow"
-                || neighbor_meta.block_name.ends_with(":snow"))
+            && (neighbor_meta.block_name == "snow" || neighbor_meta.block_name.ends_with(":snow"))
             && neighbor_meta.has_full_face(Direction::Down);
 
         if (state_meta.category == CullCategory::SolidOpaque
@@ -275,7 +276,9 @@ where
         let offset = dir.offset();
         let n_pos = block_pos + offset;
         let n_state_opt = get_neighbor_state(n_pos.x, n_pos.y, n_pos.z);
-        let n_meta_opt = n_state_opt.as_deref().map(|s| culler.get_meta(s, None, None));
+        let n_meta_opt = n_state_opt
+            .as_deref()
+            .map(|s| culler.get_meta(s, None, None));
 
         if culler.should_render_face(
             &meta,

@@ -8,10 +8,13 @@ use alloc::vec;
 use alloc::vec::Vec;
 use glam::Vec2;
 
-use crate::geometry::Aabb2d;
+use super::types::{
+    compute_face_normal, ExtrudeMeshInput, ExtrudeMeshOutput, FlatPolygonMesh,
+    MeshExtrudeRepairConfig,
+};
 use crate::extrude::ExtrudeUvMode;
+use crate::geometry::Aabb2d;
 use crate::uv::is_uv_collapsed_2d as is_uv_collapsed;
-use super::types::{compute_face_normal, ExtrudeMeshInput, ExtrudeMeshOutput, FlatPolygonMesh, MeshExtrudeRepairConfig};
 
 /// Performs complete batch UV repair and crease assignment across a mesh using contiguous flat buffers.
 pub fn process_flat_mesh_extrude_repair(
@@ -41,7 +44,10 @@ pub fn process_flat_mesh_extrude_repair(
             let v1 = f_verts[i];
             let v2 = f_verts[(i + 1) % n];
             let edge_key = if v1 < v2 { (v1, v2) } else { (v2, v1) };
-            edge_to_faces.entry(edge_key).or_default().push((f_idx as u32, i));
+            edge_to_faces
+                .entry(edge_key)
+                .or_default()
+                .push((f_idx as u32, i));
         }
     }
 
@@ -89,22 +95,27 @@ pub fn process_flat_mesh_extrude_repair(
             uv_sum_v += uv[1];
         }
 
-        let top_face_bounds = Aabb2d::new(
-            Vec2::new(min_u, min_v),
-            Vec2::new(max_u, max_v),
-        );
+        let top_face_bounds = Aabb2d::new(Vec2::new(min_u, min_v), Vec2::new(max_u, max_v));
         let top_face_uv_center = [
             uv_sum_u / top_verts.len() as f32,
             uv_sum_v / top_verts.len() as f32,
         ];
         let top_normal = compute_face_normal(top_verts, &mesh.positions);
-        let top_material = mesh.face_materials.get(top_face_idx_usize).copied().unwrap_or(0);
+        let top_material = mesh
+            .face_materials
+            .get(top_face_idx_usize)
+            .copied()
+            .unwrap_or(0);
 
         let n = top_verts.len();
         for i in 0..n {
             let v_top_a = top_verts[i];
             let v_top_b = top_verts[(i + 1) % n];
-            let edge_key = if v_top_a < v_top_b { (v_top_a, v_top_b) } else { (v_top_b, v_top_a) };
+            let edge_key = if v_top_a < v_top_b {
+                (v_top_a, v_top_b)
+            } else {
+                (v_top_b, v_top_a)
+            };
 
             let linked_faces = match edge_to_faces.get(&edge_key) {
                 Some(lf) => lf,
@@ -126,7 +137,11 @@ pub fn process_flat_mesh_extrude_repair(
                 }
 
                 // Material sync
-                let side_mat = mesh.face_materials.get(side_face_idx_usize).copied().unwrap_or(0);
+                let side_mat = mesh
+                    .face_materials
+                    .get(side_face_idx_usize)
+                    .copied()
+                    .unwrap_or(0);
                 if side_mat != top_material {
                     modified_mats.insert(side_face_idx, top_material);
                 }
@@ -183,10 +198,8 @@ pub fn process_flat_mesh_extrude_repair(
                     let is_tracked = target_side_faces
                         .map(|s| s.contains(&side_face_idx))
                         .unwrap_or(false);
-                    if !is_tracked {
-                        if !is_uv_collapsed(cur_side_uvs, Some([step_u, step_v])) {
-                            continue;
-                        }
+                    if !is_tracked && !is_uv_collapsed(cur_side_uvs, Some([step_u, step_v])) {
+                        continue;
                     }
                 }
 
@@ -229,7 +242,8 @@ pub fn process_flat_mesh_extrude_repair(
                                 && !selected_faces_set.contains(&adj_f_idx)
                             {
                                 let adj_f_idx_u = adj_f_idx as usize;
-                                let adj_mat = mesh.face_materials.get(adj_f_idx_u).copied().unwrap_or(0);
+                                let adj_mat =
+                                    mesh.face_materials.get(adj_f_idx_u).copied().unwrap_or(0);
                                 if adj_mat == top_material && adj_f_idx_u < num_faces {
                                     let adj_verts = mesh.face_vertices(adj_f_idx_u);
                                     let adj_uvs = mesh.face_uvs(adj_f_idx_u);
@@ -250,20 +264,34 @@ pub fn process_flat_mesh_extrude_repair(
                                         adj_min_v = adj_min_v.min(auv[1]);
                                         adj_max_v = adj_max_v.max(auv[1]);
                                     }
-                                    if let (Some(&adj_uva), Some(&adj_uvb)) = (adj_map.get(&v_base_a), adj_map.get(&v_base_b)) {
-                                        let edge_uv = [adj_uvb[0] - adj_uva[0], adj_uvb[1] - adj_uva[1]];
-                                        let edge_len = (edge_uv[0] * edge_uv[0] + edge_uv[1] * edge_uv[1]).sqrt();
+                                    if let (Some(&adj_uva), Some(&adj_uvb)) =
+                                        (adj_map.get(&v_base_a), adj_map.get(&v_base_b))
+                                    {
+                                        let edge_uv =
+                                            [adj_uvb[0] - adj_uva[0], adj_uvb[1] - adj_uva[1]];
+                                        let edge_len = (edge_uv[0] * edge_uv[0]
+                                            + edge_uv[1] * edge_uv[1])
+                                            .sqrt();
                                         if edge_len > 1e-6 {
                                             let adj_cnt = adj_verts.len() as f32;
-                                            let adj_mid = [(adj_uva[0] + adj_uvb[0]) * 0.5, (adj_uva[1] + adj_uvb[1]) * 0.5];
-                                            let mut in_dir = [-edge_uv[1] / edge_len, edge_uv[0] / edge_len];
-                                            if in_dir[0] * (adj_sum_u / adj_cnt - adj_mid[0]) + in_dir[1] * (adj_sum_v / adj_cnt - adj_mid[1]) < 0.0 {
+                                            let adj_mid = [
+                                                (adj_uva[0] + adj_uvb[0]) * 0.5,
+                                                (adj_uva[1] + adj_uvb[1]) * 0.5,
+                                            ];
+                                            let mut in_dir =
+                                                [-edge_uv[1] / edge_len, edge_uv[0] / edge_len];
+                                            if in_dir[0] * (adj_sum_u / adj_cnt - adj_mid[0])
+                                                + in_dir[1] * (adj_sum_v / adj_cnt - adj_mid[1])
+                                                < 0.0
+                                            {
                                                 in_dir = [-in_dir[0], -in_dir[1]];
                                             }
                                             let offset_u = in_dir[0] * (step_u * 0.1);
                                             let offset_v = in_dir[1] * (step_v * 0.1);
-                                            let pad_u = (step_u * 0.05).min((adj_max_u - adj_min_u).abs() * 0.1);
-                                            let pad_v = (step_v * 0.05).min((adj_max_v - adj_min_v).abs() * 0.1);
+                                            let pad_u = (step_u * 0.05)
+                                                .min((adj_max_u - adj_min_u).abs() * 0.1);
+                                            let pad_v = (step_v * 0.05)
+                                                .min((adj_max_v - adj_min_v).abs() * 0.1);
                                             let min_su = adj_min_u + pad_u;
                                             let max_su = adj_max_u - pad_u;
                                             let min_sv = adj_min_v + pad_v;
@@ -271,8 +299,10 @@ pub fn process_flat_mesh_extrude_repair(
 
                                             let mut base_a = adj_uva;
                                             let mut base_b = adj_uvb;
-                                            let mut top_a = [base_a[0] + offset_u, base_a[1] + offset_v];
-                                            let mut top_b = [base_b[0] + offset_u, base_b[1] + offset_v];
+                                            let mut top_a =
+                                                [base_a[0] + offset_u, base_a[1] + offset_v];
+                                            let mut top_b =
+                                                [base_b[0] + offset_u, base_b[1] + offset_v];
 
                                             if max_su >= min_su {
                                                 base_a[0] = base_a[0].clamp(min_su, max_su);
@@ -330,8 +360,16 @@ pub fn process_flat_mesh_extrude_repair(
 
                 // Crease tracking
                 if config.add_crease {
-                    let side_edge_a = if v_top_a < v_base_a { (v_top_a, v_base_a) } else { (v_base_a, v_top_a) };
-                    let side_edge_b = if v_top_b < v_base_b { (v_top_b, v_base_b) } else { (v_base_b, v_top_b) };
+                    let side_edge_a = if v_top_a < v_base_a {
+                        (v_top_a, v_base_a)
+                    } else {
+                        (v_base_a, v_top_a)
+                    };
+                    let side_edge_b = if v_top_b < v_base_b {
+                        (v_top_b, v_base_b)
+                    } else {
+                        (v_base_b, v_top_b)
+                    };
                     modified_creases.insert(edge_key, config.crease_val);
                     modified_creases.insert(side_edge_a, config.crease_val);
                     modified_creases.insert(side_edge_b, config.crease_val);

@@ -121,7 +121,11 @@ fn run_dump_batch(args: ModelDumpBatchArgs) -> Result<(), Box<dyn std::error::Er
     let mut results = HashMap::new();
     let mut baker = ModelBaker::new();
 
-    println!("Batch baking {} blockstates from {:?}...", states.len(), args.assets);
+    println!(
+        "Batch baking {} blockstates from {:?}...",
+        states.len(),
+        args.assets
+    );
 
     for state_str in &states {
         let bs = match BlockState::parse(state_str) {
@@ -219,7 +223,11 @@ fn run_dump_batch(args: ModelDumpBatchArgs) -> Result<(), Box<dyn std::error::Er
 
     let json_data = serde_json::to_string_pretty(&results)?;
     fs::write(&args.output, json_data)?;
-    println!("Exported {} baked states to {}", results.len(), args.output.display());
+    println!(
+        "Exported {} baked states to {}",
+        results.len(),
+        args.output.display()
+    );
 
     Ok(())
 }

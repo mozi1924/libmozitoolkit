@@ -77,11 +77,20 @@ fn test_pack_stack_granular_fallback() {
     let mut bottom_pack = MemoryPack::new("bottom_pack");
 
     // Top pack only provides diamond_ore_s.png
-    top_pack.insert("assets/minecraft/textures/block/diamond_ore_s.png", vec![1, 2, 3]);
+    top_pack.insert(
+        "assets/minecraft/textures/block/diamond_ore_s.png",
+        vec![1, 2, 3],
+    );
 
     // Bottom pack provides diamond_ore.png and diamond_ore_n.png
-    bottom_pack.insert("assets/minecraft/textures/block/diamond_ore.png", vec![10, 20]);
-    bottom_pack.insert("assets/minecraft/textures/block/diamond_ore_n.png", vec![30, 40]);
+    bottom_pack.insert(
+        "assets/minecraft/textures/block/diamond_ore.png",
+        vec![10, 20],
+    );
+    bottom_pack.insert(
+        "assets/minecraft/textures/block/diamond_ore_n.png",
+        vec![30, 40],
+    );
 
     let mut stack = ResourcePackStack::new();
     stack.append_pack(Box::new(bottom_pack));
@@ -115,7 +124,10 @@ weight=10
 
     assert_eq!(rule.name, "stone_ctm");
     assert_eq!(rule.priority, 10);
-    assert_eq!(rule.method, mtk_resource::CtmMethod::Full { inner_seams: false });
+    assert_eq!(
+        rule.method,
+        mtk_resource::CtmMethod::Full { inner_seams: false }
+    );
     assert_eq!(rule.tiles.len(), 47);
     assert_eq!(
         rule.tiles[0],

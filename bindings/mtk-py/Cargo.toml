@@ -35,3 +35,7 @@ parallel = ["dep:rayon", "libmtk/parallel", "mtk-core/parallel", "mtk-voxel/para
 
 [dev-dependencies]
 pyo3 = { workspace = true, features = ["auto-initialize"] }
+mtk-testkit = { workspace = true }
+
+[lints]
+workspace = true

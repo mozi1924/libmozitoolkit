@@ -66,18 +66,12 @@ fn test_standalone_multi_channel_pbr_alignment() {
     // Normal (aligned to 16x512)
     assert_eq!(result.channels[1].buffer.width, 16);
     assert_eq!(result.channels[1].buffer.height, 512);
-    assert_eq!(
-        result.channels[1].metadata.as_ref().unwrap().frametime,
-        2
-    );
+    assert_eq!(result.channels[1].metadata.as_ref().unwrap().frametime, 2);
 
     // Specular (aligned to 64x2048)
     assert_eq!(result.channels[2].buffer.width, 64);
     assert_eq!(result.channels[2].buffer.height, 2048);
-    assert_eq!(
-        result.channels[2].metadata.as_ref().unwrap().frametime,
-        2
-    );
+    assert_eq!(result.channels[2].metadata.as_ref().unwrap().frametime, 2);
 }
 
 #[test]
@@ -103,8 +97,14 @@ fn test_standalone_builder_end_to_end() {
         .unwrap();
     let sea_mcmeta = br#"{"animation": {"frametime": 3, "interpolate": true}}"#;
 
-    mem_pack.insert("assets/minecraft/textures/block/sea_lantern.png", sea_albedo);
-    mem_pack.insert("assets/minecraft/textures/block/sea_lantern_s.png", sea_spec);
+    mem_pack.insert(
+        "assets/minecraft/textures/block/sea_lantern.png",
+        sea_albedo,
+    );
+    mem_pack.insert(
+        "assets/minecraft/textures/block/sea_lantern_s.png",
+        sea_spec,
+    );
     mem_pack.insert(
         "assets/minecraft/textures/block/sea_lantern.png.mcmeta",
         sea_mcmeta.to_vec(),
@@ -113,13 +113,18 @@ fn test_standalone_builder_end_to_end() {
     let mut stack = ResourcePackStack::new();
     stack.push_pack(Box::new(mem_pack));
 
-    let temp_dir = std::env::temp_dir().join(format!("mtk_standalone_test_{:x}", std::time::SystemTime::now().elapsed().unwrap().as_nanos()));
+    let temp_dir = std::env::temp_dir().join(format!(
+        "mtk_standalone_test_{:x}",
+        std::time::SystemTime::now().elapsed().unwrap().as_nanos()
+    ));
     let builder = StandaloneBuilder::new(StandaloneConfig {
         stack_hash: Some("testhash123".to_string()),
         filter_prefix: None,
     });
 
-    let res = builder.build_to_dir(&stack, &temp_dir).expect("Build standalone must succeed");
+    let res = builder
+        .build_to_dir(&stack, &temp_dir)
+        .expect("Build standalone must succeed");
 
     assert_eq!(res.format_version, STANDALONE_FORMAT_VERSION);
     assert_eq!(res.texture_count, 2); // stone and sea_lantern
@@ -134,8 +139,13 @@ fn test_standalone_builder_end_to_end() {
     // Verify fallback entry
     let fallback = &mapping["textures"]["mozi:fallback"];
     assert!(fallback.is_object());
-    assert_eq!(fallback["files"]["albedo"], "assets/minecraft/textures/mtk_fallback.png");
-    assert!(temp_dir.join("assets/minecraft/textures/mtk_fallback.png").exists());
+    assert_eq!(
+        fallback["files"]["albedo"],
+        "assets/minecraft/textures/mtk_fallback.png"
+    );
+    assert!(temp_dir
+        .join("assets/minecraft/textures/mtk_fallback.png")
+        .exists());
 
     // Verify stone
     let stone = &mapping["textures"]["minecraft:block/stone"];
@@ -161,8 +171,12 @@ fn test_standalone_builder_end_to_end() {
     assert!(temp_dir.join(sea_spec_file).exists());
     assert!(sea["files"]["albedo_static"].is_string());
     assert!(sea["files"]["albedo_anim"].is_string());
-    assert!(temp_dir.join(sea["files"]["albedo_static"].as_str().unwrap()).exists());
-    assert!(temp_dir.join(sea["files"]["albedo_anim"].as_str().unwrap()).exists());
+    assert!(temp_dir
+        .join(sea["files"]["albedo_static"].as_str().unwrap())
+        .exists());
+    assert!(temp_dir
+        .join(sea["files"]["albedo_anim"].as_str().unwrap())
+        .exists());
 
     // Clean up
     let _ = std::fs::remove_dir_all(&temp_dir);

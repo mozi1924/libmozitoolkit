@@ -13,24 +13,106 @@ use crate::obj::{ModObjLoader, WavefrontObjParser};
 
 use super::emissive::{get_block_emissive_level, is_block_emissive};
 
-
 const KNOWN_NON_CUBES: &[&str] = &[
-    "glass_pane", "pane", "fence", "door", "trapdoor", "bars", "chain", "lantern",
-    "stairs", "slab", "chest", "banner", "bed", "carpet", "pot", "sign", "hanging_sign",
-    "head", "skull", "rod", "hook", "lever", "rail", "torch", "candle", "flower",
-    "plant", "sapling", "vine", "bush", "wire", "repeater", "comparator", "cauldron",
-    "hopper", "bell", "anvil", "stand", "frame", "portal", "conduit", "grindstone",
-    "stonecutter", "scaffolding", "dripstone", "amethyst", "sensor", "shrieker",
+    "glass_pane",
+    "pane",
+    "fence",
+    "door",
+    "trapdoor",
+    "bars",
+    "chain",
+    "lantern",
+    "stairs",
+    "slab",
+    "chest",
+    "banner",
+    "bed",
+    "carpet",
+    "pot",
+    "sign",
+    "hanging_sign",
+    "head",
+    "skull",
+    "rod",
+    "hook",
+    "lever",
+    "rail",
+    "torch",
+    "candle",
+    "flower",
+    "plant",
+    "sapling",
+    "vine",
+    "bush",
+    "wire",
+    "repeater",
+    "comparator",
+    "cauldron",
+    "hopper",
+    "bell",
+    "anvil",
+    "stand",
+    "frame",
+    "portal",
+    "conduit",
+    "grindstone",
+    "stonecutter",
+    "scaffolding",
+    "dripstone",
+    "amethyst",
+    "sensor",
+    "shrieker",
 ];
 
 const NON_OPAQUE_SUBSTRINGS: &[&str] = &[
-    "glass", "leaves", "ice", "water", "air", "pane", "fence", "door",
-    "trapdoor", "bars", "chain", "lantern", "stairs", "slab", "chest",
-    "banner", "bed", "carpet", "pot", "sign", "hanging_sign", "head",
-    "skull", "rod", "hook", "lever", "rail", "torch", "candle",
-    "flower", "plant", "sapling", "vine", "bush", "wire", "repeater",
-    "comparator", "cauldron", "hopper", "bell", "anvil", "stand",
-    "frame", "portal", "conduit", "grindstone", "cutter", "piston",
+    "glass",
+    "leaves",
+    "ice",
+    "water",
+    "air",
+    "pane",
+    "fence",
+    "door",
+    "trapdoor",
+    "bars",
+    "chain",
+    "lantern",
+    "stairs",
+    "slab",
+    "chest",
+    "banner",
+    "bed",
+    "carpet",
+    "pot",
+    "sign",
+    "hanging_sign",
+    "head",
+    "skull",
+    "rod",
+    "hook",
+    "lever",
+    "rail",
+    "torch",
+    "candle",
+    "flower",
+    "plant",
+    "sapling",
+    "vine",
+    "bush",
+    "wire",
+    "repeater",
+    "comparator",
+    "cauldron",
+    "hopper",
+    "bell",
+    "anvil",
+    "stand",
+    "frame",
+    "portal",
+    "conduit",
+    "grindstone",
+    "cutter",
+    "piston",
 ];
 
 /// Universal, headless Minecraft Model Baker.
@@ -85,7 +167,12 @@ impl ModelBaker {
             vec![BlockStateResolver::heuristic_match(&blockstate)]
         };
 
-        let baked_model = self.bake_matches(&canonical_str, &blockstate, &variant_matches, &mut model_loader)?;
+        let baked_model = self.bake_matches(
+            &canonical_str,
+            &blockstate,
+            &variant_matches,
+            &mut model_loader,
+        )?;
         self.bake_cache.insert(canonical_str, baked_model.clone());
         Ok(baked_model)
     }
@@ -117,7 +204,8 @@ impl ModelBaker {
         let mut weights = Vec::with_capacity(variant_specs.len());
 
         for (matches, weight) in variant_specs {
-            let model = self.bake_matches(&canonical_str, &blockstate, &matches, &mut model_loader)?;
+            let model =
+                self.bake_matches(&canonical_str, &blockstate, &matches, &mut model_loader)?;
             models.push(model);
             weights.push(weight);
         }
@@ -145,26 +233,37 @@ impl ModelBaker {
                 let r = external.resolve_hierarchy(&variant.model_id, |id| {
                     model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
                 })?;
-                let clean_block = blockstate.name.strip_prefix("minecraft:").unwrap_or(&blockstate.name);
-                let is_missing_bell_body = clean_block == "bell" && !r.textures.contains_key("bell_body");
+                let clean_block = blockstate
+                    .name
+                    .strip_prefix("minecraft:")
+                    .unwrap_or(&blockstate.name);
+                let is_missing_bell_body =
+                    clean_block == "bell" && !r.textures.contains_key("bell_body");
                 if r.elements.is_empty() || is_missing_bell_body {
                     // External model is empty (e.g. vanilla Java BER dummy block/skull.json or chest).
                     // Fallback to builtin model for this blockstate (if single variant) or variant ID.
                     if allow_blockstate_builtin {
-                        if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(&blockstate) {
+                        if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(blockstate) {
                             builtin.resolve_hierarchy(&variant.model_id, |id| {
-                                model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                                model_loader(id)
+                                    .or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
                             })?
-                        } else if let Some(builtin) = BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id) {
+                        } else if let Some(builtin) =
+                            BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id)
+                        {
                             builtin.resolve_hierarchy(&variant.model_id, |id| {
-                                model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                                model_loader(id)
+                                    .or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
                             })?
                         } else {
                             r
                         }
-                    } else if let Some(builtin) = BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id) {
+                    } else if let Some(builtin) =
+                        BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id)
+                    {
                         builtin.resolve_hierarchy(&variant.model_id, |id| {
-                            model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                            model_loader(id)
+                                .or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
                         })?
                     } else {
                         r
@@ -175,20 +274,27 @@ impl ModelBaker {
             } else {
                 // No external model found for variant.model_id.
                 if allow_blockstate_builtin {
-                    if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(&blockstate) {
+                    if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(blockstate) {
                         builtin.resolve_hierarchy(&variant.model_id, |id| {
-                            model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                            model_loader(id)
+                                .or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
                         })?
-                    } else if let Some(builtin) = BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id) {
+                    } else if let Some(builtin) =
+                        BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id)
+                    {
                         builtin.resolve_hierarchy(&variant.model_id, |id| {
-                            model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                            model_loader(id)
+                                .or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
                         })?
                     } else {
                         ResolvedBlockModel::default()
                     }
-                } else if let Some(builtin) = BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id) {
+                } else if let Some(builtin) =
+                    BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id)
+                {
                     builtin.resolve_hierarchy(&variant.model_id, |id| {
-                        model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                        model_loader(id)
+                            .or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
                     })?
                 } else {
                     ResolvedBlockModel::default()
@@ -233,8 +339,12 @@ impl ModelBaker {
                         if orig_dir != Direction::North && orig_dir != Direction::South {
                             continue;
                         }
-                        if let (Some(f_north), Some(f_south)) = (elem.faces.get("north"), elem.faces.get("south")) {
-                            if f_north.texture == f_south.texture && f_north.tintindex == f_south.tintindex {
+                        if let (Some(f_north), Some(f_south)) =
+                            (elem.faces.get("north"), elem.faces.get("south"))
+                        {
+                            if f_north.texture == f_south.texture
+                                && f_north.tintindex == f_south.tintindex
+                            {
                                 let keep_dir = if from_pos[2] > 8.0 + 1e-4 {
                                     Direction::North
                                 } else if from_pos[2] < 8.0 - 1e-4 {
@@ -252,8 +362,12 @@ impl ModelBaker {
                         if orig_dir != Direction::West && orig_dir != Direction::East {
                             continue;
                         }
-                        if let (Some(f_west), Some(f_east)) = (elem.faces.get("west"), elem.faces.get("east")) {
-                            if f_west.texture == f_east.texture && f_west.tintindex == f_east.tintindex {
+                        if let (Some(f_west), Some(f_east)) =
+                            (elem.faces.get("west"), elem.faces.get("east"))
+                        {
+                            if f_west.texture == f_east.texture
+                                && f_west.tintindex == f_east.tintindex
+                            {
                                 let keep_dir = if from_pos[0] > 8.0 + 1e-4 {
                                     Direction::West
                                 } else if from_pos[0] < 8.0 - 1e-4 {
@@ -271,8 +385,11 @@ impl ModelBaker {
                         if orig_dir != Direction::Down && orig_dir != Direction::Up {
                             continue;
                         }
-                        if let (Some(f_down), Some(f_up)) = (elem.faces.get("down"), elem.faces.get("up")) {
-                            if f_down.texture == f_up.texture && f_down.tintindex == f_up.tintindex {
+                        if let (Some(f_down), Some(f_up)) =
+                            (elem.faces.get("down"), elem.faces.get("up"))
+                        {
+                            if f_down.texture == f_up.texture && f_down.tintindex == f_up.tintindex
+                            {
                                 let keep_dir = if from_pos[1] >= 15.0 - 1e-4 {
                                     Direction::Down
                                 } else {
@@ -321,14 +438,13 @@ impl ModelBaker {
                         uv_base,
                     );
 
-                    let rotated_cullface = cullface_dir
-                        .map(|cd| {
-                            let mut d = rotate_direction(cd, eff_rot_x, eff_rot_y);
-                            if let Some(bt) = elem.transform.as_ref() {
-                                d = rotate_direction(d, bt.rotate[0], bt.rotate[1]);
-                            }
-                            d
-                        });
+                    let rotated_cullface = cullface_dir.map(|cd| {
+                        let mut d = rotate_direction(cd, eff_rot_x, eff_rot_y);
+                        if let Some(bt) = elem.transform.as_ref() {
+                            d = rotate_direction(d, bt.rotate[0], bt.rotate[1]);
+                        }
+                        d
+                    });
 
                     let v1 = baked_geom.positions[1] - baked_geom.positions[0];
                     let v2 = baked_geom.positions[2] - baked_geom.positions[0];
@@ -422,24 +538,32 @@ impl ModelBaker {
         let is_known_non_cube = !is_double_slab
             && short_name != "bedrock"
             && (is_bed
-                || KNOWN_NON_CUBES
-                    .iter()
-                    .any(|&w| if w == "bed" { false } else { short_name.contains(w) }));
+                || KNOWN_NON_CUBES.iter().any(|&w| {
+                    if w == "bed" {
+                        false
+                    } else {
+                        short_name.contains(w)
+                    }
+                }));
 
         let is_cube = !is_known_non_cube
             && !baked_elements.is_empty()
-            && baked_elements.iter().all(|el| {
-                el.from_pos == [0.0, 0.0, 0.0] && el.to_pos == [16.0, 16.0, 16.0]
-            });
+            && baked_elements
+                .iter()
+                .all(|el| el.from_pos == [0.0, 0.0, 0.0] && el.to_pos == [16.0, 16.0, 16.0]);
 
         let is_opaque = short_name == "bedrock"
             || (!is_bed
-                && !NON_OPAQUE_SUBSTRINGS
-                    .iter()
-                    .any(|&w| if w == "bed" { false } else { short_name.contains(w) }));
+                && !NON_OPAQUE_SUBSTRINGS.iter().any(|&w| {
+                    if w == "bed" {
+                        false
+                    } else {
+                        short_name.contains(w)
+                    }
+                }));
 
-        let emissive = is_block_emissive(&blockstate);
-        let emissive_level = get_block_emissive_level(&blockstate);
+        let emissive = is_block_emissive(blockstate);
+        let emissive_level = get_block_emissive_level(blockstate);
 
         let mut quads: Vec<([glam::Vec3; 4], Direction)> = Vec::new();
         if !baked_elements.is_empty() {
@@ -453,8 +577,13 @@ impl ModelBaker {
                 quads.push((final_six_faces[dir.to_index()].vertices, dir));
             }
         }
-        let quads_slice = if quads.is_empty() { None } else { Some(quads.as_slice()) };
-        let cull_meta = mtk_cull::compute_block_cull_meta(&canonical_str, quads_slice, Some(is_opaque));
+        let quads_slice = if quads.is_empty() {
+            None
+        } else {
+            Some(quads.as_slice())
+        };
+        let cull_meta =
+            mtk_cull::compute_block_cull_meta(canonical_str, quads_slice, Some(is_opaque));
 
         let mut baked_model = BakedModel {
             block_state: canonical_str.to_string(),
@@ -581,7 +710,6 @@ impl ModelBaker {
         baked_model.rebuild_face_buckets();
         Ok(baked_model)
     }
-
 }
 
 #[cfg(test)]
@@ -615,14 +743,15 @@ mod tests {
         let parsed_model: BlockModelJson = serde_json::from_str(model_json).unwrap();
 
         let baked = baker
-            .bake_blockstate("minecraft:stone", None, |_id| {
-                Some(parsed_model.clone())
-            })
+            .bake_blockstate("minecraft:stone", None, |_id| Some(parsed_model.clone()))
             .unwrap();
 
         assert!(baked.is_cube);
         assert_eq!(baked.elements.len(), 1);
-        assert_eq!(baked.get_face(Direction::Up).texture, "minecraft:block/stone");
+        assert_eq!(
+            baked.get_face(Direction::Up).texture,
+            "minecraft:block/stone"
+        );
 
         let mesh = baked.to_mesh(false);
         assert_eq!(mesh.face_count(), 6);
@@ -706,5 +835,4 @@ f 1/1 2/2 3/3
         assert_eq!(group.models[2].get_face(Direction::Up).uv_rot, 180.0);
         assert_eq!(group.models[3].get_face(Direction::Up).uv_rot, 270.0);
     }
-
 }

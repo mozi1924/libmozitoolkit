@@ -26,8 +26,9 @@
 | **[`mtk-save`](crates/mtk-save)** | 核心 | 现代 Minecraft 存档加载核心：基于内置零拷贝 NBT 解码、Anvil `.mca` 区域文件直接寻址、384 高度世界 3D 生物群系与方块状态解包、按需空间切片流式数据源 (`VoxelSource`) | [📖 `crates/mtk-save/README.md`](crates/mtk-save/README.md) |
 | **[`libmtk`](crates/libmtk)** | 核心 | 统一顶层门面 Crate，聚合各子模块并提供端到端高阶资产预编译管线 (`precompile`) 与统一错误处理 (`MtkError`) | [📖 `crates/libmtk/README.md`](crates/libmtk/README.md) |
 | **[`mtk-py`](bindings/mtk-py)** | **P0 (当前重点)** | 基于 PyO3 的 Python 扩展模块 (`libmtk_py`)，为 MoziToolKit Blender 插件提供零拷贝内存视图与极速批处理算子 | [📖 `bindings/mtk-py/README.md`](bindings/mtk-py/README.md) |
-| **[`mtk-cli`](crates/mtk-cli)** | **P1 (工具链)** | 独立命令行工具，支持资源包预编译 (`precompile`)、性能基准 (`bench`) 与资产缓存校验 (`inspect`) | [📖 `crates/mtk-cli/README.md`](crates/mtk-cli/README.md) |
+| **[`mtk-cli`](crates/mtk-cli)** | **P1 (工具链)** | 独立命令行工具 (`mtk`)，支持图集烘焙 (`atlas`)、模型烘焙/导出 (`model` / `export`)、CTM 测试 (`ctm`)、规则校验 (`verify`) 与性能基准 (`bench`) | [📖 `crates/mtk-cli/README.md`](crates/mtk-cli/README.md) |
 | **[`mtk-bench`](crates/mtk-bench)** | **P1 (基准压测)** | 4000 区块与网格面剔除基准性能压测套件 | [📖 `crates/mtk-bench/README.md`](crates/mtk-bench/README.md) |
+| **[`mtk-testkit`](crates/mtk-testkit)** | **Dev (测试基建)** | 仅用于测试的资产解析器与内置 JSON fixtures（`publish = false`），统一真包位置发现与缺省跳过策略 | [📖 `crates/mtk-testkit/README.md`](crates/mtk-testkit/README.md) |
 | **[`mtk-ffi`](bindings/mtk-ffi)** | **P2 (远期预备)** | 纯 C-ABI 动态与静态链接库及 C 头文件 (`mtk.h`)，供 C/C++、C# (Unity)、Go、Godot 跨语言调用 | [📖 `bindings/mtk-ffi/README.md`](bindings/mtk-ffi/README.md) |
 | **[`mtk-wasm`](bindings/mtk-wasm)** | **P2 (远期预备)** | 基于 wasm-bindgen 的 WebAssembly 绑定，支持浏览器/Node.js/WebGPU 零拷贝 TypedArray 视图 | [📖 `bindings/mtk-wasm/README.md`](bindings/mtk-wasm/README.md) |
 
@@ -45,6 +46,16 @@
 
 ## 构建与测试
 
+### 0. 提交前门禁（与 CI 一致，必须全绿）
+```bash
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+```
+
+> 需要真实 Minecraft 资产的集成测试通过 [`crates/mtk-testkit`](crates/mtk-testkit) 自动定位资源，优先级为：环境变量 → 工作区相邻目录（`../mc`、`../26.2-Fabric.jar`、`~/Downloads/SPBR-21.zip`）→ 内置 fixtures。
+> 可用环境变量：`MTK_TEST_ASSETS` / `MTK_TEST_JAR` / `MTK_TEST_RESOURCE_PACK` / `MTK_TEST_SAVE` / `MTK_TEST_MODELS_CACHE`。资产缺失时相关测试会优雅跳过，不会 panic。
+
 ### 1. 本地原生编译与测试
 ```bash
 cargo test --workspace
@@ -57,7 +68,7 @@ cargo build --release -p mtk-cli
 
 ### 3. WebAssembly 兼容性校验
 ```bash
-cargo check --workspace --target wasm32-unknown-unknown
+cargo check -p mtk-wasm --target wasm32-unknown-unknown
 ```
 
 ### 4. Python 扩展构建 (需工作区专属虚拟环境)
@@ -65,6 +76,9 @@ cargo check --workspace --target wasm32-unknown-unknown
 source .venv/bin/activate
 maturin build --release -m bindings/mtk-py/Cargo.toml
 ```
+
+### 5. 持续集成 (GitHub Actions)
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) 在 push/PR 时执行：`fmt --check`、`clippy -D warnings`、`cargo test --workspace`（从临时 Release 注入真包）、`wasm32-unknown-unknown` 兼容性检查与 abi3 Python wheel 构建。
 
 ---
 

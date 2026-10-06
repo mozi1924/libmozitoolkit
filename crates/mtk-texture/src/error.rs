@@ -1,5 +1,5 @@
-use thiserror::Error;
 use mtk_resource::ResourceError;
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum TextureError {

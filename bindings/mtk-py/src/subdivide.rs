@@ -58,12 +58,7 @@ pub fn slice_face_by_pixel_grid(
     tex_h: u32,
     pixels_per_face: f32,
     max_subdivisions: u32,
-) -> (
-    Vec<[f32; 3]>,
-    Vec<[f32; 2]>,
-    Vec<Vec<u32>>,
-    Vec<[f32; 2]>,
-) {
+) -> (Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<Vec<u32>>, Vec<[f32; 2]>) {
     let res = py.allow_threads(|| {
         mtk_core::subdivide::slice_face_by_pixel_grid(
             &positions,

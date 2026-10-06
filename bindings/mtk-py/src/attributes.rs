@@ -44,7 +44,11 @@ fn copy_pod_vec<T: Copy>(raw_bytes: &[u8], type_name: &str) -> PyResult<Vec<T>> 
     let mut vec = Vec::with_capacity(count);
     if count > 0 {
         unsafe {
-            std::ptr::copy_nonoverlapping(raw_bytes.as_ptr(), vec.as_mut_ptr() as *mut u8, raw_bytes.len());
+            std::ptr::copy_nonoverlapping(
+                raw_bytes.as_ptr(),
+                vec.as_mut_ptr() as *mut u8,
+                raw_bytes.len(),
+            );
             vec.set_len(count);
         }
     }
@@ -54,16 +58,34 @@ fn copy_pod_vec<T: Copy>(raw_bytes: &[u8], type_name: &str) -> PyResult<Vec<T>> 
 /// Parses raw bytes into typed `AttributeData` based on the given dtype specifier.
 pub fn parse_attribute_buffer(dtype: &str, raw_bytes: &[u8]) -> PyResult<AttributeData> {
     match dtype.trim().to_lowercase().as_str() {
-        "float" | "float32" | "f32" => Ok(AttributeData::Float(copy_pod_vec::<f32>(raw_bytes, "float")?)),
-        "float2" | "vec2" => Ok(AttributeData::Float2(copy_pod_vec::<[f32; 2]>(raw_bytes, "float2")?)),
-        "float3" | "vec3" => Ok(AttributeData::Float3(copy_pod_vec::<[f32; 3]>(raw_bytes, "float3")?)),
-        "float4" | "vec4" | "color" => Ok(AttributeData::Float4(copy_pod_vec::<[f32; 4]>(raw_bytes, "float4")?)),
+        "float" | "float32" | "f32" => Ok(AttributeData::Float(copy_pod_vec::<f32>(
+            raw_bytes, "float",
+        )?)),
+        "float2" | "vec2" => Ok(AttributeData::Float2(copy_pod_vec::<[f32; 2]>(
+            raw_bytes, "float2",
+        )?)),
+        "float3" | "vec3" => Ok(AttributeData::Float3(copy_pod_vec::<[f32; 3]>(
+            raw_bytes, "float3",
+        )?)),
+        "float4" | "vec4" | "color" => Ok(AttributeData::Float4(copy_pod_vec::<[f32; 4]>(
+            raw_bytes, "float4",
+        )?)),
         "int8" | "i8" => Ok(AttributeData::Int8(copy_pod_vec::<i8>(raw_bytes, "int8")?)),
-        "int16" | "i16" => Ok(AttributeData::Int16(copy_pod_vec::<i16>(raw_bytes, "int16")?)),
-        "int32" | "int" | "i32" => Ok(AttributeData::Int32(copy_pod_vec::<i32>(raw_bytes, "int32")?)),
-        "uint8" | "u8" | "byte" => Ok(AttributeData::UInt8(copy_pod_vec::<u8>(raw_bytes, "uint8")?)),
-        "uint16" | "u16" => Ok(AttributeData::UInt16(copy_pod_vec::<u16>(raw_bytes, "uint16")?)),
-        "uint32" | "u32" => Ok(AttributeData::UInt32(copy_pod_vec::<u32>(raw_bytes, "uint32")?)),
+        "int16" | "i16" => Ok(AttributeData::Int16(copy_pod_vec::<i16>(
+            raw_bytes, "int16",
+        )?)),
+        "int32" | "int" | "i32" => Ok(AttributeData::Int32(copy_pod_vec::<i32>(
+            raw_bytes, "int32",
+        )?)),
+        "uint8" | "u8" | "byte" => Ok(AttributeData::UInt8(copy_pod_vec::<u8>(
+            raw_bytes, "uint8",
+        )?)),
+        "uint16" | "u16" => Ok(AttributeData::UInt16(copy_pod_vec::<u16>(
+            raw_bytes, "uint16",
+        )?)),
+        "uint32" | "u32" => Ok(AttributeData::UInt32(copy_pod_vec::<u32>(
+            raw_bytes, "uint32",
+        )?)),
         "bool" | "boolean" => {
             let mut vec = Vec::with_capacity(raw_bytes.len());
             for &b in raw_bytes {

@@ -2,10 +2,9 @@ use glam::{IVec3, Vec3};
 use mtk_core::direction::Direction;
 use mtk_core::geometry::Aabb2d;
 use mtk_cull::{
-    extract_quad_face_occlusion_rect, is_face_completely_occluded, subtract_rect,
-    CullCategory, FaceCuller, GlassCullMode, LeavesCullMode,
+    extract_quad_face_occlusion_rect, is_face_completely_occluded, subtract_rect, CullCategory,
+    FaceCuller, GlassCullMode, LeavesCullMode,
 };
-
 
 #[test]
 fn test_2d_rectangle_boolean_subtraction() {
@@ -20,7 +19,10 @@ fn test_2d_rectangle_boolean_subtraction() {
     assert!((remainder[0].max.x - 1.0).abs() < 1e-4);
 
     // Completely occluding with two halves
-    assert!(is_face_completely_occluded(&[full], &[half_left, half_right]));
+    assert!(is_face_completely_occluded(
+        &[full],
+        &[half_left, half_right]
+    ));
 
     // Partially occluding: half_left alone leaves half unoccluded
     assert!(!is_face_completely_occluded(&[full], &[half_left]));
@@ -61,7 +63,14 @@ fn test_glass_translucent_culling() {
 
     // 2. In GROUP mode: Red Stained Glass touching Plain Glass -> culled
     culler.glass_cull_mode = GlassCullMode::Group;
-    assert!(!culler.should_render_face(&red_glass, Some(&glass), Direction::East, None, None, None));
+    assert!(!culler.should_render_face(
+        &red_glass,
+        Some(&glass),
+        Direction::East,
+        None,
+        None,
+        None
+    ));
 
     // 3. In SAME_BLOCK mode: Red Stained Glass touching Plain Glass -> rendered partition
     culler.glass_cull_mode = GlassCullMode::SameBlock;
@@ -86,8 +95,22 @@ fn test_cutout_leaves_modes() {
 
     // 1. Fancy Mode: both leaves faces rendered (internal volume visible)
     culler.leaves_cull_mode = LeavesCullMode::Fancy;
-    assert!(culler.should_render_face(&oak_leaves, Some(&birch_leaves), Direction::East, None, None, None));
-    assert!(culler.should_render_face(&birch_leaves, Some(&oak_leaves), Direction::West, None, None, None));
+    assert!(culler.should_render_face(
+        &oak_leaves,
+        Some(&birch_leaves),
+        Direction::East,
+        None,
+        None,
+        None
+    ));
+    assert!(culler.should_render_face(
+        &birch_leaves,
+        Some(&oak_leaves),
+        Direction::West,
+        None,
+        None,
+        None
+    ));
 
     // 2. Single-Face Mode: exactly one face rendered between touching leaves
     culler.leaves_cull_mode = LeavesCullMode::SingleFace;
@@ -115,14 +138,42 @@ fn test_cutout_leaves_modes() {
 
     // 3. Fast Mode: mutually culled
     culler.leaves_cull_mode = LeavesCullMode::Fast;
-    assert!(!culler.should_render_face(&oak_leaves, Some(&birch_leaves), Direction::East, None, None, None));
-    assert!(!culler.should_render_face(&birch_leaves, Some(&oak_leaves), Direction::West, None, None, None));
+    assert!(!culler.should_render_face(
+        &oak_leaves,
+        Some(&birch_leaves),
+        Direction::East,
+        None,
+        None,
+        None
+    ));
+    assert!(!culler.should_render_face(
+        &birch_leaves,
+        Some(&oak_leaves),
+        Direction::West,
+        None,
+        None,
+        None
+    ));
 
     // 4. Leaves touching Solid Log:
     // Leaf face against log -> culled (log has full occlusion)
-    assert!(!culler.should_render_face(&oak_leaves, Some(&oak_log), Direction::Down, None, None, None));
+    assert!(!culler.should_render_face(
+        &oak_leaves,
+        Some(&oak_log),
+        Direction::Down,
+        None,
+        None,
+        None
+    ));
     // Log face against leaf -> rendered
-    assert!(culler.should_render_face(&oak_log, Some(&oak_leaves), Direction::Up, None, None, None));
+    assert!(culler.should_render_face(
+        &oak_log,
+        Some(&oak_leaves),
+        Direction::Up,
+        None,
+        None,
+        None
+    ));
 }
 
 #[test]
@@ -133,9 +184,23 @@ fn test_partial_shape_slab_occlusion() {
     let stone = culler.get_meta("minecraft:stone", None, None);
 
     // Bottom slab on Stone (down direction) -> Stone has full face -> Bottom slab down face is CULLED
-    assert!(!culler.should_render_face(&bottom_slab, Some(&stone), Direction::Down, None, None, None));
+    assert!(!culler.should_render_face(
+        &bottom_slab,
+        Some(&stone),
+        Direction::Down,
+        None,
+        None,
+        None
+    ));
     // Stone placed above bottom slab (up direction) -> bottom slab up is empty -> Stone RENDERS down face
-    assert!(culler.should_render_face(&stone, Some(&bottom_slab), Direction::Down, None, None, None));
+    assert!(culler.should_render_face(
+        &stone,
+        Some(&bottom_slab),
+        Direction::Down,
+        None,
+        None,
+        None
+    ));
 
     // Top slab below Stone (up direction) -> Stone has full face -> Top slab up face is CULLED
     assert!(!culler.should_render_face(&top_slab, Some(&stone), Direction::Up, None, None, None));
@@ -167,9 +232,19 @@ fn test_fluid_culling() {
     assert!(!culler.should_render_face(&water, Some(&stone), Direction::East, None, None, None));
 
     // Water against waterlogged block above: culled
-    let waterlogged_slab =
-        culler.get_meta("minecraft:oak_slab[type=bottom,waterlogged=true]", None, None);
-    assert!(!culler.should_render_face(&water, Some(&waterlogged_slab), Direction::Up, None, None, None));
+    let waterlogged_slab = culler.get_meta(
+        "minecraft:oak_slab[type=bottom,waterlogged=true]",
+        None,
+        None,
+    );
+    assert!(!culler.should_render_face(
+        &water,
+        Some(&waterlogged_slab),
+        Direction::Up,
+        None,
+        None,
+        None
+    ));
 }
 
 #[test]
@@ -327,7 +402,14 @@ fn test_glass_pane_and_stained_glass_pane_do_not_skip_rendering_with_glass_block
     assert!(culler.should_render_face(&glass, Some(&red_pane), Direction::Up, None, None, None));
     assert!(culler.should_render_face(&glass, Some(&white_pane), Direction::Up, None, None, None));
     assert!(culler.should_render_face(&red_glass, Some(&pane), Direction::East, None, None, None));
-    assert!(culler.should_render_face(&red_glass, Some(&red_pane), Direction::East, None, None, None));
+    assert!(culler.should_render_face(
+        &red_glass,
+        Some(&red_pane),
+        Direction::East,
+        None,
+        None,
+        None
+    ));
 }
 
 #[test]
@@ -336,7 +418,8 @@ fn test_double_slab_and_stairs_culling() {
     let stone = culler.get_meta("minecraft:stone", None, None);
     let glass = culler.get_meta("minecraft:glass", None, None);
     let double_slab = culler.get_meta("minecraft:oak_slab[type=double]", None, None);
-    let stairs_bottom = culler.get_meta("minecraft:oak_stairs[facing=north,half=bottom]", None, None);
+    let stairs_bottom =
+        culler.get_meta("minecraft:oak_stairs[facing=north,half=bottom]", None, None);
     let stairs_top = culler.get_meta("minecraft:oak_stairs[facing=north,half=top]", None, None);
 
     // Double slab is solid cube
@@ -345,14 +428,42 @@ fn test_double_slab_and_stairs_culling() {
     assert!(double_slab.has_full_face(Direction::Down));
 
     // Double slab touching Stone: mutually culled
-    assert!(!culler.should_render_face(&double_slab, Some(&stone), Direction::East, None, None, None));
-    assert!(!culler.should_render_face(&stone, Some(&double_slab), Direction::West, None, None, None));
+    assert!(!culler.should_render_face(
+        &double_slab,
+        Some(&stone),
+        Direction::East,
+        None,
+        None,
+        None
+    ));
+    assert!(!culler.should_render_face(
+        &stone,
+        Some(&double_slab),
+        Direction::West,
+        None,
+        None,
+        None
+    ));
 
     // Double slab above Glass: Glass top face is culled (double slab bottom is full solid)
-    assert!(!culler.should_render_face(&glass, Some(&double_slab), Direction::Up, None, None, None));
+    assert!(!culler.should_render_face(
+        &glass,
+        Some(&double_slab),
+        Direction::Up,
+        None,
+        None,
+        None
+    ));
 
     // Bottom stairs above Stone: stairs bottom is full solid, so Stone top face is culled
-    assert!(!culler.should_render_face(&stone, Some(&stairs_bottom), Direction::Up, None, None, None));
+    assert!(!culler.should_render_face(
+        &stone,
+        Some(&stairs_bottom),
+        Direction::Up,
+        None,
+        None,
+        None
+    ));
 
     // Top stairs above Stone: stairs bottom is not full, so Stone top face MUST render
     assert!(culler.should_render_face(&stone, Some(&stairs_top), Direction::Up, None, None, None));
@@ -387,20 +498,56 @@ fn test_snow_layers_different_heights() {
     let snow_tall = culler.get_meta("minecraft:snow[layers=5]", None, None);
 
     // Short snow touching tall snow: short snow side (0.25) is 100% covered by tall snow (0.625) -> CULLED
-    assert!(!culler.should_render_face(&snow_short, Some(&snow_tall), Direction::East, None, None, None));
+    assert!(!culler.should_render_face(
+        &snow_short,
+        Some(&snow_tall),
+        Direction::East,
+        None,
+        None,
+        None
+    ));
     // Tall snow facing short snow: remaining upper portion (0.25 to 0.625) is not occluded -> RENDERS
-    assert!(culler.should_render_face(&snow_tall, Some(&snow_short), Direction::West, None, None, None));
+    assert!(culler.should_render_face(
+        &snow_tall,
+        Some(&snow_short),
+        Direction::West,
+        None,
+        None,
+        None
+    ));
 }
 
 #[test]
 fn test_iron_bars_cross_section_culling() {
     let culler = FaceCuller::default();
-    let bar_west = culler.get_meta("minecraft:iron_bars[east=true,west=false,north=false,south=false]", None, None);
-    let bar_east = culler.get_meta("minecraft:iron_bars[east=false,west=true,north=false,south=false]", None, None);
+    let bar_west = culler.get_meta(
+        "minecraft:iron_bars[east=true,west=false,north=false,south=false]",
+        None,
+        None,
+    );
+    let bar_east = culler.get_meta(
+        "minecraft:iron_bars[east=false,west=true,north=false,south=false]",
+        None,
+        None,
+    );
 
     // Touching cross-sections on X boundary (bar_west East vs bar_east West) must be culled
-    assert!(!culler.should_render_face(&bar_west, Some(&bar_east), Direction::East, None, None, None));
-    assert!(!culler.should_render_face(&bar_east, Some(&bar_west), Direction::West, None, None, None));
+    assert!(!culler.should_render_face(
+        &bar_west,
+        Some(&bar_east),
+        Direction::East,
+        None,
+        None,
+        None
+    ));
+    assert!(!culler.should_render_face(
+        &bar_east,
+        Some(&bar_west),
+        Direction::West,
+        None,
+        None,
+        None
+    ));
 
     // Unconnected direction retains render state against air
     assert!(culler.should_render_face(&bar_west, None, Direction::North, None, None, None));
@@ -409,12 +556,34 @@ fn test_iron_bars_cross_section_culling() {
 #[test]
 fn test_fence_cross_section_culling() {
     let culler = FaceCuller::default();
-    let fence_west = culler.get_meta("minecraft:oak_fence[east=true,west=false,north=false,south=false]", None, None);
-    let fence_east = culler.get_meta("minecraft:oak_fence[east=false,west=true,north=false,south=false]", None, None);
+    let fence_west = culler.get_meta(
+        "minecraft:oak_fence[east=true,west=false,north=false,south=false]",
+        None,
+        None,
+    );
+    let fence_east = culler.get_meta(
+        "minecraft:oak_fence[east=false,west=true,north=false,south=false]",
+        None,
+        None,
+    );
 
     // Touching cross-sections on X boundary (fence_west East vs fence_east West) must be culled
-    assert!(!culler.should_render_face(&fence_west, Some(&fence_east), Direction::East, None, None, None));
-    assert!(!culler.should_render_face(&fence_east, Some(&fence_west), Direction::West, None, None, None));
+    assert!(!culler.should_render_face(
+        &fence_west,
+        Some(&fence_east),
+        Direction::East,
+        None,
+        None,
+        None
+    ));
+    assert!(!culler.should_render_face(
+        &fence_east,
+        Some(&fence_west),
+        Direction::West,
+        None,
+        None,
+        None
+    ));
 }
 
 #[test]
@@ -479,7 +648,11 @@ fn test_vegetation_and_transparent_culling() {
     assert!(!culler.should_render_face(&leaves, Some(&log), Direction::West, None, None, None));
 
     // 4. JSON metadata from Yefira
-    let json_plant = culler.get_meta(r#"{"state":"minecraft:custom_flower","type":1,"opaque":0}"#, None, None);
+    let json_plant = culler.get_meta(
+        r#"{"state":"minecraft:custom_flower","type":1,"opaque":0}"#,
+        None,
+        None,
+    );
     assert_eq!(json_plant.category, CullCategory::NonOccluding);
     assert!(!json_plant.is_opaque);
     assert!(!json_plant.has_full_face(Direction::Down));
@@ -489,6 +662,12 @@ fn test_vegetation_and_transparent_culling() {
     let transparent_cube = culler.get_meta("minecraft:translucent_cube", None, Some(false));
     assert!(!transparent_cube.is_opaque);
     assert!(!transparent_cube.has_full_face(Direction::West));
-    assert!(culler.should_render_face(&stone, Some(&transparent_cube), Direction::East, None, None, None));
+    assert!(culler.should_render_face(
+        &stone,
+        Some(&transparent_cube),
+        Direction::East,
+        None,
+        None,
+        None
+    ));
 }
-

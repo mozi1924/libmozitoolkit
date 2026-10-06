@@ -1,9 +1,9 @@
-use std::sync::Arc;
 use glam::Vec3;
 use mtk_resource::CtmSolver;
 use mtk_texture::atlas::AtlasAddressMap;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use thiserror::Error;
 
 /// Coordinate space transformation mode.

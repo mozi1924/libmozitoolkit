@@ -28,8 +28,8 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::HashMap;
 use crate::parser::model_json::{BlockModelJson, ElementJson, FaceJson};
+use std::collections::HashMap;
 
 /// Applies MiEx patches to BlockModelJson (such as bell elements).
 /// Based on upstream MiEx `miex_patches.json`.
@@ -59,12 +59,66 @@ pub fn apply_bell_patches(model_id: &str, model: &mut BlockModelJson) -> bool {
         shade: Some(true),
         faces: {
             let mut f = HashMap::new();
-            f.insert("north".to_string(), FaceJson { uv: Some([3.0, 3.0, 6.0, 6.5]), texture: "#bell_body".to_string(), cullface: None, rotation: None, tintindex: None });
-            f.insert("east".to_string(), FaceJson { uv: Some([6.0, 3.0, 9.0, 6.5]), texture: "#bell_body".to_string(), cullface: None, rotation: None, tintindex: None });
-            f.insert("south".to_string(), FaceJson { uv: Some([9.0, 3.0, 12.0, 6.5]), texture: "#bell_body".to_string(), cullface: None, rotation: None, tintindex: None });
-            f.insert("west".to_string(), FaceJson { uv: Some([0.0, 3.0, 3.0, 6.5]), texture: "#bell_body".to_string(), cullface: None, rotation: None, tintindex: None });
-            f.insert("up".to_string(), FaceJson { uv: Some([3.0, 0.0, 6.0, 3.0]), texture: "#bell_body".to_string(), cullface: None, rotation: None, tintindex: None });
-            f.insert("down".to_string(), FaceJson { uv: Some([6.0, 0.0, 9.0, 3.0]), texture: "#bell_body".to_string(), cullface: None, rotation: None, tintindex: None });
+            f.insert(
+                "north".to_string(),
+                FaceJson {
+                    uv: Some([3.0, 3.0, 6.0, 6.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "east".to_string(),
+                FaceJson {
+                    uv: Some([6.0, 3.0, 9.0, 6.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "south".to_string(),
+                FaceJson {
+                    uv: Some([9.0, 3.0, 12.0, 6.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "west".to_string(),
+                FaceJson {
+                    uv: Some([0.0, 3.0, 3.0, 6.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "up".to_string(),
+                FaceJson {
+                    uv: Some([3.0, 0.0, 6.0, 3.0]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "down".to_string(),
+                FaceJson {
+                    uv: Some([6.0, 0.0, 9.0, 3.0]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
             f
         },
     };
@@ -77,12 +131,66 @@ pub fn apply_bell_patches(model_id: &str, model: &mut BlockModelJson) -> bool {
         shade: Some(true),
         faces: {
             let mut f = HashMap::new();
-            f.insert("north".to_string(), FaceJson { uv: Some([4.0, 10.5, 8.0, 11.5]), texture: "#bell_body".to_string(), cullface: None, rotation: None, tintindex: None });
-            f.insert("east".to_string(), FaceJson { uv: Some([8.0, 10.5, 12.0, 11.5]), texture: "#bell_body".to_string(), cullface: None, rotation: None, tintindex: None });
-            f.insert("south".to_string(), FaceJson { uv: Some([12.0, 10.5, 16.0, 11.5]), texture: "#bell_body".to_string(), cullface: None, rotation: None, tintindex: None });
-            f.insert("west".to_string(), FaceJson { uv: Some([0.0, 10.5, 4.0, 11.5]), texture: "#bell_body".to_string(), cullface: None, rotation: None, tintindex: None });
-            f.insert("up".to_string(), FaceJson { uv: Some([4.0, 6.5, 8.0, 10.5]), texture: "#bell_body".to_string(), cullface: None, rotation: None, tintindex: None });
-            f.insert("down".to_string(), FaceJson { uv: Some([8.0, 6.5, 12.0, 10.5]), texture: "#bell_body".to_string(), cullface: None, rotation: None, tintindex: None });
+            f.insert(
+                "north".to_string(),
+                FaceJson {
+                    uv: Some([4.0, 10.5, 8.0, 11.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "east".to_string(),
+                FaceJson {
+                    uv: Some([8.0, 10.5, 12.0, 11.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "south".to_string(),
+                FaceJson {
+                    uv: Some([12.0, 10.5, 16.0, 11.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "west".to_string(),
+                FaceJson {
+                    uv: Some([0.0, 10.5, 4.0, 11.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "up".to_string(),
+                FaceJson {
+                    uv: Some([4.0, 6.5, 8.0, 10.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "down".to_string(),
+                FaceJson {
+                    uv: Some([8.0, 6.5, 12.0, 10.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
             f
         },
     };
@@ -94,7 +202,10 @@ pub fn apply_bell_patches(model_id: &str, model: &mut BlockModelJson) -> bool {
 }
 
 /// Applies bell patches directly to a flattened `ResolvedBlockModel`.
-pub fn apply_bell_patches_resolved(model_id: &str, model: &mut crate::parser::model_json::ResolvedBlockModel) -> bool {
+pub fn apply_bell_patches_resolved(
+    model_id: &str,
+    model: &mut crate::parser::model_json::ResolvedBlockModel,
+) -> bool {
     let clean = model_id.strip_prefix("minecraft:").unwrap_or(model_id);
     if !clean.starts_with("block/bell_") && clean != "block/bell" {
         return false;
@@ -102,7 +213,9 @@ pub fn apply_bell_patches_resolved(model_id: &str, model: &mut crate::parser::mo
 
     let tex_id = "minecraft:entity/bell/bell_body".to_string();
     if !model.textures.contains_key("bell_body") {
-        model.textures.insert("bell_body".to_string(), tex_id.clone());
+        model
+            .textures
+            .insert("bell_body".to_string(), tex_id.clone());
     }
 
     let make_face = |uv: [f32; 4]| -> crate::parser::model_json::ResolvedFace {
@@ -156,4 +269,3 @@ pub fn apply_bell_patches_resolved(model_id: &str, model: &mut crate::parser::mo
 
     true
 }
-

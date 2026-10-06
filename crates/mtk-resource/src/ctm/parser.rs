@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use mtk_core::direction::DirMask;
-use crate::identifier::{DEFAULT_NAMESPACE, ResourceLocation};
 use crate::ctm::types::{BlockMatch, ConnectLogic, CtmMethod, CtmRule, CtmSymmetry};
+use crate::identifier::{ResourceLocation, DEFAULT_NAMESPACE};
+use mtk_core::direction::DirMask;
+use std::collections::HashMap;
 
 pub fn parse_ctm_properties(source_path: &str, namespace: &str, content: &str) -> Option<CtmRule> {
     let mut props: HashMap<String, String> = HashMap::new();
@@ -39,7 +39,10 @@ pub fn parse_ctm_properties(source_path: &str, namespace: &str, content: &str) -
         "top" => CtmMethod::Top,
         "repeat" | "overlay_repeat" => {
             let width = props.get("width").and_then(|w| w.parse().ok()).unwrap_or(2);
-            let height = props.get("height").and_then(|h| h.parse().ok()).unwrap_or(2);
+            let height = props
+                .get("height")
+                .and_then(|h| h.parse().ok())
+                .unwrap_or(2);
             CtmMethod::Repeat { width, height }
         }
         "random" | "overlay_random" => {
@@ -141,10 +144,7 @@ pub fn parse_ctm_properties(source_path: &str, namespace: &str, content: &str) -
         .unwrap_or(source_path);
     if match_blocks.is_empty() && match_tiles.is_empty() {
         if let Some(stripped) = file_stem.strip_prefix("block_") {
-            match_blocks.push(BlockMatch::parse_with_namespace(
-                stripped,
-                namespace,
-            ));
+            match_blocks.push(BlockMatch::parse_with_namespace(stripped, namespace));
         } else {
             match_tiles.push(ResourceLocation::new(
                 namespace,
@@ -200,8 +200,7 @@ pub fn parse_ctm_properties(source_path: &str, namespace: &str, content: &str) -
             match f.to_lowercase().as_str() {
                 "all" => custom_faces |= DirMask::all(),
                 "sides" => {
-                    custom_faces |=
-                        DirMask::NORTH | DirMask::SOUTH | DirMask::EAST | DirMask::WEST
+                    custom_faces |= DirMask::NORTH | DirMask::SOUTH | DirMask::EAST | DirMask::WEST
                 }
                 "north" => custom_faces |= DirMask::NORTH,
                 "south" => custom_faces |= DirMask::SOUTH,
@@ -218,7 +217,10 @@ pub fn parse_ctm_properties(source_path: &str, namespace: &str, content: &str) -
     }
 
     // 6. Weight / Priority
-    let priority = props.get("weight").and_then(|w| w.parse().ok()).unwrap_or(0);
+    let priority = props
+        .get("weight")
+        .and_then(|w| w.parse().ok())
+        .unwrap_or(0);
 
     // 7. Biomes & Heights
     let biomes = props.get("biomes").map(|b| {

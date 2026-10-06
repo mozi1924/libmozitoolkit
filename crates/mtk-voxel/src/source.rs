@@ -5,9 +5,9 @@
 //! input providers (e.g. Anvil/MCA saves, Bedrock LevelDB, Live Sync streams, procedural
 //! generators, or mesh reverse-engineering guessers).
 
-use glam::IVec3;
 use crate::storage::SectionStorage;
 use crate::types::VoxelError;
+use glam::IVec3;
 
 /// Read-only spatial access to a 3D block/voxel world.
 pub trait VoxelReader {
@@ -43,7 +43,15 @@ pub trait VoxelWriter {
     fn mark_section_dirty(&mut self, sx: i32, sy: i32, sz: i32);
 
     /// Sets the active world bounding box in block coordinates.
-    fn set_bounds(&mut self, min_x: i32, min_y: i32, min_z: i32, size_x: i32, size_y: i32, size_z: i32);
+    fn set_bounds(
+        &mut self,
+        min_x: i32,
+        min_y: i32,
+        min_z: i32,
+        size_x: i32,
+        size_y: i32,
+        size_z: i32,
+    );
 
     /// Clears all stored sections and resets dirty tracking.
     fn clear(&mut self);
@@ -70,7 +78,12 @@ pub trait VoxelSource {
     fn has_section(&self, sx: i32, sy: i32, sz: i32) -> bool;
 
     /// Loads or queries a single 16x16x16 `SectionStorage` at section coordinates `(sx, sy, sz)`.
-    fn load_section(&mut self, sx: i32, sy: i32, sz: i32) -> Result<Option<SectionStorage>, VoxelError>;
+    fn load_section(
+        &mut self,
+        sx: i32,
+        sy: i32,
+        sz: i32,
+    ) -> Result<Option<SectionStorage>, VoxelError>;
 
     /// Bounding box `(min_section, max_section)` in section coordinates, if bounded.
     fn section_bounds(&self) -> Option<(IVec3, IVec3)> {

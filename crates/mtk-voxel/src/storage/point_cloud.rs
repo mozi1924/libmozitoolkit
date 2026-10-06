@@ -167,7 +167,9 @@ impl VoxelPointCloud {
                 _ => None,
             })
             .ok_or_else(|| {
-                VoxelError::InvalidPointCloud("Missing or malformed mtk_block_x attribute".to_string())
+                VoxelError::InvalidPointCloud(
+                    "Missing or malformed mtk_block_x attribute".to_string(),
+                )
             })?;
 
         let block_y = mesh
@@ -177,7 +179,9 @@ impl VoxelPointCloud {
                 _ => None,
             })
             .ok_or_else(|| {
-                VoxelError::InvalidPointCloud("Missing or malformed mtk_block_y attribute".to_string())
+                VoxelError::InvalidPointCloud(
+                    "Missing or malformed mtk_block_y attribute".to_string(),
+                )
             })?;
 
         let block_z = mesh
@@ -187,7 +191,9 @@ impl VoxelPointCloud {
                 _ => None,
             })
             .ok_or_else(|| {
-                VoxelError::InvalidPointCloud("Missing or malformed mtk_block_z attribute".to_string())
+                VoxelError::InvalidPointCloud(
+                    "Missing or malformed mtk_block_z attribute".to_string(),
+                )
             })?;
 
         let block_states = mesh
@@ -197,7 +203,9 @@ impl VoxelPointCloud {
                 _ => None,
             })
             .ok_or_else(|| {
-                VoxelError::InvalidPointCloud("Missing or malformed mtk_block_state attribute".to_string())
+                VoxelError::InvalidPointCloud(
+                    "Missing or malformed mtk_block_state attribute".to_string(),
+                )
             })?;
 
         let biomes = mesh
@@ -250,7 +258,10 @@ impl VoxelPointCloud {
         let mut effective_config = config.clone();
         let (bx, by, bz, sx, sy, sz) = storage.get_bounds();
         let has_bounds = sx > 0 && sy > 0 && sz > 0;
-        if effective_config.origin_centered && effective_config.selection_bounds.is_none() && has_bounds {
+        if effective_config.origin_centered
+            && effective_config.selection_bounds.is_none()
+            && has_bounds
+        {
             effective_config.selection_bounds = Some(([bx, by, bz], [sx, sy, sz]));
         }
 
@@ -288,7 +299,8 @@ impl VoxelPointCloud {
                             let wz = base_z + lz as i32;
 
                             // Compute center point under active coordinate transform and centering
-                            let center = Vec3::new(wx as f32 + 0.5, wy as f32 + 0.5, wz as f32 + 0.5);
+                            let center =
+                                Vec3::new(wx as f32 + 0.5, wy as f32 + 0.5, wz as f32 + 0.5);
                             let transformed = effective_config.transform_position(center);
 
                             let biome = storage.get_biome(wx, wy, wz);
@@ -423,8 +435,16 @@ impl PointCloudVoxelSource {
 
         let bounds = if min_x <= max_x {
             Some((
-                IVec3::new(min_x.div_euclid(16), min_y.div_euclid(16), min_z.div_euclid(16)),
-                IVec3::new(max_x.div_euclid(16), max_y.div_euclid(16), max_z.div_euclid(16)),
+                IVec3::new(
+                    min_x.div_euclid(16),
+                    min_y.div_euclid(16),
+                    min_z.div_euclid(16),
+                ),
+                IVec3::new(
+                    max_x.div_euclid(16),
+                    max_y.div_euclid(16),
+                    max_z.div_euclid(16),
+                ),
             ))
         } else {
             None

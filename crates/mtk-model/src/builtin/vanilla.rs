@@ -2,16 +2,20 @@
 //! static JSON models in vanilla (bell, decorated pot, end portal) or bridging
 //! model ID lookups to dynamic MiEx AST evaluations.
 
-use std::collections::HashMap;
 use crate::builtin::loader::MiExModelLoader;
 use crate::builtin::patch::apply_bell_patches;
 use crate::parser::blockstate::{BlockState, BlockStateDefinition};
-use crate::parser::model_json::{BlockModelJson, BuiltinTransform, ElementJson, FaceJson, TextureValue};
+use crate::parser::model_json::{
+    BlockModelJson, BuiltinTransform, ElementJson, FaceJson, TextureValue,
+};
+use std::collections::HashMap;
 
 // Embedded BlockStates
-pub const DEF_DECORATED_POT: &str = include_str!("../../assets/builtins/blockstates/decorated_pot.json");
+pub const DEF_DECORATED_POT: &str =
+    include_str!("../../assets/builtins/blockstates/decorated_pot.json");
 pub const DEF_END_PORTAL: &str = include_str!("../../assets/builtins/blockstates/end_portal.json");
-pub const DEF_END_GATEWAY: &str = include_str!("../../assets/builtins/blockstates/end_gateway.json");
+pub const DEF_END_GATEWAY: &str =
+    include_str!("../../assets/builtins/blockstates/end_gateway.json");
 pub const DEF_CONDUIT: &str = include_str!("../../assets/builtins/blockstates/conduit.json");
 pub const DEF_BELL: &str = r#"{
     "variants": {
@@ -35,7 +39,8 @@ pub const DEF_BELL: &str = r#"{
 }"#;
 
 // Embedded Models
-pub const MODEL_DECORATED_POT: &str = include_str!("../../assets/builtins/models/decorated_pot.json");
+pub const MODEL_DECORATED_POT: &str =
+    include_str!("../../assets/builtins/models/decorated_pot.json");
 pub const MODEL_END_PORTAL: &str = include_str!("../../assets/builtins/models/end_portal.json");
 pub const MODEL_END_GATEWAY: &str = include_str!("../../assets/builtins/models/end_gateway.json");
 pub const MODEL_CONDUIT: &str = include_str!("../../assets/builtins/models/conduit.json");
@@ -111,9 +116,18 @@ fn make_simple_faces(tex: &str) -> HashMap<String, FaceJson> {
 /// Synthesizes vanilla bell frame models and applies bell body patches.
 fn create_builtin_bell_model(stem: &str) -> Option<BlockModelJson> {
     let mut textures = HashMap::new();
-    textures.insert("particle".to_string(), TextureValue::Path("minecraft:block/bell_bottom".to_string()));
-    textures.insert("bar".to_string(), TextureValue::Path("minecraft:block/dark_oak_planks".to_string()));
-    textures.insert("post".to_string(), TextureValue::Path("minecraft:block/stone".to_string()));
+    textures.insert(
+        "particle".to_string(),
+        TextureValue::Path("minecraft:block/bell_bottom".to_string()),
+    );
+    textures.insert(
+        "bar".to_string(),
+        TextureValue::Path("minecraft:block/dark_oak_planks".to_string()),
+    );
+    textures.insert(
+        "post".to_string(),
+        TextureValue::Path("minecraft:block/stone".to_string()),
+    );
 
     let mut elements = Vec::new();
 
@@ -284,8 +298,8 @@ fn create_builtin_banner_model(blockstate: &BlockState) -> Option<BlockModelJson
     elements.push(ElementJson {
         from: [
             -10.0 * scale + offset_x,
-            -1.0 * scale + offset_y,
-            -1.0 * scale + offset_z,
+            -scale + offset_y,
+            -scale + offset_z,
         ],
         to: [
             10.0 * scale + offset_x,
@@ -313,13 +327,13 @@ fn create_builtin_banner_model(blockstate: &BlockState) -> Option<BlockModelJson
     if !is_wall {
         elements.push(ElementJson {
             from: [
-                -1.0 * scale + offset_x,
+                -scale + offset_x,
                 -43.0 * scale + offset_y,
-                -1.0 * scale + offset_z,
+                -scale + offset_z,
             ],
             to: [
                 1.0 * scale + offset_x,
-                -1.0 * scale + offset_y,
+                -scale + offset_y,
                 1.0 * scale + offset_z,
             ],
             rotation: None,
@@ -379,7 +393,10 @@ fn create_builtin_banner_model(blockstate: &BlockState) -> Option<BlockModelJson
 
 /// Fallback model for a blockstate when no external model was discovered.
 pub fn get_builtin_model_for_state(blockstate: &BlockState) -> Option<BlockModelJson> {
-    let clean = blockstate.name.strip_prefix("minecraft:").unwrap_or(&blockstate.name);
+    let clean = blockstate
+        .name
+        .strip_prefix("minecraft:")
+        .unwrap_or(&blockstate.name);
     if clean == "decorated_pot" {
         return get_builtin_model_by_id("decorated_pot");
     }

@@ -1,8 +1,8 @@
-use std::io::Cursor;
+use crate::nbt::{Nbt, NbtCompound};
 use glam::IVec3;
 use mtk_core::constants::voxel::{block_index, SECTION_VOLUME};
 use mtk_voxel::storage::SectionStorage;
-use crate::nbt::{Nbt, NbtCompound};
+use std::io::Cursor;
 
 use crate::error::SaveError;
 
@@ -24,7 +24,10 @@ pub fn format_canonical_blockstate(block_comp: &NbtCompound) -> String {
         let mut prop_list: Vec<(String, String)> = Vec::new();
         for (k, v) in props.iter() {
             let key_str = k.to_string_lossy().into_owned();
-            let val_str = v.string().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            let val_str = v
+                .string()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default();
             prop_list.push((key_str, val_str));
         }
 
@@ -103,7 +106,8 @@ impl ChunkParser {
         }
 
         let data = data_longs.unwrap();
-        let bits_per_block = (32 - ((palette.len() as u32).saturating_sub(1)).leading_zeros()).max(4) as usize;
+        let bits_per_block =
+            (32 - ((palette.len() as u32).saturating_sub(1)).leading_zeros()).max(4) as usize;
         let blocks_per_long = 64 / bits_per_block;
         let mask = (1u64 << bits_per_block) - 1;
 

@@ -4,11 +4,11 @@
 
 use std::sync::Arc;
 
-use pyo3::prelude::*;
-use pyo3::types::PyBytes;
-use mtk_model::{BakedModelDatabase, BlockModelJson, BlockState, BlockStateDefinition, ModelBaker};
 use crate::mesh::PyMeshData;
 use crate::resource::PyResourcePackStack;
+use mtk_model::{BakedModelDatabase, BlockModelJson, BlockState, BlockStateDefinition, ModelBaker};
+use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 
 /// Prebaked Model Database container.
 #[pyclass(name = "BakedModelDatabase")]
@@ -77,9 +77,10 @@ impl PyBakedModelDatabase {
         let bs = BlockState::parse(state_str)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
         let bs_path = format!("assets/{}/blockstates/{}.json", bs.namespace, bs.name);
-        let bs_def = stack.inner.open_asset_raw(&bs_path).and_then(|bytes| {
-            serde_json::from_slice::<BlockStateDefinition>(&bytes).ok()
-        });
+        let bs_def = stack
+            .inner
+            .open_asset_raw(&bs_path)
+            .and_then(|bytes| serde_json::from_slice::<BlockStateDefinition>(&bytes).ok());
 
         let mut baker = ModelBaker::new();
         let mut group = baker
@@ -108,7 +109,11 @@ impl PyBakedModelDatabase {
 
     /// Retrieves baked mesh geometry and texture list for a given canonical blockstate string.
     #[pyo3(signature = (state_str, clip_hidden=true))]
-    pub fn get_mesh(&self, state_str: &str, clip_hidden: bool) -> Option<(PyMeshData, Vec<String>)> {
+    pub fn get_mesh(
+        &self,
+        state_str: &str,
+        clip_hidden: bool,
+    ) -> Option<(PyMeshData, Vec<String>)> {
         self.inner.get(state_str).map(|baked| {
             let (mesh, textures) = baked.to_mesh_with_textures(clip_hidden);
             (PyMeshData { inner: mesh }, textures)
@@ -129,7 +134,9 @@ impl PyBakedModelDatabase {
     pub fn from_bincode_bytes(bytes: &[u8]) -> PyResult<Self> {
         let inner = BakedModelDatabase::from_bincode(bytes)
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-        Ok(Self { inner: Arc::new(inner) })
+        Ok(Self {
+            inner: Arc::new(inner),
+        })
     }
 
     /// Remaps all models in the database to the specified atlas coordinates.
@@ -195,7 +202,9 @@ impl PyModelBaker {
             .allow_threads(|| libmtk::prebake_all_models(&stack.inner, atlas_map))
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
-        Ok(PyBakedModelDatabase { inner: Arc::new(db) })
+        Ok(PyBakedModelDatabase {
+            inner: Arc::new(db),
+        })
     }
 
     /// Bakes a single blockstate string into a `PyMeshData` and texture list.
@@ -215,29 +224,33 @@ impl PyModelBaker {
         let bs = BlockState::parse(state_str)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
-        let (mesh, textures) = py.allow_threads(|| -> Result<(mtk_core::mesh::MeshData, Vec<String>), String> {
-            let bs_def = {
-                let bs_path = format!("assets/{}/blockstates/{}.json", bs.namespace, bs.name);
-                stack.inner.open_asset_raw(&bs_path).and_then(|bytes| {
-                    serde_json::from_slice::<BlockStateDefinition>(&bytes).ok()
-                })
-            };
+        let (mesh, textures) = py
+            .allow_threads(
+                || -> Result<(mtk_core::mesh::MeshData, Vec<String>), String> {
+                    let bs_def = {
+                        let bs_path =
+                            format!("assets/{}/blockstates/{}.json", bs.namespace, bs.name);
+                        stack.inner.open_asset_raw(&bs_path).and_then(|bytes| {
+                            serde_json::from_slice::<BlockStateDefinition>(&bytes).ok()
+                        })
+                    };
 
-            let baked = self
-                .inner
-                .bake_blockstate(state_str, bs_def.as_ref(), |model_id| {
-                    if let Some(bytes) = stack.inner.open_model_raw(model_id) {
-                        serde_json::from_slice::<BlockModelJson>(&bytes).ok()
-                    } else {
-                        None
-                    }
-                })
-                .map_err(|e| e.to_string())?;
+                    let baked = self
+                        .inner
+                        .bake_blockstate(state_str, bs_def.as_ref(), |model_id| {
+                            if let Some(bytes) = stack.inner.open_model_raw(model_id) {
+                                serde_json::from_slice::<BlockModelJson>(&bytes).ok()
+                            } else {
+                                None
+                            }
+                        })
+                        .map_err(|e| e.to_string())?;
 
-            let (mesh, textures) = baked.to_mesh_with_textures(clip_hidden);
-            Ok((mesh, textures))
-        })
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e))?;
+                    let (mesh, textures) = baked.to_mesh_with_textures(clip_hidden);
+                    Ok((mesh, textures))
+                },
+            )
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
 
         Ok((PyMeshData { inner: mesh }, textures))
     }

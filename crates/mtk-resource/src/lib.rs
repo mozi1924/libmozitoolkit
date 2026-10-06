@@ -16,11 +16,11 @@ pub use ctm::{
     CtmRule, CtmSolver, CtmSymmetry, CTM_47_LOOKUP, OVERLAY_17_LOOKUP,
 };
 pub use error::ResourceError;
-pub use identifier::{DEFAULT_NAMESPACE, ResourceLocation};
+pub use identifier::{ResourceLocation, DEFAULT_NAMESPACE};
 pub use meta::{AnimationFrame, AnimationMetadata, TextureMetadata};
+#[cfg(feature = "zip")]
+pub use pack::ZipPack;
 pub use pack::{
     is_companion_asset_path, DirectoryPack, DiscoveredSprite, MemoryPack, PbrCompanions,
     ResourcePack, ResourcePackStack,
 };
-#[cfg(feature = "zip")]
-pub use pack::ZipPack;

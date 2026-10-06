@@ -32,17 +32,17 @@ pub fn add_attribute_from_buffer(
     let domain_enum = crate::attributes::parse_domain_str(domain)?;
 
     let py_buf: PyBuffer<u8> = PyBuffer::get(buffer)?;
-    let raw_bytes: &[u8] = unsafe {
-        std::slice::from_raw_parts(py_buf.buf_ptr() as *const u8, py_buf.len_bytes())
-    };
+    let raw_bytes: &[u8] =
+        unsafe { std::slice::from_raw_parts(py_buf.buf_ptr() as *const u8, py_buf.len_bytes()) };
 
     let attr_data = crate::attributes::parse_attribute_buffer(dtype, raw_bytes)?;
 
-    mesh.inner.add_custom_attribute(mtk_core::attributes::MeshAttribute {
-        name: name.to_string(),
-        domain: domain_enum,
-        data: attr_data,
-    });
+    mesh.inner
+        .add_custom_attribute(mtk_core::attributes::MeshAttribute {
+            name: name.to_string(),
+            domain: domain_enum,
+            data: attr_data,
+        });
 
     Ok(())
 }
@@ -56,11 +56,12 @@ pub fn add_string_attribute(
 ) -> PyResult<()> {
     let domain_enum = crate::attributes::parse_domain_str(domain)?;
 
-    mesh.inner.add_custom_attribute(mtk_core::attributes::MeshAttribute {
-        name: name.to_string(),
-        domain: domain_enum,
-        data: mtk_core::attributes::AttributeData::String(values),
-    });
+    mesh.inner
+        .add_custom_attribute(mtk_core::attributes::MeshAttribute {
+            name: name.to_string(),
+            domain: domain_enum,
+            data: mtk_core::attributes::AttributeData::String(values),
+        });
 
     Ok(())
 }
@@ -159,6 +160,9 @@ pub fn get_face_materials<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<B
 }
 
 /// Tint index per face.
-pub fn get_face_tint_indices<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+pub fn get_face_tint_indices<'py>(
+    mesh: &PyMeshData,
+    py: Python<'py>,
+) -> PyResult<Bound<'py, PyList>> {
     PyList::new(py, &mesh.inner.face_tint_indices)
 }

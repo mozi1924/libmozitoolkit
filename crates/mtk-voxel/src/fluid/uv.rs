@@ -194,10 +194,26 @@ pub fn batch_repair_fluid_uv(
         let v_off = f * 12;
         let uv_off = f * 8;
         let verts = [
-            Vec3::new(verts_flat[v_off], verts_flat[v_off + 1], verts_flat[v_off + 2]),
-            Vec3::new(verts_flat[v_off + 3], verts_flat[v_off + 4], verts_flat[v_off + 5]),
-            Vec3::new(verts_flat[v_off + 6], verts_flat[v_off + 7], verts_flat[v_off + 8]),
-            Vec3::new(verts_flat[v_off + 9], verts_flat[v_off + 10], verts_flat[v_off + 11]),
+            Vec3::new(
+                verts_flat[v_off],
+                verts_flat[v_off + 1],
+                verts_flat[v_off + 2],
+            ),
+            Vec3::new(
+                verts_flat[v_off + 3],
+                verts_flat[v_off + 4],
+                verts_flat[v_off + 5],
+            ),
+            Vec3::new(
+                verts_flat[v_off + 6],
+                verts_flat[v_off + 7],
+                verts_flat[v_off + 8],
+            ),
+            Vec3::new(
+                verts_flat[v_off + 9],
+                verts_flat[v_off + 10],
+                verts_flat[v_off + 11],
+            ),
         ];
         let mut uvs = [
             Vec2::new(uvs_flat[uv_off], uvs_flat[uv_off + 1]),
@@ -275,10 +291,10 @@ mod tests {
     fn test_repair_inverted_fluid_uv() {
         // Quad face: bottom is Y=0, top left is Y=0.2, top right is Y=0.8
         let verts = [
-            Vec3::new(0.0, 0.0, 1.0),  // Bottom right
-            Vec3::new(0.0, 0.0, 0.0),  // Bottom left
-            Vec3::new(0.0, 0.2, 0.0),  // Top left (low: 0.2)
-            Vec3::new(0.0, 0.8, 1.0),  // Top right (high: 0.8)
+            Vec3::new(0.0, 0.0, 1.0), // Bottom right
+            Vec3::new(0.0, 0.0, 0.0), // Bottom left
+            Vec3::new(0.0, 0.2, 0.0), // Top left (low: 0.2)
+            Vec3::new(0.0, 0.8, 1.0), // Top right (high: 0.8)
         ];
         let mut uvs = [
             Vec2::new(1.0, 0.0),

@@ -120,15 +120,23 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
         };
     }
 
-    let is_quad_mesh = mesh.indices.len() % 6 == 0 && (mesh.face_materials.len() == mesh.indices.len() / 6);
+    let is_quad_mesh = mesh.indices.len().is_multiple_of(6)
+        && (mesh.face_materials.len() == mesh.indices.len() / 6);
     let poly_step = if is_quad_mesh { 6 } else { 3 };
     let face_count = mesh.indices.len() / poly_step;
 
-    let tol = if config.tolerance > 0.0 { config.tolerance } else { 1e-3 };
+    let tol = if config.tolerance > 0.0 {
+        config.tolerance
+    } else {
+        1e-3
+    };
     let inv_tol = 1.0 / tol;
 
     // Canonical Plane Map: [quantized_nx, quantized_ny, quantized_nz, quantized_d] -> list of faces
-    let mut plane_buckets: HashMap<[i32; 4], Vec<(usize, glam::Vec3, glam::Vec3, Vec<glam::Vec3>)>> = HashMap::new();
+    let mut plane_buckets: HashMap<
+        [i32; 4],
+        Vec<(usize, glam::Vec3, glam::Vec3, Vec<glam::Vec3>)>,
+    > = HashMap::new();
     let mut faces_to_cull: BTreeSet<usize> = BTreeSet::new();
 
     for face_idx in 0..face_count {
@@ -200,7 +208,12 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
         ];
 
         'search: for delta_d in -1..=1 {
-            let search_key = [plane_key[0], plane_key[1], plane_key[2], plane_key[3] + delta_d];
+            let search_key = [
+                plane_key[0],
+                plane_key[1],
+                plane_key[2],
+                plane_key[3] + delta_d,
+            ];
             if let Some(neighbors) = plane_buckets.get(&search_key) {
                 for (other_idx, other_norm, _other_center, other_verts) in neighbors {
                     if faces_to_cull.contains(other_idx) {
@@ -214,8 +227,10 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
                         *other_norm,
                         tol,
                     ) {
-                        let is_same_dir = rel.alignment == crate::geometry::coplanar::FaceAlignment::SameDirection;
-                        let is_opp_dir = rel.alignment == crate::geometry::coplanar::FaceAlignment::OppositeDirection;
+                        let is_same_dir = rel.alignment
+                            == crate::geometry::coplanar::FaceAlignment::SameDirection;
+                        let is_opp_dir = rel.alignment
+                            == crate::geometry::coplanar::FaceAlignment::OppositeDirection;
 
                         match rel.overlap {
                             crate::geometry::coplanar::CoplanarOverlap::Exact => {
@@ -235,12 +250,11 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
                                     break 'search;
                                 }
                             }
-                            crate::geometry::coplanar::CoplanarOverlap::ContainedInA => {
+                            crate::geometry::coplanar::CoplanarOverlap::ContainedInA
                                 // Other face B is completely covered by Face A back-to-back
-                                if config.cull_coplanar_opposite && is_opp_dir {
+                                if config.cull_coplanar_opposite && is_opp_dir => {
                                     faces_to_cull.insert(*other_idx);
                                 }
-                            }
                             _ => {}
                         }
                     }
@@ -324,14 +338,25 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
             let new_v_idx = out.positions.len() as u32;
 
             out.positions.push(mesh.positions[orig_idx]);
-            out.normals.push(mesh.normals.get(orig_idx).copied().unwrap_or([0.0, 0.0, 1.0]));
-            out.uvs.push(mesh.uvs.get(orig_idx).copied().unwrap_or([0.0, 0.0]));
+            out.normals.push(
+                mesh.normals
+                    .get(orig_idx)
+                    .copied()
+                    .unwrap_or([0.0, 0.0, 1.0]),
+            );
+            out.uvs
+                .push(mesh.uvs.get(orig_idx).copied().unwrap_or([0.0, 0.0]));
 
             if let (Some(sec_in), Some(sec_out)) = (&mesh.secondary_uvs, &mut out.secondary_uvs) {
                 sec_out.push(sec_in.get(orig_idx).copied().unwrap_or([0.0, 0.0]));
             }
             if let (Some(col_in), Some(col_out)) = (&mesh.colors, &mut out.colors) {
-                col_out.push(col_in.get(orig_idx).copied().unwrap_or([1.0, 1.0, 1.0, 1.0]));
+                col_out.push(
+                    col_in
+                        .get(orig_idx)
+                        .copied()
+                        .unwrap_or([1.0, 1.0, 1.0, 1.0]),
+                );
             }
 
             // Copy Point and Corner domain attributes
@@ -402,7 +427,8 @@ mod tests {
             [-0.5, 0.5, 0.0],
         ]);
         mesh.normals.extend_from_slice(&[[0.0, 0.0, 1.0]; 4]);
-        mesh.uvs.extend_from_slice(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]);
+        mesh.uvs
+            .extend_from_slice(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]);
         mesh.indices.extend_from_slice(&[0, 1, 2, 0, 2, 3]);
         mesh.face_materials.push(0);
         mesh.face_tint_indices.push(-1);
@@ -415,14 +441,18 @@ mod tests {
             [0.5, -0.5, 0.0],
         ]);
         mesh.normals.extend_from_slice(&[[0.0, 0.0, -1.0]; 4]);
-        mesh.uvs.extend_from_slice(&[[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0]]);
+        mesh.uvs
+            .extend_from_slice(&[[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0]]);
         mesh.indices.extend_from_slice(&[4, 5, 6, 4, 6, 7]);
         mesh.face_materials.push(0);
         mesh.face_tint_indices.push(-1);
 
         let res = cull_mesh_faces(&mesh, &MeshCullConfig::default());
         assert_eq!(res.initial_faces, 2);
-        assert_eq!(res.culled_faces, 2, "Both contacting interior faces must be culled!");
+        assert_eq!(
+            res.culled_faces, 2,
+            "Both contacting interior faces must be culled!"
+        );
         assert_eq!(res.remaining_faces, 0);
     }
 
@@ -438,7 +468,8 @@ mod tests {
             [offset1, -0.5, 0.5],
         ]);
         mesh.normals.extend_from_slice(&[[1.0, 0.0, 0.0]; 4]);
-        mesh.uvs.extend_from_slice(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]);
+        mesh.uvs
+            .extend_from_slice(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]);
         mesh.indices.extend_from_slice(&[0, 1, 2, 0, 2, 3]);
         mesh.face_materials.push(0);
         mesh.face_tint_indices.push(-1);
@@ -453,14 +484,18 @@ mod tests {
             [offset2, 0.5, -0.5],
         ]);
         mesh.normals.extend_from_slice(&[[-1.0, 0.0, 0.0]; 4]);
-        mesh.uvs.extend_from_slice(&[[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0]]);
+        mesh.uvs
+            .extend_from_slice(&[[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0]]);
         mesh.indices.extend_from_slice(&[4, 5, 6, 4, 6, 7]);
         mesh.face_materials.push(0);
         mesh.face_tint_indices.push(-1);
 
         let res = cull_mesh_faces(&mesh, &MeshCullConfig::default());
         assert_eq!(res.initial_faces, 2);
-        assert_eq!(res.culled_faces, 2, "Faces across quantization boundary must be detected and culled!");
+        assert_eq!(
+            res.culled_faces, 2,
+            "Faces across quantization boundary must be detected and culled!"
+        );
         assert_eq!(res.remaining_faces, 0);
     }
 
@@ -475,7 +510,8 @@ mod tests {
             [-1.0, 1.0, 0.0],
         ]);
         mesh.normals.extend_from_slice(&[[0.0, 0.0, 1.0]; 4]);
-        mesh.uvs.extend_from_slice(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]);
+        mesh.uvs
+            .extend_from_slice(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]);
         mesh.indices.extend_from_slice(&[0, 1, 2, 0, 2, 3]);
         mesh.face_materials.push(10);
         mesh.face_tint_indices.push(-1);
@@ -488,7 +524,8 @@ mod tests {
             [-1.0, 1.0, 0.0],
         ]);
         mesh.normals.extend_from_slice(&[[0.0, 0.0, 1.0]; 4]);
-        mesh.uvs.extend_from_slice(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]);
+        mesh.uvs
+            .extend_from_slice(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]);
         mesh.indices.extend_from_slice(&[4, 5, 6, 4, 6, 7]);
         mesh.face_materials.push(20);
         mesh.face_tint_indices.push(-1);
@@ -501,12 +538,19 @@ mod tests {
 
         let res = cull_mesh_faces(&mesh, &MeshCullConfig::default());
         assert_eq!(res.initial_faces, 2);
-        assert_eq!(res.culled_faces, 1, "Duplicate face must be culled to eliminate Z-fighting");
+        assert_eq!(
+            res.culled_faces, 1,
+            "Duplicate face must be culled to eliminate Z-fighting"
+        );
         assert_eq!(res.remaining_faces, 1);
         assert_eq!(res.mesh.face_materials, vec![10]);
 
         // Verify custom attributes preserved
-        let attr = res.mesh.custom_attributes.get("test_attr").expect("test_attr must exist");
+        let attr = res
+            .mesh
+            .custom_attributes
+            .get("test_attr")
+            .expect("test_attr must exist");
         if let AttributeData::String(ref vals) = attr.data {
             assert_eq!(vals.len(), 1);
             assert_eq!(vals[0], "face_0");

@@ -11,7 +11,6 @@ pub use mtk_core::constants::voxel::{
     SECTION_SHIFT, SECTION_SIZE, SECTION_VOLUME,
 };
 
-
 /// 16x16x16 Chunk Section with dense palette-indexed storage and non-air tracking.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -67,7 +66,6 @@ mod serde_voxels {
         Ok(boxed_array)
     }
 }
-
 
 impl SectionStorage {
     /// Creates an empty section filled with `minecraft:air` at coordinate `coord`.
@@ -239,7 +237,10 @@ impl SectionStorage {
                     let lz = pz as i32 - 1;
                     let pad_idx = padded_index(px, py, pz);
 
-                    let pal_idx = if (0..16).contains(&lx) && (0..16).contains(&ly) && (0..16).contains(&lz) {
+                    let pal_idx = if (0..16).contains(&lx)
+                        && (0..16).contains(&ly)
+                        && (0..16).contains(&lz)
+                    {
                         let core_idx = block_index(lx as usize, ly as usize, lz as usize);
                         self.voxels[core_idx]
                     } else {

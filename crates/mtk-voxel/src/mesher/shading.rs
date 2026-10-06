@@ -4,11 +4,11 @@
 //! and Biome color sampling for voxel meshing, decoupling material logic
 //! from voxel traversal.
 
-use std::sync::Arc;
 use glam::{IVec3, Vec2};
 use mtk_core::direction::Direction;
 use mtk_material::MaterialResolver;
 use mtk_model::baked::{BakedFace, BakedModel, BakedVariantGroup};
+use std::sync::Arc;
 
 use crate::biome::SmoothedBiomeColumn;
 use crate::mesher::heuristic::get_unit_cube_texture_candidates;
@@ -154,21 +154,13 @@ fn resolve_model_face(
                 None
             };
             let resolved = if let Some(ref loc) = base_loc {
-                MaterialResolver::resolve(
-                    &loc.as_string(),
-                    config.custom_aliases.as_deref(),
-                    atlas,
-                )
-                .or_else(|| atlas.lookup(loc).map(|sp| ((*loc).clone(), sp)))
+                MaterialResolver::resolve(&loc.as_string(), config.custom_aliases.as_deref(), atlas)
+                    .or_else(|| atlas.lookup(loc).map(|sp| ((*loc).clone(), sp)))
             } else {
                 None
             }
             .or_else(|| {
-                MaterialResolver::resolve(
-                    &face.texture,
-                    config.custom_aliases.as_deref(),
-                    atlas,
-                )
+                MaterialResolver::resolve(&face.texture, config.custom_aliases.as_deref(), atlas)
             });
 
             if let Some((res_loc, atlas_loc)) = resolved {
@@ -203,7 +195,13 @@ fn resolve_model_face(
                 )
             } else {
                 let default_chunk = atlas.default_chunk_id();
-                (face.texture.clone(), None, default_chunk, default_chunk as i32, 0u32)
+                (
+                    face.texture.clone(),
+                    None,
+                    default_chunk,
+                    default_chunk as i32,
+                    0u32,
+                )
             }
         } else {
             (face.texture.clone(), None, 0u16, 0i32, 0u32)
@@ -308,71 +306,71 @@ pub fn build_palette_meshing_data(
                     }
                 }
                 ModelSource::None => {
-                let clean_sub = clean_block
-                    .strip_prefix("minecraft:")
-                    .unwrap_or(clean_block);
+                    let clean_sub = clean_block
+                        .strip_prefix("minecraft:")
+                        .unwrap_or(clean_block);
 
-                let mut faces: [Option<PreResolvedFace>; 6] = Default::default();
-                for dir in Direction::ALL {
-                    let (final_tex_key, override_uvs, mat_slot, chunk_id, tex_id) =
-                        if let Some(atlas) = &config.atlas_address_map {
-                            let candidates = get_unit_cube_texture_candidates(clean_sub, dir);
-                            let mut resolved = None;
-                            for cand in &candidates {
-                                if let Some((res, sp)) = MaterialResolver::resolve(
-                                    cand,
-                                    config.custom_aliases.as_deref(),
-                                    atlas,
-                                ) {
-                                    resolved = Some((res, sp));
-                                    break;
+                    let mut faces: [Option<PreResolvedFace>; 6] = Default::default();
+                    for dir in Direction::ALL {
+                        let (final_tex_key, override_uvs, mat_slot, chunk_id, tex_id) =
+                            if let Some(atlas) = &config.atlas_address_map {
+                                let candidates = get_unit_cube_texture_candidates(clean_sub, dir);
+                                let mut resolved = None;
+                                for cand in &candidates {
+                                    if let Some((res, sp)) = MaterialResolver::resolve(
+                                        cand,
+                                        config.custom_aliases.as_deref(),
+                                        atlas,
+                                    ) {
+                                        resolved = Some((res, sp));
+                                        break;
+                                    }
                                 }
-                            }
-                            if let Some((res_loc, atlas_loc)) = resolved {
-                                let u_min = atlas_loc.frame_0_uv_bounds[0];
-                                let v_min = atlas_loc.frame_0_uv_bounds[1];
-                                let u_max = atlas_loc.frame_0_uv_bounds[2];
-                                let v_max = atlas_loc.frame_0_uv_bounds[3];
-                                let remapped = [
-                                    Vec2::new(u_min, v_max),
-                                    Vec2::new(u_min, v_min),
-                                    Vec2::new(u_max, v_min),
-                                    Vec2::new(u_max, v_max),
-                                ];
-                                (
-                                    res_loc.as_string(),
-                                    Some(remapped),
-                                    atlas_loc.chunk_id,
-                                    atlas_loc.chunk_id as i32,
-                                    atlas_loc.texture_id,
-                                )
+                                if let Some((res_loc, atlas_loc)) = resolved {
+                                    let u_min = atlas_loc.frame_0_uv_bounds[0];
+                                    let v_min = atlas_loc.frame_0_uv_bounds[1];
+                                    let u_max = atlas_loc.frame_0_uv_bounds[2];
+                                    let v_max = atlas_loc.frame_0_uv_bounds[3];
+                                    let remapped = [
+                                        Vec2::new(u_min, v_max),
+                                        Vec2::new(u_min, v_min),
+                                        Vec2::new(u_max, v_min),
+                                        Vec2::new(u_max, v_max),
+                                    ];
+                                    (
+                                        res_loc.as_string(),
+                                        Some(remapped),
+                                        atlas_loc.chunk_id,
+                                        atlas_loc.chunk_id as i32,
+                                        atlas_loc.texture_id,
+                                    )
+                                } else {
+                                    (format!("minecraft:block/{}", clean_sub), None, 0, 0, 0)
+                                }
                             } else {
                                 (format!("minecraft:block/{}", clean_sub), None, 0, 0, 0)
-                            }
-                        } else {
-                            (format!("minecraft:block/{}", clean_sub), None, 0, 0, 0)
-                        };
+                            };
 
-                    let tint_idx = mtk_material::get_unit_cube_tint_index(clean_sub, dir);
-                    let (tint_data, tint_color, colormap_uv) = compute_face_tint(
-                        &final_tex_key,
-                        state_str,
-                        tint_idx,
-                        config.biome_resolver.as_deref(),
-                    );
+                        let tint_idx = mtk_material::get_unit_cube_tint_index(clean_sub, dir);
+                        let (tint_data, tint_color, colormap_uv) = compute_face_tint(
+                            &final_tex_key,
+                            state_str,
+                            tint_idx,
+                            config.biome_resolver.as_deref(),
+                        );
 
-                    faces[dir.to_index()] = Some(PreResolvedFace {
-                        source_texture_key: final_tex_key,
-                        override_uvs,
-                        mat_slot,
-                        chunk_id,
-                        tex_id,
-                        tint_data,
-                        tint_color,
-                        colormap_uv,
-                        emission,
-                    });
-                }
+                        faces[dir.to_index()] = Some(PreResolvedFace {
+                            source_texture_key: final_tex_key,
+                            override_uvs,
+                            mat_slot,
+                            chunk_id,
+                            tex_id,
+                            tint_data,
+                            tint_color,
+                            colormap_uv,
+                            emission,
+                        });
+                    }
 
                     PaletteMeshingData::UnitCube {
                         faces: [
@@ -505,10 +503,8 @@ where
         let clean_block = mtk_resource::extract_block_name(state_str)
             .strip_prefix("minecraft:")
             .unwrap_or(mtk_resource::extract_block_name(state_str));
-        let base_loc = mtk_resource::ResourceLocation::new(
-            "minecraft",
-            format!("block/{}", clean_block),
-        );
+        let base_loc =
+            mtk_resource::ResourceLocation::new("minecraft", format!("block/{}", clean_block));
         if let Some(resolved_loc) = solver.resolve_face(
             state_str,
             dir,

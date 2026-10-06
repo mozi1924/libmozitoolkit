@@ -180,7 +180,10 @@ fn precompile_all_assets_inner(
         let mut def_list: Vec<(String, mtk_resource::AtlasDefinition)> = Vec::new();
         let mut seen_cats = std::collections::HashSet::new();
 
-        if config.atlas_category != "all" && config.atlas_category != "blocks" && !config.atlas_category.is_empty() {
+        if config.atlas_category != "all"
+            && config.atlas_category != "blocks"
+            && !config.atlas_category.is_empty()
+        {
             let cat = AtlasCategory::parse(&config.atlas_category);
             let def = stack.load_atlas_category(&cat);
             def_list.push((cat.as_str().to_string(), def));
@@ -218,38 +221,41 @@ fn precompile_all_assets_inner(
         let mapping_json = baked_atlas.address_map.to_json()?;
         fs::write(atlas_dir.join("atlas_mapping.json"), mapping_json)?;
 
-        let atlas_throttler = ProgressThrottler::new(
-            "prebake_atlas",
-            chunk_count.max(1),
-            progress_callback,
-        )
-        .with_step(1)
-        .with_prefix("Writing atlas chunk textures");
+        let atlas_throttler =
+            ProgressThrottler::new("prebake_atlas", chunk_count.max(1), progress_callback)
+                .with_step(1)
+                .with_prefix("Writing atlas chunk textures");
 
         #[cfg(feature = "parallel")]
         {
-            baked_atlas.chunks.par_iter().try_for_each(|chunk| -> Result<(), MtkError> {
-                let stem = chunk.file_stem();
-                let albedo_bytes = chunk.albedo.to_png_bytes()?;
-                fs::write(atlas_dir.join(format!("{}.png", stem)), albedo_bytes)?;
+            baked_atlas
+                .chunks
+                .par_iter()
+                .try_for_each(|chunk| -> Result<(), MtkError> {
+                    let stem = chunk.file_stem();
+                    let albedo_bytes = chunk.albedo.to_png_bytes()?;
+                    fs::write(atlas_dir.join(format!("{}.png", stem)), albedo_bytes)?;
 
-                if let Some(ref normal) = chunk.normal {
-                    let normal_bytes = normal.to_png_bytes()?;
-                    fs::write(atlas_dir.join(format!("{}_n.png", stem)), normal_bytes)?;
-                }
+                    if let Some(ref normal) = chunk.normal {
+                        let normal_bytes = normal.to_png_bytes()?;
+                        fs::write(atlas_dir.join(format!("{}_n.png", stem)), normal_bytes)?;
+                    }
 
-                if let Some(ref specular) = chunk.specular {
-                    let spec_bytes = specular.to_png_bytes()?;
-                    fs::write(atlas_dir.join(format!("{}_s.png", stem)), spec_bytes)?;
-                }
+                    if let Some(ref specular) = chunk.specular {
+                        let spec_bytes = specular.to_png_bytes()?;
+                        fs::write(atlas_dir.join(format!("{}_s.png", stem)), spec_bytes)?;
+                    }
 
-                if let Some(ref overlay) = chunk.overlay {
-                    let overlay_bytes = overlay.to_png_bytes()?;
-                    fs::write(atlas_dir.join(format!("{}_overlay.png", stem)), overlay_bytes)?;
-                }
-                atlas_throttler.inc();
-                Ok(())
-            })?;
+                    if let Some(ref overlay) = chunk.overlay {
+                        let overlay_bytes = overlay.to_png_bytes()?;
+                        fs::write(
+                            atlas_dir.join(format!("{}_overlay.png", stem)),
+                            overlay_bytes,
+                        )?;
+                    }
+                    atlas_throttler.inc();
+                    Ok(())
+                })?;
         }
 
         #[cfg(not(feature = "parallel"))]
@@ -271,7 +277,10 @@ fn precompile_all_assets_inner(
 
                 if let Some(ref overlay) = chunk.overlay {
                     let overlay_bytes = overlay.to_png_bytes()?;
-                    fs::write(atlas_dir.join(format!("{}_overlay.png", stem)), overlay_bytes)?;
+                    fs::write(
+                        atlas_dir.join(format!("{}_overlay.png", stem)),
+                        overlay_bytes,
+                    )?;
                 }
                 atlas_throttler.inc();
             }
@@ -378,7 +387,9 @@ pub fn prebake_all_models_with_progress(
             if file.ends_with(".json") && file.contains("/models/") {
                 if let Some(bytes) = pack.open(&file) {
                     if let Ok(model) = serde_json::from_slice::<BlockModelJson>(&bytes) {
-                        if let Some(loc) = ResourceLocation::from_asset_path(&file, "models", "json") {
+                        if let Some(loc) =
+                            ResourceLocation::from_asset_path(&file, "models", "json")
+                        {
                             let canon = loc.as_string();
                             model_cache.insert(canon.clone(), model.clone());
                             if loc.namespace == "minecraft" {
@@ -398,7 +409,10 @@ pub fn prebake_all_models_with_progress(
         }
         for path in ResourceLocation::model_candidate_asset_paths(model_id) {
             if let Some(loc) = ResourceLocation::from_asset_path(&path, "models", "json") {
-                if let Some(m) = model_cache.get(&loc.as_string()).or_else(|| model_cache.get(&loc.path)) {
+                if let Some(m) = model_cache
+                    .get(&loc.as_string())
+                    .or_else(|| model_cache.get(&loc.path))
+                {
                     return Some(m.clone());
                 }
             }
@@ -435,7 +449,9 @@ pub fn prebake_all_models_with_progress(
             let mut local_baker = ModelBaker::new();
             let mut pairs = Vec::new();
             for state_str in states {
-                if let Ok(mut group) = local_baker.bake_blockstate_variants(&state_str, Some(def), |id| get_model(id)) {
+                if let Ok(mut group) =
+                    local_baker.bake_blockstate_variants(&state_str, Some(def), |id| get_model(id))
+                {
                     if let Some(atlas) = atlas_map {
                         group.remap_to_atlas_with(|tex| {
                             MaterialResolver::resolve(tex, None, atlas)
@@ -458,7 +474,9 @@ pub fn prebake_all_models_with_progress(
             let mut local_baker = ModelBaker::new();
             let mut pairs = Vec::new();
             for state_str in states {
-                if let Ok(mut group) = local_baker.bake_blockstate_variants(&state_str, Some(def), |id| get_model(id)) {
+                if let Ok(mut group) =
+                    local_baker.bake_blockstate_variants(&state_str, Some(def), |id| get_model(id))
+                {
                     if let Some(atlas) = atlas_map {
                         group.remap_to_atlas_with(|tex| {
                             MaterialResolver::resolve(tex, None, atlas)
@@ -498,4 +516,3 @@ pub fn prebake_all_models(
 ) -> Result<BakedModelDatabase, MtkError> {
     prebake_all_models_with_progress(stack, atlas_map, None)
 }
-

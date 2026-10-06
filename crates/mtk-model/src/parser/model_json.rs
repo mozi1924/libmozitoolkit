@@ -94,12 +94,8 @@ impl BlockModelJson {
             for elem in elems {
                 let mut res_faces = HashMap::with_capacity(elem.faces.len());
                 for (dir, face) in elem.faces {
-                    let final_tex =
-                        Self::resolve_texture_value(&face.texture, &raw_textures).unwrap_or_else(
-                            |_| {
-                                face.texture.trim_start_matches('#').to_string()
-                            },
-                        );
+                    let final_tex = Self::resolve_texture_value(&face.texture, &raw_textures)
+                        .unwrap_or_else(|_| face.texture.trim_start_matches('#').to_string());
                     res_faces.insert(
                         dir,
                         ResolvedFace {
@@ -357,13 +353,22 @@ mod tests {
         let model: BlockModelJson = serde_json::from_str(json_data).unwrap();
         assert_eq!(model.parent, Some("minecraft:block/block".to_string()));
         let textures = model.textures.as_ref().unwrap();
-        assert_eq!(textures.get("all").unwrap().as_str(), "minecraft:block/stone");
+        assert_eq!(
+            textures.get("all").unwrap().as_str(),
+            "minecraft:block/stone"
+        );
         assert_eq!(model.elements.as_ref().unwrap().len(), 1);
 
         // Test hierarchy and texture resolution
         let resolved = model.resolve_hierarchy("test:model", |_| None).unwrap();
-        assert_eq!(resolved.textures.get("all").unwrap(), "minecraft:block/stone");
-        assert_eq!(resolved.textures.get("particle").unwrap(), "minecraft:block/stone");
+        assert_eq!(
+            resolved.textures.get("all").unwrap(),
+            "minecraft:block/stone"
+        );
+        assert_eq!(
+            resolved.textures.get("particle").unwrap(),
+            "minecraft:block/stone"
+        );
         assert_eq!(resolved.elements.len(), 1);
         assert_eq!(
             resolved.elements[0].faces.get("up").unwrap().texture,

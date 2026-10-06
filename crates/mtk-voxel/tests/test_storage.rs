@@ -97,7 +97,10 @@ fn test_manifest_metadata_export_import() {
     assert!(restored.import_manifest_metadata(&json_meta));
     assert_eq!(restored.min_x, 0);
     assert_eq!(restored.size_x, 32);
-    assert_eq!(restored.section_crc_map.get(&IVec3::new(0, 0, 0)), world.section_crc_map.get(&IVec3::new(0, 0, 0)));
+    assert_eq!(
+        restored.section_crc_map.get(&IVec3::new(0, 0, 0)),
+        world.section_crc_map.get(&IVec3::new(0, 0, 0))
+    );
 }
 
 #[test]
@@ -121,5 +124,3 @@ fn test_section_snapshot_dynamic_bounds_expansion() {
     assert!(world.contains(0, 0, 0));
     assert!(world.contains(20, 5, 5));
 }
-
-

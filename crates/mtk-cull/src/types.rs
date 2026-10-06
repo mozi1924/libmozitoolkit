@@ -58,7 +58,6 @@ pub enum GlassCullMode {
 
 pub use mtk_core::constants::geometry::{EMPTY_FACE_RECT, FULL_FACE_RECT};
 
-
 /// Check if a rectangle covers the full 1.0 x 1.0 face within epsilon.
 #[inline]
 pub fn is_full_rect(rect: &Aabb2d, eps: f32) -> bool {
@@ -124,4 +123,3 @@ impl BlockCullMeta {
         &self.face_shapes[dir.to_index()]
     }
 }
-

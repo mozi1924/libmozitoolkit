@@ -12,12 +12,12 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use mtk_resource::{ResourceLocation, ResourcePackStack};
-use crate::error::TextureError;
-use crate::image::RgbaBuffer;
 use super::aligner::{
     align_standalone_channels, ChannelData, ChannelType, StandaloneAnimationMeta,
 };
+use crate::error::TextureError;
+use crate::image::RgbaBuffer;
+use mtk_resource::{ResourceLocation, ResourcePackStack};
 
 pub const STANDALONE_FORMAT_VERSION: u32 = 3;
 
@@ -199,138 +199,159 @@ impl StandaloneBuilder {
         #[cfg(not(feature = "parallel"))]
         let process_iter = loc_vec.iter();
 
-        let records: Vec<(ResourceLocation, StandaloneTextureRecord, Vec<(String, Vec<u8>)>)> =
-            process_iter
-                .filter_map(|loc| {
-                    let companions = stack.resolve_pbr_companions(loc);
-                    let raw_albedo = companions.albedo.as_ref()?;
-                    let albedo_buf = RgbaBuffer::from_png_bytes(raw_albedo).ok()?;
+        let records: Vec<(
+            ResourceLocation,
+            StandaloneTextureRecord,
+            Vec<(String, Vec<u8>)>,
+        )> = process_iter
+            .filter_map(|loc| {
+                let companions = stack.resolve_pbr_companions(loc);
+                let raw_albedo = companions.albedo.as_ref()?;
+                let albedo_buf = RgbaBuffer::from_png_bytes(raw_albedo).ok()?;
 
-                    let mut channels = vec![ChannelData {
-                        channel_type: ChannelType::Albedo,
-                        buffer: albedo_buf,
-                        metadata: companions.mcmeta.clone(),
-                    }];
+                let mut channels = vec![ChannelData {
+                    channel_type: ChannelType::Albedo,
+                    buffer: albedo_buf,
+                    metadata: companions.mcmeta.clone(),
+                }];
 
-                    if let Some(ref n_bytes) = companions.normal {
-                        if let Ok(n_buf) = RgbaBuffer::from_png_bytes(n_bytes) {
-                            channels.push(ChannelData {
-                                channel_type: ChannelType::Normal,
-                                buffer: n_buf,
-                                metadata: None,
-                            });
-                        }
+                if let Some(ref n_bytes) = companions.normal {
+                    if let Ok(n_buf) = RgbaBuffer::from_png_bytes(n_bytes) {
+                        channels.push(ChannelData {
+                            channel_type: ChannelType::Normal,
+                            buffer: n_buf,
+                            metadata: None,
+                        });
                     }
+                }
 
-                    if let Some(ref s_bytes) = companions.specular {
-                        if let Ok(s_buf) = RgbaBuffer::from_png_bytes(s_bytes) {
-                            channels.push(ChannelData {
-                                channel_type: ChannelType::Specular,
-                                buffer: s_buf,
-                                metadata: None,
-                            });
-                        }
+                if let Some(ref s_bytes) = companions.specular {
+                    if let Ok(s_buf) = RgbaBuffer::from_png_bytes(s_bytes) {
+                        channels.push(ChannelData {
+                            channel_type: ChannelType::Specular,
+                            buffer: s_buf,
+                            metadata: None,
+                        });
                     }
+                }
 
-                    // Check for overlay companion (e.g. grass_block_side -> grass_block_side_overlay)
-                    let overlay_cands = [
-                        format!("{}_overlay", loc.path),
-                        loc.path.replace("grass_block_side", "grass_block_side_overlay"),
-                        loc.path.replace("grass_side", "grass_side_overlay"),
-                    ];
-                    for cand_path in overlay_cands {
-                        if cand_path != loc.path {
-                            let cand_loc = ResourceLocation::new(&loc.namespace, cand_path);
-                            if let Some(overlay_bytes) = stack.open_texture_raw(&cand_loc) {
-                                if let Ok(overlay_buf) = RgbaBuffer::from_png_bytes(&overlay_bytes) {
-                                    channels.push(ChannelData {
-                                        channel_type: ChannelType::Overlay,
-                                        buffer: overlay_buf,
-                                        metadata: None,
-                                    });
-                                    break;
-                                }
+                // Check for overlay companion (e.g. grass_block_side -> grass_block_side_overlay)
+                let overlay_cands = [
+                    format!("{}_overlay", loc.path),
+                    loc.path
+                        .replace("grass_block_side", "grass_block_side_overlay"),
+                    loc.path.replace("grass_side", "grass_side_overlay"),
+                ];
+                for cand_path in overlay_cands {
+                    if cand_path != loc.path {
+                        let cand_loc = ResourceLocation::new(&loc.namespace, cand_path);
+                        if let Some(overlay_bytes) = stack.open_texture_raw(&cand_loc) {
+                            if let Ok(overlay_buf) = RgbaBuffer::from_png_bytes(&overlay_bytes) {
+                                channels.push(ChannelData {
+                                    channel_type: ChannelType::Overlay,
+                                    buffer: overlay_buf,
+                                    metadata: None,
+                                });
+                                break;
                             }
                         }
                     }
+                }
 
-                    // Multi-channel frame alignment
-                    let align_res = align_standalone_channels(channels);
+                // Multi-channel frame alignment
+                let align_res = align_standalone_channels(channels);
 
-                    let mut file_paths = StandaloneFilePaths::default();
-                    let mut out_files = Vec::new();
+                let mut file_paths = StandaloneFilePaths::default();
+                let mut out_files = Vec::new();
 
-                    for ch in align_res.channels {
-                        // 1. Static Frame 0 (1:1 Square) -> assets/<namespace>/textures/<path>[_n/_s/_overlay].png
-                        let static_buf = ch.static_frame_0();
-                        let static_rel = match ch.channel_type {
-                            ChannelType::Albedo => format!("assets/{}/textures/{}.png", loc.namespace, loc.path),
-                            ChannelType::Normal => format!("assets/{}/textures/{}_n.png", loc.namespace, loc.path),
-                            ChannelType::Specular => format!("assets/{}/textures/{}_s.png", loc.namespace, loc.path),
-                            ChannelType::Overlay => format!("assets/{}/textures/{}_overlay.png", loc.namespace, loc.path),
-                        };
-
-                        if let Ok(png_bytes) = static_buf.to_png_bytes() {
-                            out_files.push((static_rel.clone(), png_bytes));
-                            match ch.channel_type {
-                                ChannelType::Albedo => {
-                                    file_paths.albedo = Some(static_rel.clone());
-                                    file_paths.albedo_static = Some(static_rel);
-                                }
-                                ChannelType::Normal => {
-                                    file_paths.normal = Some(static_rel.clone());
-                                    file_paths.normal_static = Some(static_rel);
-                                }
-                                ChannelType::Specular => {
-                                    file_paths.specular = Some(static_rel.clone());
-                                    file_paths.specular_static = Some(static_rel);
-                                }
-                                ChannelType::Overlay => {
-                                    file_paths.overlay = Some(static_rel.clone());
-                                    file_paths.overlay_static = Some(static_rel);
-                                }
-                            }
+                for ch in align_res.channels {
+                    // 1. Static Frame 0 (1:1 Square) -> assets/<namespace>/textures/<path>[_n/_s/_overlay].png
+                    let static_buf = ch.static_frame_0();
+                    let static_rel = match ch.channel_type {
+                        ChannelType::Albedo => {
+                            format!("assets/{}/textures/{}.png", loc.namespace, loc.path)
                         }
-
-                        // 2. Animated vertical strip (if animated) -> assets/<namespace>/textures/<path>[_n/_s]_anim.png
-                        if align_res.is_animated {
-                            let anim_rel = match ch.channel_type {
-                                ChannelType::Albedo => format!("assets/{}/textures/{}_anim.png", loc.namespace, loc.path),
-                                ChannelType::Normal => format!("assets/{}/textures/{}_n_anim.png", loc.namespace, loc.path),
-                                ChannelType::Specular => format!("assets/{}/textures/{}_s_anim.png", loc.namespace, loc.path),
-                                ChannelType::Overlay => format!("assets/{}/textures/{}_overlay_anim.png", loc.namespace, loc.path),
-                            };
-
-                            if let Ok(anim_png) = ch.buffer.to_png_bytes() {
-                                out_files.push((anim_rel.clone(), anim_png));
-                                match ch.channel_type {
-                                    ChannelType::Albedo => file_paths.albedo_anim = Some(anim_rel),
-                                    ChannelType::Normal => file_paths.normal_anim = Some(anim_rel),
-                                    ChannelType::Specular => file_paths.specular_anim = Some(anim_rel),
-                                    ChannelType::Overlay => file_paths.overlay_anim = Some(anim_rel),
-                                }
-                            }
+                        ChannelType::Normal => {
+                            format!("assets/{}/textures/{}_n.png", loc.namespace, loc.path)
                         }
-                    }
-
-                    let tex_name = loc.short_name().to_string();
-                    let canonical_key = loc.as_string();
-
-                    let record = StandaloneTextureRecord {
-                        namespace: loc.namespace.clone(),
-                        texture_name: tex_name,
-                        texture_key: loc.path.clone(),
-                        canonical_key,
-                        files: file_paths,
-                        is_animated: align_res.is_animated,
-                        animation: align_res.animation,
-                        tint_info: json!({}),
-                        is_fallback: None,
+                        ChannelType::Specular => {
+                            format!("assets/{}/textures/{}_s.png", loc.namespace, loc.path)
+                        }
+                        ChannelType::Overlay => {
+                            format!("assets/{}/textures/{}_overlay.png", loc.namespace, loc.path)
+                        }
                     };
 
-                    Some((loc.clone(), record, out_files))
-                })
-                .collect();
+                    if let Ok(png_bytes) = static_buf.to_png_bytes() {
+                        out_files.push((static_rel.clone(), png_bytes));
+                        match ch.channel_type {
+                            ChannelType::Albedo => {
+                                file_paths.albedo = Some(static_rel.clone());
+                                file_paths.albedo_static = Some(static_rel);
+                            }
+                            ChannelType::Normal => {
+                                file_paths.normal = Some(static_rel.clone());
+                                file_paths.normal_static = Some(static_rel);
+                            }
+                            ChannelType::Specular => {
+                                file_paths.specular = Some(static_rel.clone());
+                                file_paths.specular_static = Some(static_rel);
+                            }
+                            ChannelType::Overlay => {
+                                file_paths.overlay = Some(static_rel.clone());
+                                file_paths.overlay_static = Some(static_rel);
+                            }
+                        }
+                    }
+
+                    // 2. Animated vertical strip (if animated) -> assets/<namespace>/textures/<path>[_n/_s]_anim.png
+                    if align_res.is_animated {
+                        let anim_rel = match ch.channel_type {
+                            ChannelType::Albedo => {
+                                format!("assets/{}/textures/{}_anim.png", loc.namespace, loc.path)
+                            }
+                            ChannelType::Normal => {
+                                format!("assets/{}/textures/{}_n_anim.png", loc.namespace, loc.path)
+                            }
+                            ChannelType::Specular => {
+                                format!("assets/{}/textures/{}_s_anim.png", loc.namespace, loc.path)
+                            }
+                            ChannelType::Overlay => format!(
+                                "assets/{}/textures/{}_overlay_anim.png",
+                                loc.namespace, loc.path
+                            ),
+                        };
+
+                        if let Ok(anim_png) = ch.buffer.to_png_bytes() {
+                            out_files.push((anim_rel.clone(), anim_png));
+                            match ch.channel_type {
+                                ChannelType::Albedo => file_paths.albedo_anim = Some(anim_rel),
+                                ChannelType::Normal => file_paths.normal_anim = Some(anim_rel),
+                                ChannelType::Specular => file_paths.specular_anim = Some(anim_rel),
+                                ChannelType::Overlay => file_paths.overlay_anim = Some(anim_rel),
+                            }
+                        }
+                    }
+                }
+
+                let tex_name = loc.short_name().to_string();
+                let canonical_key = loc.as_string();
+
+                let record = StandaloneTextureRecord {
+                    namespace: loc.namespace.clone(),
+                    texture_name: tex_name,
+                    texture_key: loc.path.clone(),
+                    canonical_key,
+                    files: file_paths,
+                    is_animated: align_res.is_animated,
+                    animation: align_res.animation,
+                    tint_info: json!({}),
+                    is_fallback: None,
+                };
+
+                Some((loc.clone(), record, out_files))
+            })
+            .collect();
 
         // 4. Write all encoded image files to staging directory
         #[cfg(feature = "parallel")]
@@ -369,7 +390,9 @@ impl StandaloneBuilder {
             textures_map.insert(full_key.clone(), rec.clone());
             textures_map.insert(canonical_key.clone(), rec.clone());
 
-            aliases_map.entry(rec.texture_name.clone()).or_insert_with(|| canonical_key.clone());
+            aliases_map
+                .entry(rec.texture_name.clone())
+                .or_insert_with(|| canonical_key.clone());
             aliases_map.insert(rec.texture_key.clone(), canonical_key);
         }
 

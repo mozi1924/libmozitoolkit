@@ -1,23 +1,19 @@
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use mtk_resource::{AnimationMetadata, ResourceLocation};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Classification of sprite placement and usage mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum SpriteKind {
     /// Placed on a static chunk (either a truly static sprite or Frame 0 of an animated sprite).
+    #[default]
     StaticAtlas,
     /// Placed on a dedicated animated chunk (full vertical strip, frame_count > 1).
     AnimatedAtlas,
     /// Standalone-only texture.
     StandaloneOnly,
-}
-
-impl Default for SpriteKind {
-    fn default() -> Self {
-        Self::StaticAtlas
-    }
 }
 
 /// Address and metrics for a single sprite located within a stitched Atlas Chunk.
@@ -123,7 +119,10 @@ impl AtlasChunkMeta {
     /// Canonical file stem for this atlas sheet, e.g. `"blocks_chunk_001"` or `"blocks_anim_chunk_001"`.
     pub fn file_stem(&self) -> String {
         if self.is_animated {
-            format!("{}_anim_chunk_{:03}", self.category, self.category_chunk_index)
+            format!(
+                "{}_anim_chunk_{:03}",
+                self.category, self.category_chunk_index
+            )
         } else {
             format!("{}_chunk_{:03}", self.category, self.category_chunk_index)
         }
@@ -153,7 +152,9 @@ impl AtlasAddressMap {
 
     /// O(1) primary lookup by exact ResourceLocation (checks static sprites first, then anim sprites).
     pub fn lookup(&self, location: &ResourceLocation) -> Option<&AtlasSpriteLocation> {
-        self.sprites.get(location).or_else(|| self.anim_sprites.get(location))
+        self.sprites
+            .get(location)
+            .or_else(|| self.anim_sprites.get(location))
     }
 
     /// Lookup static Frame 0 sprite location (100% coverage across all textures).

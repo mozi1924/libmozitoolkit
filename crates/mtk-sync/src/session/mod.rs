@@ -68,7 +68,12 @@ impl LiveSyncSession {
     }
 
     /// Starts the live sync session connecting to the given WebSocket `url`.
-    pub fn start(&mut self, url: &str, auto_reconnect: bool, max_reconnect_attempts: usize) -> Result<(), String> {
+    pub fn start(
+        &mut self,
+        url: &str,
+        auto_reconnect: bool,
+        max_reconnect_attempts: usize,
+    ) -> Result<(), String> {
         self.stop();
 
         let (msg_sender, msg_receiver) = crossbeam_channel::unbounded::<ClientMessage>();
@@ -179,7 +184,12 @@ impl LiveSyncSession {
     }
 
     /// Sends Sync Configuration (0x82) to Minecraft server.
-    pub fn send_sync_config(&self, throttle_mode: u8, target_fps: u8, is_active: bool) -> Result<(), String> {
+    pub fn send_sync_config(
+        &self,
+        throttle_mode: u8,
+        target_fps: u8,
+        is_active: bool,
+    ) -> Result<(), String> {
         if let Some(ref client) = self.client {
             client.send_packet(encode_sync_config(throttle_mode, target_fps, is_active))
         } else {

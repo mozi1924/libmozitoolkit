@@ -1,6 +1,6 @@
-use std::time::Instant;
 use libmtk::core::IVec3;
 use libmtk::{FaceCuller, MesherConfig, PaddedVoxelArray, SectionMesher, SectionStorage};
+use std::time::Instant;
 
 fn main() {
     println!("============================================================");
@@ -8,7 +8,10 @@ fn main() {
     println!("============================================================");
 
     let num_sections = 4096;
-    println!("Generating {} test chunk sections (16.7 million voxels)...", num_sections);
+    println!(
+        "Generating {} test chunk sections (16.7 million voxels)...",
+        num_sections
+    );
 
     let sample_blocks = [
         "minecraft:stone",
@@ -54,7 +57,11 @@ fn main() {
         let padded = sec.build_padded_array(|_x, _y, _z| "minecraft:air".to_string());
         sections.push(padded);
     }
-    println!("Generated {} sections in {:.2} ms", num_sections, gen_start.elapsed().as_secs_f64() * 1000.0);
+    println!(
+        "Generated {} sections in {:.2} ms",
+        num_sections,
+        gen_start.elapsed().as_secs_f64() * 1000.0
+    );
 
     let culler = FaceCuller::default();
     let config = MesherConfig::default();
@@ -75,13 +82,29 @@ fn main() {
     println!(" Total Sections:       {}", num_sections);
     println!(" Total Triangles:      {:?}", total_tris_single);
     println!(" Total Vertices:       {:?}", total_verts_single);
-    println!(" Total Time:           {:.3} s ({:.2} ms)", single_secs, single_secs * 1000.0);
-    println!(" Average per Section:  {:.2} µs", (single_secs * 1_000_000.0) / num_sections as f64);
-    println!(" Throughput:           {:.1} sections / sec ({:.2}M voxels/sec)", num_sections as f64 / single_secs, (num_sections * 4096) as f64 / (single_secs * 1e6));
+    println!(
+        " Total Time:           {:.3} s ({:.2} ms)",
+        single_secs,
+        single_secs * 1000.0
+    );
+    println!(
+        " Average per Section:  {:.2} µs",
+        (single_secs * 1_000_000.0) / num_sections as f64
+    );
+    println!(
+        " Throughput:           {:.1} sections / sec ({:.2}M voxels/sec)",
+        num_sections as f64 / single_secs,
+        (num_sections * 4096) as f64 / (single_secs * 1e6)
+    );
 
     // 2. Multi-threaded parallel meshing of 4,000 sections
-    let available_cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
-    println!("\n[Test 2: Multi-Core Parallel Meshing (Rayon, {} threads)]", available_cores);
+    let available_cores = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4);
+    println!(
+        "\n[Test 2: Multi-Core Parallel Meshing (Rayon, {} threads)]",
+        available_cores
+    );
 
     for threads in [2, 4, available_cores] {
         let t_par_start = Instant::now();
@@ -91,7 +114,8 @@ fn main() {
             |_st| None,
             &config,
             Some(threads),
-        ).unwrap();
+        )
+        .unwrap();
         let t_par = t_par_start.elapsed();
         let par_secs = t_par.as_secs_f64();
         let speedup = single_secs / par_secs;

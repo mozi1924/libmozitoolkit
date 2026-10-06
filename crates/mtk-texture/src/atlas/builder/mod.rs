@@ -13,10 +13,10 @@ pub use paletted::process_paletted_permutations;
 pub use static_atlas::build_static_atlas_chunks;
 pub use types::*;
 
-use mtk_resource::{AtlasDefinition, ResourcePackStack};
 use crate::atlas::address_map::AtlasAddressMap;
 use crate::error::TextureError;
 use crate::image::loader::DecodedSprite;
+use mtk_resource::{AtlasDefinition, ResourcePackStack};
 
 impl AtlasBuilder {
     pub fn new(config: AtlasBuilderConfig) -> Self {
@@ -77,8 +77,10 @@ impl AtlasBuilder {
             // must never be swept into the catch-all "entities" sheet.
             if category_name == "entities" {
                 decoded.retain(|sp| {
-                    let cat = mtk_resource::AtlasCategory::classify_texture_path(&sp.sprite_id.path);
-                    cat == mtk_resource::AtlasCategory::Entities || cat == mtk_resource::AtlasCategory::Misc
+                    let cat =
+                        mtk_resource::AtlasCategory::classify_texture_path(&sp.sprite_id.path);
+                    cat == mtk_resource::AtlasCategory::Entities
+                        || cat == mtk_resource::AtlasCategory::Misc
                 });
             }
 
@@ -129,7 +131,10 @@ impl AtlasBuilder {
     }
 
     /// Build directly from pre-decoded sprites (defaults to "blocks" category).
-    pub fn build_from_sprites(&self, sprites: Vec<DecodedSprite>) -> Result<BakedAtlas, TextureError> {
+    pub fn build_from_sprites(
+        &self,
+        sprites: Vec<DecodedSprite>,
+    ) -> Result<BakedAtlas, TextureError> {
         self.build_from_sprites_with_category(sprites, "blocks")
     }
 

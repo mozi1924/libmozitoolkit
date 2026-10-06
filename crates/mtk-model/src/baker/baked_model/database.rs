@@ -64,9 +64,9 @@ impl<'de> Deserialize<'de> for BakedModelDatabase {
 
         // Reconstruct single-variant groups for states present in models but not in multi_variants
         for (st, model) in &models {
-            variant_groups.entry(st.clone()).or_insert_with(|| {
-                BakedVariantGroup::single(st.clone(), model.clone())
-            });
+            variant_groups
+                .entry(st.clone())
+                .or_insert_with(|| BakedVariantGroup::single(st.clone(), model.clone()));
         }
 
         Ok(Self {
@@ -93,7 +93,8 @@ impl BakedModelDatabase {
 
     /// Inserts a multi-variant group, registering its primary model into `self.models`.
     pub fn insert_variant_group(&mut self, state: String, group: BakedVariantGroup) {
-        self.models.insert(state.clone(), group.select_primary().clone());
+        self.models
+            .insert(state.clone(), group.select_primary().clone());
         self.variant_groups.insert(state, group);
     }
 
@@ -207,7 +208,9 @@ impl BakedModelDatabase {
         }
 
         // Helper closure to find the best compatible variant for a given base_id and property map
-        let find_best_variant = |target_base_id: &str, target_props: &BTreeMap<String, String>| -> Option<&BakedModel> {
+        let find_best_variant = |target_base_id: &str,
+                                 target_props: &BTreeMap<String, String>|
+         -> Option<&BakedModel> {
             let prefix = format!("{}[", target_base_id);
             let mut best_model: Option<&BakedModel> = None;
             let mut best_score = -999999i32;
@@ -251,7 +254,11 @@ impl BakedModelDatabase {
                         if let Some(&cand_v) = cand_props.get(k.as_str()) {
                             if cand_v == v.as_str() {
                                 matched_keys += 1;
-                                relaxed_score += if k == "facing" || k == "axis" { 500 } else { 100 };
+                                relaxed_score += if k == "facing" || k == "axis" {
+                                    500
+                                } else {
+                                    100
+                                };
                             } else {
                                 compatible = false;
                                 if k == "facing" || k == "axis" {
@@ -271,7 +278,10 @@ impl BakedModelDatabase {
                         // Prefer canonical vanilla default values!
                         for (cand_k, cand_v) in &cand_props {
                             if !target_props.contains_key(*cand_k) {
-                                if *cand_k == "up" && (target_base_id.ends_with("_wall") || target_base_id == "wall") {
+                                if *cand_k == "up"
+                                    && (target_base_id.ends_with("_wall")
+                                        || target_base_id == "wall")
+                                {
                                     // In vanilla Minecraft, wall blocks default to up=true (post enabled)
                                     if *cand_v == "true" {
                                         score += 10;
@@ -280,14 +290,38 @@ impl BakedModelDatabase {
                                     }
                                 } else if matches!(
                                     *cand_v,
-                                    "false" | "0" | "none" | "straight" | "bottom" | "lower" | "single"
-                                        | "foot" | "normal" | "y" | "north"
+                                    "false"
+                                        | "0"
+                                        | "none"
+                                        | "straight"
+                                        | "bottom"
+                                        | "lower"
+                                        | "single"
+                                        | "foot"
+                                        | "normal"
+                                        | "y"
+                                        | "north"
                                 ) {
                                     score += 10;
                                 } else if matches!(
                                     *cand_v,
-                                    "true" | "1" | "top" | "upper" | "head" | "inner" | "outer" | "double"
-                                        | "x" | "z" | "south" | "east" | "west" | "side" | "up" | "low" | "tall"
+                                    "true"
+                                        | "1"
+                                        | "top"
+                                        | "upper"
+                                        | "head"
+                                        | "inner"
+                                        | "outer"
+                                        | "double"
+                                        | "x"
+                                        | "z"
+                                        | "south"
+                                        | "east"
+                                        | "west"
+                                        | "side"
+                                        | "up"
+                                        | "low"
+                                        | "tall"
                                 ) {
                                     score -= 10;
                                 }

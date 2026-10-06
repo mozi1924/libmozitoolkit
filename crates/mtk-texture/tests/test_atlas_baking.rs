@@ -17,10 +17,10 @@ fn test_paletted_permutation_baking() {
 
     // Base 2x2 image with Red, Green, and White pixels
     let mut base = RgbaBuffer::new(2, 2);
-    base.set_pixel(0, 0, [255, 0, 0, 255]);   // Will become Blue
-    base.set_pixel(1, 0, [0, 255, 0, 255]);   // Will become Yellow
+    base.set_pixel(0, 0, [255, 0, 0, 255]); // Will become Blue
+    base.set_pixel(1, 0, [0, 255, 0, 255]); // Will become Yellow
     base.set_pixel(0, 1, [255, 255, 255, 255]); // Unchanged White
-    base.set_pixel(1, 1, [0, 0, 0, 0]);       // Transparent
+    base.set_pixel(1, 1, [0, 0, 0, 0]); // Transparent
 
     let baked = bake_paletted_permutation(&base, &key_pal, &perm_pal).unwrap();
     assert_eq!(baked.get_pixel(0, 0), [0, 0, 255, 255]);
@@ -44,7 +44,7 @@ fn test_atlas_builder_with_pbr_and_animation() {
     let stone_albedo = RgbaBuffer::solid(16, 16, 120, 120, 120, 255);
     let diamond_albedo = RgbaBuffer::solid(16, 32, 0, 200, 255, 255); // 2 frames of 16x16
     let diamond_normal = RgbaBuffer::solid(16, 16, 128, 128, 255, 255); // 1 frame static normal
-    let diamond_spec = RgbaBuffer::solid(16, 16, 255, 255, 255, 255);   // 1 frame static specular
+    let diamond_spec = RgbaBuffer::solid(16, 16, 255, 255, 255, 255); // 1 frame static specular
 
     let sprites = vec![
         DecodedSprite {
@@ -162,7 +162,12 @@ fn test_pbr_auto_tiling_for_animated_sprite() {
     for frame in 0..4 {
         let sample_y = loc.pixel_rect[1] + frame * 16 + 8;
         let px = norm_buf.get_pixel(loc.pixel_rect[0] + 8, sample_y);
-        assert_eq!(px, [128, 128, 255, 255], "Frame {} normal pixel mismatch", frame);
+        assert_eq!(
+            px,
+            [128, 128, 255, 255],
+            "Frame {} normal pixel mismatch",
+            frame
+        );
     }
 }
 
@@ -213,7 +218,13 @@ fn test_companion_dimension_scaling_and_alignment() {
     for sample_x in [static_loc.pixel_rect[0] + 4, static_loc.pixel_rect[0] + 28] {
         for sample_y in [static_loc.pixel_rect[1] + 4, static_loc.pixel_rect[1] + 28] {
             let px = static_spec.get_pixel(sample_x, sample_y);
-            assert_eq!(px, [10, 20, 250, 255], "Static frame 0 pixel at ({}, {}) was not fully covered", sample_x, sample_y);
+            assert_eq!(
+                px,
+                [10, 20, 250, 255],
+                "Static frame 0 pixel at ({}, {}) was not fully covered",
+                sample_x,
+                sample_y
+            );
         }
     }
 
@@ -224,7 +235,12 @@ fn test_companion_dimension_scaling_and_alignment() {
     for frame in 0..2 {
         let sample_y = anim_loc.pixel_rect[1] + frame * 32 + 16;
         let px = anim_spec.get_pixel(anim_loc.pixel_rect[0] + 16, sample_y);
-        assert_eq!(px, [10, 20, 250, 255], "Animated frame {} specular emission mismatch", frame);
+        assert_eq!(
+            px,
+            [10, 20, 250, 255],
+            "Animated frame {} specular emission mismatch",
+            frame
+        );
     }
 }
 
@@ -289,7 +305,10 @@ fn test_atlas_builder_with_overlay() {
 
     // Verify overlay alias in address_map
     let overlay_id = grass_side_id.with_suffix("_overlay");
-    let overlay_loc = baked.address_map.lookup_static(&overlay_id).expect("Overlay alias must exist in address_map");
+    let overlay_loc = baked
+        .address_map
+        .lookup_static(&overlay_id)
+        .expect("Overlay alias must exist in address_map");
     assert_eq!(overlay_loc.pixel_rect, grass_loc.pixel_rect);
     assert_eq!(overlay_loc.uv_bounds, grass_loc.uv_bounds);
     assert!(overlay_loc.has_overlay);
@@ -312,7 +331,8 @@ fn test_independent_atlases_not_hijacked_by_entities() {
     use mtk_resource::AtlasCategory;
 
     let banner_base_id = ResourceLocation::parse("minecraft:entity/banner/banner_base").unwrap();
-    let pot_base_id = ResourceLocation::parse("minecraft:entity/decorated_pot/decorated_pot_base").unwrap();
+    let pot_base_id =
+        ResourceLocation::parse("minecraft:entity/decorated_pot/decorated_pot_base").unwrap();
     let zombie_id = ResourceLocation::parse("minecraft:entity/zombie/zombie").unwrap();
 
     let sprites_banner = vec![DecodedSprite {
@@ -339,8 +359,12 @@ fn test_independent_atlases_not_hijacked_by_entities() {
     }];
 
     let builder = AtlasBuilder::new(AtlasBuilderConfig::default());
-    let baked_banner = builder.build_from_sprites_with_category(sprites_banner, "banner_patterns").unwrap();
-    let baked_pot = builder.build_from_sprites_with_category(sprites_pot, "decorated_pot").unwrap();
+    let baked_banner = builder
+        .build_from_sprites_with_category(sprites_banner, "banner_patterns")
+        .unwrap();
+    let baked_pot = builder
+        .build_from_sprites_with_category(sprites_pot, "decorated_pot")
+        .unwrap();
 
     let mut combined_map = baked_banner.address_map;
     combined_map.merge(baked_pot.address_map);
@@ -388,7 +412,9 @@ fn test_independent_atlases_not_hijacked_by_entities() {
         cat == AtlasCategory::Entities || cat == AtlasCategory::Misc
     });
 
-    let baked_entities = builder.build_from_sprites_with_category(entities_sprites, "entities").unwrap();
+    let baked_entities = builder
+        .build_from_sprites_with_category(entities_sprites, "entities")
+        .unwrap();
     combined_map.merge(baked_entities.address_map);
 
     // Assertions: banner and pot MUST maintain their independent atlas categories
@@ -401,4 +427,3 @@ fn test_independent_atlases_not_hijacked_by_entities() {
     let zombie_loc = combined_map.lookup_static(&zombie_id).unwrap();
     assert_eq!(zombie_loc.category, "entities");
 }
-

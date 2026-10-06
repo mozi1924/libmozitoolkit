@@ -314,9 +314,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 5.3.0",
  "wasip2",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -691,6 +693,7 @@ dependencies = [
  "glam",
  "mtk-core",
  "mtk-resource",
+ "mtk-testkit",
  "mtk-texture",
  "rayon",
  "serde",
@@ -707,6 +710,7 @@ dependencies = [
  "glam",
  "mtk-core",
  "mtk-cull",
+ "mtk-testkit",
  "rayon",
  "serde",
  "serde_json",
@@ -727,6 +731,7 @@ dependencies = [
  "mtk-resource",
  "mtk-save",
  "mtk-sync",
+ "mtk-testkit",
  "mtk-texture",
  "mtk-voxel",
  "pyo3",
@@ -754,6 +759,7 @@ dependencies = [
  "flate2",
  "glam",
  "mtk-core",
+ "mtk-testkit",
  "mtk-voxel",
  "rayon",
  "serde",
@@ -777,6 +783,10 @@ dependencies = [
  "tungstenite",
  "url",
 ]
+
+[[package]]
+name = "mtk-testkit"
+version = "0.1.0"
 
 [[package]]
 name = "mtk-texture"
@@ -803,6 +813,7 @@ dependencies = [
  "mtk-material",
  "mtk-model",
  "mtk-resource",
+ "mtk-testkit",
  "mtk-texture",
  "rayon",
  "serde",
@@ -815,6 +826,7 @@ name = "mtk-wasm"
 version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
+ "getrandom 0.3.4",
  "js-sys",
  "libmtk",
  "mtk-core",

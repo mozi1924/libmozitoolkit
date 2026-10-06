@@ -67,7 +67,11 @@ pub fn event_worker_loop(
                     let (unified, world_mesh) = {
                         let mut w = world.write().unwrap();
                         let _ = w.rebuild_dirty();
-                        let wm = if w.unified_mesh { w.get_world_mesh().cloned() } else { None };
+                        let wm = if w.unified_mesh {
+                            w.get_world_mesh().cloned()
+                        } else {
+                            None
+                        };
                         (w.unified_mesh, wm)
                     };
                     if unified {
@@ -88,7 +92,9 @@ pub fn event_worker_loop(
                     }
                 }
                 // Auto-expire sync_requested latch after silence to recover from dropped packets
-                if sync_requested.load(Ordering::SeqCst) && stream_id_atomic.load(Ordering::SeqCst) == 0 {
+                if sync_requested.load(Ordering::SeqCst)
+                    && stream_id_atomic.load(Ordering::SeqCst) == 0
+                {
                     if let Some(t) = last_sync_request_time {
                         if t.elapsed() > std::time::Duration::from_millis(1500) {
                             sync_requested.store(false, Ordering::SeqCst);
@@ -113,7 +119,11 @@ pub fn event_worker_loop(
             let (unified, world_mesh) = {
                 let mut w = world.write().unwrap();
                 let _ = w.rebuild_dirty();
-                let wm = if w.unified_mesh { w.get_world_mesh().cloned() } else { None };
+                let wm = if w.unified_mesh {
+                    w.get_world_mesh().cloned()
+                } else {
+                    None
+                };
                 (w.unified_mesh, wm)
             };
             if unified {
@@ -213,7 +223,10 @@ pub fn handle_packet(
                 current: 1,
                 total: 1,
                 message: if packet_bytes > 0 {
-                    format!("Received full snapshot [{:.1} MB]", packet_bytes as f64 / (1024.0 * 1024.0))
+                    format!(
+                        "Received full snapshot [{:.1} MB]",
+                        packet_bytes as f64 / (1024.0 * 1024.0)
+                    )
                 } else {
                     "Received full snapshot, rebuilding world mesh...".to_string()
                 },
@@ -254,7 +267,10 @@ pub fn handle_packet(
             } else {
                 let w = world.read().unwrap();
                 for (i, (&coord, s_mesh)) in w.get_section_cache().iter().enumerate() {
-                    let _ = event_sender.send(SyncEvent::SectionMeshReady { coord, mesh: s_mesh.clone() });
+                    let _ = event_sender.send(SyncEvent::SectionMeshReady {
+                        coord,
+                        mesh: s_mesh.clone(),
+                    });
                     let _ = event_sender.send(SyncEvent::StreamProgress {
                         stage: "sync_meshing".to_string(),
                         current: i + 1,
@@ -303,7 +319,10 @@ pub fn handle_packet(
                 *stream_received_sections += 1;
                 *stream_received_bytes += packet_bytes;
                 let mb_str = if *stream_received_bytes > 0 {
-                    format!(" [{:.1} MB]", *stream_received_bytes as f64 / (1024.0 * 1024.0))
+                    format!(
+                        " [{:.1} MB]",
+                        *stream_received_bytes as f64 / (1024.0 * 1024.0)
+                    )
                 } else {
                     String::new()
                 };
@@ -320,8 +339,16 @@ pub fn handle_packet(
                 let (unified, section_mesh, world_mesh) = {
                     let mut w = world.write().unwrap();
                     let _ = w.rebuild_dirty();
-                    let s_mesh = w.get_section_cache().get(&sec_coord).cloned().unwrap_or_default();
-                    let w_mesh = if w.unified_mesh { w.get_world_mesh().cloned() } else { None };
+                    let s_mesh = w
+                        .get_section_cache()
+                        .get(&sec_coord)
+                        .cloned()
+                        .unwrap_or_default();
+                    let w_mesh = if w.unified_mesh {
+                        w.get_world_mesh().cloned()
+                    } else {
+                        None
+                    };
                     (w.unified_mesh, s_mesh, w_mesh)
                 };
 
@@ -339,20 +366,29 @@ pub fn handle_packet(
         }
 
         Packet::DeltaUpdate {
-            min_pos,
-            changes,
-            ..
+            min_pos, changes, ..
         } => {
             let borrowed_changes: Vec<(i32, i32, i32, &str)> = changes
                 .iter()
-                .map(|c| (c.rel_pos.x + min_pos.x, c.rel_pos.y + min_pos.y, c.rel_pos.z + min_pos.z, c.state.as_str()))
+                .map(|c| {
+                    (
+                        c.rel_pos.x + min_pos.x,
+                        c.rel_pos.y + min_pos.y,
+                        c.rel_pos.z + min_pos.z,
+                        c.state.as_str(),
+                    )
+                })
                 .collect();
 
             let (rebuilt, unified, world_mesh) = {
                 let mut w = world.write().unwrap();
                 w.apply_delta_update(min_pos.x, min_pos.y, min_pos.z, &borrowed_changes);
                 let r = w.rebuild_dirty().unwrap_or_default();
-                let wm = if w.unified_mesh { w.get_world_mesh().cloned() } else { None };
+                let wm = if w.unified_mesh {
+                    w.get_world_mesh().cloned()
+                } else {
+                    None
+                };
                 (r, w.unified_mesh, wm)
             };
 
@@ -373,7 +409,10 @@ pub fn handle_packet(
             });
         }
 
-        Packet::SectionManifest { seq_id: _, sections } => {
+        Packet::SectionManifest {
+            seq_id: _,
+            sections,
+        } => {
             let raw_entries: Vec<(i32, i32, i32, u32)> = sections
                 .iter()
                 .map(|s| (s.coord.x, s.coord.y, s.coord.z, s.crc32))
@@ -389,7 +428,8 @@ pub fn handle_packet(
             if mismatched.is_empty() {
                 let (rebuilt_mesh, is_unified) = {
                     let mut w = world.write().unwrap();
-                    let needs_remesh = w.get_world_mesh().is_none() || !w.storage.dirty_sections.is_empty();
+                    let needs_remesh =
+                        w.get_world_mesh().is_none() || !w.storage.dirty_sections.is_empty();
                     if needs_remesh && !w.storage.get_all_non_empty_sections().is_empty() {
                         let m = w.rebuild_all().cloned().unwrap_or_default();
                         (Some(m), w.unified_mesh)
@@ -490,7 +530,10 @@ pub fn handle_packet(
             } else {
                 let w = world.read().unwrap();
                 for (i, (&coord, s_mesh)) in w.get_section_cache().iter().enumerate() {
-                    let _ = event_sender.send(SyncEvent::SectionMeshReady { coord, mesh: s_mesh.clone() });
+                    let _ = event_sender.send(SyncEvent::SectionMeshReady {
+                        coord,
+                        mesh: s_mesh.clone(),
+                    });
                     let _ = event_sender.send(SyncEvent::StreamProgress {
                         stage: "sync_meshing".to_string(),
                         current: i + 1,

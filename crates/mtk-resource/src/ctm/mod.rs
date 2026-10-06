@@ -43,12 +43,14 @@ matchBlocks=minecraft:bookshelf
 method=horizontal
 tiles=0 1 2 3
 "#;
-        let rule_h = CtmRule::parse_properties("optifine/ctm/bookshelf.properties", "minecraft", content_h).unwrap();
+        let rule_h =
+            CtmRule::parse_properties("optifine/ctm/bookshelf.properties", "minecraft", content_h)
+                .unwrap();
         let solver = CtmSolver::new(vec![rule_h]);
 
         // Query bookshelf face
-        use mtk_core::direction::Direction;
         use glam::IVec3;
+        use mtk_core::direction::Direction;
         let pos = IVec3::new(0, 0, 0);
         let get_block = |p: IVec3| {
             if p == IVec3::new(1, 0, 0) {
@@ -58,7 +60,14 @@ tiles=0 1 2 3
             }
         };
 
-        let tile = solver.resolve_face("minecraft:bookshelf", Direction::North, pos, None, None, get_block);
+        let tile = solver.resolve_face(
+            "minecraft:bookshelf",
+            Direction::North,
+            pos,
+            None,
+            None,
+            get_block,
+        );
         assert_eq!(tile.unwrap().path, "optifine/ctm/0");
     }
 
@@ -71,14 +80,26 @@ width=2
 height=2
 tiles=0 1 2 3
 "#;
-        let rule_repeat = CtmRule::parse_properties("optifine/ctm/sandstone.properties", "minecraft", content_repeat).unwrap();
+        let rule_repeat = CtmRule::parse_properties(
+            "optifine/ctm/sandstone.properties",
+            "minecraft",
+            content_repeat,
+        )
+        .unwrap();
         let solver = CtmSolver::new(vec![rule_repeat]);
 
-        use mtk_core::direction::Direction;
         use glam::IVec3;
+        use mtk_core::direction::Direction;
         let pos = IVec3::new(1, 0, 0);
         let dummy = |_: IVec3| None::<&str>;
-        let tile = solver.resolve_face("minecraft:sandstone", Direction::North, pos, None, None, dummy);
+        let tile = solver.resolve_face(
+            "minecraft:sandstone",
+            Direction::North,
+            pos,
+            None,
+            None,
+            dummy,
+        );
         assert!(tile.is_some());
     }
 
@@ -89,10 +110,18 @@ matchBlocks=create:cogwheel
 method=horizontal
 tiles=0 1 2 3
 "#;
-        let rule = CtmRule::parse_properties("assets/create/optifine/ctm/cogwheel.properties", "create", content).unwrap();
+        let rule = CtmRule::parse_properties(
+            "assets/create/optifine/ctm/cogwheel.properties",
+            "create",
+            content,
+        )
+        .unwrap();
         assert_eq!(rule.match_blocks[0].block, "create:cogwheel");
         assert_eq!(rule.tiles[0].as_ref().unwrap().namespace, "create");
-        assert_eq!(rule.tiles[0].as_ref().unwrap().path, "assets/create/optifine/ctm/0");
+        assert_eq!(
+            rule.tiles[0].as_ref().unwrap().path,
+            "assets/create/optifine/ctm/0"
+        );
 
         let solver = CtmSolver::new(vec![rule]);
         let pos = glam::IVec3::new(0, 0, 0);
@@ -103,7 +132,17 @@ tiles=0 1 2 3
                 None
             }
         };
-        let tile = solver.resolve_face("create:cogwheel", mtk_core::direction::Direction::North, pos, None, None, get_block);
-        assert_eq!(tile.unwrap().to_string(), "create:assets/create/optifine/ctm/0");
+        let tile = solver.resolve_face(
+            "create:cogwheel",
+            mtk_core::direction::Direction::North,
+            pos,
+            None,
+            None,
+            get_block,
+        );
+        assert_eq!(
+            tile.unwrap().to_string(),
+            "create:assets/create/optifine/ctm/0"
+        );
     }
 }

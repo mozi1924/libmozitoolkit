@@ -115,7 +115,9 @@ impl UniversalAssetLoader {
     }
 
     pub fn load_blockstate(&mut self, blockstate_id: &str) -> Option<BlockStateDefinition> {
-        let clean_id = blockstate_id.strip_prefix("minecraft:").unwrap_or(blockstate_id);
+        let clean_id = blockstate_id
+            .strip_prefix("minecraft:")
+            .unwrap_or(blockstate_id);
         if let Some(cached) = self.blockstate_cache.get(clean_id) {
             return cached.clone();
         }

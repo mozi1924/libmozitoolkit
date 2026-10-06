@@ -3,10 +3,10 @@
 //! Exposes `mtk-save` level metadata, spatial chunk querying, and direct
 //! world meshing pipelines to Python.
 
-use std::path::Path;
 use glam::IVec3;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use std::path::Path;
 
 use mtk_save::{LevelData, SaveLoader};
 use mtk_voxel::storage::VoxelStorage;
@@ -93,7 +93,10 @@ impl PyLevelData {
         dict.set_item("level_name", &self.inner.level_name)?;
         dict.set_item("version_name", &self.inner.version_name)?;
         dict.set_item("data_version", self.inner.data_version)?;
-        dict.set_item("spawn", (self.inner.spawn.x, self.inner.spawn.y, self.inner.spawn.z))?;
+        dict.set_item(
+            "spawn",
+            (self.inner.spawn.x, self.inner.spawn.y, self.inner.spawn.z),
+        )?;
         dict.set_item("time", self.inner.time)?;
         dict.set_item("day_time", self.inner.day_time)?;
         dict.set_item("hardcore", self.inner.hardcore)?;
@@ -162,12 +165,20 @@ pub fn load_minecraft_save_storage(
             });
         }
     });
-    let progress_ref: Option<mtk_core::progress::ProgressCallback<'_>> =
-        on_progress.as_ref().map(|f| f as &(dyn Fn(mtk_core::progress::ProgressReport) + Send + Sync));
+    let progress_ref: Option<mtk_core::progress::ProgressCallback<'_>> = on_progress
+        .as_ref()
+        .map(|f| f as &(dyn Fn(mtk_core::progress::ProgressReport) + Send + Sync));
 
     let mut storage = VoxelStorage::new();
-    SaveLoader::load_box_into_storage_with_progress(path, dimension, min_coord, max_coord, &mut storage, progress_ref)
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+    SaveLoader::load_box_into_storage_with_progress(
+        path,
+        dimension,
+        min_coord,
+        max_coord,
+        &mut storage,
+        progress_ref,
+    )
+    .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
     Ok((
         PyVoxelStorage { inner: storage },
@@ -216,29 +227,31 @@ pub fn load_and_mesh_minecraft_save(
             });
         }
     });
-    let progress_ref: Option<mtk_core::progress::ProgressCallback<'_>> =
-        on_progress.as_ref().map(|f| f as &(dyn Fn(mtk_core::progress::ProgressReport) + Send + Sync));
+    let progress_ref: Option<mtk_core::progress::ProgressCallback<'_>> = on_progress
+        .as_ref()
+        .map(|f| f as &(dyn Fn(mtk_core::progress::ProgressReport) + Send + Sync));
 
     let mut storage = VoxelStorage::new();
-    SaveLoader::load_box_into_storage_with_progress(path, dimension, min_coord, max_coord, &mut storage, progress_ref)
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+    SaveLoader::load_box_into_storage_with_progress(
+        path,
+        dimension,
+        min_coord,
+        max_coord,
+        &mut storage,
+        progress_ref,
+    )
+    .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
     let cfg = config.map(|c| c.inner.clone());
     let cul = culler.map(|c| c.inner.clone());
     let mdb = model_db.map(|db| db.inner.clone());
     let threads = num_threads.or_else(|| config.and_then(|c| c.num_threads));
 
-    let mut world = VoxelWorld::from_storage_with_threads(
-        storage.clone(),
-        cfg,
-        cul,
-        mdb,
-        true,
-        threads,
-    );
+    let mut world =
+        VoxelWorld::from_storage_with_threads(storage.clone(), cfg, cul, mdb, true, threads);
 
     let mesh = py
-        .allow_threads(|| world.rebuild_all_with_progress(progress_ref).map(|m| m.clone()))
+        .allow_threads(|| world.rebuild_all_with_progress(progress_ref).cloned())
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
     Ok((

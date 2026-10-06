@@ -36,7 +36,12 @@ impl VoxelSource for MockVoxelSource {
         self.sections.contains_key(&IVec3::new(sx, sy, sz))
     }
 
-    fn load_section(&mut self, sx: i32, sy: i32, sz: i32) -> Result<Option<SectionStorage>, VoxelError> {
+    fn load_section(
+        &mut self,
+        sx: i32,
+        sy: i32,
+        sz: i32,
+    ) -> Result<Option<SectionStorage>, VoxelError> {
         Ok(self.sections.get(&IVec3::new(sx, sy, sz)).cloned())
     }
 
@@ -51,7 +56,9 @@ fn test_voxel_source_ingestion_and_traits() {
     let mut storage = VoxelStorage::new();
 
     // 1. Ingest via VoxelStorage::ingest_source
-    let count = storage.ingest_source(&mut source, None).expect("Failed to ingest source");
+    let count = storage
+        .ingest_source(&mut source, None)
+        .expect("Failed to ingest source");
     assert_eq!(count, 2);
 
     // 2. Query via VoxelReader trait

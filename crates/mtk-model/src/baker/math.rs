@@ -61,11 +61,7 @@ pub fn get_face_canonical_vertex(
 }
 
 /// Calculate default UV (min_u, min_v, max_u, max_v) in [0..16] matching Minecraft FaceBakery.
-pub fn default_face_uv(
-    dir: Direction,
-    from_pos: [f32; 3],
-    to_pos: [f32; 3],
-) -> [f32; 4] {
+pub fn default_face_uv(dir: Direction, from_pos: [f32; 3], to_pos: [f32; 3]) -> [f32; 4] {
     let [fx, fy, fz] = from_pos;
     let [tx, ty, tz] = to_pos;
 
@@ -312,17 +308,22 @@ pub fn apply_uvlock_to_uvs(
 
 /// Exact implementation of Minecraft FaceBakery.recalculateWinding:
 /// Reorders positions and uvs so vertices match FaceInfo canonical order.
-pub fn recalculate_winding(
-    positions: &mut [Vec3; 4],
-    uvs: &mut [Vec2; 4],
-    final_dir: Direction,
-) {
+pub fn recalculate_winding(positions: &mut [Vec3; 4], uvs: &mut [Vec2; 4], final_dir: Direction) {
     let min_x = positions.iter().map(|p| p.x).fold(f32::INFINITY, f32::min);
     let min_y = positions.iter().map(|p| p.y).fold(f32::INFINITY, f32::min);
     let min_z = positions.iter().map(|p| p.z).fold(f32::INFINITY, f32::min);
-    let max_x = positions.iter().map(|p| p.x).fold(f32::NEG_INFINITY, f32::max);
-    let max_y = positions.iter().map(|p| p.y).fold(f32::NEG_INFINITY, f32::max);
-    let max_z = positions.iter().map(|p| p.z).fold(f32::NEG_INFINITY, f32::max);
+    let max_x = positions
+        .iter()
+        .map(|p| p.x)
+        .fold(f32::NEG_INFINITY, f32::max);
+    let max_y = positions
+        .iter()
+        .map(|p| p.y)
+        .fold(f32::NEG_INFINITY, f32::max);
+    let max_z = positions
+        .iter()
+        .map(|p| p.z)
+        .fold(f32::NEG_INFINITY, f32::max);
 
     let from_pos = [min_x * 16.0, min_y * 16.0, min_z * 16.0];
     let to_pos = [max_x * 16.0, max_y * 16.0, max_z * 16.0];

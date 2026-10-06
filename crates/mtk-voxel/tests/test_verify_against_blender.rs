@@ -59,7 +59,6 @@ struct FluidUvTestCase {
     expected_side_uvs: Option<Vec<[f32; 2]>>,
 }
 
-
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 struct MeshTestCase {
@@ -107,10 +106,7 @@ fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
     for tc in &truth.crc_tests {
         let mut sec = SectionStorage::new(IVec3::new(0, 0, 0));
         for (coord_str, state) in &tc.blocks {
-            let parts: Vec<usize> = coord_str
-                .split(',')
-                .map(|s| s.parse().unwrap())
-                .collect();
+            let parts: Vec<usize> = coord_str.split(',').map(|s| s.parse().unwrap()).collect();
             sec.set_local(parts[0], parts[1], parts[2], state);
         }
         let rust_crc = sec.compute_crc();
@@ -222,7 +218,13 @@ fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
 
         println!(
             " • {:<24} -> UV: [{:.4}, {:.4}] | Blender: [{:.4}, {:.4}] | Temp: {:.2} vs {:.2}",
-            tc.biome, uv[0], uv[1], tc.colormap_uv[0], tc.colormap_uv[1], meta.temperature, tc.temperature
+            tc.biome,
+            uv[0],
+            uv[1],
+            tc.colormap_uv[0],
+            tc.colormap_uv[1],
+            meta.temperature,
+            tc.temperature
         );
 
         assert!(
@@ -238,8 +240,6 @@ fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
             tc.biome
         );
     }
-
-
 
     // 4. Verify Fluid UV Mapping
     println!("\n[4. Fluid UVs (Top Rotations & Slanted Side Trapeze) Verification]");
@@ -282,7 +282,9 @@ fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
     }
 
     // 5. Verify Section Mesh Generation (Quads, Vertices, Triangles, Occlusion Culling)
-    println!("\n[5. 3D Section Mesh Assembly Verification (vs MoziToolKit RawSectionGeometryBuffer)]");
+    println!(
+        "\n[5. 3D Section Mesh Assembly Verification (vs MoziToolKit RawSectionGeometryBuffer)]"
+    );
     let culler = FaceCuller::default();
     let unwelded_config = MesherConfig {
         weld_vertices: false,
@@ -331,7 +333,11 @@ fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
         // Also verify welded mesh produces 8 vertices for single_cube_mesh
         let welded_mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &welded_config);
         if tc.name == "single_cube_mesh" {
-            assert_eq!(welded_mesh.vertex_count(), 8, "Welded single cube must have 8 vertices");
+            assert_eq!(
+                welded_mesh.vertex_count(),
+                8,
+                "Welded single cube must have 8 vertices"
+            );
         }
     }
 

@@ -6,12 +6,12 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
+use super::grid::{
+    calculate_face_target_grid, calculate_pixel_grid_cut_factors, interpolate_bilinear_2d,
+    interpolate_bilinear_3d, interpolate_bilinear_4d,
+};
 use crate::attributes::{AttributeData, MeshAttribute};
 use crate::mesh::MeshData;
-use super::grid::{
-    calculate_face_target_grid, calculate_pixel_grid_cut_factors,
-    interpolate_bilinear_2d, interpolate_bilinear_3d, interpolate_bilinear_4d,
-};
 
 /// Performs adaptive pixel grid subdivision on quad faces in a `MeshData` buffer.
 ///
@@ -92,7 +92,13 @@ pub fn adaptive_pixel_split_mesh(
             .unwrap_or(default_resolution);
 
         let (u_factors, v_factors) = if pixels_per_face <= 1.0 {
-            calculate_pixel_grid_cut_factors(&[uv0, uv1, uv2, uv3], tex_w, tex_h, pixels_per_face, max_subdivisions)
+            calculate_pixel_grid_cut_factors(
+                &[uv0, uv1, uv2, uv3],
+                tex_w,
+                tex_h,
+                pixels_per_face,
+                max_subdivisions,
+            )
         } else {
             let (c_count, r_count) = calculate_face_target_grid(
                 &[uv0, uv1, uv2, uv3],
@@ -131,8 +137,12 @@ pub fn adaptive_pixel_split_mesh(
             }
 
             out.indices.extend_from_slice(&[
-                base_v, base_v + 1, base_v + 2,
-                base_v, base_v + 2, base_v + 3,
+                base_v,
+                base_v + 1,
+                base_v + 2,
+                base_v,
+                base_v + 2,
+                base_v + 3,
             ]);
             out.face_materials.push(mat_id);
             out.face_tint_indices.push(tint_idx);
@@ -157,7 +167,8 @@ pub fn adaptive_pixel_split_mesh(
                 out.normals.push(norm);
                 out.uvs.push(uv);
 
-                if let (Some(sec_in), Some(sec_out)) = (&mesh.secondary_uvs, &mut out.secondary_uvs) {
+                if let (Some(sec_in), Some(sec_out)) = (&mesh.secondary_uvs, &mut out.secondary_uvs)
+                {
                     let s0 = sec_in.get(idx0).copied().unwrap_or([0.0, 0.0]);
                     let s1 = sec_in.get(idx1).copied().unwrap_or([1.0, 0.0]);
                     let s2 = sec_in.get(idx2).copied().unwrap_or([1.0, 1.0]);
@@ -183,7 +194,8 @@ pub fn adaptive_pixel_split_mesh(
                 let v11 = grid_indices[r + 1][c + 1];
                 let v01 = grid_indices[r + 1][c];
 
-                out.indices.extend_from_slice(&[v00, v10, v11, v00, v11, v01]);
+                out.indices
+                    .extend_from_slice(&[v00, v10, v11, v00, v11, v01]);
                 out.face_materials.push(mat_id);
                 out.face_tint_indices.push(tint_idx);
             }
@@ -224,7 +236,9 @@ pub fn weld_mesh_vertices(mesh: &mut MeshData, weld_dist: f32) {
             // Check if UVs also match closely to avoid welding across UV seams
             let existing_uv = new_uvs[existing_idx as usize];
             let cur_uv = mesh.uvs[i];
-            let uv_diff = (existing_uv[0] - cur_uv[0]).abs().max((existing_uv[1] - cur_uv[1]).abs());
+            let uv_diff = (existing_uv[0] - cur_uv[0])
+                .abs()
+                .max((existing_uv[1] - cur_uv[1]).abs());
             if uv_diff < 1e-4 {
                 remap.push(existing_idx);
                 continue;

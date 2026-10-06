@@ -8,7 +8,6 @@ pub fn ao_level_to_brightness(level: u8) -> f32 {
     AO_LEVEL_MULTIPLIERS[idx]
 }
 
-
 /// Computes the ambient occlusion level `0..=3` for a single vertex given its 2 adjacent side blocks and diagonal corner block.
 ///
 /// If both adjacent side blocks are solid opaque, light is completely blocked (corner is occluded, AO = 0).
@@ -38,46 +37,106 @@ where
             // v2: (+X, -Z) => (1, 1, 0), (0, 1, -1), (1, 1, -1)
             let ao2 = vertex_ao(is_opaque(1, 1, 0), is_opaque(0, 1, -1), is_opaque(1, 1, -1));
             // v3: (-X, -Z) => (-1, 1, 0), (0, 1, -1), (-1, 1, -1)
-            let ao3 = vertex_ao(is_opaque(-1, 1, 0), is_opaque(0, 1, -1), is_opaque(-1, 1, -1));
+            let ao3 = vertex_ao(
+                is_opaque(-1, 1, 0),
+                is_opaque(0, 1, -1),
+                is_opaque(-1, 1, -1),
+            );
             [ao0, ao1, ao2, ao3]
         }
         Direction::Down => {
             // Face at Y = 0 (bottom)
-            let ao0 = vertex_ao(is_opaque(-1, -1, 0), is_opaque(0, -1, -1), is_opaque(-1, -1, -1));
-            let ao1 = vertex_ao(is_opaque(1, -1, 0), is_opaque(0, -1, -1), is_opaque(1, -1, -1));
-            let ao2 = vertex_ao(is_opaque(1, -1, 0), is_opaque(0, -1, 1), is_opaque(1, -1, 1));
-            let ao3 = vertex_ao(is_opaque(-1, -1, 0), is_opaque(0, -1, 1), is_opaque(-1, -1, 1));
+            let ao0 = vertex_ao(
+                is_opaque(-1, -1, 0),
+                is_opaque(0, -1, -1),
+                is_opaque(-1, -1, -1),
+            );
+            let ao1 = vertex_ao(
+                is_opaque(1, -1, 0),
+                is_opaque(0, -1, -1),
+                is_opaque(1, -1, -1),
+            );
+            let ao2 = vertex_ao(
+                is_opaque(1, -1, 0),
+                is_opaque(0, -1, 1),
+                is_opaque(1, -1, 1),
+            );
+            let ao3 = vertex_ao(
+                is_opaque(-1, -1, 0),
+                is_opaque(0, -1, 1),
+                is_opaque(-1, -1, 1),
+            );
             [ao0, ao1, ao2, ao3]
         }
         Direction::North => {
             // Face at Z = 0 (looking towards -Z)
-            let ao0 = vertex_ao(is_opaque(1, 0, -1), is_opaque(0, 1, -1), is_opaque(1, 1, -1));
-            let ao1 = vertex_ao(is_opaque(1, 0, -1), is_opaque(0, -1, -1), is_opaque(1, -1, -1));
-            let ao2 = vertex_ao(is_opaque(-1, 0, -1), is_opaque(0, -1, -1), is_opaque(-1, -1, -1));
-            let ao3 = vertex_ao(is_opaque(-1, 0, -1), is_opaque(0, 1, -1), is_opaque(-1, 1, -1));
+            let ao0 = vertex_ao(
+                is_opaque(1, 0, -1),
+                is_opaque(0, 1, -1),
+                is_opaque(1, 1, -1),
+            );
+            let ao1 = vertex_ao(
+                is_opaque(1, 0, -1),
+                is_opaque(0, -1, -1),
+                is_opaque(1, -1, -1),
+            );
+            let ao2 = vertex_ao(
+                is_opaque(-1, 0, -1),
+                is_opaque(0, -1, -1),
+                is_opaque(-1, -1, -1),
+            );
+            let ao3 = vertex_ao(
+                is_opaque(-1, 0, -1),
+                is_opaque(0, 1, -1),
+                is_opaque(-1, 1, -1),
+            );
             [ao0, ao1, ao2, ao3]
         }
         Direction::South => {
             // Face at Z = +1 (looking towards +Z)
             let ao0 = vertex_ao(is_opaque(-1, 0, 1), is_opaque(0, 1, 1), is_opaque(-1, 1, 1));
-            let ao1 = vertex_ao(is_opaque(-1, 0, 1), is_opaque(0, -1, 1), is_opaque(-1, -1, 1));
+            let ao1 = vertex_ao(
+                is_opaque(-1, 0, 1),
+                is_opaque(0, -1, 1),
+                is_opaque(-1, -1, 1),
+            );
             let ao2 = vertex_ao(is_opaque(1, 0, 1), is_opaque(0, -1, 1), is_opaque(1, -1, 1));
             let ao3 = vertex_ao(is_opaque(1, 0, 1), is_opaque(0, 1, 1), is_opaque(1, 1, 1));
             [ao0, ao1, ao2, ao3]
         }
         Direction::West => {
             // Face at X = 0 (looking towards -X)
-            let ao0 = vertex_ao(is_opaque(-1, 0, -1), is_opaque(-1, 1, 0), is_opaque(-1, 1, -1));
-            let ao1 = vertex_ao(is_opaque(-1, 0, -1), is_opaque(-1, -1, 0), is_opaque(-1, -1, -1));
-            let ao2 = vertex_ao(is_opaque(-1, 0, 1), is_opaque(-1, -1, 0), is_opaque(-1, -1, 1));
-            let ao3 = vertex_ao(is_opaque(-1, 0, 1), is_opaque(-1, 1, 0), is_opaque(-1, 1, 1));
+            let ao0 = vertex_ao(
+                is_opaque(-1, 0, -1),
+                is_opaque(-1, 1, 0),
+                is_opaque(-1, 1, -1),
+            );
+            let ao1 = vertex_ao(
+                is_opaque(-1, 0, -1),
+                is_opaque(-1, -1, 0),
+                is_opaque(-1, -1, -1),
+            );
+            let ao2 = vertex_ao(
+                is_opaque(-1, 0, 1),
+                is_opaque(-1, -1, 0),
+                is_opaque(-1, -1, 1),
+            );
+            let ao3 = vertex_ao(
+                is_opaque(-1, 0, 1),
+                is_opaque(-1, 1, 0),
+                is_opaque(-1, 1, 1),
+            );
             [ao0, ao1, ao2, ao3]
         }
         Direction::East => {
             // Face at X = +1 (looking towards +X)
             let ao0 = vertex_ao(is_opaque(1, 0, 1), is_opaque(1, 1, 0), is_opaque(1, 1, 1));
             let ao1 = vertex_ao(is_opaque(1, 0, 1), is_opaque(1, -1, 0), is_opaque(1, -1, 1));
-            let ao2 = vertex_ao(is_opaque(1, 0, -1), is_opaque(1, -1, 0), is_opaque(1, -1, -1));
+            let ao2 = vertex_ao(
+                is_opaque(1, 0, -1),
+                is_opaque(1, -1, 0),
+                is_opaque(1, -1, -1),
+            );
             let ao3 = vertex_ao(is_opaque(1, 0, -1), is_opaque(1, 1, 0), is_opaque(1, 1, -1));
             [ao0, ao1, ao2, ao3]
         }

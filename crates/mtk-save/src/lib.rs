@@ -22,5 +22,8 @@ pub use chunk::{format_canonical_blockstate, ChunkParser};
 pub use error::SaveError;
 pub use level::LevelData;
 pub use loader::SaveLoader;
-pub use region::{ChunkLocation, RegionFile, REGION_CHUNKS_AXIS, REGION_HEADER_SIZE, REGION_TOTAL_CHUNKS, SECTOR_SIZE};
+pub use region::{
+    ChunkLocation, RegionFile, REGION_CHUNKS_AXIS, REGION_HEADER_SIZE, REGION_TOTAL_CHUNKS,
+    SECTOR_SIZE,
+};
 pub use source::AnvilWorldSource;

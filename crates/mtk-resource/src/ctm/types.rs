@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use crate::identifier::{ResourceLocation, DEFAULT_NAMESPACE};
 use glam::IVec3;
 use mtk_core::direction::{DirMask, Direction};
-use crate::identifier::{DEFAULT_NAMESPACE, ResourceLocation};
+use std::collections::HashMap;
 
 /// Symmetry modes for random CTM.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -222,10 +222,7 @@ pub const fn get_face_tangents(face: Direction) -> (Direction, Direction) {
 /// Deterministic 3D spatial pseudorandom number generator matching standard Minecraft / OptiFine.
 #[inline]
 pub fn coordinate_random(x: i32, y: i32, z: i32) -> f32 {
-    let mut l = (x as i64)
-        .wrapping_mul(3129871)
-        ^ (z as i64).wrapping_mul(116129781)
-        ^ (y as i64);
+    let mut l = (x as i64).wrapping_mul(3129871) ^ (z as i64).wrapping_mul(116129781) ^ (y as i64);
     l = l
         .wrapping_mul(l)
         .wrapping_mul(42317861)

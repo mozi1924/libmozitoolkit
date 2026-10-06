@@ -4,8 +4,9 @@ import json
 import math
 from pathlib import Path
 
-# Add MoziToolKit to sys.path
-MOZI_DIR = Path("/home/mozi/MoziToolKit")
+# Resolve the MoziToolKit workspace relative to this repo (override with MTK_MOZI_DIR).
+WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
+MOZI_DIR = Path(os.environ.get("MTK_MOZI_DIR", WORKSPACE_ROOT.parent / "MoziToolKit"))
 if str(MOZI_DIR) not in sys.path:
     sys.path.insert(0, str(MOZI_DIR))
 
@@ -303,7 +304,12 @@ def export_truth_data():
             "fluids_count": buf.fluids_count,
         })
 
-    out_path = Path("/home/mozi/libmozitoolkit/crates/mtk-voxel/tests/fixtures/blender_ground_truth.json")
+    out_path = Path(
+        os.environ.get(
+            "MTK_GROUND_TRUTH_OUT",
+            WORKSPACE_ROOT / "crates/mtk-voxel/tests/fixtures/blender_ground_truth.json",
+        )
+    )
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(truth, f, indent=2)
 

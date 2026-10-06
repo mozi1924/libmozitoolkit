@@ -82,7 +82,11 @@ pub fn check_coplanar_overlap(
     }
 
     // Compute 2D tangent basis (u_axis, v_axis)
-    let up = if norm_a.y.abs() > 0.9 { Vec3::Z } else { Vec3::Y };
+    let up = if norm_a.y.abs() > 0.9 {
+        Vec3::Z
+    } else {
+        Vec3::Y
+    };
     let mut u_axis = up.cross(norm_a);
     let u_len = u_axis.length();
     if u_len < 1e-5 {

@@ -113,10 +113,11 @@ impl VoxelStorage {
 
             // Bad chunk check: if non-empty section exists on server but its mesh object is missing
             if let Some(existing_meshes) = existing_section_meshes {
-                if !self.is_empty_section_crc(coord, server_crc) {
-                    if !existing_meshes.contains(&coord) && !self.known_empty_sections.contains(&coord) {
-                        mismatched.push(coord);
-                    }
+                if !self.is_empty_section_crc(coord, server_crc)
+                    && !existing_meshes.contains(&coord)
+                    && !self.known_empty_sections.contains(&coord)
+                {
+                    mismatched.push(coord);
                 }
             }
         }
@@ -180,7 +181,8 @@ impl VoxelStorage {
                         parts[2].parse::<i32>(),
                         v.as_u64(),
                     ) {
-                        self.section_crc_map.insert(IVec3::new(x, y, z), crc_val as u32);
+                        self.section_crc_map
+                            .insert(IVec3::new(x, y, z), crc_val as u32);
                     }
                 }
             }

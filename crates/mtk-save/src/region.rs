@@ -49,10 +49,18 @@ impl RegionFile {
     pub fn open(path: &Path) -> Result<Self, SaveError> {
         let mut file = File::open(path)?;
         let mut header = [0u8; REGION_HEADER_SIZE];
-        file.read_exact(&mut header)
-            .map_err(|e| SaveError::InvalidRegionHeader(format!("Header read failed for {}: {}", path.display(), e)))?;
+        file.read_exact(&mut header).map_err(|e| {
+            SaveError::InvalidRegionHeader(format!(
+                "Header read failed for {}: {}",
+                path.display(),
+                e
+            ))
+        })?;
 
-        let mut locations = [ChunkLocation { sector_offset: 0, sector_count: 0 }; REGION_TOTAL_CHUNKS];
+        let mut locations = [ChunkLocation {
+            sector_offset: 0,
+            sector_count: 0,
+        }; REGION_TOTAL_CHUNKS];
         for i in 0..REGION_TOTAL_CHUNKS {
             let offset_idx = i * 4;
             let sector_offset = ((header[offset_idx] as u32) << 16)
@@ -132,14 +140,16 @@ impl RegionFile {
             1 => {
                 // GZip
                 let mut gz = GzDecoder::new(&compressed_data[..]);
-                gz.read_to_end(&mut decompressed)
-                    .map_err(|e| SaveError::DecompressionFailed(format!("GZip decompression error: {}", e)))?;
+                gz.read_to_end(&mut decompressed).map_err(|e| {
+                    SaveError::DecompressionFailed(format!("GZip decompression error: {}", e))
+                })?;
             }
             2 => {
                 // Zlib / Deflate (standard Java Edition)
                 let mut zlib = ZlibDecoder::new(&compressed_data[..]);
-                zlib.read_to_end(&mut decompressed)
-                    .map_err(|e| SaveError::DecompressionFailed(format!("Zlib decompression error: {}", e)))?;
+                zlib.read_to_end(&mut decompressed).map_err(|e| {
+                    SaveError::DecompressionFailed(format!("Zlib decompression error: {}", e))
+                })?;
             }
             3 => {
                 // Uncompressed

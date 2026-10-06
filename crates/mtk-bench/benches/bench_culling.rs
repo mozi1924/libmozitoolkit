@@ -1,10 +1,7 @@
-use std::time::Instant;
 use glam::IVec3;
 use mtk_core::direction::Direction;
 use mtk_cull::FaceCuller;
-
-
-
+use std::time::Instant;
 
 fn main() {
     let complex_blocks = [
@@ -125,8 +122,15 @@ fn main() {
     println!(" Complex Block States: {}", n);
     println!(" Total Evaluations: {}", total_iterations);
     println!(" Rendered Faces: {}", render_count);
-    println!(" Total Elapsed: {:.4} s ({:.2} ms)", total_secs, total_secs * 1000.0);
+    println!(
+        " Total Elapsed: {:.4} s ({:.2} ms)",
+        total_secs,
+        total_secs * 1000.0
+    );
     println!(" Average Latency: {:.2} ns / evaluation", avg_ns);
-    println!(" Throughput: {:.2} million evaluations / sec", throughput / 1_000_000.0);
+    println!(
+        " Throughput: {:.2} million evaluations / sec",
+        throughput / 1_000_000.0
+    );
     println!("============================================================");
 }

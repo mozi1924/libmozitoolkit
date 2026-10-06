@@ -430,11 +430,16 @@ mod tests {
     fn test_uv_area_2d_and_collapse_2d() {
         let quad_uvs = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
         assert!((calculate_uv_area_2d(&quad_uvs) - 1.0).abs() < 1e-6);
-        assert!(!is_uv_collapsed_2d(&quad_uvs, Some([1.0 / 16.0, 1.0 / 16.0])));
+        assert!(!is_uv_collapsed_2d(
+            &quad_uvs,
+            Some([1.0 / 16.0, 1.0 / 16.0])
+        ));
 
         let collapsed_line = [[0.1, 0.2], [0.1, 0.2], [0.1, 0.2], [0.1, 0.2]];
         assert_eq!(calculate_uv_area_2d(&collapsed_line), 0.0);
-        assert!(is_uv_collapsed_2d(&collapsed_line, Some([1.0 / 16.0, 1.0 / 16.0])));
+        assert!(is_uv_collapsed_2d(
+            &collapsed_line,
+            Some([1.0 / 16.0, 1.0 / 16.0])
+        ));
     }
 }
-

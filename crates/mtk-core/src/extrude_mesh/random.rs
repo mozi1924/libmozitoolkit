@@ -6,12 +6,12 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use crate::extrude::generate_extrude_heights;
 use super::repair::process_flat_mesh_extrude_repair;
 use super::types::{
-    compute_face_normal, FlatPolygonMesh, MeshExtrudeRepairConfig,
-    RandomExtrudeMeshInput, RandomExtrudeMeshOutput,
+    compute_face_normal, FlatPolygonMesh, MeshExtrudeRepairConfig, RandomExtrudeMeshInput,
+    RandomExtrudeMeshOutput,
 };
+use crate::extrude::generate_extrude_heights;
 
 /// Performs complete discrete face extrusion, noise vertex displacement, topology rebuilding,
 /// and automatic side UV repair in a single batch pass.
@@ -69,7 +69,11 @@ pub fn process_random_extrude_mesh(input: &RandomExtrudeMeshInput) -> RandomExtr
         let base_verts = input.face_vertices[f_idx_u].clone();
         let base_uvs = input.face_uvs[f_idx_u].clone();
         let mat_idx = input.face_materials.get(f_idx_u).copied().unwrap_or(0);
-        let p_step = input.pixel_steps.get(f_idx_u).copied().unwrap_or([1.0 / 64.0, 1.0 / 64.0]);
+        let p_step = input
+            .pixel_steps
+            .get(f_idx_u)
+            .copied()
+            .unwrap_or([1.0 / 64.0, 1.0 / 64.0]);
 
         let norm = compute_face_normal(&base_verts, &input.positions);
         let n = base_verts.len();

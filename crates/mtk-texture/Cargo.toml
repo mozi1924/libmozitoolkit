@@ -22,3 +22,6 @@ rayon = { workspace = true, optional = true }
 default = ["std", "parallel"]
 std = ["mtk-core/std", "mtk-resource/std", "serde/std", "serde_json/std"]
 parallel = ["dep:rayon", "mtk-resource/parallel"]
+
+[lints]
+workspace = true

@@ -7,10 +7,10 @@
 //! 3. Secondary normalized [0, 1] UV generation for PBR
 //! 4. Structured result mesh & material summary generation
 
-use std::collections::HashMap;
 use mtk_core::mesh::MeshData;
 use mtk_material::{remap_mesh_multi_uvs_parallel, GridAtlasSpec, MeshMultiUvRemapResult};
 use mtk_texture::AtlasAddressMap;
+use std::collections::HashMap;
 
 /// Configuration options for the unified mesh processing pipeline.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -123,7 +123,7 @@ pub fn process_mesh(
         let mut face_loop_ranges: Vec<(u32, u32)> = Vec::with_capacity(face_count);
         let mut per_face_mat_names: Vec<String> = Vec::with_capacity(face_count);
 
-        let loops_per_face = if face_count > 0 && total_uvs % face_count == 0 {
+        let loops_per_face = if face_count > 0 && total_uvs.is_multiple_of(face_count) {
             (total_uvs / face_count) as u32
         } else {
             4 // default quad assumption
@@ -157,7 +157,11 @@ pub fn process_mesh(
         use mtk_core::attributes::constants::*;
         use mtk_core::attributes::{AttributeData, AttributeDomain, MeshAttribute};
 
-        let chunk_ids: Vec<i32> = remap_result.face_chunk_ids.iter().map(|&c| c as i32).collect();
+        let chunk_ids: Vec<i32> = remap_result
+            .face_chunk_ids
+            .iter()
+            .map(|&c| c as i32)
+            .collect();
         output_mesh.add_custom_attribute(MeshAttribute::new(
             ATTR_ATLAS_CHUNK_ID,
             AttributeDomain::Face,
@@ -288,7 +292,10 @@ mod tests {
         assert_eq!(out.stats.output_faces, 1);
         assert_eq!(out.stats.resolved_slots, 1);
         assert_eq!(out.materials[0].atlas_chunk_id, 0);
-        assert_eq!(out.materials[0].canonical_name.as_deref(), Some("minecraft:block/stone"));
+        assert_eq!(
+            out.materials[0].canonical_name.as_deref(),
+            Some("minecraft:block/stone")
+        );
         assert!(out.mesh.secondary_uvs.is_some());
     }
 }

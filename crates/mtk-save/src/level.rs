@@ -2,11 +2,11 @@ use std::fs::File;
 use std::io::{Cursor, Read};
 use std::path::Path;
 
+use crate::nbt::Nbt;
 use flate2::read::GzDecoder;
 use glam::IVec3;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use crate::nbt::Nbt;
 
 use crate::error::SaveError;
 
@@ -42,8 +42,9 @@ impl LevelData {
         let file = File::open(file_path)?;
         let mut gz = GzDecoder::new(file);
         let mut decompressed = Vec::new();
-        gz.read_to_end(&mut decompressed)
-            .map_err(|e| SaveError::DecompressionFailed(format!("Failed decompressing level.dat: {}", e)))?;
+        gz.read_to_end(&mut decompressed).map_err(|e| {
+            SaveError::DecompressionFailed(format!("Failed decompressing level.dat: {}", e))
+        })?;
 
         Self::read_from_bytes(&decompressed)
     }
@@ -54,14 +55,16 @@ impl LevelData {
         let base = match nbt {
             Nbt::Some(b) => b,
             Nbt::None => {
-                return Err(SaveError::InvalidChunkData("level.dat contains empty NBT".to_string()))
+                return Err(SaveError::InvalidChunkData(
+                    "level.dat contains empty NBT".to_string(),
+                ))
             }
         };
 
         let root = base.as_compound();
-        let data = root
-            .compound("Data")
-            .ok_or_else(|| SaveError::InvalidChunkData("Missing 'Data' compound in level.dat".to_string()))?;
+        let data = root.compound("Data").ok_or_else(|| {
+            SaveError::InvalidChunkData("Missing 'Data' compound in level.dat".to_string())
+        })?;
 
         let level_name = data
             .string("LevelName")

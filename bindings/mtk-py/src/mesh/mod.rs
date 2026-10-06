@@ -191,7 +191,10 @@ impl PyMeshData {
         let tri_faces = indices.len() / 3;
         let quad_faces = indices.len() / 6;
         if let Some(ref mats) = face_materials {
-            if mats.len() != tri_faces && mats.len() != quad_faces && !(indices.is_empty() && mats.is_empty()) {
+            if mats.len() != tri_faces
+                && mats.len() != quad_faces
+                && !(indices.is_empty() && mats.is_empty())
+            {
                 return Err(pyo3::exceptions::PyValueError::new_err(format!(
                     "face_materials length ({}) must match triangle count ({}) or quad count ({})",
                     mats.len(),
@@ -254,7 +257,12 @@ impl PyMeshData {
     ///
     /// Eliminates DCC viewport and render-time Z-fighting artifacts while preserving custom attributes.
     #[pyo3(signature = (tolerance=1e-3, cull_opposite=true, cull_duplicates=true))]
-    pub fn cull_faces(&self, tolerance: f32, cull_opposite: bool, cull_duplicates: bool) -> PyMeshData {
+    pub fn cull_faces(
+        &self,
+        tolerance: f32,
+        cull_opposite: bool,
+        cull_duplicates: bool,
+    ) -> PyMeshData {
         if self.inner.is_empty() {
             return PyMeshData::new();
         }
@@ -287,12 +295,18 @@ impl PyMeshData {
     }
 
     /// Read-only memoryview of secondary normalized [0, 1] vertex UVs (if generated).
-    pub fn secondary_uvs_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
+    pub fn secondary_uvs_memoryview<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
         memoryview::secondary_uvs_memoryview(self, py)
     }
 
     /// Flattened secondary vertex UVs `[u0, v0, u1, v1, ...]`.
-    pub fn get_flat_secondary_uvs<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyList>>> {
+    pub fn get_flat_secondary_uvs<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Option<Bound<'py, PyList>>> {
         memoryview::get_flat_secondary_uvs(self, py)
     }
 
@@ -302,7 +316,10 @@ impl PyMeshData {
     }
 
     /// Read-only memoryview of quad indices as raw bytes (`uint32` per index) if quads are recorded.
-    pub fn quad_indices_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
+    pub fn quad_indices_memoryview<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
         memoryview::quad_indices_memoryview(self, py)
     }
 
@@ -312,27 +329,42 @@ impl PyMeshData {
     }
 
     /// Read-only memoryview of polygon loop start offsets (`int32` per polygon).
-    pub fn loop_starts_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+    pub fn loop_starts_memoryview<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, PyMemoryView>> {
         memoryview::loop_starts_memoryview(self, py)
     }
 
     /// Read-only memoryview of polygon loop totals (`int32` per polygon: 4 for quads, 3 for triangles).
-    pub fn loop_totals_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+    pub fn loop_totals_memoryview<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, PyMemoryView>> {
         memoryview::loop_totals_memoryview(self, py)
     }
 
     /// Read-only memoryview of face material slots (`uint16` per face).
-    pub fn face_materials_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+    pub fn face_materials_memoryview<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, PyMemoryView>> {
         memoryview::face_materials_memoryview(self, py)
     }
 
     /// Read-only memoryview of face tint indices (`int8` per face).
-    pub fn face_tint_indices_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+    pub fn face_tint_indices_memoryview<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, PyMemoryView>> {
         memoryview::face_tint_indices_memoryview(self, py)
     }
 
     /// Read-only memoryview of vertex RGBA colors (`float32 * 4` per vertex) if present.
-    pub fn colors_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
+    pub fn colors_memoryview<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
         memoryview::colors_memoryview(self, py)
     }
 
@@ -351,7 +383,11 @@ impl PyMeshData {
     // -------------------------------------------------------------------------
 
     /// Read-only zero-copy memoryview of a numeric custom attribute by name.
-    pub fn attribute_memoryview<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
+    pub fn attribute_memoryview<'py>(
+        &self,
+        py: Python<'py>,
+        name: &str,
+    ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
         attributes::attribute_memoryview(self, py, name)
     }
 
@@ -367,7 +403,12 @@ impl PyMeshData {
     }
 
     /// Add a string custom attribute.
-    pub fn add_string_attribute(&mut self, name: &str, domain: &str, values: Vec<String>) -> PyResult<()> {
+    pub fn add_string_attribute(
+        &mut self,
+        name: &str,
+        domain: &str,
+        values: Vec<String>,
+    ) -> PyResult<()> {
         attributes::add_string_attribute(self, name, domain, values)
     }
 
@@ -397,7 +438,11 @@ impl PyMeshData {
     }
 
     /// Retrieve attribute data as a native Python list.
-    pub fn get_attribute_data<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
+    pub fn get_attribute_data<'py>(
+        &self,
+        py: Python<'py>,
+        name: &str,
+    ) -> PyResult<Option<Bound<'py, PyAny>>> {
         attributes::get_attribute_data(self, py, name)
     }
 

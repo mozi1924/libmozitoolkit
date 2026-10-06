@@ -39,8 +39,8 @@ mod tests {
 
     #[test]
     fn test_matches_properties() {
-        let bs =
-            BlockState::parse("minecraft:oak_stairs[facing=east,half=bottom,shape=straight]").unwrap();
+        let bs = BlockState::parse("minecraft:oak_stairs[facing=east,half=bottom,shape=straight]")
+            .unwrap();
         assert!(bs.matches_properties([("facing", "east"), ("half", "bottom")]));
         assert!(!bs.matches_properties([("facing", "west")]));
     }
@@ -81,7 +81,8 @@ mod tests {
             ]
         }"#;
         let def: BlockStateDefinition = serde_json::from_str(json_data).unwrap();
-        let bs = BlockState::parse("minecraft:oak_fence[north=true,south=false,east=true]").unwrap();
+        let bs =
+            BlockState::parse("minecraft:oak_fence[north=true,south=false,east=true]").unwrap();
         let matches = BlockStateResolver::resolve(&def, &bs);
         // Should match post (unconditional), north=true, and OR (east=true) -> 3 models
         assert_eq!(matches.len(), 3);
@@ -120,17 +121,33 @@ mod tests {
             ]
         }"#;
         let def: BlockStateDefinition = serde_json::from_str(json_data).unwrap();
-        let bs_occupied = BlockState::parse("minecraft:chiseled_bookshelf[facing=south,slot_0_occupied=true]").unwrap();
+        let bs_occupied =
+            BlockState::parse("minecraft:chiseled_bookshelf[facing=south,slot_0_occupied=true]")
+                .unwrap();
         let matches_occ = BlockStateResolver::resolve(&def, &bs_occupied);
         assert_eq!(matches_occ.len(), 2);
-        assert_eq!(matches_occ[0].model_id, "minecraft:block/chiseled_bookshelf");
-        assert_eq!(matches_occ[1].model_id, "minecraft:block/chiseled_bookshelf_occupied_slot_top_left");
+        assert_eq!(
+            matches_occ[0].model_id,
+            "minecraft:block/chiseled_bookshelf"
+        );
+        assert_eq!(
+            matches_occ[1].model_id,
+            "minecraft:block/chiseled_bookshelf_occupied_slot_top_left"
+        );
 
-        let bs_empty = BlockState::parse("minecraft:chiseled_bookshelf[facing=south,slot_0_occupied=false]").unwrap();
+        let bs_empty =
+            BlockState::parse("minecraft:chiseled_bookshelf[facing=south,slot_0_occupied=false]")
+                .unwrap();
         let matches_emp = BlockStateResolver::resolve(&def, &bs_empty);
         assert_eq!(matches_emp.len(), 2);
-        assert_eq!(matches_emp[0].model_id, "minecraft:block/chiseled_bookshelf");
-        assert_eq!(matches_emp[1].model_id, "minecraft:block/chiseled_bookshelf_empty_slot_top_left");
+        assert_eq!(
+            matches_emp[0].model_id,
+            "minecraft:block/chiseled_bookshelf"
+        );
+        assert_eq!(
+            matches_emp[1].model_id,
+            "minecraft:block/chiseled_bookshelf_empty_slot_top_left"
+        );
     }
 
     #[test]
@@ -148,7 +165,7 @@ mod tests {
             ]
         }"#;
         let def: BlockStateDefinition = serde_json::from_str(json_data).unwrap();
-        
+
         // 1 flower -> only wildflowers_1
         let bs1 = BlockState::parse("minecraft:wildflowers[facing=north,flower_amount=1]").unwrap();
         let m1 = BlockStateResolver::resolve(&def, &bs1);

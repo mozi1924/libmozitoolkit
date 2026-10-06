@@ -15,10 +15,7 @@ pub enum SyncEvent {
     StatusChange(String),
 
     /// Minecraft selection bounding box updated.
-    SelectionUpdated {
-        min_pos: IVec3,
-        size: IVec3,
-    },
+    SelectionUpdated { min_pos: IVec3, size: IVec3 },
 
     /// Handshake synchronization metadata.
     Handshake {
@@ -30,15 +27,10 @@ pub enum SyncEvent {
     },
 
     /// A 16x16x16 chunk section mesh has been assembled in background and is ready for DCC ingestion.
-    SectionMeshReady {
-        coord: IVec3,
-        mesh: MeshData,
-    },
+    SectionMeshReady { coord: IVec3, mesh: MeshData },
 
     /// A unified, merged world mesh containing the entire active volume has been assembled.
-    WorldMeshReady {
-        mesh: MeshData,
-    },
+    WorldMeshReady { mesh: MeshData },
 
     /// Stream batch progress update.
     StreamProgress {
@@ -61,10 +53,7 @@ pub enum SyncEvent {
     },
 
     /// Live sync validation completed.
-    Verified {
-        is_verified: bool,
-        message: String,
-    },
+    Verified { is_verified: bool, message: String },
 
     /// Warning or non-fatal error.
     Warning(String),

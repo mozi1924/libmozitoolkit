@@ -1,10 +1,10 @@
-use std::collections::HashMap;
 use mtk_material::{
-    clean_identifier, decode_grid_atlas_uv, remap_local_to_atlas,
-    remap_mesh_multi_uvs_parallel, remap_mesh_uvs_parallel, GridAtlasSpec, MaterialResolver,
+    clean_identifier, decode_grid_atlas_uv, remap_local_to_atlas, remap_mesh_multi_uvs_parallel,
+    remap_mesh_uvs_parallel, GridAtlasSpec, MaterialResolver,
 };
 use mtk_resource::ResourceLocation;
 use mtk_texture::{AtlasAddressMap, AtlasSpriteLocation, SpriteKind};
+use std::collections::HashMap;
 
 #[test]
 fn test_grid_atlas_spec_detection() {
@@ -23,7 +23,10 @@ fn test_grid_atlas_spec_detection() {
 #[test]
 fn test_grid_atlas_uv_decode() {
     let mut swatch_map = HashMap::new();
-    swatch_map.insert(0, vec!["grass_block_top".to_string(), "grass_top".to_string()]);
+    swatch_map.insert(
+        0,
+        vec!["grass_block_top".to_string(), "grass_top".to_string()],
+    );
 
     let spec = GridAtlasSpec {
         swatch_size: 18.0,
@@ -53,7 +56,10 @@ fn test_grid_atlas_uv_decode() {
 fn test_clean_identifier() {
     assert_eq!(clean_identifier("block/stone.png"), "stone");
     assert_eq!(clean_identifier("minecraft:stone.001"), "stone");
-    assert_eq!(clean_identifier("textures/block/grass_block_top"), "grass_block_top");
+    assert_eq!(
+        clean_identifier("textures/block/grass_block_top"),
+        "grass_block_top"
+    );
 }
 
 #[test]
@@ -85,13 +91,13 @@ fn test_resolver_and_atlas_projection() {
     );
 
     let mut custom_aliases = HashMap::new();
-    custom_aliases.insert("custom_rock_mat".to_string(), vec!["block/stone".to_string()]);
-
-    let resolved = MaterialResolver::resolve(
-        "custom_rock_mat",
-        Some(&custom_aliases),
-        &address_map,
+    custom_aliases.insert(
+        "custom_rock_mat".to_string(),
+        vec!["block/stone".to_string()],
     );
+
+    let resolved =
+        MaterialResolver::resolve("custom_rock_mat", Some(&custom_aliases), &address_map);
     assert!(resolved.is_some());
     let (res_id, sprite) = resolved.unwrap();
     assert_eq!(res_id.path, "block/stone");
@@ -135,8 +141,14 @@ fn test_parallel_batch_mesh_remap() {
 
     // 2 quads (8 loops)
     let mut uvs = vec![
-        [0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0],
-        [0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0],
+        [0.0, 0.0],
+        [1.0, 0.0],
+        [1.0, 1.0],
+        [0.0, 1.0],
+        [0.0, 0.0],
+        [1.0, 0.0],
+        [1.0, 1.0],
+        [0.0, 1.0],
     ];
     let face_materials = vec!["muddy_ground".to_string(), "dirt".to_string()];
     let face_loop_ranges = vec![(0, 4), (4, 4)];

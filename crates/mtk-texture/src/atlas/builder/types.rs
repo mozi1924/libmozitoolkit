@@ -40,7 +40,10 @@ impl BakedAtlasChunk {
     /// Canonical file stem for this atlas sheet, e.g. `"blocks_chunk_001"` or `"blocks_anim_chunk_001"`.
     pub fn file_stem(&self) -> String {
         if self.is_animated {
-            format!("{}_anim_chunk_{:03}", self.category, self.category_chunk_index)
+            format!(
+                "{}_anim_chunk_{:03}",
+                self.category, self.category_chunk_index
+            )
         } else {
             format!("{}_chunk_{:03}", self.category, self.category_chunk_index)
         }
@@ -65,7 +68,10 @@ impl BakedAtlas {
     }
 
     /// Lookup chunk descriptor from address map by chunk ID.
-    pub fn get_chunk_meta(&self, chunk_id: u16) -> Option<&crate::atlas::address_map::AtlasChunkMeta> {
+    pub fn get_chunk_meta(
+        &self,
+        chunk_id: u16,
+    ) -> Option<&crate::atlas::address_map::AtlasChunkMeta> {
         self.address_map.get_chunk_meta(chunk_id)
     }
 }

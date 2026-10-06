@@ -1,9 +1,9 @@
-use std::collections::HashSet;
 use crate::atlas::{AtlasDefinition, AtlasSource};
 use crate::error::ResourceError;
 use crate::identifier::ResourceLocation;
-use crate::meta::{TextureMetadata, AnimationMetadata};
+use crate::meta::{AnimationMetadata, TextureMetadata};
 use crate::pack::source::ResourcePack;
+use std::collections::HashSet;
 
 /// Discovered single sprite entry ready for decoding and stitching.
 #[derive(Debug, Clone, PartialEq)]
@@ -167,7 +167,10 @@ impl ResourcePackStack {
     }
 
     /// Read and parse an atlas definition from `assets/<namespace>/atlases/<name>.json`.
-    pub fn load_atlas_definition(&self, location: &ResourceLocation) -> Result<AtlasDefinition, ResourceError> {
+    pub fn load_atlas_definition(
+        &self,
+        location: &ResourceLocation,
+    ) -> Result<AtlasDefinition, ResourceError> {
         let path = location.to_asset_path("atlases", "json");
         let bytes = self.open_asset_raw(&path).ok_or_else(|| {
             ResourceError::NotFound(format!("Atlas definition not found: {}", path))
@@ -181,7 +184,8 @@ impl ResourcePackStack {
     /// Read and parse an atlas definition for a category, falling back to standard default if not found.
     pub fn load_atlas_category(&self, category: &crate::atlas::AtlasCategory) -> AtlasDefinition {
         let loc = category.atlas_location();
-        let mut def = self.load_atlas_definition(&loc)
+        let mut def = self
+            .load_atlas_definition(&loc)
             .unwrap_or_else(|_| category.default_definition());
 
         if matches!(category, crate::atlas::AtlasCategory::Blocks) {
@@ -249,10 +253,25 @@ impl ResourcePackStack {
 
         // 4. Overlay (e.g. grass_block_side_overlay, _overlay.png)
         let overlay_candidates = [
-            location.with_suffix("_overlay").to_asset_path("textures", "png"),
-            format!("assets/{}/{}_overlay.png", location.namespace, location.path),
-            format!("assets/{}/textures/{}.png", location.namespace, location.path.replace("grass_block_side", "grass_block_side_overlay")),
-            format!("assets/{}/textures/{}.png", location.namespace, location.path.replace("grass_side", "grass_side_overlay")),
+            location
+                .with_suffix("_overlay")
+                .to_asset_path("textures", "png"),
+            format!(
+                "assets/{}/{}_overlay.png",
+                location.namespace, location.path
+            ),
+            format!(
+                "assets/{}/textures/{}.png",
+                location.namespace,
+                location
+                    .path
+                    .replace("grass_block_side", "grass_block_side_overlay")
+            ),
+            format!(
+                "assets/{}/textures/{}.png",
+                location.namespace,
+                location.path.replace("grass_side", "grass_side_overlay")
+            ),
         ];
         for path in &overlay_candidates {
             if path != &candidates[0] && path != &candidates[1] {
@@ -303,9 +322,15 @@ impl ResourcePackStack {
                 if let Some(bytes) = pack.open(&file) {
                     if let Ok(content) = std::str::from_utf8(&bytes) {
                         let parts: Vec<&str> = file.split('/').collect();
-                        let namespace = if parts.len() > 1 { parts[1] } else { crate::DEFAULT_NAMESPACE };
+                        let namespace = if parts.len() > 1 {
+                            parts[1]
+                        } else {
+                            crate::DEFAULT_NAMESPACE
+                        };
                         let rel_path = parts[2..].join("/");
-                        if let Some(rule) = crate::ctm::CtmRule::parse_properties(&rel_path, namespace, content) {
+                        if let Some(rule) =
+                            crate::ctm::CtmRule::parse_properties(&rel_path, namespace, content)
+                        {
                             rules.push(rule);
                         }
                     }
@@ -318,13 +343,19 @@ impl ResourcePackStack {
     }
 
     /// Collect and expand all Sprite references declared in an AtlasDefinition into discrete `DiscoveredSprite`s.
-    pub fn collect_sprites_for_atlas(&self, definition: &AtlasDefinition) -> Result<Vec<DiscoveredSprite>, ResourceError> {
+    pub fn collect_sprites_for_atlas(
+        &self,
+        definition: &AtlasDefinition,
+    ) -> Result<Vec<DiscoveredSprite>, ResourceError> {
         let mut results = Vec::new();
         let mut registered_sprites: HashSet<ResourceLocation> = HashSet::new();
 
         for source in &definition.sources {
             match source {
-                AtlasSource::Directory { source: dir_src, prefix } => {
+                AtlasSource::Directory {
+                    source: dir_src,
+                    prefix,
+                } => {
                     let mut found_paths = HashSet::new();
                     // Scan all packs in stack
                     for pack in &self.packs {
@@ -337,8 +368,12 @@ impl ResourcePackStack {
                                 continue;
                             }
 
-                            if let Some(loc) = ResourceLocation::from_asset_path(&file, "textures", "png") {
-                                if loc.path == *dir_src || loc.path.starts_with(&format!("{}/", dir_src)) {
+                            if let Some(loc) =
+                                ResourceLocation::from_asset_path(&file, "textures", "png")
+                            {
+                                if loc.path == *dir_src
+                                    || loc.path.starts_with(&format!("{}/", dir_src))
+                                {
                                     found_paths.insert(loc);
                                 }
                             }
@@ -350,7 +385,10 @@ impl ResourcePackStack {
                         let short = if tex_loc.path == *dir_src {
                             ""
                         } else {
-                            tex_loc.path.strip_prefix(&format!("{}/", dir_src)).unwrap_or(&tex_loc.path)
+                            tex_loc
+                                .path
+                                .strip_prefix(&format!("{}/", dir_src))
+                                .unwrap_or(&tex_loc.path)
                         };
                         let sprite_path = format!("{}{}", prefix, short);
                         let sprite_id = ResourceLocation::new(&tex_loc.namespace, sprite_path);
@@ -396,7 +434,12 @@ impl ResourcePackStack {
                     // PalettedPermutations are dynamically baked directly by AtlasBuilder
                 }
 
-                AtlasSource::Unstitch { resource, divisor_x: _, divisor_y: _, regions } => {
+                AtlasSource::Unstitch {
+                    resource,
+                    divisor_x: _,
+                    divisor_y: _,
+                    regions,
+                } => {
                     let companions = self.resolve_pbr_companions(resource);
                     for region in regions {
                         if !registered_sprites.contains(&region.sprite) {
@@ -417,8 +460,14 @@ impl ResourcePackStack {
                 AtlasSource::Filter { pattern } => {
                     // Filter matching entries
                     results.retain(|s| {
-                        let ns_match = pattern.namespace.as_ref().is_none_or(|ns_pat| s.sprite_id.namespace.contains(ns_pat));
-                        let path_match = pattern.path.as_ref().is_none_or(|p_pat| s.sprite_id.path.contains(p_pat));
+                        let ns_match = pattern
+                            .namespace
+                            .as_ref()
+                            .is_none_or(|ns_pat| s.sprite_id.namespace.contains(ns_pat));
+                        let path_match = pattern
+                            .path
+                            .as_ref()
+                            .is_none_or(|p_pat| s.sprite_id.path.contains(p_pat));
                         !(ns_match && path_match)
                     });
                 }
@@ -435,7 +484,8 @@ impl ResourcePackStack {
         ctm_rules: &[crate::ctm::CtmRule],
     ) -> Result<Vec<DiscoveredSprite>, ResourceError> {
         let mut results = self.collect_sprites_for_atlas(definition)?;
-        let mut registered_sprites: HashSet<ResourceLocation> = results.iter().map(|s| s.sprite_id.clone()).collect();
+        let mut registered_sprites: HashSet<ResourceLocation> =
+            results.iter().map(|s| s.sprite_id.clone()).collect();
 
         for rule in ctm_rules {
             for tile_loc in rule.tiles.iter().flatten() {

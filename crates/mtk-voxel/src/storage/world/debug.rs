@@ -9,7 +9,7 @@
 
 use std::collections::HashSet;
 use std::path::Path;
-use std::sync::OnceLock;
+use std::sync::RwLock;
 
 use crate::storage::VoxelStorage;
 use crate::types::VoxelError;
@@ -24,7 +24,7 @@ pub const DEBUG_BARRIER_Y: i32 = 60;
 #[deprecated(note = "Embedded snapshot is superseded by pure-code debug world generator")]
 pub const DEBUG_WORLD_SNAPSHOT_GZ: &[u8] = &[];
 
-static CACHED_DEBUG_STORAGE: OnceLock<VoxelStorage> = OnceLock::new();
+static CACHED_DEBUG_STORAGE: RwLock<Option<VoxelStorage>> = RwLock::new(None);
 
 /// Returns true if the blockstate string represents any variant of air.
 #[inline]
@@ -139,45 +139,47 @@ impl VoxelStorage {
     /// Default entry point: loads or generates the canonical Minecraft debug world.
     ///
     /// Checks in order:
-    /// 1. `MC_ASSETS_DIR` or `MC_DIR` environment variables;
-    /// 2. `/home/mozi/mc` (standard dev unpack workspace);
-    /// 3. In-memory pure-code vanilla fallback generator.
+    /// 1. `MC_ASSETS_DIR` or `MC_DIR` environment variables (unpacked vanilla assets);
+    /// 2. In-memory pure-code vanilla fallback generator.
     ///
-    /// Internally cached via `OnceLock` for sub-millisecond cloning on repeat requests.
+    /// Results are memoized for sub-millisecond cloning on repeat requests. Hosts that
+    /// reload resource packs at runtime can invalidate the cache via
+    /// [`VoxelStorage::clear_debug_world_cache`].
     pub fn create_debug_world() -> Result<Self, VoxelError> {
-        if let Some(cached) = CACHED_DEBUG_STORAGE.get() {
-            return Ok(cached.clone());
+        if let Ok(guard) = CACHED_DEBUG_STORAGE.read() {
+            if let Some(cached) = guard.as_ref() {
+                return Ok(cached.clone());
+            }
         }
 
-        // 1. Check environment variable override
+        // 1. Environment variable override (CI / custom unpack locations)
         if let Ok(env_path) = std::env::var("MC_ASSETS_DIR").or_else(|_| std::env::var("MC_DIR")) {
             let p = Path::new(&env_path);
-            if p.exists() {
+            if p.join("assets").exists() {
                 if let Ok(storage) = Self::create_debug_world_from_dir(p) {
-                    let _ = CACHED_DEBUG_STORAGE.set(storage.clone());
+                    Self::store_debug_world(storage.clone());
                     return Ok(storage);
                 }
             }
         }
 
-        // 2. Check canonical dev unpack path /home/mozi/mc
-        let mc_path = Path::new("/home/mozi/mc");
-        if mc_path.exists() && mc_path.join("assets").exists() {
-            if let Ok(storage) = Self::create_debug_world_from_dir(mc_path) {
-                let _ = CACHED_DEBUG_STORAGE.set(storage.clone());
-                return Ok(storage);
-            }
-        }
-
-        // 3. Fallback: In-memory pure-code vanilla state generator
+        // 2. Fallback: In-memory pure-code vanilla state generator
         let fallback_storage = Self::create_fallback_debug_world()?;
-        let _ = CACHED_DEBUG_STORAGE.set(fallback_storage.clone());
+        Self::store_debug_world(fallback_storage.clone());
         Ok(fallback_storage)
+    }
+
+    fn store_debug_world(storage: VoxelStorage) {
+        if let Ok(mut guard) = CACHED_DEBUG_STORAGE.write() {
+            *guard = Some(storage);
+        }
     }
 
     /// Clears the internally cached debug storage (useful during live pack reload or tests).
     pub fn clear_debug_world_cache() {
-        // OnceLock cannot be unset, but subsequent explicit calls can bypass cache.
+        if let Ok(mut guard) = CACHED_DEBUG_STORAGE.write() {
+            *guard = None;
+        }
     }
 
     /// In-memory pure-code generator for hundreds of canonical vanilla states without any external files.
@@ -186,38 +188,96 @@ impl VoxelStorage {
 
         // Basic stone & minerals
         let simple_blocks = [
-            "stone", "granite", "polished_granite", "diorite", "polished_diorite",
-            "andesite", "polished_andesite", "dirt", "coarse_dirt", "cobblestone",
-            "bedrock", "sand", "gravel", "gold_ore", "iron_ore", "coal_ore",
-            "obsidian", "oak_planks", "spruce_planks", "birch_planks", "jungle_planks",
-            "acacia_planks", "dark_oak_planks", "glass", "lapis_block", "sandstone",
-            "gold_block", "iron_block", "bricks", "mossy_cobblestone", "diamond_block",
-            "netherrack", "soul_sand", "glowstone", "stone_bricks", "mossy_stone_bricks",
-            "cracked_stone_bricks", "chiseled_stone_bricks", "emerald_block", "redstone_block",
-            "quartz_block", "prismarine", "prismarine_bricks", "dark_prismarine", "sea_lantern",
-            "magma_block", "nether_wart_block", "red_nether_bricks", "bone_block",
+            "stone",
+            "granite",
+            "polished_granite",
+            "diorite",
+            "polished_diorite",
+            "andesite",
+            "polished_andesite",
+            "dirt",
+            "coarse_dirt",
+            "cobblestone",
+            "bedrock",
+            "sand",
+            "gravel",
+            "gold_ore",
+            "iron_ore",
+            "coal_ore",
+            "obsidian",
+            "oak_planks",
+            "spruce_planks",
+            "birch_planks",
+            "jungle_planks",
+            "acacia_planks",
+            "dark_oak_planks",
+            "glass",
+            "lapis_block",
+            "sandstone",
+            "gold_block",
+            "iron_block",
+            "bricks",
+            "mossy_cobblestone",
+            "diamond_block",
+            "netherrack",
+            "soul_sand",
+            "glowstone",
+            "stone_bricks",
+            "mossy_stone_bricks",
+            "cracked_stone_bricks",
+            "chiseled_stone_bricks",
+            "emerald_block",
+            "redstone_block",
+            "quartz_block",
+            "prismarine",
+            "prismarine_bricks",
+            "dark_prismarine",
+            "sea_lantern",
+            "magma_block",
+            "nether_wart_block",
+            "red_nether_bricks",
+            "bone_block",
         ];
         for b in &simple_blocks {
             states.push(format!("minecraft:{}", b));
         }
 
         // Directional stairs (facing x half x shape)
-        let stair_types = ["oak_stairs", "cobblestone_stairs", "stone_brick_stairs", "sandstone_stairs"];
+        let stair_types = [
+            "oak_stairs",
+            "cobblestone_stairs",
+            "stone_brick_stairs",
+            "sandstone_stairs",
+        ];
         let facings = ["north", "south", "east", "west"];
         let halves = ["top", "bottom"];
-        let shapes = ["straight", "inner_left", "inner_right", "outer_left", "outer_right"];
+        let shapes = [
+            "straight",
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+        ];
         for st in &stair_types {
             for f in &facings {
                 for h in &halves {
                     for s in &shapes {
-                        states.push(format!("minecraft:{}[facing={},half={},shape={}]", st, f, h, s));
+                        states.push(format!(
+                            "minecraft:{}[facing={},half={},shape={}]",
+                            st, f, h, s
+                        ));
                     }
                 }
             }
         }
 
         // Slabs
-        let slab_types = ["oak_slab", "cobblestone_slab", "stone_brick_slab", "sandstone_slab"];
+        let slab_types = [
+            "oak_slab",
+            "cobblestone_slab",
+            "stone_brick_slab",
+            "sandstone_slab",
+        ];
         let slab_types_vals = ["bottom", "top", "double"];
         for sl in &slab_types {
             for v in &slab_types_vals {
@@ -226,13 +286,21 @@ impl VoxelStorage {
         }
 
         // Walls (north, south, east, west, up)
-        let wall_types = ["cobblestone_wall", "stone_brick_wall", "granite_wall", "diorite_wall"];
+        let wall_types = [
+            "cobblestone_wall",
+            "stone_brick_wall",
+            "granite_wall",
+            "diorite_wall",
+        ];
         let wall_conns = ["none", "low", "tall"];
         for w in &wall_types {
             for n in &wall_conns {
                 for s in &wall_conns {
                     for up in &["true", "false"] {
-                        states.push(format!("minecraft:{}[east=none,north={},south={},up={},west=none]", w, n, s, up));
+                        states.push(format!(
+                            "minecraft:{}[east=none,north={},south={},up={},west=none]",
+                            w, n, s, up
+                        ));
                     }
                 }
             }
@@ -244,14 +312,24 @@ impl VoxelStorage {
             for f in &facings {
                 for h in &["upper", "lower"] {
                     for open in &["true", "false"] {
-                        states.push(format!("minecraft:{}[facing={},half={},hinge=left,open={},powered=false]", d, f, h, open));
+                        states.push(format!(
+                            "minecraft:{}[facing={},half={},hinge=left,open={},powered=false]",
+                            d, f, h, open
+                        ));
                     }
                 }
             }
         }
 
         // Logs (axis)
-        let logs = ["oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log"];
+        let logs = [
+            "oak_log",
+            "spruce_log",
+            "birch_log",
+            "jungle_log",
+            "acacia_log",
+            "dark_oak_log",
+        ];
         for l in &logs {
             for axis in &["x", "y", "z"] {
                 states.push(format!("minecraft:{}[axis={}]", l, axis));
@@ -266,7 +344,10 @@ impl VoxelStorage {
             }
             states.push(format!("minecraft:ender_chest[facing={}]", f));
             for part in &["head", "foot"] {
-                states.push(format!("minecraft:red_bed[facing={},occupied=false,part={}]", f, part));
+                states.push(format!(
+                    "minecraft:red_bed[facing={},occupied=false,part={}]",
+                    f, part
+                ));
             }
         }
         for f in &["down", "up", "north", "south", "west", "east"] {
@@ -309,7 +390,15 @@ mod tests {
 
     #[test]
     fn test_canonical_debug_world_generation() {
-        let storage = VoxelStorage::create_debug_world().expect("Should load/generate debug world");
+        let Some(root) = mtk_testkit::real_assets_root() else {
+            eprintln!(
+                "[mtk-testkit] skipping canonical debug world test: full vanilla assets unavailable"
+            );
+            return;
+        };
+
+        let storage = VoxelStorage::create_debug_world_from_dir(&root)
+            .expect("Should generate debug world from full assets");
         let (min_x, min_y, min_z, size_x, size_y, size_z) = storage.get_bounds();
         assert_eq!(min_x, 0);
         assert_eq!(min_y, 69);
@@ -318,12 +407,22 @@ mod tests {
         assert_eq!(size_y, 3);
         assert!(size_z > 100);
         assert!(storage.get_all_non_empty_sections().len() > 50);
+    }
+
+    #[test]
+    fn test_debug_world_clone_is_cached_and_fast() {
+        VoxelStorage::clear_debug_world_cache();
+        let first = VoxelStorage::create_debug_world().expect("Should generate/cache debug world");
 
         // Test repeat cloning speed
         let start = std::time::Instant::now();
         let cloned = VoxelStorage::create_debug_world().expect("Should return cached clone");
         let elapsed = start.elapsed();
-        assert_eq!(cloned.get_all_non_empty_sections().len(), storage.get_all_non_empty_sections().len());
+
+        assert_eq!(
+            cloned.get_all_non_empty_sections().len(),
+            first.get_all_non_empty_sections().len()
+        );
         assert!(elapsed.as_millis() < 50, "Cached clone should take <50ms");
     }
 }

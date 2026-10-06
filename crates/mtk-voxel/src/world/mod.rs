@@ -121,7 +121,7 @@ impl VoxelWorld {
         num_threads: Option<usize>,
     ) -> Result<Self, VoxelError> {
         let storage = if let Some(ref db) = model_db {
-            if db.len() > 0 {
+            if !db.is_empty() {
                 VoxelStorage::create_debug_world_from_model_db(db)?
             } else {
                 VoxelStorage::create_debug_world()?
@@ -129,7 +129,14 @@ impl VoxelWorld {
         } else {
             VoxelStorage::create_debug_world()?
         };
-        Ok(Self::from_storage_with_threads(storage, config, culler, model_db, unified_mesh, num_threads))
+        Ok(Self::from_storage_with_threads(
+            storage,
+            config,
+            culler,
+            model_db,
+            unified_mesh,
+            num_threads,
+        ))
     }
 
     /// Creates a debug `VoxelWorld` from an explicit list of blockstate strings.
@@ -142,7 +149,14 @@ impl VoxelWorld {
         num_threads: Option<usize>,
     ) -> Result<Self, VoxelError> {
         let storage = VoxelStorage::create_debug_world_from_states(states)?;
-        Ok(Self::from_storage_with_threads(storage, config, culler, model_db, unified_mesh, num_threads))
+        Ok(Self::from_storage_with_threads(
+            storage,
+            config,
+            culler,
+            model_db,
+            unified_mesh,
+            num_threads,
+        ))
     }
 
     /// Creates a debug `VoxelWorld` by enumerating blockstates across a `ResourcePackStack`.
@@ -155,7 +169,14 @@ impl VoxelWorld {
         num_threads: Option<usize>,
     ) -> Result<Self, VoxelError> {
         let storage = VoxelStorage::create_debug_world_from_pack_stack(stack)?;
-        Ok(Self::from_storage_with_threads(storage, config, culler, model_db, unified_mesh, num_threads))
+        Ok(Self::from_storage_with_threads(
+            storage,
+            config,
+            culler,
+            model_db,
+            unified_mesh,
+            num_threads,
+        ))
     }
 
     /// Sets the worker thread count for parallel meshing.
@@ -194,7 +215,9 @@ impl VoxelWorld {
         size_y: i32,
         size_z: i32,
     ) -> bool {
-        let bounds_changed = self.storage.set_bounds(min_x, min_y, min_z, size_x, size_y, size_z);
+        let bounds_changed = self
+            .storage
+            .set_bounds(min_x, min_y, min_z, size_x, size_y, size_z);
         let new_bounds = Some(([min_x, min_y, min_z], [size_x, size_y, size_z]));
         let bounds_differ = self.config.selection_bounds != new_bounds;
         if self.config.origin_centered {
@@ -300,7 +323,8 @@ impl VoxelWorld {
         min_z: i32,
         changes: &[(i32, i32, i32, &str)],
     ) -> Vec<(i32, i32, i32, String, String)> {
-        self.storage.apply_delta_update(min_x, min_y, min_z, changes)
+        self.storage
+            .apply_delta_update(min_x, min_y, min_z, changes)
     }
 
     /// Ingests chunk sections from an abstract `VoxelSource` provider (Anvil save,
@@ -338,7 +362,11 @@ impl VoxelWorld {
             if self.config.weld_vertices {
                 merged.weld_spatial_vertices(1e-4);
             }
-            self.used_chunk_ids = merged.used_materials().into_iter().map(|id| id as u32).collect();
+            self.used_chunk_ids = merged
+                .used_materials()
+                .into_iter()
+                .map(|id| id as u32)
+                .collect();
             self.world_mesh = Some(merged);
         }
     }
@@ -361,7 +389,12 @@ impl VoxelWorld {
             self.world_mesh = Some(MeshData::new());
             self.used_chunk_ids.clear();
             if let Some(cb) = progress {
-                cb(ProgressReport::new("meshing_sections", 0, 0, "No sections to mesh"));
+                cb(ProgressReport::new(
+                    "meshing_sections",
+                    0,
+                    0,
+                    "No sections to mesh",
+                ));
             }
             return Ok(self.world_mesh.as_ref().unwrap());
         }
@@ -489,7 +522,12 @@ impl VoxelWorld {
             crate::mesher::ModelSource::None
         };
 
-        let mesh = SectionMesher::mesh_section_with_source(&padded, &self.culler, model_lookup, &self.config);
+        let mesh = SectionMesher::mesh_section_with_source(
+            &padded,
+            &self.culler,
+            model_lookup,
+            &self.config,
+        );
         if mesh.is_empty() {
             self.section_mesh_cache.remove(&sec_coord);
         } else {

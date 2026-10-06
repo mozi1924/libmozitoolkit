@@ -65,10 +65,26 @@ pub fn compute_face_tint(
         if cat != "none" {
             let bw = if has_overlay { 0.0 } else { 1.0 };
             let (tt, tw, col) = match cat {
-                "grass" => (mtk_material::TINT_TYPE_GRASS, 1.0, default_pal.grass_linear()),
-                "foliage" => (mtk_material::TINT_TYPE_FOLIAGE, 1.0, default_pal.foliage_linear()),
-                "dry_foliage" => (mtk_material::TINT_TYPE_DRY_FOLIAGE, 1.0, default_pal.dry_foliage_linear()),
-                "water" => (mtk_material::TINT_TYPE_WATER, 1.0, default_pal.water_linear()),
+                "grass" => (
+                    mtk_material::TINT_TYPE_GRASS,
+                    1.0,
+                    default_pal.grass_linear(),
+                ),
+                "foliage" => (
+                    mtk_material::TINT_TYPE_FOLIAGE,
+                    1.0,
+                    default_pal.foliage_linear(),
+                ),
+                "dry_foliage" => (
+                    mtk_material::TINT_TYPE_DRY_FOLIAGE,
+                    1.0,
+                    default_pal.dry_foliage_linear(),
+                ),
+                "water" => (
+                    mtk_material::TINT_TYPE_WATER,
+                    1.0,
+                    default_pal.water_linear(),
+                ),
                 "hardcoded" => {
                     let hc = mtk_material::get_hardcoded_tint(texture_key)
                         .or_else(|| mtk_material::get_hardcoded_tint(block_name))

@@ -28,8 +28,8 @@ fn test_sync_session_packet_flow() {
     let world_mesh = session.get_world_mesh();
     assert!(!world_mesh.is_empty());
     assert_eq!(world_mesh.positions.len(), 8); // 1 cube welded vertices
-    assert_eq!(world_mesh.indices.len(), 36);  // 6 faces * 2 tris * 3 indices
-    assert_eq!(world_mesh.uvs.len(), 24);      // 6 faces * 4 corner UVs
+    assert_eq!(world_mesh.indices.len(), 36); // 6 faces * 2 tris * 3 indices
+    assert_eq!(world_mesh.uvs.len(), 24); // 6 faces * 4 corner UVs
 }
 
 #[test]
@@ -94,7 +94,10 @@ fn test_two_phase_streaming_cross_chunk_culling_and_welding() {
         _ => None,
     });
 
-    assert!(world_mesh_event.is_some(), "WorldMeshReady event must be emitted on StreamEnd");
+    assert!(
+        world_mesh_event.is_some(),
+        "WorldMeshReady event must be emitted on StreamEnd"
+    );
     let mesh = world_mesh_event.unwrap();
 
     // Two touching unit cubes:
@@ -102,21 +105,36 @@ fn test_two_phase_streaming_cross_chunk_culling_and_welding() {
     // Each face has 4 corner UVs -> 10 * 4 = 40 UVs
     // Each face has 2 triangles -> 10 * 6 = 60 indices
     // Vertices: 8 + 8 - 4 (welded shared vertices on x=16 plane) = 12 vertices!
-    assert_eq!(mesh.uvs.len(), 40, "Expected 10 faces (40 loop UVs), found {}", mesh.uvs.len());
-    assert_eq!(mesh.indices.len(), 60, "Expected 60 triangle indices, found {}", mesh.indices.len());
-    assert_eq!(mesh.positions.len(), 12, "Expected 12 welded spatial vertices across chunk seam, found {}", mesh.positions.len());
+    assert_eq!(
+        mesh.uvs.len(),
+        40,
+        "Expected 10 faces (40 loop UVs), found {}",
+        mesh.uvs.len()
+    );
+    assert_eq!(
+        mesh.indices.len(),
+        60,
+        "Expected 60 triangle indices, found {}",
+        mesh.indices.len()
+    );
+    assert_eq!(
+        mesh.positions.len(),
+        12,
+        "Expected 12 welded spatial vertices across chunk seam, found {}",
+        mesh.positions.len()
+    );
 }
 
 #[test]
 fn test_auto_sync_request_on_manifest_mismatch() {
-    use std::sync::atomic::{AtomicBool, AtomicU32};
-    use std::sync::Arc;
     use glam::IVec3;
     use mtk_sync::client::ClientCommand;
     use mtk_sync::protocol::constants::PacketType;
     use mtk_sync::protocol::packet::{ManifestSectionEntry, Packet};
     use mtk_sync::{session::dispatcher, LiveSyncSession, SyncEvent};
     use mtk_voxel::types::MesherConfig;
+    use std::sync::atomic::{AtomicBool, AtomicU32};
+    use std::sync::Arc;
 
     let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None, true);
     let (cmd_sender, cmd_receiver) = crossbeam_channel::unbounded::<ClientCommand>();
@@ -150,13 +168,22 @@ fn test_auto_sync_request_on_manifest_mismatch() {
     );
 
     // Should have sent ReqFullSync (0x80)
-    let cmd = cmd_receiver.try_recv().expect("Should have sent a command to server");
+    let cmd = cmd_receiver
+        .try_recv()
+        .expect("Should have sent a command to server");
     match cmd {
         ClientCommand::Send(bytes) => {
             assert_eq!(bytes[2], 0x02, "Version should be 2");
-            assert_eq!(bytes[3], PacketType::ReqFullSync as u8, "Packet type should be ReqFullSync (0x80)");
+            assert_eq!(
+                bytes[3],
+                PacketType::ReqFullSync as u8,
+                "Packet type should be ReqFullSync (0x80)"
+            );
         }
         _ => panic!("Expected ClientCommand::Send"),
     }
-    assert!(sync_requested.load(std::sync::atomic::Ordering::SeqCst), "sync_requested flag should be set");
+    assert!(
+        sync_requested.load(std::sync::atomic::Ordering::SeqCst),
+        "sync_requested flag should be set"
+    );
 }

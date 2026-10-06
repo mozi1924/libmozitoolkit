@@ -1,6 +1,6 @@
-use std::io::Cursor;
-use image::{ImageBuffer, Rgba};
 use crate::error::TextureError;
+use image::{ImageBuffer, Rgba};
+use std::io::Cursor;
 
 /// High-performance 2D RGBA pixel buffer for atlas generation and blitting.
 #[derive(Debug, Clone, PartialEq)]
@@ -52,8 +52,11 @@ impl RgbaBuffer {
 
     /// Encode buffer into PNG byte vector.
     pub fn to_png_bytes(&self) -> Result<Vec<u8>, TextureError> {
-        let img_buf = ImageBuffer::<Rgba<u8>, _>::from_raw(self.width, self.height, self.pixels.clone())
-            .ok_or_else(|| TextureError::Baking("Failed to create ImageBuffer from raw pixels".to_string()))?;
+        let img_buf =
+            ImageBuffer::<Rgba<u8>, _>::from_raw(self.width, self.height, self.pixels.clone())
+                .ok_or_else(|| {
+                    TextureError::Baking("Failed to create ImageBuffer from raw pixels".to_string())
+                })?;
         let mut cursor = Cursor::new(Vec::new());
         img_buf.write_to(&mut cursor, image::ImageFormat::Png)?;
         Ok(cursor.into_inner())
@@ -70,7 +73,12 @@ impl RgbaBuffer {
             return [0, 0, 0, 0];
         }
         let idx = self.pixel_index(x, y);
-        [self.pixels[idx], self.pixels[idx + 1], self.pixels[idx + 2], self.pixels[idx + 3]]
+        [
+            self.pixels[idx],
+            self.pixels[idx + 1],
+            self.pixels[idx + 2],
+            self.pixels[idx + 3],
+        ]
     }
 
     #[inline]
@@ -96,8 +104,12 @@ impl RgbaBuffer {
         width: u32,
         height: u32,
     ) {
-        let copy_w = width.min(src.width.saturating_sub(src_x)).min(self.width.saturating_sub(dst_x));
-        let copy_h = height.min(src.height.saturating_sub(src_y)).min(self.height.saturating_sub(dst_y));
+        let copy_w = width
+            .min(src.width.saturating_sub(src_x))
+            .min(self.width.saturating_sub(dst_x));
+        let copy_h = height
+            .min(src.height.saturating_sub(src_y))
+            .min(self.height.saturating_sub(dst_y));
 
         if copy_w == 0 || copy_h == 0 {
             return;
@@ -182,9 +194,8 @@ impl RgbaBuffer {
             return self.clone();
         }
 
-        let is_multi_frame_matching = albedo_fc > 1
-            && self.height > self.width
-            && (self.height / self.width) == albedo_fc;
+        let is_multi_frame_matching =
+            albedo_fc > 1 && self.height > self.width && (self.height / self.width) == albedo_fc;
 
         if is_multi_frame_matching {
             self.resize_nearest(albedo_fw, target_total_height)

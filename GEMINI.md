@@ -40,7 +40,7 @@
 - 严禁在其他子模块（如 `mtk-voxel`）或宿主前端中分散、硬编码重复的生物群系调色板。
 
 ### 规则 6：工作区虚拟环境、双态联动与轮子编译规范 (Workspace Venv & Dual-Mode Build Policy)
-- 当需要使用 `maturin` 编译 Python 绑定轮子（Wheel, `.whl`）或进行 Python 绑定调试时，**必须严格使用工作区内的虚拟环境（如 `/home/mozi/libmozitoolkit/.venv`）**。
+- 当需要使用 `maturin` 编译 Python 绑定轮子（Wheel, `.whl`）或进行 Python 绑定调试时，**必须严格使用工作区内的虚拟环境（如 `./.venv`）**。
 - 若当前工作区内不存在虚拟环境，**必须首先在工作区根目录下创建专属虚拟环境**（如 `python3 -m venv .venv`），并在该虚拟环境中安装 `maturin`，严禁污染或依赖宿主系统全局环境。
 - **开发态直通与发布态隔离 (Dev Direct-Link vs Release Wheel Isolation)**：
   - **日常开发态 (Dev Direct Link)**：`cargo build --release -p mtk-py --features extension-module` 产出 `target/release/liblibmtk_py.so`。通过软链接（`MoziToolKit/dev/lib/libmtk_py.so`）直接打通 Blender 宿主，代码改动后 Blender 重载插件即可即时生效，严禁在开发期频繁构建或安装轮子。
@@ -73,6 +73,27 @@
 - **优先使用 ripgrep (`rg`)**：在工作区检索代码、文本或符号时，**首选且尽量使用 `rg` (ripgrep)** 命令。`rg` 具备极高的检索性能且原生遵循 `.gitignore` 规则，自动忽略构建产物。
 - **使用 `grep` 时必须忽略 `target` 目录**：若在特定环境下使用 `grep`，**必须显式添加 `--exclude-dir=target`**（以及 `--exclude-dir=.git`、`--exclude-dir=.venv` 等冗余目录），严禁递归扫描庞大的 Rust 编译产物 `target/` 目录，杜绝海量输出干扰与性能浪费。
 
+### 规则 13：测试门禁与测试资产规范 (Test Gate & Asset Policy)
+
+- **提交前必须通过的三道门禁（必须与 CI 完全一致，缺一不可）**：
+  ```bash
+  cargo fmt --all -- --check
+  cargo clippy --workspace --all-targets -- -D warnings
+  cargo test --workspace
+  ```
+  禁止以“本地能跑”为由提交带 fmt 差异、Clippy 警告或失败测试的代码；任何 warning 一律在源头修复，严禁用 `#[allow]` 无理由压掉（确需抑制时必须走 `Cargo.toml` 的 `[workspace.lints.clippy]` 并写明理由）。
+- **严禁硬编码个人绝对路径**：源码、测试、文档中一律禁止出现 `/home/<user>`、`/Users/<user>`、`C:\Users\<user>` 等个人机器路径。
+- **统一使用 `mtk-testkit` 解析测试资产**：所有需要真实 Minecraft 资产的测试，**必须**通过 `crates/mtk-testkit` 提供的 `assets_root()` / `real_assets_root()` / `fabric_jar()` / `resource_pack_zip()` / `save_world()` 与 `model_json_path()` / `blockstate_json_path()` 定位，严禁自行拼接绝对路径。解析优先级为：环境变量（`MTK_TEST_ASSETS` / `MTK_TEST_JAR` / `MTK_TEST_RESOURCE_PACK` / `MTK_TEST_SAVE` / `MTK_TEST_MODELS_CACHE`）→ 工作区相邻目录（`../mc`、`../26.2-Fabric.jar`、`~/Downloads/SPBR-21.zip`）→ 内置 fixtures。
+- **缺失即优雅跳过（No Panic on Missing Assets）**：依赖真实资产的测试在资产缺失时必须打印明确的跳过原因并 `return`，严禁 `unwrap()` panic；必须保证在“纯仓库（无任何外部资产）”与“云端 CI”两种环境下都能运行。
+- **fixtures 与真包边界**：
+  - **小型 JSON 依赖**（blockstate / model / 材质名列表等）：必须解析 `parent` 继承闭包后 vendor 到 `crates/mtk-testkit/fixtures/`，并通过 `mtk-testkit` 的路径函数访问，保证测试密闭可复现；
+  - **大型二进制真包**（客户端 JAR、资源包 ZIP、存档）：**绝不入库**。云端 CI 由 `.github/workflows/ci.yml` 从临时 Release 镜像下载并注入上述环境变量。临时镜像 `mozi1924/mtk-ci-assets` 属于过渡方案，迁移到稳定来源后必须删除并于本文档与 workflow 中同步移除；
+  - 需要“完整原版资产”才能成立的断言（如 canonical debug world 尺寸），必须基于 `real_assets_root()`，不得基于内置 fixtures 做完整性断言。
+- **新增依赖原版模型的测试流程**：
+  1. 用脚本从真实资产解析目标 blockstate 的模型 `parent` 继承闭包；
+  2. **仅**将闭包内文件复制到 `crates/mtk-testkit/fixtures/mc/assets/minecraft/{blockstates,models}`；
+  3. 在测试中使用 `mtk-testkit` 的路径函数访问，并在 `README.md` 或测试注释中说明 fixtures 来源。
+
 ---
 
 ## 3. 核心领域架构与模块划分
@@ -91,6 +112,7 @@ libmozitoolkit/
 │   ├── libmtk/         -> 统一顶层门面、端到端预编译管线 (Prebake) 与统一错误处理
 │   ├── mtk-bench/      -> 性能压测与基准测试套件
 │   └── mtk-cli/        -> 独立命令行工具 (mtk)
+│   └── mtk-testkit/    -> 仅测试用资产解析器与内置 JSON fixtures (publish = false)
 └── bindings/
     ├── mtk-py/         -> PyO3 + maturin Python 绑定 (libmtk_py)
     ├── mtk-ffi/        -> C-ABI 动态/静态库与 C 头文件 (cbindgen)

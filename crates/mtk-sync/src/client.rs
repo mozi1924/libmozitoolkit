@@ -26,10 +26,7 @@ pub enum ClientCommand {
 #[derive(Debug, Clone)]
 pub enum ClientMessage {
     Status(String),
-    PacketReceived {
-        packet: Packet,
-        bytes: usize,
-    },
+    PacketReceived { packet: Packet, bytes: usize },
     Disconnected,
 }
 
@@ -48,7 +45,8 @@ impl SyncClient {
         auto_reconnect: bool,
         max_reconnect_attempts: usize,
     ) -> Result<Self, String> {
-        let _parsed = Url::parse(&url_str).map_err(|e| format!("Invalid WebSocket URL '{}': {}", url_str, e))?;
+        let _parsed = Url::parse(&url_str)
+            .map_err(|e| format!("Invalid WebSocket URL '{}': {}", url_str, e))?;
 
         let running = Arc::new(AtomicBool::new(true));
         let (cmd_sender, cmd_receiver) = crossbeam_channel::unbounded::<ClientCommand>();
@@ -150,7 +148,8 @@ impl SyncClient {
                                 let bytes = bin.len();
                                 match decode_packet(&bin) {
                                     Ok(packet) => {
-                                        let _ = msg_sender.send(ClientMessage::PacketReceived { packet, bytes });
+                                        let _ = msg_sender
+                                            .send(ClientMessage::PacketReceived { packet, bytes });
                                     }
                                     Err(e) => {
                                         let _ = msg_sender.send(ClientMessage::Status(format!(
@@ -203,7 +202,10 @@ impl SyncClient {
                 }
             }
 
-            if running.load(Ordering::Relaxed) && auto_reconnect && attempts <= max_reconnect_attempts {
+            if running.load(Ordering::Relaxed)
+                && auto_reconnect
+                && attempts <= max_reconnect_attempts
+            {
                 thread::sleep(Duration::from_millis(1500));
             } else {
                 break;

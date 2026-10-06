@@ -1,14 +1,9 @@
-use glam::IVec3;
-use mtk_core::direction::Direction;
 use crate::ctm::tables::OVERLAY_17_LOOKUP;
 use crate::ctm::types::{coordinate_random, extract_block_name, get_face_tangents, CtmSymmetry};
+use glam::IVec3;
+use mtk_core::direction::Direction;
 
-pub fn solve_repeat(
-    face: Direction,
-    world_pos: IVec3,
-    width: u32,
-    height: u32,
-) -> Option<usize> {
+pub fn solve_repeat(face: Direction, world_pos: IVec3, width: u32, height: u32) -> Option<usize> {
     if width == 0 || height == 0 {
         return None;
     }
@@ -94,10 +89,7 @@ where
     chosen_idx
 }
 
-pub fn solve_overlay<F>(
-    face: Direction,
-    check_connect: &F,
-) -> Option<usize>
+pub fn solve_overlay<F>(face: Direction, check_connect: &F) -> Option<usize>
 where
     F: Fn(IVec3) -> bool,
 {

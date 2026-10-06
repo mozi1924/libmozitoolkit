@@ -19,13 +19,23 @@ fn test_point_cloud_extraction_no_culling_and_roundtrip() {
             }
         }
     }
-    world.set_block(10, 10, 10, "minecraft:diamond_block", Some("minecraft:plains"));
+    world.set_block(
+        10,
+        10,
+        10,
+        "minecraft:diamond_block",
+        Some("minecraft:plains"),
+    );
 
     let config = MesherConfig::default();
 
     // 1. Verify point cloud extraction contains ALL 28 blocks without culling
     let cloud = world.to_point_cloud(&config);
-    assert_eq!(cloud.len(), 28, "All 28 blocks including fully occluded ones must be present");
+    assert_eq!(
+        cloud.len(),
+        28,
+        "All 28 blocks including fully occluded ones must be present"
+    );
 
     // Check that occluded center block (1, 1, 1) is unconditionally preserved
     let mut found_center = false;
@@ -49,7 +59,10 @@ fn test_point_cloud_extraction_no_culling_and_roundtrip() {
             }
         }
     }
-    assert_eq!(restored_world.get_block(10, 10, 10), "minecraft:diamond_block");
+    assert_eq!(
+        restored_world.get_block(10, 10, 10),
+        "minecraft:diamond_block"
+    );
     assert_eq!(restored_world.get_biome(10, 10, 10), "minecraft:plains");
 }
 
@@ -66,14 +79,22 @@ fn test_point_cloud_mesh_data_conversion() {
 
     let mesh_data = cloud.to_mesh_data();
     assert_eq!(mesh_data.positions.len(), 1);
-    assert_eq!(mesh_data.indices.len(), 0, "Point cloud mesh data must have no face indices");
+    assert_eq!(
+        mesh_data.indices.len(),
+        0,
+        "Point cloud mesh data must have no face indices"
+    );
 
-    let restored_cloud = VoxelPointCloud::from_mesh_data(&mesh_data).expect("Must parse from MeshData");
+    let restored_cloud =
+        VoxelPointCloud::from_mesh_data(&mesh_data).expect("Must parse from MeshData");
     assert_eq!(restored_cloud.len(), 1);
     assert_eq!(restored_cloud.block_x[0], 1);
     assert_eq!(restored_cloud.block_y[0], 2);
     assert_eq!(restored_cloud.block_z[0], 3);
-    assert_eq!(restored_cloud.block_states[0], "minecraft:oak_stairs[facing=east]");
+    assert_eq!(
+        restored_cloud.block_states[0],
+        "minecraft:oak_stairs[facing=east]"
+    );
     assert_eq!(restored_cloud.biomes[0], "minecraft:forest");
     assert_eq!(restored_cloud.light_levels[0], 15);
 }
@@ -100,7 +121,10 @@ fn test_user_carving_via_point_cloud_deletion() {
     let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
     let initial_mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
     let initial_quad_count = initial_mesh.quad_count();
-    assert_eq!(initial_quad_count, 96, "Initial 4x4x4 solid cube should only have 96 outer quads");
+    assert_eq!(
+        initial_quad_count, 96,
+        "Initial 4x4x4 solid cube should only have 96 outer quads"
+    );
 
     // 3. Extract unculled point cloud -> must have all 64 points
     let original_cloud = world.to_point_cloud(&config);
@@ -133,7 +157,11 @@ fn test_user_carving_via_point_cloud_deletion() {
 
     // 5. Reconstruct VoxelStorage from modified point cloud and remesh
     let carved_world = VoxelStorage::from_point_cloud(&modified_cloud);
-    assert_eq!(carved_world.get_block(1, 1, 1), "minecraft:air", "Deleted block is now air");
+    assert_eq!(
+        carved_world.get_block(1, 1, 1),
+        "minecraft:air",
+        "Deleted block is now air"
+    );
 
     let carved_padded = carved_world.get_section_padded_array(IVec3::new(0, 0, 0));
     let carved_mesh = SectionMesher::mesh_section(&carved_padded, &culler, |_| None, &config);
@@ -141,15 +169,31 @@ fn test_user_carving_via_point_cloud_deletion() {
     // 6. Verify that carving out the 2x2x2 cavity exposed new internal cavity faces!
     // Internal cavity has 2*2 = 4 faces per direction * 6 directions = 24 new inner quads.
     // Total quads = 96 outer quads + 24 inner quads = 120 quads.
-    assert_eq!(carved_mesh.quad_count(), 120, "Mesh should now include both outer and carved inner cavity faces");
+    assert_eq!(
+        carved_mesh.quad_count(),
+        120,
+        "Mesh should now include both outer and carved inner cavity faces"
+    );
     assert!(carved_mesh.quad_count() > initial_quad_count);
 }
 
 #[test]
 fn test_point_cloud_voxel_source_ingestion() {
     let mut cloud = VoxelPointCloud::new();
-    cloud.push([0.5, 0.5, 0.5], [0, 0, 0], "minecraft:stone".to_string(), "minecraft:plains".to_string(), 0);
-    cloud.push([16.5, 0.5, 0.5], [16, 0, 0], "minecraft:gold_block".to_string(), "minecraft:desert".to_string(), 0);
+    cloud.push(
+        [0.5, 0.5, 0.5],
+        [0, 0, 0],
+        "minecraft:stone".to_string(),
+        "minecraft:plains".to_string(),
+        0,
+    );
+    cloud.push(
+        [16.5, 0.5, 0.5],
+        [16, 0, 0],
+        "minecraft:gold_block".to_string(),
+        "minecraft:desert".to_string(),
+        0,
+    );
 
     let mut source = cloud.as_source();
     let mut target = VoxelStorage::new();

@@ -57,7 +57,7 @@ Commands:
 
 | 子命令 | 参数 | 说明 |
 | :--- | :--- | :--- |
-| `bake-vanilla` | `--mc-dir <DIR>` (默认 `/home/mozi/mc`)<br>`--max-size <SIZE>` (默认 4096) | 扫描指定 Minecraft assets 目录并烘焙原版方块基础图集 |
+| `bake-vanilla` | `--mc-dir <DIR>` (默认 `mc`)<br>`--max-size <SIZE>` (默认 4096) | 扫描指定 Minecraft assets 目录并烘焙原版方块基础图集 |
 | `bake-all` | `-j, --jar <JAR>` (基础原版 JAR)<br>`-p, --pack <ZIP>` (可选材质包)<br>`-o, --output <DIR>` (输出目录)<br>`--max-size <SIZE>` | 烘焙包含 14 大类 Minecraft 资产的静态与动态双图集及映射 JSON |
 | `bake-dual` | `-j, --jar <JAR>`<br>`-p, --pack <ZIP>`<br>`--output-atlas <DIR>`<br>`--output-standalone <DIR>`<br>`--max-size <SIZE>` | 一次性烘焙双图集与 Standalone 独立 PBR 材质资产包 |
 
@@ -85,8 +85,8 @@ Commands:
 
 | 参数 | 说明 |
 | :--- | :--- |
-| `-p, --packs-dir <DIR>` (默认 `/home/mozi/MiEx`) | 扫描包含 CTM / Continuity 资源包的目录 |
-| `-j, --jar <JAR>` (默认 `/home/mozi/26.2-Fabric.jar`) | 基础原版 JAR 文件路径 |
+| `-p, --packs-dir <DIR>` (默认 `MiEx`) | 扫描包含 CTM / Continuity 资源包的目录 |
+| `-j, --jar <JAR>` (默认 `26.2-Fabric.jar`) | 基础原版 JAR 文件路径 |
 
 ---
 
@@ -126,8 +126,8 @@ cargo install --path crates/mtk-cli
 ### 示例 1：全量预编译原版与第三方 PBR 材质包
 ```bash
 mtk atlas bake-all \
-    --jar /home/mozi/26.2-Fabric.jar \
-    --pack /home/mozi/Desktop/SPBR-21.zip \
+    --jar 26.2-Fabric.jar \
+    --pack SPBR-21.zip \
     --output ./baked_assets/atlases \
     --max-size 4096
 ```
@@ -135,7 +135,7 @@ mtk atlas bake-all \
 ### 示例 2：检查单个方块状态的模型烘焙几何
 ```bash
 mtk model dump \
-    /home/mozi/26.2-Fabric.jar \
+    26.2-Fabric.jar \
     "minecraft:oak_stairs[facing=east,half=top,shape=inner_left]" \
     --pretty
 ```
@@ -143,7 +143,7 @@ mtk model dump \
 ### 示例 3：导出代表性方块 OBJ 用于 DCC 视觉审查
 ```bash
 mtk export samples \
-    --jar /home/mozi/26.2-Fabric.jar \
+    --jar 26.2-Fabric.jar \
     --output ./debug_models
 ```
 
@@ -157,7 +157,7 @@ mtk verify cull \
 
 ### 示例 5：运行模型烘焙吞吐量压测
 ```bash
-mtk bench model --jar /home/mozi/26.2-Fabric.jar
+mtk bench model --jar 26.2-Fabric.jar
 ```
 
 ---

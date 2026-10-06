@@ -1,8 +1,8 @@
 use glam::IVec3;
 
+use super::container::VoxelStorage;
 use crate::crc::extract_canonical_state_str;
 use crate::storage::SectionStorage;
-use super::container::VoxelStorage;
 
 impl VoxelStorage {
     /// Applies a batch of block delta modifications. Returns a vector of effective changes `(x, y, z, old_state, new_state)`.
@@ -236,7 +236,8 @@ impl VoxelStorage {
         for dx in -1..=1 {
             for dy in -1..=1 {
                 for dz in -1..=1 {
-                    self.dirty_sections.insert(sec_coord + IVec3::new(dx, dy, dz));
+                    self.dirty_sections
+                        .insert(sec_coord + IVec3::new(dx, dy, dz));
                 }
             }
         }

@@ -13,8 +13,8 @@ pub mod storage;
 pub mod types;
 
 pub use biome::{
-    get_biome_meta, get_colormap_uv, get_smoothed_biome_data, get_smoothed_column_biome,
-    BiomeMeta, SmoothedBiomeColumn,
+    get_biome_meta, get_colormap_uv, get_smoothed_biome_data, get_smoothed_column_biome, BiomeMeta,
+    SmoothedBiomeColumn,
 };
 pub use fluid::{
     batch_repair_fluid_uv, calculate_corner_average, calculate_fluid_corner_heights,

@@ -9,11 +9,11 @@ use mtk_texture::{AtlasBuilder, AtlasBuilderConfig, DecodedSprite};
 #[derive(Args, Debug)]
 pub struct CtmTestArgs {
     /// Directory containing CTM resource pack zip files
-    #[arg(short, long, default_value = "/home/mozi/MiEx")]
+    #[arg(short, long, default_value = "MiEx")]
     pub packs_dir: PathBuf,
 
     /// Path to base vanilla JAR file
-    #[arg(short, long, default_value = "/home/mozi/26.2-Fabric.jar")]
+    #[arg(short, long, default_value = "26.2-Fabric.jar")]
     pub jar: PathBuf,
 }
 
@@ -36,7 +36,11 @@ pub fn run_ctm_test(args: CtmTestArgs) -> Result<(), Box<dyn std::error::Error>>
         }
     }
 
-    println!("Discovered {} test resource packs in {}:", ctm_zip_paths.len(), args.packs_dir.display());
+    println!(
+        "Discovered {} test resource packs in {}:",
+        ctm_zip_paths.len(),
+        args.packs_dir.display()
+    );
     for p in &ctm_zip_paths {
         println!(" - {}", p.file_name().unwrap_or_default().to_string_lossy());
     }
@@ -54,7 +58,11 @@ pub fn run_ctm_test(args: CtmTestArgs) -> Result<(), Box<dyn std::error::Error>>
         single_stack.push_pack(Box::new(pack));
 
         let rules = single_stack.load_ctm_rules();
-        println!("Loaded in {:?}, parsed {} CTM rules:", t0.elapsed(), rules.len());
+        println!(
+            "Loaded in {:?}, parsed {} CTM rules:",
+            t0.elapsed(),
+            rules.len()
+        );
         total_rules_count += rules.len();
 
         for (idx, r) in rules.iter().enumerate().take(5) {
@@ -86,24 +94,40 @@ pub fn run_ctm_test(args: CtmTestArgs) -> Result<(), Box<dyn std::error::Error>>
         println!("Adding Base Vanilla JAR: {}", args.jar.display());
         full_stack.append_pack(Box::new(ZipPack::from_file("vanilla", &args.jar)?));
     } else {
-        println!("Notice: Base vanilla JAR not found at {}, proceeding without it.", args.jar.display());
+        println!(
+            "Notice: Base vanilla JAR not found at {}, proceeding without it.",
+            args.jar.display()
+        );
     }
 
     for zip_path in &ctm_zip_paths {
         let pack_name = zip_path.file_name().unwrap_or_default().to_string_lossy();
-        full_stack.push_pack(Box::new(ZipPack::from_file(pack_name.to_string(), zip_path)?));
+        full_stack.push_pack(Box::new(ZipPack::from_file(
+            pack_name.to_string(),
+            zip_path,
+        )?));
     }
 
-    println!("Full Stack constructed ({} packs) in {:?}", full_stack.len(), t_stack.elapsed());
+    println!(
+        "Full Stack constructed ({} packs) in {:?}",
+        full_stack.len(),
+        t_stack.elapsed()
+    );
 
     let all_ctm_rules = full_stack.load_ctm_rules();
-    println!("Total Active CTM Rules across all packs: {}", all_ctm_rules.len());
+    println!(
+        "Total Active CTM Rules across all packs: {}",
+        all_ctm_rules.len()
+    );
 
     let blocks_loc = ResourceLocation::parse("minecraft:blocks")?;
     let definition = match full_stack.load_atlas_definition(&blocks_loc) {
         Ok(d) => d,
         Err(e) => {
-            println!("Warning: Could not load blocks atlas definition: {}. Skipping baking test.", e);
+            println!(
+                "Warning: Could not load blocks atlas definition: {}. Skipping baking test.",
+                e
+            );
             return Ok(());
         }
     };
@@ -111,12 +135,20 @@ pub fn run_ctm_test(args: CtmTestArgs) -> Result<(), Box<dyn std::error::Error>>
     println!("Collecting sprites (including all CTM sub-tiles)...");
     let t_collect = Instant::now();
     let discovered = full_stack.collect_sprites_including_ctm(&definition, &all_ctm_rules)?;
-    println!("Discovered {} total sprites (vanilla + CTM sub-tiles) in {:?}", discovered.len(), t_collect.elapsed());
+    println!(
+        "Discovered {} total sprites (vanilla + CTM sub-tiles) in {:?}",
+        discovered.len(),
+        t_collect.elapsed()
+    );
 
     println!("Decoding sprites in parallel...");
     let t_decode = Instant::now();
     let decoded = DecodedSprite::decode_batch(discovered)?;
-    println!("Decoded {} sprites in {:?}", decoded.len(), t_decode.elapsed());
+    println!(
+        "Decoded {} sprites in {:?}",
+        decoded.len(),
+        t_decode.elapsed()
+    );
 
     println!("Baking CTM Atlas...");
     let builder = AtlasBuilder::new(AtlasBuilderConfig {
@@ -133,7 +165,10 @@ pub fn run_ctm_test(args: CtmTestArgs) -> Result<(), Box<dyn std::error::Error>>
     println!("------------------------------------------------------------");
     println!(" CTM Atlas Baking Complete in {:?}", bake_elapsed);
     println!(" Total Chunks: {}", baked.chunks.len());
-    println!(" Total Registered Sprites in Address Map: {}", baked.address_map.sprites.len());
+    println!(
+        " Total Registered Sprites in Address Map: {}",
+        baked.address_map.sprites.len()
+    );
     for chunk in &baked.chunks {
         println!(
             " - Chunk #{}: {}x{} px (Albedo: {} bytes, Normal: {}, Specular: {})",
@@ -147,7 +182,10 @@ pub fn run_ctm_test(args: CtmTestArgs) -> Result<(), Box<dyn std::error::Error>>
     }
 
     println!("============================================================");
-    println!(" All CTM Tests Finished! Total Rules Parsed: {}", total_rules_count);
+    println!(
+        " All CTM Tests Finished! Total Rules Parsed: {}",
+        total_rules_count
+    );
     println!("============================================================");
 
     Ok(())

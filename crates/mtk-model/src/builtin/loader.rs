@@ -28,20 +28,27 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::HashMap;
-use serde_json::Value;
+use super::evaluator::{
+    entity_uv_to_faces, eval_miex_arithmetic, eval_miex_condition, eval_miex_num, eval_miex_string,
+};
 use crate::parser::blockstate::BlockState;
-use crate::parser::model_json::{BlockModelJson, BuiltinTransform, ElementJson, FaceJson, RotationJson, TextureValue};
-use super::evaluator::{entity_uv_to_faces, eval_miex_arithmetic, eval_miex_condition, eval_miex_num, eval_miex_string};
+use crate::parser::model_json::{
+    BlockModelJson, BuiltinTransform, ElementJson, FaceJson, RotationJson, TextureValue,
+};
+use serde_json::Value;
+use std::collections::HashMap;
 
 /// Embedded static raw JSON strings from upstream MiEx `base_resource_pack`.
 pub const MIEX_BED_JSON: &str = include_str!("../../assets/builtins/blockstates/bed.json");
 pub const MIEX_CHEST_JSON: &str = include_str!("../../assets/builtins/blockstates/chest.json");
-pub const MIEX_SHULKER_BOX_JSON: &str = include_str!("../../assets/builtins/blockstates/shulker_box.json");
+pub const MIEX_SHULKER_BOX_JSON: &str =
+    include_str!("../../assets/builtins/blockstates/shulker_box.json");
 pub const MIEX_SIGN_JSON: &str = include_str!("../../assets/builtins/blockstates/sign.json");
-pub const MIEX_HANGING_SIGN_JSON: &str = include_str!("../../assets/builtins/blockstates/hanging_sign.json");
+pub const MIEX_HANGING_SIGN_JSON: &str =
+    include_str!("../../assets/builtins/blockstates/hanging_sign.json");
 pub const MIEX_SKULL_JSON: &str = include_str!("../../assets/builtins/blockstates/skull.json");
-pub const MIEX_END_PORTAL_JSON: &str = include_str!("../../assets/builtins/blockstates/end_portal.json");
+pub const MIEX_END_PORTAL_JSON: &str =
+    include_str!("../../assets/builtins/blockstates/end_portal.json");
 pub const MIEX_PATCHES_JSON: &str = include_str!("../../assets/builtins/patches/miex_patches.json");
 
 /// Loader that parses upstream MiEx JSON definitions dynamically at runtime.
@@ -53,9 +60,7 @@ impl MiExModelLoader {
         let name = blockstate.name.as_str();
         let short_name = name.strip_prefix("minecraft:").unwrap_or(name);
 
-        let raw_json = if short_name == "chest"
-            || short_name.ends_with("_chest")
-        {
+        let raw_json = if short_name == "chest" || short_name.ends_with("_chest") {
             MIEX_CHEST_JSON
         } else if short_name == "bed" || short_name.ends_with("_bed") {
             MIEX_BED_JSON
@@ -65,9 +70,14 @@ impl MiExModelLoader {
             MIEX_END_PORTAL_JSON
         } else if short_name.contains("hanging_sign") {
             MIEX_HANGING_SIGN_JSON
-        } else if short_name.ends_with("_sign") || short_name == "sign" || short_name.contains("_wall_sign") {
+        } else if short_name.ends_with("_sign")
+            || short_name == "sign"
+            || short_name.contains("_wall_sign")
+        {
             MIEX_SIGN_JSON
-        } else if (short_name.contains("head") || short_name.contains("skull")) && !short_name.contains("piston") {
+        } else if (short_name.contains("head") || short_name.contains("skull"))
+            && !short_name.contains("piston")
+        {
             MIEX_SKULL_JSON
         } else {
             return None;
@@ -84,8 +94,14 @@ impl MiExModelLoader {
 
         let mut textures: HashMap<String, TextureValue> = HashMap::new();
         if let Some(default_tex) = root.get("defaultTexture").and_then(|v| v.as_str()) {
-            textures.insert("particle".to_string(), TextureValue::Path(default_tex.to_string()));
-            textures.insert("texture".to_string(), TextureValue::Path(default_tex.to_string()));
+            textures.insert(
+                "particle".to_string(),
+                TextureValue::Path(default_tex.to_string()),
+            );
+            textures.insert(
+                "texture".to_string(),
+                TextureValue::Path(default_tex.to_string()),
+            );
         }
 
         let mut elements: Vec<ElementJson> = Vec::new();
@@ -252,11 +268,16 @@ impl MiExModelLoader {
                 let b = eval_miex_condition(expr, vars_str, blockstate);
                 vars_str.insert(
                     var_name.clone(),
-                    if b { "true".to_string() } else { "false".to_string() },
+                    if b {
+                        "true".to_string()
+                    } else {
+                        "false".to_string()
+                    },
                 );
             } else if expr.contains('?') {
                 let evaluated = eval_miex_string(expr, vars_str, blockstate);
-                if let Some(num) = eval_miex_arithmetic(&evaluated, vars_num, vars_str, blockstate) {
+                if let Some(num) = eval_miex_arithmetic(&evaluated, vars_num, vars_str, blockstate)
+                {
                     vars_num.insert(var_name.clone(), num);
                     vars_str.insert(var_name.clone(), num.to_string());
                 } else if let Ok(n) = evaluated.parse::<f32>() {
@@ -342,13 +363,18 @@ impl MiExModelLoader {
         } else if let Some(faces_val) = val.get("faces").and_then(|v| v.as_object()) {
             let mut f_map = HashMap::new();
             for (dir_name, face_obj) in faces_val {
-                let uv = face_obj.get("uv").and_then(|v| v.as_array()).map(|uv_arr| [
+                let uv = face_obj.get("uv").and_then(|v| v.as_array()).map(|uv_arr| {
+                    [
                         uv_arr.first().and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,
                         uv_arr.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,
                         uv_arr.get(2).and_then(|v| v.as_f64()).unwrap_or(16.0) as f32,
                         uv_arr.get(3).and_then(|v| v.as_f64()).unwrap_or(16.0) as f32,
-                    ]);
-                let rotation = face_obj.get("rotation").and_then(|v| v.as_i64()).map(|n| n as u32);
+                    ]
+                });
+                let rotation = face_obj
+                    .get("rotation")
+                    .and_then(|v| v.as_i64())
+                    .map(|n| n as u32);
                 let texture = face_obj
                     .get("texture")
                     .and_then(|v| v.as_str())
@@ -417,20 +443,32 @@ mod tests {
     #[test]
     fn test_load_chest() {
         let bs_north = BlockState::parse("minecraft:chest[facing=north,type=single]").unwrap();
-        let model_north = MiExModelLoader::load_for_blockstate(&bs_north).expect("Chest north should load");
+        let model_north =
+            MiExModelLoader::load_for_blockstate(&bs_north).expect("Chest north should load");
         let elems_north = model_north.elements.unwrap_or_default();
         assert!(!elems_north.is_empty());
-        let t_north = elems_north[0].transform.as_ref().expect("Transform should be present");
+        let t_north = elems_north[0]
+            .transform
+            .as_ref()
+            .expect("Transform should be present");
         assert_eq!(t_north.rotate[1], 0.0);
 
         let bs_south = BlockState::parse("minecraft:chest[facing=south,type=single]").unwrap();
-        let model_south = MiExModelLoader::load_for_blockstate(&bs_south).expect("Chest south should load");
+        let model_south =
+            MiExModelLoader::load_for_blockstate(&bs_south).expect("Chest south should load");
         let elems_south = model_south.elements.unwrap_or_default();
-        let t_south = elems_south[0].transform.as_ref().expect("Transform should be present");
-        assert_eq!(t_south.rotate[1], 180.0, "South chest should rotate 180 deg");
+        let t_south = elems_south[0]
+            .transform
+            .as_ref()
+            .expect("Transform should be present");
+        assert_eq!(
+            t_south.rotate[1], 180.0,
+            "South chest should rotate 180 deg"
+        );
 
         let bs_east = BlockState::parse("minecraft:chest[facing=east,type=single]").unwrap();
-        let model_east = MiExModelLoader::load_for_blockstate(&bs_east).expect("Chest east should load");
+        let model_east =
+            MiExModelLoader::load_for_blockstate(&bs_east).expect("Chest east should load");
         let elems_east = model_east.elements.unwrap();
         let t_east = elems_east[0].transform.as_ref().unwrap();
         assert_eq!(t_east.rotate[1], 90.0, "East chest should rotate 90 deg");
@@ -439,20 +477,31 @@ mod tests {
     #[test]
     fn test_skull_floor_vs_wall() {
         let bs_floor = BlockState::parse("minecraft:skeleton_skull[rotation=0]").unwrap();
-        let model_floor = MiExModelLoader::load_for_blockstate(&bs_floor).expect("Floor skull should load");
+        let model_floor =
+            MiExModelLoader::load_for_blockstate(&bs_floor).expect("Floor skull should load");
         let elems_floor = model_floor.elements.unwrap();
-        assert_eq!(elems_floor[0].from, [4.0, 0.0, 4.0], "Floor skull must start at Y=0");
+        assert_eq!(
+            elems_floor[0].from,
+            [4.0, 0.0, 4.0],
+            "Floor skull must start at Y=0"
+        );
 
         let bs_wall = BlockState::parse("minecraft:skeleton_wall_skull[facing=north]").unwrap();
-        let model_wall = MiExModelLoader::load_for_blockstate(&bs_wall).expect("Wall skull should load");
+        let model_wall =
+            MiExModelLoader::load_for_blockstate(&bs_wall).expect("Wall skull should load");
         let elems_wall = model_wall.elements.unwrap();
-        assert_eq!(elems_wall[0].from, [4.0, 4.0, 0.0], "Wall skull must start at Y=4, Z=0");
+        assert_eq!(
+            elems_wall[0].from,
+            [4.0, 4.0, 0.0],
+            "Wall skull must start at Y=4, Z=0"
+        );
     }
 
     #[test]
     fn test_dragon_and_piglin_heads() {
         let bs_dragon = BlockState::parse("minecraft:dragon_head[rotation=0]").unwrap();
-        let model_dragon = MiExModelLoader::load_for_blockstate(&bs_dragon).expect("Dragon head should load");
+        let model_dragon =
+            MiExModelLoader::load_for_blockstate(&bs_dragon).expect("Dragon head should load");
         let elems_dragon = model_dragon.elements.unwrap();
         assert_eq!(elems_dragon.len(), 7, "Dragon head should have 7 elements");
         let tex_dragon = model_dragon.textures.unwrap();
@@ -463,13 +512,17 @@ mod tests {
 
         // Verify dragon jaw rotation (element 2)
         let jaw = &elems_dragon[2];
-        let jaw_rot = jaw.rotation.as_ref().expect("Dragon jaw should have rotation");
+        let jaw_rot = jaw
+            .rotation
+            .as_ref()
+            .expect("Dragon jaw should have rotation");
         assert_eq!(jaw_rot.axis, "x");
         assert_eq!(jaw_rot.angle, 11.5);
         assert_eq!(jaw_rot.origin, [8.0, 3.0, 14.0]);
 
         let bs_piglin = BlockState::parse("minecraft:piglin_head[rotation=4]").unwrap();
-        let model_piglin = MiExModelLoader::load_for_blockstate(&bs_piglin).expect("Piglin head should load");
+        let model_piglin =
+            MiExModelLoader::load_for_blockstate(&bs_piglin).expect("Piglin head should load");
         let elems_piglin = model_piglin.elements.unwrap();
         assert_eq!(elems_piglin.len(), 6, "Piglin head should have 6 elements");
         let tex_piglin = model_piglin.textures.unwrap();
@@ -478,17 +531,26 @@ mod tests {
             "minecraft:entity/piglin/piglin"
         );
         let t_piglin = elems_piglin[0].transform.as_ref().unwrap();
-        assert_eq!(t_piglin.rotate[1], 270.0, "Rotation 4 should be 270 deg (22.5*4 + 180)");
+        assert_eq!(
+            t_piglin.rotate[1], 270.0,
+            "Rotation 4 should be 270 deg (22.5*4 + 180)"
+        );
 
         // Verify piglin ear rotations and distinct UVs
         let right_ear = &elems_piglin[2];
-        let right_ear_rot = right_ear.rotation.as_ref().expect("Right ear should have rotation");
+        let right_ear_rot = right_ear
+            .rotation
+            .as_ref()
+            .expect("Right ear should have rotation");
         assert_eq!(right_ear_rot.axis, "z");
         assert_eq!(right_ear_rot.angle, 30.0);
         assert_eq!(right_ear_rot.origin, [12.5, 6.0, 8.0]);
 
         let left_ear = &elems_piglin[3];
-        let left_ear_rot = left_ear.rotation.as_ref().expect("Left ear should have rotation");
+        let left_ear_rot = left_ear
+            .rotation
+            .as_ref()
+            .expect("Left ear should have rotation");
         assert_eq!(left_ear_rot.axis, "z");
         assert_eq!(left_ear_rot.angle, -30.0);
         assert_eq!(left_ear_rot.origin, [3.5, 6.0, 8.0]);
@@ -496,16 +558,25 @@ mod tests {
         // Verify left and right ears have different face UVs
         let right_faces = &right_ear.faces;
         let left_faces = &left_ear.faces;
-        assert_ne!(right_faces.get("west").unwrap().uv, left_faces.get("west").unwrap().uv);
+        assert_ne!(
+            right_faces.get("west").unwrap().uv,
+            left_faces.get("west").unwrap().uv
+        );
     }
 
     #[test]
     fn test_hanging_sign_load() {
-        let bs_standing = BlockState::parse("minecraft:oak_hanging_sign[attached=false,rotation=0]").unwrap();
-        let model_standing = MiExModelLoader::load_for_blockstate(&bs_standing).expect("Standing hanging sign must load");
+        let bs_standing =
+            BlockState::parse("minecraft:oak_hanging_sign[attached=false,rotation=0]").unwrap();
+        let model_standing = MiExModelLoader::load_for_blockstate(&bs_standing)
+            .expect("Standing hanging sign must load");
         let elems_standing = model_standing.elements.unwrap_or_default();
         // Board (1) + 4 angled chains (4) = 5 elements. Absolutely NO vertical sign post!
-        assert_eq!(elems_standing.len(), 5, "Standing hanging sign without attachment must have board and 4 chains");
+        assert_eq!(
+            elems_standing.len(),
+            5,
+            "Standing hanging sign without attachment must have board and 4 chains"
+        );
         let tex = model_standing.textures.unwrap();
         assert_eq!(
             tex.get("texture").unwrap().as_str(),
@@ -513,24 +584,38 @@ mod tests {
         );
         for elem in &elems_standing {
             // Confirm none of the elements are the vertical sign post (which had X in [7, 9], Y in [0, 9.333])
-            let is_post = elem.from[0] > 6.0 && elem.to[0] < 10.0 && elem.from[1] < 1.0 && elem.to[1] < 10.0;
-            assert!(!is_post, "Hanging sign must NOT contain vertical standing sign post!");
+            let is_post =
+                elem.from[0] > 6.0 && elem.to[0] < 10.0 && elem.from[1] < 1.0 && elem.to[1] < 10.0;
+            assert!(
+                !is_post,
+                "Hanging sign must NOT contain vertical standing sign post!"
+            );
         }
 
         let bs_wall = BlockState::parse("minecraft:oak_wall_hanging_sign[facing=north]").unwrap();
-        let model_wall = MiExModelLoader::load_for_blockstate(&bs_wall).expect("Wall hanging sign must load");
+        let model_wall =
+            MiExModelLoader::load_for_blockstate(&bs_wall).expect("Wall hanging sign must load");
         let elems_wall = model_wall.elements.unwrap_or_default();
         for (i, el) in elems_wall.iter().enumerate() {
             println!("Wall elem {}: from={:?}, to={:?}", i, el.from, el.to);
         }
         // Board (1) + wall bracket (1) = 2 elements
-        assert_eq!(elems_wall.len(), 2, "Wall hanging sign must have board and bracket");
+        assert_eq!(
+            elems_wall.len(),
+            2,
+            "Wall hanging sign must have board and bracket"
+        );
 
-        let bs_attached = BlockState::parse("minecraft:oak_hanging_sign[attached=true,rotation=0]").unwrap();
-        let model_attached = MiExModelLoader::load_for_blockstate(&bs_attached).expect("Attached hanging sign must load");
+        let bs_attached =
+            BlockState::parse("minecraft:oak_hanging_sign[attached=true,rotation=0]").unwrap();
+        let model_attached = MiExModelLoader::load_for_blockstate(&bs_attached)
+            .expect("Attached hanging sign must load");
         let elems_attached = model_attached.elements.unwrap_or_default();
         // Board (1) + center chain (1) = 2 elements
-        assert_eq!(elems_attached.len(), 2, "Attached hanging sign must have board and center chain");
+        assert_eq!(
+            elems_attached.len(),
+            2,
+            "Attached hanging sign must have board and center chain"
+        );
     }
 }
-

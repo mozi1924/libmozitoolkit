@@ -20,3 +20,6 @@ default = ["std", "serde"]
 std = ["glam/std"]
 serde = ["dep:serde", "glam/serde"]
 parallel = ["dep:rayon", "std"]
+
+[lints]
+workspace = true

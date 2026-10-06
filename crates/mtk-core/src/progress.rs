@@ -22,7 +22,12 @@ pub struct ProgressReport {
 
 impl ProgressReport {
     /// Constructs a new progress report milestone.
-    pub fn new(stage: &'static str, current: usize, total: usize, message: impl Into<String>) -> Self {
+    pub fn new(
+        stage: &'static str,
+        current: usize,
+        total: usize,
+        message: impl Into<String>,
+    ) -> Self {
         Self {
             stage,
             current,
@@ -158,4 +163,3 @@ mod tests {
         assert!(call_count.load(Ordering::SeqCst) >= 9);
     }
 }
-

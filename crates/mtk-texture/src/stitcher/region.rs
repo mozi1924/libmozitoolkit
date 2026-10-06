@@ -22,12 +22,7 @@ impl<T> StitcherRegion<T> {
     }
 
     /// Try to add a slot into this region or its partitioned sub-slots.
-    pub fn add(
-        &mut self,
-        holder: T,
-        holder_width: u32,
-        holder_height: u32,
-    ) -> Option<T> {
+    pub fn add(&mut self, holder: T, holder_width: u32, holder_height: u32) -> Option<T> {
         if self.holder.is_some() {
             return Some(holder);
         }
@@ -56,12 +51,32 @@ impl<T> StitcherRegion<T> {
             let mut sub_slots = Vec::with_capacity(2);
             if dx > dy {
                 // Split horizontally: left slot (exact width) and right remainder
-                sub_slots.push(StitcherRegion::new(self.origin_x, self.origin_y, holder_width, self.height));
-                sub_slots.push(StitcherRegion::new(self.origin_x + holder_width, self.origin_y, dx, self.height));
+                sub_slots.push(StitcherRegion::new(
+                    self.origin_x,
+                    self.origin_y,
+                    holder_width,
+                    self.height,
+                ));
+                sub_slots.push(StitcherRegion::new(
+                    self.origin_x + holder_width,
+                    self.origin_y,
+                    dx,
+                    self.height,
+                ));
             } else {
                 // Split vertically: top slot (exact height) and bottom remainder
-                sub_slots.push(StitcherRegion::new(self.origin_x, self.origin_y, self.width, holder_height));
-                sub_slots.push(StitcherRegion::new(self.origin_x, self.origin_y + holder_height, self.width, dy));
+                sub_slots.push(StitcherRegion::new(
+                    self.origin_x,
+                    self.origin_y,
+                    self.width,
+                    holder_height,
+                ));
+                sub_slots.push(StitcherRegion::new(
+                    self.origin_x,
+                    self.origin_y + holder_height,
+                    self.width,
+                    dy,
+                ));
             }
 
             // Insert into first sub-slot

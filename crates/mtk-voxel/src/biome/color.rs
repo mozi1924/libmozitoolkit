@@ -1,13 +1,33 @@
-use std::collections::HashMap;
 pub use mtk_material::get_colormap_uv;
+use std::collections::HashMap;
 
 /// Precomputed inverse distance weights for 2D horizontal kernel radius `R=2`.
 pub const BIOME_KERNEL_R2: &[(i32, i32, f32)] = &[
-    (-2, -2, 0.2612), (-2, -1, 0.3090), (-2, 0, 0.3333), (-2, 1, 0.3090), (-2, 2, 0.2612),
-    (-1, -2, 0.3090), (-1, -1, 0.4142), (-1, 0, 0.5000), (-1, 1, 0.4142), (-1, 2, 0.3090),
-    (0, -2, 0.3333),  (0, -1, 0.5000),  (0, 0, 1.0000),  (0, 1, 0.5000),  (0, 2, 0.3333),
-    (1, -2, 0.3090),  (1, -1, 0.4142),  (1, 0, 0.5000),  (1, 1, 0.4142),  (1, 2, 0.3090),
-    (2, -2, 0.2612),  (2, -1, 0.3090),  (2, 0, 0.3333),  (2, 1, 0.3090),  (2, 2, 0.2612),
+    (-2, -2, 0.2612),
+    (-2, -1, 0.3090),
+    (-2, 0, 0.3333),
+    (-2, 1, 0.3090),
+    (-2, 2, 0.2612),
+    (-1, -2, 0.3090),
+    (-1, -1, 0.4142),
+    (-1, 0, 0.5000),
+    (-1, 1, 0.4142),
+    (-1, 2, 0.3090),
+    (0, -2, 0.3333),
+    (0, -1, 0.5000),
+    (0, 0, 1.0000),
+    (0, 1, 0.5000),
+    (0, 2, 0.3333),
+    (1, -2, 0.3090),
+    (1, -1, 0.4142),
+    (1, 0, 0.5000),
+    (1, 1, 0.4142),
+    (1, 2, 0.3090),
+    (2, -2, 0.2612),
+    (2, -1, 0.3090),
+    (2, 0, 0.3333),
+    (2, 1, 0.3090),
+    (2, 2, 0.2612),
 ];
 
 /// Metadata and color properties for a single Minecraft biome (delegated to authoritative mtk-material).
@@ -67,12 +87,7 @@ impl Default for SmoothedBiomeColumn {
 }
 
 /// Computes smooth biome blending over `(x ± 2, z ± 2)` horizontal neighborhood for all color channels.
-pub fn get_smoothed_column_biome<F>(
-    mut get_biome: F,
-    x: i32,
-    y: i32,
-    z: i32,
-) -> SmoothedBiomeColumn
+pub fn get_smoothed_column_biome<F>(mut get_biome: F, x: i32, y: i32, z: i32) -> SmoothedBiomeColumn
 where
     F: FnMut(i32, i32, i32) -> String,
 {
@@ -161,12 +176,7 @@ where
 
 /// Computes smooth biome blending over `(x ± 2, z ± 2)` horizontal neighborhood.
 /// Returns `(smoothed_colormap_uv, smoothed_water_linear_rgba)`.
-pub fn get_smoothed_biome_data<F>(
-    get_biome: F,
-    x: i32,
-    y: i32,
-    z: i32,
-) -> ([f32; 2], [f32; 4])
+pub fn get_smoothed_biome_data<F>(get_biome: F, x: i32, y: i32, z: i32) -> ([f32; 2], [f32; 4])
 where
     F: FnMut(i32, i32, i32) -> String,
 {
@@ -187,7 +197,8 @@ mod tests {
 
     #[test]
     fn test_smoothed_biome() {
-        let (uv, water_col) = get_smoothed_biome_data(|_x, _y, _z| "minecraft:plains".to_string(), 0, 64, 0);
+        let (uv, water_col) =
+            get_smoothed_biome_data(|_x, _y, _z| "minecraft:plains".to_string(), 0, 64, 0);
         assert!(uv[0] > 0.0);
         assert!(water_col[3] > 0.0);
     }

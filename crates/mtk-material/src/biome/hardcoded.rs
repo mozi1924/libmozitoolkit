@@ -1,7 +1,7 @@
 //! Hardcoded Minecraft Block Tints, Canonical Block Tint Registry, and Classifier.
 
-use mtk_core::direction::Direction;
 use super::palettes::hex_to_linear_rgba;
+use mtk_core::direction::Direction;
 
 pub const TINT_TYPE_NONE: u8 = 0;
 pub const TINT_TYPE_GRASS: u8 = 1;
@@ -31,10 +31,8 @@ pub static HARDCODED_BLOCK_TINTS: &[(&str, &str)] = &[
 
 /// Precomputed canonical hex strings for redstone wire power levels 0 to 15.
 pub static REDSTONE_WIRE_TINT_HEX: [&str; 16] = [
-    "#4B0000", "#580200", "#640500", "#700700",
-    "#7C0A00", "#880C00", "#940F00", "#A01100",
-    "#AC1400", "#B81600", "#C31900", "#CF1B00",
-    "#DB1E00", "#E72000", "#F32300", "#FF2600",
+    "#4B0000", "#580200", "#640500", "#700700", "#7C0A00", "#880C00", "#940F00", "#A01100",
+    "#AC1400", "#B81600", "#C31900", "#CF1B00", "#DB1E00", "#E72000", "#F32300", "#FF2600",
 ];
 
 /// Returns the sRGB float color `[r, g, b, 1.0]` for a redstone wire signal power level (0..15).
@@ -195,7 +193,10 @@ pub fn is_explicit_none_tint(stem: &str) -> bool {
     let unname = clean.strip_prefix("minecraft:").unwrap_or(&clean);
     let s = unname.strip_prefix("block/").unwrap_or(unname);
 
-    if EXPLICIT_NONE_BLOCKS.iter().any(|&b| s == b || s.starts_with(b)) {
+    if EXPLICIT_NONE_BLOCKS
+        .iter()
+        .any(|&b| s == b || s.starts_with(b))
+    {
         return true;
     }
     s.contains("dead_bush") || s.contains("firefly_bush")
@@ -269,7 +270,11 @@ pub fn is_water(stem: &str) -> bool {
     let unname = clean.strip_prefix("minecraft:").unwrap_or(&clean);
     let s = unname.strip_prefix("block/").unwrap_or(unname);
 
-    s == "water" || s.contains("water_still") || s.contains("water_flow") || s.contains("water_cauldron") || s.contains("bubble_column")
+    s == "water"
+        || s.contains("water_still")
+        || s.contains("water_flow")
+        || s.contains("water_cauldron")
+        || s.contains("bubble_column")
 }
 
 /// Retrieve the hardcoded hex string for a block or texture stem, if any.
@@ -327,7 +332,7 @@ pub fn classify_tint_category(
     }
 
     // 1. Explicitly untinted check
-    if is_explicit_none_tint(s_stem) || b_norm.as_deref().map_or(false, is_explicit_none_tint) {
+    if is_explicit_none_tint(s_stem) || b_norm.as_deref().is_some_and(is_explicit_none_tint) {
         return "none";
     }
 
@@ -354,34 +359,40 @@ pub fn classify_tint_category(
     }
 
     // 3. Hardcoded block/texture tints
-    if get_hardcoded_tint_hex(s_stem).is_some() || b_norm.as_deref().and_then(get_hardcoded_tint_hex).is_some() {
+    if get_hardcoded_tint_hex(s_stem).is_some()
+        || b_norm.as_deref().and_then(get_hardcoded_tint_hex).is_some()
+    {
         return "hardcoded";
     }
 
     // 4. Canonical known stems
-    if KNOWN_DRY_FOLIAGE_STEMS.iter().any(|&k| s_stem == k) {
+    if KNOWN_DRY_FOLIAGE_STEMS.contains(&s_stem) {
         return "dry_foliage";
     }
-    if KNOWN_GRASS_STEMS.iter().any(|&k| s_stem == k) {
+    if KNOWN_GRASS_STEMS.contains(&s_stem) {
         return "grass";
     }
-    if KNOWN_FOLIAGE_STEMS.iter().any(|&k| s_stem == k) {
+    if KNOWN_FOLIAGE_STEMS.contains(&s_stem) {
         return "foliage";
     }
-    if KNOWN_WATER_STEMS.iter().any(|&k| s_stem == k) {
+    if KNOWN_WATER_STEMS.contains(&s_stem) {
         return "water";
     }
 
     // 5. Heuristic fallback for leaves
-    if s_stem.contains("leaves") || b_norm.as_deref().map_or(false, |b| b.contains("leaves")) {
-        if s_stem.contains("spruce") || b_norm.as_deref().map_or(false, |b| b.contains("spruce")) {
+    if s_stem.contains("leaves") || b_norm.as_deref().is_some_and(|b| b.contains("leaves")) {
+        if s_stem.contains("spruce") || b_norm.as_deref().is_some_and(|b| b.contains("spruce")) {
             return "hardcoded";
         }
-        if s_stem.contains("birch") || b_norm.as_deref().map_or(false, |b| b.contains("birch")) {
+        if s_stem.contains("birch") || b_norm.as_deref().is_some_and(|b| b.contains("birch")) {
             return "hardcoded";
         }
-        if s_stem.contains("cherry") || s_stem.contains("azalea") || s_stem.contains("pale_oak")
-            || b_norm.as_deref().map_or(false, |b| b.contains("cherry") || b.contains("azalea") || b.contains("pale_oak"))
+        if s_stem.contains("cherry")
+            || s_stem.contains("azalea")
+            || s_stem.contains("pale_oak")
+            || b_norm.as_deref().is_some_and(|b| {
+                b.contains("cherry") || b.contains("azalea") || b.contains("pale_oak")
+            })
         {
             return "none";
         }
@@ -389,18 +400,21 @@ pub fn classify_tint_category(
     }
 
     // 6. Suffix and keyword heuristics
-    if s_stem.ends_with("_grass") || s_stem.ends_with("_fern") || s_stem.ends_with("_vine")
-        || s_stem == "bush" || s_stem == "potted_bush"
+    if s_stem.ends_with("_grass")
+        || s_stem.ends_with("_fern")
+        || s_stem.ends_with("_vine")
+        || s_stem == "bush"
+        || s_stem == "potted_bush"
     {
         return "grass";
     }
     if s_stem.contains("vine") {
         return "foliage";
     }
-    if is_dry_foliage(s_stem) || b_norm.as_deref().map_or(false, |b| is_dry_foliage(b)) {
+    if is_dry_foliage(s_stem) || b_norm.as_deref().is_some_and(is_dry_foliage) {
         return "dry_foliage";
     }
-    if is_water(s_stem) || b_norm.as_deref().map_or(false, |b| is_water(b)) {
+    if is_water(s_stem) || b_norm.as_deref().is_some_and(is_water) {
         return "water";
     }
 

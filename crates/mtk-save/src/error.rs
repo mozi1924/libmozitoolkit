@@ -25,7 +25,9 @@ pub enum SaveError {
     #[error("Chunk decompression failed: {0}")]
     DecompressionFailed(String),
 
-    #[error("Unsupported or legacy Minecraft DataVersion ({0}); minimum supported is 2844 (1.18+)")]
+    #[error(
+        "Unsupported or legacy Minecraft DataVersion ({0}); minimum supported is 2844 (1.18+)"
+    )]
     UnsupportedDataVersion(i32),
 
     #[error("Corrupt or invalid chunk data: {0}")]

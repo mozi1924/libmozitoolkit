@@ -22,6 +22,10 @@ js-sys = { workspace = true }
 console_error_panic_hook = { workspace = true }
 wasm-bindgen-rayon = { version = "1.3", optional = true }
 
+# Enable the JS-backed entropy backend required by `getrandom` on wasm32-unknown-unknown.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }
+
 [features]
 default = ["std"]
 std = [
@@ -41,3 +45,6 @@ parallel = [
     "mtk-material/parallel",
     "std",
 ]
+
+[lints]
+workspace = true

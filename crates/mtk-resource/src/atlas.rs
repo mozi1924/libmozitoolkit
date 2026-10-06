@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use crate::identifier::ResourceLocation;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Unstitch region slice definition.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -26,10 +26,7 @@ pub struct AtlasFilterPattern {
 #[serde(tag = "type")]
 pub enum AtlasSource {
     #[serde(rename = "minecraft:directory", alias = "directory")]
-    Directory {
-        source: String,
-        prefix: String,
-    },
+    Directory { source: String, prefix: String },
 
     #[serde(rename = "minecraft:single", alias = "single")]
     Single {
@@ -54,7 +51,10 @@ pub enum AtlasSource {
         regions: Vec<UnstitchRegion>,
     },
 
-    #[serde(rename = "minecraft:paletted_permutations", alias = "paletted_permutations")]
+    #[serde(
+        rename = "minecraft:paletted_permutations",
+        alias = "paletted_permutations"
+    )]
     PalettedPermutations {
         palette_key: ResourceLocation,
         permutations: HashMap<String, ResourceLocation>,
@@ -263,7 +263,9 @@ impl AtlasCategory {
                         sprite: None,
                     },
                     AtlasSource::Single {
-                        resource: ResourceLocation::vanilla("entity/enchantment/enchanting_table_book"),
+                        resource: ResourceLocation::vanilla(
+                            "entity/enchantment/enchanting_table_book",
+                        ),
                         sprite: None,
                     },
                     AtlasSource::Single {
@@ -277,9 +279,15 @@ impl AtlasCategory {
                 for (name, path) in [
                     ("amethyst", "minecraft:trims/color_palettes/amethyst"),
                     ("copper", "minecraft:trims/color_palettes/copper"),
-                    ("copper_darker", "minecraft:trims/color_palettes/copper_darker"),
+                    (
+                        "copper_darker",
+                        "minecraft:trims/color_palettes/copper_darker",
+                    ),
                     ("diamond", "minecraft:trims/color_palettes/diamond"),
-                    ("diamond_darker", "minecraft:trims/color_palettes/diamond_darker"),
+                    (
+                        "diamond_darker",
+                        "minecraft:trims/color_palettes/diamond_darker",
+                    ),
                     ("emerald", "minecraft:trims/color_palettes/emerald"),
                     ("gold", "minecraft:trims/color_palettes/gold"),
                     ("gold_darker", "minecraft:trims/color_palettes/gold_darker"),
@@ -287,7 +295,10 @@ impl AtlasCategory {
                     ("iron_darker", "minecraft:trims/color_palettes/iron_darker"),
                     ("lapis", "minecraft:trims/color_palettes/lapis"),
                     ("netherite", "minecraft:trims/color_palettes/netherite"),
-                    ("netherite_darker", "minecraft:trims/color_palettes/netherite_darker"),
+                    (
+                        "netherite_darker",
+                        "minecraft:trims/color_palettes/netherite_darker",
+                    ),
                     ("quartz", "minecraft:trims/color_palettes/quartz"),
                     ("redstone", "minecraft:trims/color_palettes/redstone"),
                     ("resin", "minecraft:trims/color_palettes/resin"),
@@ -301,7 +312,9 @@ impl AtlasCategory {
                             prefix: "item/".to_string(),
                         },
                         AtlasSource::PalettedPermutations {
-                            palette_key: ResourceLocation::vanilla("trims/color_palettes/trim_palette"),
+                            palette_key: ResourceLocation::vanilla(
+                                "trims/color_palettes/trim_palette",
+                            ),
                             permutations: perms,
                             textures: vec![
                                 ResourceLocation::vanilla("trims/items/helmet_trim"),
@@ -326,45 +339,43 @@ impl AtlasCategory {
                 ],
             },
             AtlasCategory::Chests => AtlasDefinition {
-                sources: vec![
-                    AtlasSource::Directory {
-                        source: "entity/chest".to_string(),
-                        prefix: "entity/chest/".to_string(),
-                    },
-                ],
+                sources: vec![AtlasSource::Directory {
+                    source: "entity/chest".to_string(),
+                    prefix: "entity/chest/".to_string(),
+                }],
             },
             AtlasCategory::ShulkerBoxes => AtlasDefinition {
-                sources: vec![
-                    AtlasSource::Directory {
-                        source: "entity/shulker".to_string(),
-                        prefix: "entity/shulker/".to_string(),
-                    },
-                ],
+                sources: vec![AtlasSource::Directory {
+                    source: "entity/shulker".to_string(),
+                    prefix: "entity/shulker/".to_string(),
+                }],
             },
             AtlasCategory::BannerPatterns => AtlasDefinition {
-                sources: vec![
-                    AtlasSource::Directory {
-                        source: "entity/banner".to_string(),
-                        prefix: "entity/banner/".to_string(),
-                    },
-                ],
+                sources: vec![AtlasSource::Directory {
+                    source: "entity/banner".to_string(),
+                    prefix: "entity/banner/".to_string(),
+                }],
             },
             AtlasCategory::ShieldPatterns => AtlasDefinition {
-                sources: vec![
-                    AtlasSource::Directory {
-                        source: "entity/shield".to_string(),
-                        prefix: "entity/shield/".to_string(),
-                    },
-                ],
+                sources: vec![AtlasSource::Directory {
+                    source: "entity/shield".to_string(),
+                    prefix: "entity/shield/".to_string(),
+                }],
             },
             AtlasCategory::ArmorTrims => {
                 let mut perms = HashMap::new();
                 for (name, path) in [
                     ("amethyst", "minecraft:trims/color_palettes/amethyst"),
                     ("copper", "minecraft:trims/color_palettes/copper"),
-                    ("copper_darker", "minecraft:trims/color_palettes/copper_darker"),
+                    (
+                        "copper_darker",
+                        "minecraft:trims/color_palettes/copper_darker",
+                    ),
                     ("diamond", "minecraft:trims/color_palettes/diamond"),
-                    ("diamond_darker", "minecraft:trims/color_palettes/diamond_darker"),
+                    (
+                        "diamond_darker",
+                        "minecraft:trims/color_palettes/diamond_darker",
+                    ),
                     ("emerald", "minecraft:trims/color_palettes/emerald"),
                     ("gold", "minecraft:trims/color_palettes/gold"),
                     ("gold_darker", "minecraft:trims/color_palettes/gold_darker"),
@@ -372,7 +383,10 @@ impl AtlasCategory {
                     ("iron_darker", "minecraft:trims/color_palettes/iron_darker"),
                     ("lapis", "minecraft:trims/color_palettes/lapis"),
                     ("netherite", "minecraft:trims/color_palettes/netherite"),
-                    ("netherite_darker", "minecraft:trims/color_palettes/netherite_darker"),
+                    (
+                        "netherite_darker",
+                        "minecraft:trims/color_palettes/netherite_darker",
+                    ),
                     ("quartz", "minecraft:trims/color_palettes/quartz"),
                     ("redstone", "minecraft:trims/color_palettes/redstone"),
                     ("resin", "minecraft:trims/color_palettes/resin"),
@@ -386,7 +400,9 @@ impl AtlasCategory {
                             prefix: "trims/".to_string(),
                         },
                         AtlasSource::PalettedPermutations {
-                            palette_key: ResourceLocation::vanilla("trims/color_palettes/trim_palette"),
+                            palette_key: ResourceLocation::vanilla(
+                                "trims/color_palettes/trim_palette",
+                            ),
                             permutations: perms,
                             textures: vec![
                                 ResourceLocation::vanilla("trims/entity/humanoid/sentry"),
@@ -412,7 +428,9 @@ impl AtlasCategory {
                                 ResourceLocation::vanilla("trims/entity/humanoid/spire"),
                                 ResourceLocation::vanilla("trims/entity/humanoid_leggings/spire"),
                                 ResourceLocation::vanilla("trims/entity/humanoid/wayfinder"),
-                                ResourceLocation::vanilla("trims/entity/humanoid_leggings/wayfinder"),
+                                ResourceLocation::vanilla(
+                                    "trims/entity/humanoid_leggings/wayfinder",
+                                ),
                                 ResourceLocation::vanilla("trims/entity/humanoid/shaper"),
                                 ResourceLocation::vanilla("trims/entity/humanoid_leggings/shaper"),
                                 ResourceLocation::vanilla("trims/entity/humanoid/silence"),
@@ -431,12 +449,10 @@ impl AtlasCategory {
                 }
             }
             AtlasCategory::DecoratedPot => AtlasDefinition {
-                sources: vec![
-                    AtlasSource::Directory {
-                        source: "entity/decorated_pot".to_string(),
-                        prefix: "entity/decorated_pot/".to_string(),
-                    },
-                ],
+                sources: vec![AtlasSource::Directory {
+                    source: "entity/decorated_pot".to_string(),
+                    prefix: "entity/decorated_pot/".to_string(),
+                }],
             },
             AtlasCategory::Paintings => AtlasDefinition {
                 sources: vec![

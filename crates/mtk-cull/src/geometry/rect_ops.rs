@@ -4,10 +4,7 @@ use mtk_core::direction::Direction;
 use mtk_core::geometry::Aabb2d;
 use mtk_core::Vec3;
 
-
-
 use crate::types::{is_empty_rect, is_full_rect};
-
 
 /// Subtracts `occluder` rectangle from `source` rectangle.
 /// Returns a list of disjoint rectangles representing `source \ occluder`.
@@ -105,10 +102,7 @@ pub fn is_fully_occluded(source: &Aabb2d, occluders: &[Aabb2d]) -> bool {
 ///
 /// Returns `true` if target is 100% occluded (should be culled), `false` if any part remains visible.
 /// Equivalent to Minecraft `Shapes.joinIsNotEmpty(targetShape, occluderShape, BooleanOp.ONLY_FIRST) == false`.
-pub fn is_face_completely_occluded(
-    target_rects: &[Aabb2d],
-    neighbor_occluders: &[Aabb2d],
-) -> bool {
+pub fn is_face_completely_occluded(target_rects: &[Aabb2d], neighbor_occluders: &[Aabb2d]) -> bool {
     if target_rects.is_empty() {
         return true;
     }
@@ -352,4 +346,3 @@ mod tests {
         assert!(is_full_rect(&rect.unwrap(), 1e-4));
     }
 }
-

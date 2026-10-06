@@ -69,7 +69,7 @@ impl<'a> fmt::Display for NbtStr<'a> {
 
 impl<'a> fmt::Debug for NbtStr<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", &self.0)
+        write!(f, "{:?}", self.0)
     }
 }
 

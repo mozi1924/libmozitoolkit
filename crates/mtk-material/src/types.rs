@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Generic specification for decoding grid-based texture atlases (e.g. Mineways-style atlases).
 /// This completely decouples libmtk from any specific DCC exporter format.

@@ -60,7 +60,7 @@ impl PyLiveSyncSession {
     ) -> PyResult<()> {
         self.inner
             .start(url, auto_reconnect, max_reconnect_attempts)
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e))
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err)
     }
 
     /// Stops the live sync session cleanly and disconnects from server.
@@ -126,7 +126,11 @@ impl PyLiveSyncSession {
                     dict.set_item("current", current)?;
                     dict.set_item("total", total)?;
                     dict.set_item("message", message)?;
-                    let pct = if total > 0 { (current as f32 / total as f32) * 100.0 } else { 0.0 };
+                    let pct = if total > 0 {
+                        (current as f32 / total as f32) * 100.0
+                    } else {
+                        0.0
+                    };
                     dict.set_item("percent", pct)?;
                 }
                 SyncEvent::StreamFinished {
@@ -176,7 +180,7 @@ impl PyLiveSyncSession {
     pub fn send_full_sync_request(&self) -> PyResult<()> {
         self.inner
             .send_full_sync_request()
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e))
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err)
     }
 
     /// Sends Section Repair Requests (0x81) to server.
@@ -187,7 +191,7 @@ impl PyLiveSyncSession {
             .collect();
         self.inner
             .send_repair_request(&vec)
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e))
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err)
     }
 
     /// Sends Sync Configuration (0x82) to server.
@@ -200,7 +204,7 @@ impl PyLiveSyncSession {
     ) -> PyResult<()> {
         self.inner
             .send_sync_config(throttle_mode, target_fps, is_active)
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e))
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err)
     }
 
     /// Returns the unique Atlas Chunk IDs used by the active world mesh.
@@ -210,10 +214,11 @@ impl PyLiveSyncSession {
 
     /// Returns a copy of the underlying `VoxelStorage`.
     pub fn get_storage(&self) -> PyResult<PyVoxelStorage> {
-        let w = self.inner
-            .world
-            .read()
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("World lock poisoned: {}", e)))?;
-        Ok(PyVoxelStorage { inner: w.storage.clone() })
+        let w = self.inner.world.read().map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!("World lock poisoned: {}", e))
+        })?;
+        Ok(PyVoxelStorage {
+            inner: w.storage.clone(),
+        })
     }
 }

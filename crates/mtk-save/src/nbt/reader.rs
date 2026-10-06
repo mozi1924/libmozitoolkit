@@ -258,9 +258,7 @@ pub fn read_tag_payload<'a>(
                     for _ in 0..count {
                         let sub_len = reader.read_i32_be()?;
                         if sub_len < 0 {
-                            return Err(NbtError::InvalidData(
-                                "Negative int array in list".into(),
-                            ));
+                            return Err(NbtError::InvalidData("Negative int array in list".into()));
                         }
                         vec.push(reader.read_exact(sub_len as usize * 4)?);
                     }

@@ -126,8 +126,14 @@ mod tests {
     #[test]
     fn test_extract_canonical_state() {
         assert_eq!(extract_canonical_state_str(""), "minecraft:air");
-        assert_eq!(extract_canonical_state_str("minecraft:cave_air"), "minecraft:air");
-        assert_eq!(extract_canonical_state_str("minecraft:stone"), "minecraft:stone");
+        assert_eq!(
+            extract_canonical_state_str("minecraft:cave_air"),
+            "minecraft:air"
+        );
+        assert_eq!(
+            extract_canonical_state_str("minecraft:stone"),
+            "minecraft:stone"
+        );
         assert_eq!(
             extract_canonical_state_str("{\"state\":\"minecraft:dirt\"}"),
             "minecraft:dirt"

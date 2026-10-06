@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use glam::IVec3;
 use mtk_cull::FaceCuller;
 use mtk_resource::{CtmRule, CtmSolver, ResourceLocation};
@@ -6,6 +5,7 @@ use mtk_texture::atlas::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation, S
 use mtk_voxel::mesher::SectionMesher;
 use mtk_voxel::storage::VoxelStorage;
 use mtk_voxel::types::MesherConfig;
+use std::sync::Arc;
 
 #[test]
 fn test_ctm_horizontal_meshing_with_atlas() {
@@ -25,7 +25,9 @@ matchBlocks=minecraft:bookshelf
 method=horizontal
 tiles=0-3
 "#;
-    let rule = CtmRule::parse_properties("optifine/ctm/bookshelf.properties", "minecraft", ctm_props).unwrap();
+    let rule =
+        CtmRule::parse_properties("optifine/ctm/bookshelf.properties", "minecraft", ctm_props)
+            .unwrap();
     let solver = Arc::new(CtmSolver::new(vec![rule]));
 
     // Create AtlasAddressMap with 4 tiles
@@ -80,8 +82,8 @@ tiles=0-3
 
     assert!(!mesh.positions.is_empty());
     assert_eq!(mesh.positions.len(), 16); // 2 connected cubes welded vertices
-    assert_eq!(mesh.uvs.len(), 56);       // 14 quads * 4 loop corner UVs
-    // All face materials should be chunk_id = 0
+    assert_eq!(mesh.uvs.len(), 56); // 14 quads * 4 loop corner UVs
+                                    // All face materials should be chunk_id = 0
     assert!(mesh.face_materials.iter().all(|&mat| mat == 0));
 }
 
@@ -104,7 +106,8 @@ matchBlocks=minecraft:glass
 method=ctm
 tiles=0-46
 "#;
-    let rule = CtmRule::parse_properties("optifine/ctm/glass.properties", "minecraft", ctm_props).unwrap();
+    let rule =
+        CtmRule::parse_properties("optifine/ctm/glass.properties", "minecraft", ctm_props).unwrap();
     let solver = Arc::new(CtmSolver::new(vec![rule]));
 
     let config = MesherConfig {

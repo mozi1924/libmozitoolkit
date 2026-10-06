@@ -24,7 +24,11 @@ pub fn calculate_face_target_grid(
         return (1, 1);
     }
 
-    let ppf = if pixels_per_face <= 0.0 { 1.0 } else { pixels_per_face };
+    let ppf = if pixels_per_face <= 0.0 {
+        1.0
+    } else {
+        pixels_per_face
+    };
     let max_sub = max(1, max_subdivisions);
 
     // If we have 4 quad corner UVs [uv0, uv1, uv2, uv3]:
@@ -61,11 +65,12 @@ pub fn calculate_face_target_grid(
     };
 
     // Anti-explosion defense for long vertical animated strips (e.g. 16x512)
-    let effective_v_pixels = if tex_h > tex_w && (tex_h % tex_w == 0) && v_pixels > (tex_w as f32 * 1.5) {
-        tex_w as f32
-    } else {
-        v_pixels
-    };
+    let effective_v_pixels =
+        if tex_h > tex_w && tex_h.is_multiple_of(tex_w) && v_pixels > (tex_w as f32 * 1.5) {
+            tex_w as f32
+        } else {
+            v_pixels
+        };
 
     let cols = ((u_pixels / ppf).round() as u32).clamp(1, max_sub);
     let rows = ((effective_v_pixels / ppf).round() as u32).clamp(1, max_sub);
@@ -88,7 +93,11 @@ pub fn calculate_pixel_grid_cut_factors(
         return (vec![0.0, 1.0], vec![0.0, 1.0]);
     }
 
-    let step = if pixels_per_face <= 0.0 { 1.0 } else { pixels_per_face };
+    let step = if pixels_per_face <= 0.0 {
+        1.0
+    } else {
+        pixels_per_face
+    };
     let max_sub = max_subdivisions.max(1) as usize;
 
     // Convert UVs to pixel space
@@ -172,7 +181,14 @@ pub fn calculate_pixel_grid_cut_factors(
 
 /// Bilinear interpolation helper for scalar / vector types.
 #[inline]
-pub fn interpolate_bilinear_2d(c0: [f32; 2], c1: [f32; 2], c2: [f32; 2], c3: [f32; 2], u: f32, v: f32) -> [f32; 2] {
+pub fn interpolate_bilinear_2d(
+    c0: [f32; 2],
+    c1: [f32; 2],
+    c2: [f32; 2],
+    c3: [f32; 2],
+    u: f32,
+    v: f32,
+) -> [f32; 2] {
     let u_inv = 1.0 - u;
     let v_inv = 1.0 - v;
     [
@@ -182,7 +198,14 @@ pub fn interpolate_bilinear_2d(c0: [f32; 2], c1: [f32; 2], c2: [f32; 2], c3: [f3
 }
 
 #[inline]
-pub fn interpolate_bilinear_3d(c0: [f32; 3], c1: [f32; 3], c2: [f32; 3], c3: [f32; 3], u: f32, v: f32) -> [f32; 3] {
+pub fn interpolate_bilinear_3d(
+    c0: [f32; 3],
+    c1: [f32; 3],
+    c2: [f32; 3],
+    c3: [f32; 3],
+    u: f32,
+    v: f32,
+) -> [f32; 3] {
     let u_inv = 1.0 - u;
     let v_inv = 1.0 - v;
     [
@@ -193,7 +216,14 @@ pub fn interpolate_bilinear_3d(c0: [f32; 3], c1: [f32; 3], c2: [f32; 3], c3: [f3
 }
 
 #[inline]
-pub fn interpolate_bilinear_4d(c0: [f32; 4], c1: [f32; 4], c2: [f32; 4], c3: [f32; 4], u: f32, v: f32) -> [f32; 4] {
+pub fn interpolate_bilinear_4d(
+    c0: [f32; 4],
+    c1: [f32; 4],
+    c2: [f32; 4],
+    c3: [f32; 4],
+    u: f32,
+    v: f32,
+) -> [f32; 4] {
     let u_inv = 1.0 - u;
     let v_inv = 1.0 - v;
     [

@@ -111,8 +111,7 @@ pub fn derive_parametric_face_shapes(
     if name_low.ends_with("_fence") || name_low == "fence" {
         let w0 = 7.0 / 16.0;
         let w1 = 9.0 / 16.0;
-        let post_cap =
-            Aabb2d::from_min_max(6.0 / 16.0, 6.0 / 16.0, 10.0 / 16.0, 10.0 / 16.0);
+        let post_cap = Aabb2d::from_min_max(6.0 / 16.0, 6.0 / 16.0, 10.0 / 16.0, 10.0 / 16.0);
         let top_bar = Aabb2d::from_min_max(w0, 12.0 / 16.0, w1, 15.0 / 16.0);
         let bot_bar = Aabb2d::from_min_max(w0, 6.0 / 16.0, w1, 9.0 / 16.0);
         shapes[Direction::Down.to_index()] = alloc::vec![post_cap];

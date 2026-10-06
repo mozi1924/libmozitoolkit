@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use glam::Vec3;
 use mtk_core::mesh::MeshData;
 
-use crate::cull_volume::clip_face_excluding_hidden_volume;
 use super::model::{BakedModel, ModelMeshOptions};
+use crate::cull_volume::clip_face_excluding_hidden_volume;
 
 impl BakedModel {
     /// Converts the baked model geometry into a platform-agnostic, contiguous `MeshData` buffer.
@@ -42,7 +42,10 @@ impl BakedModel {
                     && (max_pos.y - min_pos.y) > 1e-4
                     && (max_pos.z - min_pos.z) > 1e-4;
                 if is_volume {
-                    element_bounds.push(Some(([min_pos.x, min_pos.y, min_pos.z], [max_pos.x, max_pos.y, max_pos.z])));
+                    element_bounds.push(Some((
+                        [min_pos.x, min_pos.y, min_pos.z],
+                        [max_pos.x, max_pos.y, max_pos.z],
+                    )));
                 } else {
                     element_bounds.push(None);
                 }
@@ -96,7 +99,11 @@ impl BakedModel {
                     }]
                 };
 
-                let emission = if self.is_emissive { self.emissive_level } else { 0.0 };
+                let emission = if self.is_emissive {
+                    self.emissive_level
+                } else {
+                    0.0
+                };
                 let scale_u = (face.uv_bounds[2] - face.uv_bounds[0]).abs();
                 let scale_v = (face.uv_bounds[3] - face.uv_bounds[1]).abs();
                 let uv_trans = [
@@ -176,7 +183,11 @@ impl BakedModel {
                 mesh.uvs.push([uv.x, 1.0 - uv.y]);
             }
 
-            let emission = if self.is_emissive { self.emissive_level } else { 0.0 };
+            let emission = if self.is_emissive {
+                self.emissive_level
+            } else {
+                0.0
+            };
             let (tint_color, tint_data) = ([1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 0.0, 0.0]);
 
             let face_attr = mtk_core::attributes::FaceAttributes {

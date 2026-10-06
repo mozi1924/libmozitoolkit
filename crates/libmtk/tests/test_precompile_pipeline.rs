@@ -1,5 +1,7 @@
+use libmtk::{
+    precompile_all_assets, CacheManifest, MemoryPack, PrecompileConfig, ResourcePackStack,
+};
 use std::fs;
-use libmtk::{precompile_all_assets, CacheManifest, PrecompileConfig, ResourcePackStack, MemoryPack};
 
 #[test]
 fn test_precompile_all_assets_end_to_end() {
@@ -31,7 +33,10 @@ fn test_precompile_all_assets_end_to_end() {
             }
         ]
     }"##;
-    pack.insert("assets/minecraft/models/block/stone.json", model_json.as_bytes().to_vec());
+    pack.insert(
+        "assets/minecraft/models/block/stone.json",
+        model_json.as_bytes().to_vec(),
+    );
 
     // 3. Add sample blockstate JSON
     let blockstate_json = r##"{
@@ -39,11 +44,15 @@ fn test_precompile_all_assets_end_to_end() {
             "": { "model": "minecraft:block/stone" }
         }
     }"##;
-    pack.insert("assets/minecraft/blockstates/stone.json", blockstate_json.as_bytes().to_vec());
+    pack.insert(
+        "assets/minecraft/blockstates/stone.json",
+        blockstate_json.as_bytes().to_vec(),
+    );
 
     stack.push_pack(Box::new(pack));
 
-    let temp_cache_dir = std::env::temp_dir().join(format!("mtk_test_cache_{}", std::process::id()));
+    let temp_cache_dir =
+        std::env::temp_dir().join(format!("mtk_test_cache_{}", std::process::id()));
     let _ = fs::remove_dir_all(&temp_cache_dir);
 
     let config = PrecompileConfig {
@@ -65,7 +74,9 @@ fn test_precompile_all_assets_end_to_end() {
 
     // Verify cache files existence
     assert!(temp_cache_dir.join("atlas/atlas_mapping.json").exists());
-    assert!(temp_cache_dir.join("standalone/standalone_mapping.json").exists());
+    assert!(temp_cache_dir
+        .join("standalone/standalone_mapping.json")
+        .exists());
     assert!(temp_cache_dir.join("models/models.bin").exists());
     assert!(temp_cache_dir.join("cache_manifest.json").exists());
 

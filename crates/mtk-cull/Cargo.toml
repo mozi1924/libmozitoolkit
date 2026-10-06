@@ -21,3 +21,6 @@ std = ["mtk-core/std"]
 serde = ["dep:serde", "dep:serde_json", "mtk-core/serde"]
 
 
+
+[lints]
+workspace = true

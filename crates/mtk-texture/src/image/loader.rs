@@ -1,6 +1,6 @@
-use mtk_resource::{AnimationMetadata, DiscoveredSprite, ResourceLocation};
 use crate::error::TextureError;
 use crate::image::buffer::RgbaBuffer;
+use mtk_resource::{AnimationMetadata, DiscoveredSprite, ResourceLocation};
 
 /// A fully decoded sprite with single-frame metrics and optional PBR companions.
 #[derive(Debug, Clone)]
@@ -20,7 +20,10 @@ impl DecodedSprite {
     /// Decode a discovered sprite entry from its raw PNG byte buffers.
     pub fn from_discovered(discovered: DiscoveredSprite) -> Result<Self, TextureError> {
         let raw_albedo = discovered.raw_albedo.ok_or_else(|| {
-            TextureError::Baking(format!("Missing albedo bytes for sprite '{}'", discovered.sprite_id))
+            TextureError::Baking(format!(
+                "Missing albedo bytes for sprite '{}'",
+                discovered.sprite_id
+            ))
         })?;
 
         let albedo = RgbaBuffer::from_png_bytes(&raw_albedo)?;
@@ -45,11 +48,13 @@ impl DecodedSprite {
         // paintings e.g. 16x32, 48x64; entities e.g. 64x128, 16x256; blocks; GUI, etc.).
         let (frame_width, frame_height, frame_count) = if let Some(ref meta) = discovered.metadata {
             let fw = meta.width.unwrap_or(albedo.width);
-            let fh = meta.height.unwrap_or(if albedo.height >= albedo.width && albedo.width > 0 {
-                albedo.width
-            } else {
-                albedo.height
-            });
+            let fh = meta
+                .height
+                .unwrap_or(if albedo.height >= albedo.width && albedo.width > 0 {
+                    albedo.width
+                } else {
+                    albedo.height
+                });
             let fc = albedo.height.checked_div(fh).unwrap_or(1);
             (fw, fh, fc.max(1))
         } else {
@@ -57,9 +62,12 @@ impl DecodedSprite {
         };
 
         // Align PBR companion buffers with albedo frame metrics and vertical tiling
-        let normal = normal.map(|n| n.align_companion_to_albedo(frame_width, frame_height, frame_count));
-        let specular = specular.map(|s| s.align_companion_to_albedo(frame_width, frame_height, frame_count));
-        let overlay = overlay.map(|o| o.align_companion_to_albedo(frame_width, frame_height, frame_count));
+        let normal =
+            normal.map(|n| n.align_companion_to_albedo(frame_width, frame_height, frame_count));
+        let specular =
+            specular.map(|s| s.align_companion_to_albedo(frame_width, frame_height, frame_count));
+        let overlay =
+            overlay.map(|o| o.align_companion_to_albedo(frame_width, frame_height, frame_count));
 
         Ok(Self {
             sprite_id: discovered.sprite_id,
@@ -75,14 +83,13 @@ impl DecodedSprite {
     }
 
     /// Parallel or sequential batch decode of discovered sprites.
-    pub fn decode_batch(sprites: Vec<DiscoveredSprite>) -> Result<Vec<DecodedSprite>, TextureError> {
+    pub fn decode_batch(
+        sprites: Vec<DiscoveredSprite>,
+    ) -> Result<Vec<DecodedSprite>, TextureError> {
         #[cfg(feature = "parallel")]
         {
             use rayon::prelude::*;
-            sprites
-                .into_par_iter()
-                .map(Self::from_discovered)
-                .collect()
+            sprites.into_par_iter().map(Self::from_discovered).collect()
         }
 
         #[cfg(not(feature = "parallel"))]

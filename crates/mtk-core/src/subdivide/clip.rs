@@ -68,14 +68,22 @@ pub(crate) fn clip_polygon_halfplane_2d(
         let d1 = if is_vertical { p1.x - val } else { p1.y - val };
         let d2 = if is_vertical { p2.x - val } else { p2.y - val };
 
-        let in1 = if keep_greater { d1 >= -1e-5 } else { d1 <= 1e-5 };
+        let in1 = if keep_greater {
+            d1 >= -1e-5
+        } else {
+            d1 <= 1e-5
+        };
 
         if in1 {
             out.push(p1);
         }
 
         if (d1 > 1e-5 && d2 < -1e-5) || (d1 < -1e-5 && d2 > 1e-5) {
-            let denom = if is_vertical { p2.x - p1.x } else { p2.y - p1.y };
+            let denom = if is_vertical {
+                p2.x - p1.x
+            } else {
+                p2.y - p1.y
+            };
             let t = if denom.abs() > 1e-6 {
                 ((val - if is_vertical { p1.x } else { p1.y }) / denom).clamp(0.0, 1.0)
             } else {
@@ -131,7 +139,11 @@ pub fn slice_face_by_pixel_grid(
         return default_res;
     }
 
-    let step = if pixels_per_face <= 0.0 { 1.0 } else { pixels_per_face };
+    let step = if pixels_per_face <= 0.0 {
+        1.0
+    } else {
+        pixels_per_face
+    };
 
     // Convert polygon to pixel space
     let mut initial_poly: Vec<Point2D> = uvs
@@ -148,10 +160,22 @@ pub fn slice_face_by_pixel_grid(
     }
 
     // Determine bounding box in pixel space
-    let min_x = initial_poly.iter().map(|p| p.x).fold(f32::INFINITY, f32::min);
-    let max_x = initial_poly.iter().map(|p| p.x).fold(f32::NEG_INFINITY, f32::max);
-    let min_y = initial_poly.iter().map(|p| p.y).fold(f32::INFINITY, f32::min);
-    let max_y = initial_poly.iter().map(|p| p.y).fold(f32::NEG_INFINITY, f32::max);
+    let min_x = initial_poly
+        .iter()
+        .map(|p| p.x)
+        .fold(f32::INFINITY, f32::min);
+    let max_x = initial_poly
+        .iter()
+        .map(|p| p.x)
+        .fold(f32::NEG_INFINITY, f32::max);
+    let min_y = initial_poly
+        .iter()
+        .map(|p| p.y)
+        .fold(f32::INFINITY, f32::min);
+    let max_y = initial_poly
+        .iter()
+        .map(|p| p.y)
+        .fold(f32::NEG_INFINITY, f32::max);
 
     // Collect vertical and horizontal grid lines
     let mut x_lines = Vec::new();
@@ -251,12 +275,15 @@ pub fn slice_face_by_pixel_grid(
             continue;
         }
         let poly_indices: Vec<u32> = poly.iter().map(|&pt| get_or_insert_vert(pt)).collect();
-        if poly_indices.len() == 4 {
-            out_faces.push(poly_indices);
-        } else if poly_indices.len() == 3 {
+        if matches!(poly_indices.len(), 3 | 4) {
             out_faces.push(poly_indices);
         } else if poly_indices.len() == 5 {
-            out_faces.push(vec![poly_indices[0], poly_indices[1], poly_indices[2], poly_indices[3]]);
+            out_faces.push(vec![
+                poly_indices[0],
+                poly_indices[1],
+                poly_indices[2],
+                poly_indices[3],
+            ]);
             out_faces.push(vec![poly_indices[0], poly_indices[3], poly_indices[4]]);
         } else {
             for i in 1..(poly_indices.len() - 1) {
@@ -285,7 +312,14 @@ pub fn slice_face_by_pixel_grid(
         out_params.push(st);
 
         let pos = if is_quad {
-            interpolate_bilinear_3d(positions[0], positions[1], positions[2], positions[3], st[0], st[1])
+            interpolate_bilinear_3d(
+                positions[0],
+                positions[1],
+                positions[2],
+                positions[3],
+                st[0],
+                st[1],
+            )
         } else {
             positions[0]
         };

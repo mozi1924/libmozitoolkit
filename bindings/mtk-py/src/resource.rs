@@ -2,13 +2,13 @@
 //!
 //! Exposes layered resource pack loading and asset discovery to Python.
 
-use std::path::Path;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
+use std::path::Path;
 
-use mtk_resource::{DirectoryPack, ResourceLocation, ResourcePackStack};
 #[cfg(feature = "zip")]
 use mtk_resource::ZipPack;
+use mtk_resource::{DirectoryPack, ResourceLocation, ResourcePackStack};
 
 /// Python wrapper for layered Minecraft resource packs (`ResourcePackStack`).
 #[pyclass(name = "ResourcePackStack")]
@@ -92,10 +92,7 @@ impl PyResourcePackStack {
     }
 
     fn __repr__(&self) -> String {
-        format!(
-            "<ResourcePackStack packs={}>",
-            self.inner.len()
-        )
+        format!("<ResourcePackStack packs={}>", self.inner.len())
     }
 }
 
@@ -124,7 +121,11 @@ impl PyPrecompileResult {
     fn __repr__(&self) -> String {
         format!(
             "<PrecompileResult packs={} atlas_chunks={} standalone={} models={} cache_dir='{}'>",
-            self.pack_count, self.atlas_chunks, self.standalone_textures, self.baked_models, self.cache_dir
+            self.pack_count,
+            self.atlas_chunks,
+            self.standalone_textures,
+            self.baked_models,
+            self.cache_dir
         )
     }
 }
@@ -171,8 +172,9 @@ pub fn precompile_all_assets<'py>(
             });
         }
     });
-    let progress_ref: Option<mtk_core::progress::ProgressCallback<'_>> =
-        on_progress.as_ref().map(|f| f as &(dyn Fn(mtk_core::progress::ProgressReport) + Send + Sync));
+    let progress_ref: Option<mtk_core::progress::ProgressCallback<'_>> = on_progress
+        .as_ref()
+        .map(|f| f as &(dyn Fn(mtk_core::progress::ProgressReport) + Send + Sync));
 
     let res = py
         .allow_threads(|| {

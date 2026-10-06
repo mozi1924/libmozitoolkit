@@ -1,14 +1,17 @@
-use std::collections::HashMap;
-use glam::IVec3;
-use mtk_core::direction::Direction;
-use crate::identifier::{DEFAULT_NAMESPACE, ResourceLocation};
-use crate::ctm::types::{extract_block_name, ConnectLogic, CtmMethod, CtmRule};
 use crate::ctm::algorithms::{
     compact::solve_compact_ctm,
-    directional::{solve_horizontal, solve_horizontal_vertical, solve_top, solve_vertical, solve_vertical_horizontal},
+    directional::{
+        solve_horizontal, solve_horizontal_vertical, solve_top, solve_vertical,
+        solve_vertical_horizontal,
+    },
     full::solve_full_ctm,
     patterns::{solve_overlay, solve_random, solve_repeat},
 };
+use crate::ctm::types::{extract_block_name, ConnectLogic, CtmMethod, CtmRule};
+use crate::identifier::{ResourceLocation, DEFAULT_NAMESPACE};
+use glam::IVec3;
+use mtk_core::direction::Direction;
+use std::collections::HashMap;
 
 impl CtmRule {
     /// Solves the final CTM sub-tile ResourceLocation for this face.

@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use crate::error::TextureError;
 use crate::image::buffer::RgbaBuffer;
+use std::collections::HashMap;
 
 /// Extract ordered RGBA color palette from a 1xN or Nx1 palette texture.
 pub fn extract_palette_colors(palette_img: &RgbaBuffer) -> Vec<[u8; 4]> {

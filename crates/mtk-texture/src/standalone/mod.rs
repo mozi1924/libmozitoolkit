@@ -11,6 +11,6 @@ pub use aligner::{
     StandaloneAnimationMeta,
 };
 pub use builder::{
-    StandaloneBuilder, StandaloneConfig, StandaloneFilePaths, StandaloneMapping,
-    StandaloneResult, StandaloneTextureRecord, STANDALONE_FORMAT_VERSION,
+    StandaloneBuilder, StandaloneConfig, StandaloneFilePaths, StandaloneMapping, StandaloneResult,
+    StandaloneTextureRecord, STANDALONE_FORMAT_VERSION,
 };

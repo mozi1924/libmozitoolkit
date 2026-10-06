@@ -1,6 +1,6 @@
+use crate::ctm::types::get_face_tangents;
 use glam::IVec3;
 use mtk_core::direction::Direction;
-use crate::ctm::types::get_face_tangents;
 
 pub fn solve_horizontal<F>(face: Direction, check_connect: &F) -> usize
 where

@@ -3,9 +3,7 @@ use std::collections::HashMap;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::attributes::{
-    AttributeData, FaceAttributes, MaterialSlotId, MeshAttribute, TintIndex,
-};
+use crate::attributes::{AttributeData, FaceAttributes, MaterialSlotId, MeshAttribute, TintIndex};
 use crate::geometry::Quad;
 
 /// Flat, contiguous mesh data buffer designed for zero-copy or direct buffer transfers
@@ -240,7 +238,8 @@ impl MeshData {
         }
 
         self.face_materials.extend_from_slice(&other.face_materials);
-        self.face_tint_indices.extend_from_slice(&other.face_tint_indices);
+        self.face_tint_indices
+            .extend_from_slice(&other.face_tint_indices);
 
         if let Some(ref other_sec) = other.secondary_uvs {
             let sec = self.secondary_uvs.get_or_insert_with(Vec::new);
@@ -256,18 +255,38 @@ impl MeshData {
             if let Some(existing) = self.custom_attributes.get_mut(name) {
                 if existing.domain == attr.domain {
                     match (&mut existing.data, &attr.data) {
-                        (AttributeData::Float(a), AttributeData::Float(b)) => a.extend_from_slice(b),
-                        (AttributeData::Float2(a), AttributeData::Float2(b)) => a.extend_from_slice(b),
-                        (AttributeData::Float3(a), AttributeData::Float3(b)) => a.extend_from_slice(b),
-                        (AttributeData::Float4(a), AttributeData::Float4(b)) => a.extend_from_slice(b),
+                        (AttributeData::Float(a), AttributeData::Float(b)) => {
+                            a.extend_from_slice(b)
+                        }
+                        (AttributeData::Float2(a), AttributeData::Float2(b)) => {
+                            a.extend_from_slice(b)
+                        }
+                        (AttributeData::Float3(a), AttributeData::Float3(b)) => {
+                            a.extend_from_slice(b)
+                        }
+                        (AttributeData::Float4(a), AttributeData::Float4(b)) => {
+                            a.extend_from_slice(b)
+                        }
                         (AttributeData::Int8(a), AttributeData::Int8(b)) => a.extend_from_slice(b),
-                        (AttributeData::Int16(a), AttributeData::Int16(b)) => a.extend_from_slice(b),
-                        (AttributeData::Int32(a), AttributeData::Int32(b)) => a.extend_from_slice(b),
-                        (AttributeData::UInt8(a), AttributeData::UInt8(b)) => a.extend_from_slice(b),
-                        (AttributeData::UInt16(a), AttributeData::UInt16(b)) => a.extend_from_slice(b),
-                        (AttributeData::UInt32(a), AttributeData::UInt32(b)) => a.extend_from_slice(b),
+                        (AttributeData::Int16(a), AttributeData::Int16(b)) => {
+                            a.extend_from_slice(b)
+                        }
+                        (AttributeData::Int32(a), AttributeData::Int32(b)) => {
+                            a.extend_from_slice(b)
+                        }
+                        (AttributeData::UInt8(a), AttributeData::UInt8(b)) => {
+                            a.extend_from_slice(b)
+                        }
+                        (AttributeData::UInt16(a), AttributeData::UInt16(b)) => {
+                            a.extend_from_slice(b)
+                        }
+                        (AttributeData::UInt32(a), AttributeData::UInt32(b)) => {
+                            a.extend_from_slice(b)
+                        }
                         (AttributeData::Bool(a), AttributeData::Bool(b)) => a.extend_from_slice(b),
-                        (AttributeData::String(a), AttributeData::String(b)) => a.extend_from_slice(b),
+                        (AttributeData::String(a), AttributeData::String(b)) => {
+                            a.extend_from_slice(b)
+                        }
                         _ => {}
                     }
                 }
@@ -321,10 +340,22 @@ impl MeshData {
             positions: Vec::with_capacity(total_verts),
             normals: Vec::with_capacity(total_normals),
             uvs: Vec::with_capacity(total_uvs),
-            secondary_uvs: if has_sec_uvs { Some(Vec::with_capacity(total_verts)) } else { None },
-            colors: if has_colors { Some(Vec::with_capacity(total_verts)) } else { None },
+            secondary_uvs: if has_sec_uvs {
+                Some(Vec::with_capacity(total_verts))
+            } else {
+                None
+            },
+            colors: if has_colors {
+                Some(Vec::with_capacity(total_verts))
+            } else {
+                None
+            },
             indices: Vec::with_capacity(total_indices),
-            quad_indices: if total_quads > 0 { Some(Vec::with_capacity(total_quads)) } else { None },
+            quad_indices: if total_quads > 0 {
+                Some(Vec::with_capacity(total_quads))
+            } else {
+                None
+            },
             face_materials: Vec::with_capacity(total_faces),
             face_tint_indices: Vec::with_capacity(total_faces),
             custom_attributes: HashMap::new(),
@@ -352,7 +383,9 @@ impl MeshData {
             }
 
             merged.face_materials.extend_from_slice(&m.face_materials);
-            merged.face_tint_indices.extend_from_slice(&m.face_tint_indices);
+            merged
+                .face_tint_indices
+                .extend_from_slice(&m.face_tint_indices);
 
             if let Some(ref other_sec) = m.secondary_uvs {
                 let sec = merged.secondary_uvs.get_or_insert_with(Vec::new);
@@ -369,18 +402,42 @@ impl MeshData {
                     if let Some(existing) = merged.custom_attributes.get_mut(name) {
                         if existing.domain == attr.domain {
                             match (&mut existing.data, &attr.data) {
-                                (AttributeData::Float(a), AttributeData::Float(b)) => a.extend_from_slice(b),
-                                (AttributeData::Float2(a), AttributeData::Float2(b)) => a.extend_from_slice(b),
-                                (AttributeData::Float3(a), AttributeData::Float3(b)) => a.extend_from_slice(b),
-                                (AttributeData::Float4(a), AttributeData::Float4(b)) => a.extend_from_slice(b),
-                                (AttributeData::Int8(a), AttributeData::Int8(b)) => a.extend_from_slice(b),
-                                (AttributeData::Int16(a), AttributeData::Int16(b)) => a.extend_from_slice(b),
-                                (AttributeData::Int32(a), AttributeData::Int32(b)) => a.extend_from_slice(b),
-                                (AttributeData::UInt8(a), AttributeData::UInt8(b)) => a.extend_from_slice(b),
-                                (AttributeData::UInt16(a), AttributeData::UInt16(b)) => a.extend_from_slice(b),
-                                (AttributeData::UInt32(a), AttributeData::UInt32(b)) => a.extend_from_slice(b),
-                                (AttributeData::Bool(a), AttributeData::Bool(b)) => a.extend_from_slice(b),
-                                (AttributeData::String(a), AttributeData::String(b)) => a.extend_from_slice(b),
+                                (AttributeData::Float(a), AttributeData::Float(b)) => {
+                                    a.extend_from_slice(b)
+                                }
+                                (AttributeData::Float2(a), AttributeData::Float2(b)) => {
+                                    a.extend_from_slice(b)
+                                }
+                                (AttributeData::Float3(a), AttributeData::Float3(b)) => {
+                                    a.extend_from_slice(b)
+                                }
+                                (AttributeData::Float4(a), AttributeData::Float4(b)) => {
+                                    a.extend_from_slice(b)
+                                }
+                                (AttributeData::Int8(a), AttributeData::Int8(b)) => {
+                                    a.extend_from_slice(b)
+                                }
+                                (AttributeData::Int16(a), AttributeData::Int16(b)) => {
+                                    a.extend_from_slice(b)
+                                }
+                                (AttributeData::Int32(a), AttributeData::Int32(b)) => {
+                                    a.extend_from_slice(b)
+                                }
+                                (AttributeData::UInt8(a), AttributeData::UInt8(b)) => {
+                                    a.extend_from_slice(b)
+                                }
+                                (AttributeData::UInt16(a), AttributeData::UInt16(b)) => {
+                                    a.extend_from_slice(b)
+                                }
+                                (AttributeData::UInt32(a), AttributeData::UInt32(b)) => {
+                                    a.extend_from_slice(b)
+                                }
+                                (AttributeData::Bool(a), AttributeData::Bool(b)) => {
+                                    a.extend_from_slice(b)
+                                }
+                                (AttributeData::String(a), AttributeData::String(b)) => {
+                                    a.extend_from_slice(b)
+                                }
                                 _ => {}
                             }
                         }
@@ -501,32 +558,21 @@ impl MeshData {
     #[inline]
     pub fn normals_flat(&self) -> &[f32] {
         unsafe {
-            std::slice::from_raw_parts(
-                self.normals.as_ptr() as *const f32,
-                self.normals.len() * 3,
-            )
+            std::slice::from_raw_parts(self.normals.as_ptr() as *const f32, self.normals.len() * 3)
         }
     }
 
     /// Returns a flat contiguous slice of primary UVs `[u0, v0, u1, v1, ...]`.
     #[inline]
     pub fn uvs_flat(&self) -> &[f32] {
-        unsafe {
-            std::slice::from_raw_parts(
-                self.uvs.as_ptr() as *const f32,
-                self.uvs.len() * 2,
-            )
-        }
+        unsafe { std::slice::from_raw_parts(self.uvs.as_ptr() as *const f32, self.uvs.len() * 2) }
     }
 
     /// Returns a flat contiguous slice of vertex colors `[r0, g0, b0, a0, ...]` if present.
     #[inline]
     pub fn colors_flat(&self) -> Option<&[f32]> {
         self.colors.as_ref().map(|cols| unsafe {
-            std::slice::from_raw_parts(
-                cols.as_ptr() as *const f32,
-                cols.len() * 4,
-            )
+            std::slice::from_raw_parts(cols.as_ptr() as *const f32, cols.len() * 4)
         })
     }
 
@@ -781,9 +827,26 @@ mod tests {
         ));
 
         assert!(mesh.has_custom_attribute("mtk_atlas_chunk_id"));
-        assert_eq!(mesh.get_custom_attribute("mtk_atlas_chunk_id").unwrap().len(), 3);
-        assert_eq!(mesh.get_custom_attribute("mtk_atlas_chunk_id").unwrap().as_bytes().unwrap().len(), 12);
-        assert_eq!(mesh.get_custom_attribute("mtk_source_texture_key").unwrap().as_bytes(), None);
+        assert_eq!(
+            mesh.get_custom_attribute("mtk_atlas_chunk_id")
+                .unwrap()
+                .len(),
+            3
+        );
+        assert_eq!(
+            mesh.get_custom_attribute("mtk_atlas_chunk_id")
+                .unwrap()
+                .as_bytes()
+                .unwrap()
+                .len(),
+            12
+        );
+        assert_eq!(
+            mesh.get_custom_attribute("mtk_source_texture_key")
+                .unwrap()
+                .as_bytes(),
+            None
+        );
 
         let mut other = MeshData::new();
         other.add_custom_attribute(MeshAttribute::new(

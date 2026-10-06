@@ -2,13 +2,13 @@ use std::collections::HashMap;
 
 use mtk_resource::ResourceLocation;
 
+use super::types::{AtlasBuilderConfig, BakedAtlasChunk};
 use crate::atlas::address_map::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation, SpriteKind};
 use crate::error::TextureError;
 use crate::image::buffer::RgbaBuffer;
 use crate::image::loader::DecodedSprite;
 use crate::image::padding::apply_edge_clamping_padding;
 use crate::stitcher::stitcher::Stitcher;
-use super::types::{AtlasBuilderConfig, BakedAtlasChunk};
 
 /// Builds and bakes animated atlas chunks with full vertical animation strips and PBR alignment.
 pub fn build_anim_atlas_chunks(
@@ -30,7 +30,12 @@ pub fn build_anim_atlas_chunks(
     for sprite in anim_sprites {
         let strip_w = sprite.frame_width + config.padding * 2;
         let strip_h = sprite.albedo.height + config.padding * 2;
-        anim_stitcher.register_sprite(sprite.sprite_id.clone(), strip_w, strip_h, sprite.sprite_id.as_string());
+        anim_stitcher.register_sprite(
+            sprite.sprite_id.clone(),
+            strip_w,
+            strip_h,
+            sprite.sprite_id.as_string(),
+        );
         anim_sprite_map.insert(sprite.sprite_id.clone(), sprite);
     }
 
@@ -46,15 +51,28 @@ pub fn build_anim_atlas_chunks(
 
         for slot in &chunk.slots {
             if let Some(sp) = anim_sprite_map.get(&slot.entry) {
-                if sp.normal.is_some() { has_normal = true; }
-                if sp.specular.is_some() { has_specular = true; }
-                if sp.overlay.is_some() { has_overlay = true; }
+                if sp.normal.is_some() {
+                    has_normal = true;
+                }
+                if sp.specular.is_some() {
+                    has_specular = true;
+                }
+                if sp.overlay.is_some() {
+                    has_overlay = true;
+                }
             }
         }
 
         let mut albedo_buf = RgbaBuffer::new(chunk.width, chunk.height);
         let mut normal_buf = if has_normal {
-            Some(RgbaBuffer::solid(chunk.width, chunk.height, 128, 128, 255, 255))
+            Some(RgbaBuffer::solid(
+                chunk.width,
+                chunk.height,
+                128,
+                128,
+                255,
+                255,
+            ))
         } else {
             None
         };
@@ -78,22 +96,44 @@ pub fn build_anim_atlas_chunks(
 
                 albedo_buf.blit(&sp.albedo, 0, 0, inner_x, inner_y, fw, strip_h);
                 if config.padding > 0 {
-                    apply_edge_clamping_padding(&mut albedo_buf, inner_x, inner_y, fw, strip_h, config.padding);
+                    apply_edge_clamping_padding(
+                        &mut albedo_buf,
+                        inner_x,
+                        inner_y,
+                        fw,
+                        strip_h,
+                        config.padding,
+                    );
                 }
 
                 let slot_has_normal = sp.normal.is_some();
                 if let (Some(ref mut n_buf), Some(ref norm_src)) = (&mut normal_buf, &sp.normal) {
                     n_buf.blit(norm_src, 0, 0, inner_x, inner_y, fw, strip_h);
                     if config.padding > 0 {
-                        apply_edge_clamping_padding(n_buf, inner_x, inner_y, fw, strip_h, config.padding);
+                        apply_edge_clamping_padding(
+                            n_buf,
+                            inner_x,
+                            inner_y,
+                            fw,
+                            strip_h,
+                            config.padding,
+                        );
                     }
                 }
 
                 let slot_has_specular = sp.specular.is_some();
-                if let (Some(ref mut s_buf), Some(ref spec_src)) = (&mut specular_buf, &sp.specular) {
+                if let (Some(ref mut s_buf), Some(ref spec_src)) = (&mut specular_buf, &sp.specular)
+                {
                     s_buf.blit(spec_src, 0, 0, inner_x, inner_y, fw, strip_h);
                     if config.padding > 0 {
-                        apply_edge_clamping_padding(s_buf, inner_x, inner_y, fw, strip_h, config.padding);
+                        apply_edge_clamping_padding(
+                            s_buf,
+                            inner_x,
+                            inner_y,
+                            fw,
+                            strip_h,
+                            config.padding,
+                        );
                     }
                 }
 
@@ -101,7 +141,14 @@ pub fn build_anim_atlas_chunks(
                 if let (Some(ref mut o_buf), Some(ref over_src)) = (&mut overlay_buf, &sp.overlay) {
                     o_buf.blit(over_src, 0, 0, inner_x, inner_y, fw, strip_h);
                     if config.padding > 0 {
-                        apply_edge_clamping_padding(o_buf, inner_x, inner_y, fw, strip_h, config.padding);
+                        apply_edge_clamping_padding(
+                            o_buf,
+                            inner_x,
+                            inner_y,
+                            fw,
+                            strip_h,
+                            config.padding,
+                        );
                     }
                 }
 
@@ -133,11 +180,15 @@ pub fn build_anim_atlas_chunks(
                     has_overlay: slot_has_overlay,
                 };
 
-                address_map.anim_sprites.insert(sp.sprite_id.clone(), sprite_loc.clone());
+                address_map
+                    .anim_sprites
+                    .insert(sp.sprite_id.clone(), sprite_loc.clone());
 
                 if slot_has_overlay {
                     let overlay_id = sp.sprite_id.with_suffix("_overlay");
-                    address_map.anim_sprites.insert(overlay_id, sprite_loc.clone());
+                    address_map
+                        .anim_sprites
+                        .insert(overlay_id, sprite_loc.clone());
                     if sp.sprite_id.path.ends_with("side") {
                         let alt_path = sp.sprite_id.path.replace("side", "side_overlay");
                         address_map.anim_sprites.insert(

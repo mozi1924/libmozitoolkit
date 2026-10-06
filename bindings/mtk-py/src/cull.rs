@@ -58,10 +58,7 @@ impl PyFaceCuller {
     }
 
     fn __repr__(&self) -> String {
-        format!(
-            "<FaceCuller cached_entries={}>",
-            self.inner.cache_len()
-        )
+        format!("<FaceCuller cached_entries={}>", self.inner.cache_len())
     }
 }
 
@@ -92,4 +89,3 @@ pub fn cull_mesh_faces<'py>(
 
     Ok((crate::mesh::PyMeshData { inner: result.mesh }, stats_dict))
 }
-

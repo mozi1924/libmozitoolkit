@@ -1,16 +1,18 @@
 //! High-performance mesh generator for individual and batch chunk sections.
 
-use std::sync::Arc;
 use glam::IVec3;
 use mtk_core::direction::Direction;
 use mtk_core::mesh::MeshData;
 use mtk_core::progress::{ProgressCallback, ProgressThrottler};
-use mtk_core::random::{determine_block_offset_type, get_block_offset, mc_coordinate_seed, JavaRandom, OffsetType};
+use mtk_core::random::{
+    determine_block_offset_type, get_block_offset, mc_coordinate_seed, JavaRandom, OffsetType,
+};
 use mtk_cull::types::BlockCullMeta;
 use mtk_cull::FaceCuller;
 use mtk_model::baked::BakedModel;
 use mtk_model::baker::is_block_emissive;
 use mtk_model::blockstate::BlockState;
+use std::sync::Arc;
 
 use crate::ao::calculate_face_ao;
 use crate::fluid::emit_fluid_geometry;
@@ -38,12 +40,7 @@ impl SectionMesher {
     where
         F: FnMut(&str) -> Option<Arc<BakedModel>>,
     {
-        Self::mesh_section_with_source(
-            padded,
-            culler,
-            |st| get_baked_model(st).into(),
-            config,
-        )
+        Self::mesh_section_with_source(padded, culler, |st| get_baked_model(st).into(), config)
     }
 
     /// Meshes a single `PaddedVoxelArray` into a complete `MeshData` buffer using a unified `ModelSource` lookup.
@@ -64,8 +61,7 @@ impl SectionMesher {
         let mut collector = FaceAttributesCollector::with_capacity(512);
 
         // Pre-resolve model sources FIRST
-        let mut palette_sources: Vec<ModelSource> =
-            Vec::with_capacity(padded.palette.len());
+        let mut palette_sources: Vec<ModelSource> = Vec::with_capacity(padded.palette.len());
         for st in &padded.palette {
             palette_sources.push(get_model_source(st));
         }
@@ -101,7 +97,10 @@ impl SectionMesher {
                 if let Some(model) = source.primary_model() {
                     model.is_emissive
                 } else {
-                    BlockState::parse(st).as_ref().map(is_block_emissive).unwrap_or(false)
+                    BlockState::parse(st)
+                        .as_ref()
+                        .map(is_block_emissive)
+                        .unwrap_or(false)
                 }
             })
             .collect();
@@ -172,10 +171,14 @@ impl SectionMesher {
                         };
 
                         let col_idx = lx * 16 + lz;
-                        let (fluid_col, fluid_uv) = if let Some(ref biome_cols) = padded.biome_data {
+                        let (fluid_col, fluid_uv) = if let Some(ref biome_cols) = padded.biome_data
+                        {
                             if col_idx < biome_cols.len() {
                                 let col = &biome_cols[col_idx];
-                                (Some(col.water_color), Some([col.colormap_uv[0], col.colormap_uv[1], 0.0]))
+                                (
+                                    Some(col.water_color),
+                                    Some([col.colormap_uv[0], col.colormap_uv[1], 0.0]),
+                                )
                             } else {
                                 (None, None)
                             }
@@ -227,8 +230,15 @@ impl SectionMesher {
                         let rel_x = target_pos.x - block_pos.x + px as i32;
                         let rel_y = target_pos.y - block_pos.y + py as i32;
                         let rel_z = target_pos.z - block_pos.z + pz as i32;
-                        if (0..18).contains(&rel_x) && (0..18).contains(&rel_y) && (0..18).contains(&rel_z) {
-                            Some(padded.get_padded_state(rel_x as usize, rel_y as usize, rel_z as usize))
+                        if (0..18).contains(&rel_x)
+                            && (0..18).contains(&rel_y)
+                            && (0..18).contains(&rel_z)
+                        {
+                            Some(padded.get_padded_state(
+                                rel_x as usize,
+                                rel_y as usize,
+                                rel_z as usize,
+                            ))
                         } else {
                             None
                         }
@@ -236,9 +246,17 @@ impl SectionMesher {
 
                     if !source.is_none() {
                         let (culled_faces, unculled_faces) = match &palette_meshing_data[pal_idx] {
-                            PaletteMeshingData::Model { culled_faces, unculled_faces } => (culled_faces, unculled_faces),
-                            PaletteMeshingData::VariantModel { variants, weights, total_weight } => {
-                                let seed = mc_coordinate_seed(block_pos.x, block_pos.y, block_pos.z);
+                            PaletteMeshingData::Model {
+                                culled_faces,
+                                unculled_faces,
+                            } => (culled_faces, unculled_faces),
+                            PaletteMeshingData::VariantModel {
+                                variants,
+                                weights,
+                                total_weight,
+                            } => {
+                                let seed =
+                                    mc_coordinate_seed(block_pos.x, block_pos.y, block_pos.z);
                                 let mut rng = JavaRandom::new(seed);
                                 let mut target = rng.next_int(*total_weight);
                                 let mut chosen = 0;
@@ -320,7 +338,8 @@ impl SectionMesher {
                             let npy = (py as i32 + offset.y) as usize;
                             let npz = (pz as i32 + offset.z) as usize;
 
-                            let npal_idx = padded.padded_voxels[padded_index(npx, npy, npz)] as usize;
+                            let npal_idx =
+                                padded.padded_voxels[padded_index(npx, npy, npz)] as usize;
                             let n_meta = if npal_idx < palette_metas.len() {
                                 Some(&*palette_metas[npal_idx])
                             } else {
@@ -361,7 +380,8 @@ impl SectionMesher {
                             let npy = (py as i32 + offset.y) as usize;
                             let npz = (pz as i32 + offset.z) as usize;
 
-                            let npal_idx = padded.padded_voxels[padded_index(npx, npy, npz)] as usize;
+                            let npal_idx =
+                                padded.padded_voxels[padded_index(npx, npy, npz)] as usize;
                             let n_meta = if npal_idx < palette_metas.len() {
                                 Some(&*palette_metas[npal_idx])
                             } else {
@@ -456,12 +476,7 @@ impl SectionMesher {
     where
         F: Fn(&str) -> Option<Arc<BakedModel>> + Sync + Send,
     {
-        Self::mesh_sections_with_source(
-            sections,
-            culler,
-            |st| model_provider(st).into(),
-            config,
-        )
+        Self::mesh_sections_with_source(sections, culler, |st| model_provider(st).into(), config)
     }
 
     /// Meshes a batch of `PaddedVoxelArray`s using a unified `ModelSource` provider.
@@ -497,7 +512,12 @@ impl SectionMesher {
             let results = sections
                 .par_iter()
                 .map(|sec| {
-                    let mesh = Self::mesh_section_with_source(sec, culler, |st| model_provider(st), config);
+                    let mesh = Self::mesh_section_with_source(
+                        sec,
+                        culler,
+                        |st| model_provider(st),
+                        config,
+                    );
                     throttler.inc();
                     (sec.coord, mesh)
                 })
@@ -510,7 +530,12 @@ impl SectionMesher {
             let results = sections
                 .iter()
                 .map(|sec| {
-                    let mesh = Self::mesh_section_with_source(sec, culler, |st| model_provider(st), config);
+                    let mesh = Self::mesh_section_with_source(
+                        sec,
+                        culler,
+                        |st| model_provider(st),
+                        config,
+                    );
                     throttler.inc();
                     (sec.coord, mesh)
                 })
@@ -573,9 +598,14 @@ impl SectionMesher {
         F: Fn(&str) -> ModelSource + Sync + Send,
     {
         mtk_core::constants::concurrency::execute_parallel(num_threads, || {
-            Self::mesh_sections_with_source_and_progress(sections, culler, model_provider, config, progress)
+            Self::mesh_sections_with_source_and_progress(
+                sections,
+                culler,
+                model_provider,
+                config,
+                progress,
+            )
         })
         .map_err(VoxelError::ThreadPoolError)?
     }
 }
-

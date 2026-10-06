@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use std::collections::HashMap;
 
 use mtk_material::{
     clean_identifier, decode_grid_atlas_uv, remap_grid_atlas_uv_to_local,
@@ -72,7 +72,9 @@ impl PyGridAtlasSpec {
 
     /// Set candidate texture names for a given swatch ID.
     pub fn set_swatch_candidates(&mut self, swatch_id: usize, candidates: Vec<String>) {
-        self.inner.swatch_to_candidates.insert(swatch_id, candidates);
+        self.inner
+            .swatch_to_candidates
+            .insert(swatch_id, candidates);
     }
 
     /// Check if a material name matches this grid atlas specification.
@@ -256,7 +258,10 @@ pub struct PyBiomeResolver {
     pub(crate) inner: mtk_material::BiomeResolver,
 }
 
-fn py_dict_to_json_hashmap(py: Python<'_>, dict: &Bound<'_, pyo3::types::PyDict>) -> PyResult<HashMap<String, serde_json::Value>> {
+fn py_dict_to_json_hashmap(
+    py: Python<'_>,
+    dict: &Bound<'_, pyo3::types::PyDict>,
+) -> PyResult<HashMap<String, serde_json::Value>> {
     let json_module = py.import("json")?;
     let json_str: String = json_module.call_method1("dumps", (dict,))?.extract()?;
     let map: HashMap<String, serde_json::Value> = serde_json::from_str(&json_str)
@@ -278,7 +283,11 @@ impl PyBiomeResolver {
     }
 
     /// Set loaded block models dictionary.
-    pub fn set_models(&mut self, py: Python<'_>, models: Bound<'_, pyo3::types::PyDict>) -> PyResult<()> {
+    pub fn set_models(
+        &mut self,
+        py: Python<'_>,
+        models: Bound<'_, pyo3::types::PyDict>,
+    ) -> PyResult<()> {
         let map = py_dict_to_json_hashmap(py, &models)?;
         self.inner.set_models(map);
         Ok(())
@@ -329,7 +338,9 @@ impl PyBiomeResolver {
 
     /// Retrieve the paired overlay texture stem for a given base texture stem, if any.
     pub fn get_overlay_texture(&self, texture_stem: &str) -> Option<String> {
-        self.inner.get_overlay_texture(texture_stem).map(|s| s.to_string())
+        self.inner
+            .get_overlay_texture(texture_stem)
+            .map(|s| s.to_string())
     }
 
     /// Resolve tint metadata for a single texture.
@@ -341,7 +352,9 @@ impl PyBiomeResolver {
         block_name: Option<&str>,
         tint_index: Option<i32>,
     ) -> PyResult<PyObject> {
-        let info = self.inner.get_tint_info(texture_name, block_name, tint_index);
+        let info = self
+            .inner
+            .get_tint_info(texture_name, block_name, tint_index);
         let dict = PyDict::new(py);
         dict.set_item("tint_type", info.tint_type)?;
         dict.set_item("tint_category", info.tint_category)?;
@@ -358,7 +371,6 @@ impl PyBiomeResolver {
         dict.set_item("default_overlay_tint_weight", info.overlay_tint_weight)?;
         Ok(dict.into())
     }
-
 
     /// Compute batch mesh attributes in parallel across all faces.
     #[pyo3(signature = (
@@ -410,7 +422,11 @@ impl PyBiomeResolver {
                     has_custom_foliage,
                     has_custom_dry_foliage,
                 };
-                mtk_material::compute_mesh_biome_attributes_custom(&face_texture_keys, &settings, &self.inner)
+                mtk_material::compute_mesh_biome_attributes_custom(
+                    &face_texture_keys,
+                    &settings,
+                    &self.inner,
+                )
             } else {
                 mtk_material::compute_mesh_biome_attributes(
                     &face_texture_keys,
@@ -444,8 +460,14 @@ pub fn get_biome_meta(py: Python<'_>, biome_name: &str) -> PyResult<PyObject> {
         dict.set_item("dry_foliage_hex", "#A37546")?;
         dict.set_item("water_hex", "#3F76E4")?;
         dict.set_item("grass_linear", mtk_material::hex_to_linear_rgba("#91BD59"))?;
-        dict.set_item("foliage_linear", mtk_material::hex_to_linear_rgba("#77AB2F"))?;
-        dict.set_item("dry_foliage_linear", mtk_material::hex_to_linear_rgba("#A37546"))?;
+        dict.set_item(
+            "foliage_linear",
+            mtk_material::hex_to_linear_rgba("#77AB2F"),
+        )?;
+        dict.set_item(
+            "dry_foliage_linear",
+            mtk_material::hex_to_linear_rgba("#A37546"),
+        )?;
         dict.set_item("water_linear", mtk_material::hex_to_linear_rgba("#3F76E4"))?;
         dict.set_item("colormap_uv", mtk_material::get_colormap_uv(0.8, 0.4))?;
         dict.set_item("has_custom_grass", false)?;
@@ -588,7 +610,11 @@ pub fn compute_biome_tint_attributes(
                 has_custom_foliage,
                 has_custom_dry_foliage,
             };
-            mtk_material::compute_mesh_biome_attributes_custom(&face_texture_keys, &settings, res_ref)
+            mtk_material::compute_mesh_biome_attributes_custom(
+                &face_texture_keys,
+                &settings,
+                res_ref,
+            )
         } else {
             mtk_material::compute_mesh_biome_attributes(
                 &face_texture_keys,
@@ -621,11 +647,11 @@ pub fn classify_tint_category(
 /// Compute a smooth blended Linear RGBA color across multiple weighted biomes.
 #[pyfunction]
 #[pyo3(signature = (biome_weights, tint_type="grass"))]
-pub fn blend_biome_colors(
-    biome_weights: Vec<(String, f32)>,
-    tint_type: &str,
-) -> [f32; 4] {
-    let weights_ref: Vec<(&str, f32)> = biome_weights.iter().map(|(s, w)| (s.as_str(), *w)).collect();
+pub fn blend_biome_colors(biome_weights: Vec<(String, f32)>, tint_type: &str) -> [f32; 4] {
+    let weights_ref: Vec<(&str, f32)> = biome_weights
+        .iter()
+        .map(|(s, w)| (s.as_str(), *w))
+        .collect();
     mtk_material::blend_biome_colors(&weights_ref, tint_type)
 }
 
@@ -640,7 +666,14 @@ pub fn sample_colormap_pixel(
     downfall: f32,
     channels: usize,
 ) -> [f32; 3] {
-    mtk_material::sample_colormap_pixel(image_pixels, width, height, temperature, downfall, channels)
+    mtk_material::sample_colormap_pixel(
+        image_pixels,
+        width,
+        height,
+        temperature,
+        downfall,
+        channels,
+    )
 }
 
 /// Compute packed material properties `[emission, thin_wall, transmission, sticker_threshold]`
@@ -668,7 +701,8 @@ pub fn compute_flat_material_props(
     block_names: Option<Vec<String>>,
 ) -> PyResult<Vec<f32>> {
     let res = py.allow_threads(|| {
-        let props = mtk_material::compute_mesh_material_props(&face_texture_keys, block_names.as_deref());
+        let props =
+            mtk_material::compute_mesh_material_props(&face_texture_keys, block_names.as_deref());
         let mut flat = Vec::with_capacity(props.len() * 4);
         for p in props {
             flat.extend_from_slice(&p);
@@ -681,10 +715,7 @@ pub fn compute_flat_material_props(
 /// Query individual block material physical properties `[emission, thin_wall, transmission, sticker_threshold]`.
 #[pyfunction]
 #[pyo3(signature = (block_name="", texture_name=None))]
-pub fn get_material_props(
-    block_name: &str,
-    texture_name: Option<&str>,
-) -> [f32; 4] {
+pub fn get_material_props(block_name: &str, texture_name: Option<&str>) -> [f32; 4] {
     mtk_material::get_material_props(block_name, texture_name)
 }
 
@@ -696,46 +727,38 @@ pub fn get_block_emission_strength(
     properties: Option<HashMap<String, String>>,
     texture_name: Option<&str>,
 ) -> f32 {
-    mtk_material::properties::get_block_emission_strength(block_name, properties.as_ref(), texture_name)
+    mtk_material::properties::get_block_emission_strength(
+        block_name,
+        properties.as_ref(),
+        texture_name,
+    )
 }
 
 /// Query whether a block or texture is thin wall foliage / vegetation.
 #[pyfunction]
 #[pyo3(signature = (block_name="", texture_name=None))]
-pub fn is_thin_wall_block(
-    block_name: &str,
-    texture_name: Option<&str>,
-) -> bool {
+pub fn is_thin_wall_block(block_name: &str, texture_name: Option<&str>) -> bool {
     mtk_material::properties::is_thin_wall_block(block_name, texture_name)
 }
 
 /// Query whether a block or texture is a dielectric transmissive medium (glass, water, ice, etc.).
 #[pyfunction]
 #[pyo3(signature = (block_name="", texture_name=None))]
-pub fn is_transmissive_block(
-    block_name: &str,
-    texture_name: Option<&str>,
-) -> bool {
+pub fn is_transmissive_block(block_name: &str, texture_name: Option<&str>) -> bool {
     mtk_material::properties::is_transmissive_block(block_name, texture_name)
 }
 
 /// Query transmission weight (1.0 for glass/water/ice, 0.0 otherwise).
 #[pyfunction]
 #[pyo3(signature = (block_name="", texture_name=None))]
-pub fn get_block_transmission_weight(
-    block_name: &str,
-    texture_name: Option<&str>,
-) -> f32 {
+pub fn get_block_transmission_weight(block_name: &str, texture_name: Option<&str>) -> f32 {
     mtk_material::properties::get_block_transmission_weight(block_name, texture_name)
 }
 
 /// Query alpha sticker threshold (0.55 for glass, 0.95 for water/ice/slime/honey).
 #[pyfunction]
 #[pyo3(signature = (block_name="", texture_name=None))]
-pub fn get_block_sticker_threshold(
-    block_name: &str,
-    texture_name: Option<&str>,
-) -> f32 {
+pub fn get_block_sticker_threshold(block_name: &str, texture_name: Option<&str>) -> f32 {
     mtk_material::properties::get_block_sticker_threshold(block_name, texture_name)
 }
 
@@ -743,10 +766,7 @@ pub fn get_block_sticker_threshold(
 /// Accepts either a JSON string or a Python dict.
 #[pyfunction]
 #[pyo3(signature = (properties))]
-pub fn register_material_properties(
-    py: Python<'_>,
-    properties: &Bound<'_, PyAny>,
-) -> PyResult<()> {
+pub fn register_material_properties(py: Python<'_>, properties: &Bound<'_, PyAny>) -> PyResult<()> {
     let json_str = if let Ok(s) = properties.extract::<String>() {
         s
     } else {
@@ -787,5 +807,3 @@ pub fn load_material_properties_replace(
 pub fn reset_material_properties_to_default() {
     mtk_material::reset_material_properties_to_default();
 }
-
-

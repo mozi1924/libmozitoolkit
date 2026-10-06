@@ -20,3 +20,9 @@ mtk-voxel = { workspace = true }
 default = ["std"]
 std = []
 serde = ["dep:serde", "dep:serde_json", "mtk-core/serde", "mtk-voxel/serde"]
+
+[dev-dependencies]
+mtk-testkit = { workspace = true }
+
+[lints]
+workspace = true

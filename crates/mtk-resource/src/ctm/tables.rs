@@ -28,7 +28,11 @@ pub const fn build_ctm_47_lookup() -> [u8; 256] {
             let mut corner_bit = 1;
             while corner_bit < 8 {
                 let left_side_bit = if corner_bit == 0 { 7 } else { corner_bit - 1 };
-                let right_side_bit = if corner_bit + 1 >= 8 { 0 } else { corner_bit + 1 };
+                let right_side_bit = if corner_bit + 1 >= 8 {
+                    0
+                } else {
+                    corner_bit + 1
+                };
 
                 let left_side = tile_idx & (1 << left_side_bit);
                 let right_side = tile_idx & (1 << right_side_bit);
@@ -51,9 +55,9 @@ pub const CTM_47_LOOKUP: [u8; 256] = build_ctm_47_lookup();
 
 /// 17 Overlay tile index to connection bit pattern.
 pub const TILE_TO_OVERLAY_DATA: [u8; 17] = [
-    0b00001000, 0b00001110, 0b00000010, 0b00111110, 0b10001111, 0b10111111, 0b11101111,
-    0b00111000, 0b11111111, 0b10000011, 0b11111000, 0b11100011, 0b11111110, 0b11111011,
-    0b00100000, 0b11100000, 0b10000000,
+    0b00001000, 0b00001110, 0b00000010, 0b00111110, 0b10001111, 0b10111111, 0b11101111, 0b00111000,
+    0b11111111, 0b10000011, 0b11111000, 0b11100011, 0b11111110, 0b11111011, 0b00100000, 0b11100000,
+    0b10000000,
 ];
 
 /// Precomputed 256-entry lookup table for Overlay CTM.
@@ -77,7 +81,11 @@ pub const fn build_overlay_17_lookup() -> [i8; 256] {
             let mut corner_bit = 1;
             while corner_bit < 8 {
                 let left_side_bit = if corner_bit == 0 { 7 } else { corner_bit - 1 };
-                let right_side_bit = if corner_bit + 1 >= 8 { 0 } else { corner_bit + 1 };
+                let right_side_bit = if corner_bit + 1 >= 8 {
+                    0
+                } else {
+                    corner_bit + 1
+                };
 
                 let left_side = tile_idx & (1 << left_side_bit);
                 let right_side = tile_idx & (1 << right_side_bit);

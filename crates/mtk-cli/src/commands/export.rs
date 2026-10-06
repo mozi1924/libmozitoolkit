@@ -19,7 +19,7 @@ pub enum ExportSubcommand {
 #[derive(Args, Debug)]
 pub struct ExportSamplesArgs {
     /// Path to Minecraft vanilla JAR or assets directory
-    #[arg(short, long, default_value = "/home/mozi/26.2-Fabric.jar")]
+    #[arg(short, long, default_value = "26.2-Fabric.jar")]
     pub jar: PathBuf,
 
     /// Directory where exported .obj and .mtl files will be saved
@@ -30,7 +30,7 @@ pub struct ExportSamplesArgs {
 #[derive(Args, Debug)]
 pub struct ExportBuiltinObjsArgs {
     /// Path to Minecraft assets directory or vanilla JAR
-    #[arg(short, long, default_value = "/home/mozi/26.2-Fabric.jar")]
+    #[arg(short, long, default_value = "26.2-Fabric.jar")]
     pub assets: PathBuf,
 
     /// Directory where exported .obj and .mtl files will be saved
@@ -94,7 +94,10 @@ fn run_export_samples(args: ExportSamplesArgs) -> Result<(), Box<dyn std::error:
         "minecraft:oak_trapdoor[facing=north,half=bottom,open=true,powered=false,waterlogged=false]",
     ];
 
-    println!("\nBaking and exporting {} sample models...", test_states.len());
+    println!(
+        "\nBaking and exporting {} sample models...",
+        test_states.len()
+    );
 
     for &state_str in &test_states {
         let bs = BlockState::parse(state_str)?;
@@ -175,44 +178,73 @@ fn run_export_builtin_objs(args: ExportBuiltinObjsArgs) -> Result<(), Box<dyn st
         ("chest_single", "minecraft:chest[facing=north,type=single]"),
         ("chest_left", "minecraft:chest[facing=north,type=left]"),
         ("chest_right", "minecraft:chest[facing=north,type=right]"),
-        ("trapped_chest_single", "minecraft:trapped_chest[facing=north,type=single]"),
+        (
+            "trapped_chest_single",
+            "minecraft:trapped_chest[facing=north,type=single]",
+        ),
         ("ender_chest", "minecraft:ender_chest[facing=north]"),
-
         // Shulker Boxes
         ("shulker_box_default", "minecraft:shulker_box[facing=up]"),
         ("shulker_box_red", "minecraft:red_shulker_box[facing=up]"),
-        ("shulker_box_white_north", "minecraft:white_shulker_box[facing=north]"),
-
+        (
+            "shulker_box_white_north",
+            "minecraft:white_shulker_box[facing=north]",
+        ),
         // Skulls & Heads
         ("skeleton_skull", "minecraft:skeleton_skull[rotation=0]"),
-        ("skeleton_wall_skull", "minecraft:skeleton_wall_skull[facing=north]"),
-        ("wither_skeleton_skull", "minecraft:wither_skeleton_skull[rotation=0]"),
+        (
+            "skeleton_wall_skull",
+            "minecraft:skeleton_wall_skull[facing=north]",
+        ),
+        (
+            "wither_skeleton_skull",
+            "minecraft:wither_skeleton_skull[rotation=0]",
+        ),
         ("zombie_head", "minecraft:zombie_head[rotation=0]"),
         ("creeper_head", "minecraft:creeper_head[rotation=0]"),
         ("player_head", "minecraft:player_head[rotation=0]"),
-
         // Bell
-        ("bell_floor", "minecraft:bell[attachment=floor,facing=north]"),
-        ("bell_ceiling", "minecraft:bell[attachment=ceiling,facing=north]"),
-        ("bell_single_wall", "minecraft:bell[attachment=single_wall,facing=north]"),
-
+        (
+            "bell_floor",
+            "minecraft:bell[attachment=floor,facing=north]",
+        ),
+        (
+            "bell_ceiling",
+            "minecraft:bell[attachment=ceiling,facing=north]",
+        ),
+        (
+            "bell_single_wall",
+            "minecraft:bell[attachment=single_wall,facing=north]",
+        ),
         // End Portal
         ("end_portal", "minecraft:end_portal"),
-
         // Signs & Hanging Signs
         ("oak_sign", "minecraft:oak_sign[rotation=0]"),
         ("oak_wall_sign", "minecraft:oak_wall_sign[facing=north]"),
-        ("oak_hanging_sign", "minecraft:oak_hanging_sign[attached=false,rotation=0,waterlogged=false]"),
-        ("oak_wall_hanging_sign", "minecraft:oak_wall_hanging_sign[facing=north,waterlogged=false]"),
-
+        (
+            "oak_hanging_sign",
+            "minecraft:oak_hanging_sign[attached=false,rotation=0,waterlogged=false]",
+        ),
+        (
+            "oak_wall_hanging_sign",
+            "minecraft:oak_wall_hanging_sign[facing=north,waterlogged=false]",
+        ),
         // Beds
         ("red_bed_foot", "minecraft:red_bed[facing=north,part=foot]"),
         ("red_bed_head", "minecraft:red_bed[facing=north,part=head]"),
-        ("blue_bed_foot", "minecraft:blue_bed[facing=north,part=foot]"),
-
+        (
+            "blue_bed_foot",
+            "minecraft:blue_bed[facing=north,part=foot]",
+        ),
         // Standard comparison models
-        ("oak_stairs", "minecraft:oak_stairs[facing=east,half=bottom,shape=straight]"),
-        ("oak_door_lower", "minecraft:oak_door[facing=north,half=lower,hinge=left,open=false]"),
+        (
+            "oak_stairs",
+            "minecraft:oak_stairs[facing=east,half=bottom,shape=straight]",
+        ),
+        (
+            "oak_door_lower",
+            "minecraft:oak_door[facing=north,half=lower,hinge=left,open=false]",
+        ),
     ];
 
     let mut copied_textures: HashMap<String, PathBuf> = HashMap::new();
@@ -221,7 +253,8 @@ fn run_export_builtin_objs(args: ExportBuiltinObjsArgs) -> Result<(), Box<dyn st
         let bs = BlockState::parse(state_str)?;
         let def = loader.load_blockstate(&bs.name);
 
-        let baked = baker.bake_blockstate(state_str, def.as_ref(), |m_id| loader.load_model(m_id))?;
+        let baked =
+            baker.bake_blockstate(state_str, def.as_ref(), |m_id| loader.load_model(m_id))?;
         let (mesh, textures) = baked.to_mesh_with_textures(false);
 
         println!(
@@ -313,7 +346,10 @@ fn run_export_builtin_objs(args: ExportBuiltinObjsArgs) -> Result<(), Box<dyn st
             let slot = mesh.face_materials.get(quad_face_idx).copied().unwrap_or(0);
             if current_slot != Some(slot) {
                 current_slot = Some(slot);
-                let mat_name = mat_map.get(slot as usize).map(|s| s.as_str()).unwrap_or("default");
+                let mat_name = mat_map
+                    .get(slot as usize)
+                    .map(|s| s.as_str())
+                    .unwrap_or("default");
                 obj_content.push_str(&format!("usemtl {}\n", mat_name));
             }
 
@@ -332,7 +368,10 @@ fn run_export_builtin_objs(args: ExportBuiltinObjsArgs) -> Result<(), Box<dyn st
     }
 
     println!("------------------------------------------------------------");
-    println!("Export completed successfully! Total textures resolved: {}", copied_textures.len());
+    println!(
+        "Export completed successfully! Total textures resolved: {}",
+        copied_textures.len()
+    );
     println!("Output location: {}", args.output.display());
 
     Ok(())

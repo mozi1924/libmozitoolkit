@@ -28,3 +28,6 @@ serde = ["dep:serde", "dep:serde_json"]
 [dev-dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+[lints]
+workspace = true

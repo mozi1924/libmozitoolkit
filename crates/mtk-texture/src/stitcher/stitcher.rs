@@ -1,6 +1,6 @@
-use std::cmp::Ordering;
 use crate::error::TextureError;
 use crate::stitcher::region::StitcherRegion;
+use std::cmp::Ordering;
 
 /// Helper: find smallest power of two greater than or equal to `val`.
 #[inline]
@@ -234,13 +234,16 @@ impl<T: Clone> Stitcher<T> {
 
         let expand_horizontal = if is_expand_x_diff ^ is_expand_y_diff {
             is_expand_x_diff
-        } else { can_expand_x && cur_pow_x <= cur_pow_y };
+        } else {
+            can_expand_x && cur_pow_x <= cur_pow_y
+        };
 
         if expand_horizontal {
             if *storage_y == 0 {
                 *storage_y = next_pow_y;
             }
-            let mut new_region = StitcherRegion::new(*storage_x, 0, next_pow_x - *storage_x, *storage_y);
+            let mut new_region =
+                StitcherRegion::new(*storage_x, 0, next_pow_x - *storage_x, *storage_y);
             *storage_x = next_pow_x;
             new_region.add(holder.clone(), holder.width, holder.height);
             storage.push(new_region);
@@ -248,7 +251,8 @@ impl<T: Clone> Stitcher<T> {
             if *storage_x == 0 {
                 *storage_x = next_pow_x;
             }
-            let mut new_region = StitcherRegion::new(0, *storage_y, *storage_x, next_pow_y - *storage_y);
+            let mut new_region =
+                StitcherRegion::new(0, *storage_y, *storage_x, next_pow_y - *storage_y);
             *storage_y = next_pow_y;
             new_region.add(holder.clone(), holder.width, holder.height);
             storage.push(new_region);

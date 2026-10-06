@@ -162,7 +162,7 @@ impl AttributeData {
                     v.len() * std::mem::size_of::<i32>(),
                 )),
                 Self::UInt8(v) => Some(std::slice::from_raw_parts(
-                    v.as_ptr() as *const u8,
+                    v.as_ptr(),
                     v.len() * std::mem::size_of::<u8>(),
                 )),
                 Self::UInt16(v) => Some(std::slice::from_raw_parts(
@@ -360,13 +360,24 @@ impl FaceAttributes {
     }
 
     /// Sets UV affine transform.
-    pub fn with_uv_transform(mut self, scale_u: f32, scale_v: f32, offset_u: f32, offset_v: f32) -> Self {
+    pub fn with_uv_transform(
+        mut self,
+        scale_u: f32,
+        scale_v: f32,
+        offset_u: f32,
+        offset_v: f32,
+    ) -> Self {
         self.uv_transform = [scale_u, scale_v, offset_u, offset_v];
         self
     }
 
     /// Sets biome tint parameters.
-    pub fn with_biome_tint(mut self, color: [f32; 4], data: [f32; 4], colormap_uv: [f32; 3]) -> Self {
+    pub fn with_biome_tint(
+        mut self,
+        color: [f32; 4],
+        data: [f32; 4],
+        colormap_uv: [f32; 3],
+    ) -> Self {
         self.biome_tint_color = color;
         self.biome_tint_data = data;
         self.colormap_uv = colormap_uv;

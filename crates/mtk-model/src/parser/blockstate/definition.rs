@@ -319,7 +319,9 @@ impl BlockStateDefinition {
     }
 
     pub fn expand_known_entity_states(base_id: &str) -> Option<Vec<String>> {
-        if let Some(builtin) = crate::builtin::BuiltinModelRegistry::get_builtin_blockstate_def(base_id) {
+        if let Some(builtin) =
+            crate::builtin::BuiltinModelRegistry::get_builtin_blockstate_def(base_id)
+        {
             if let Some(ref variants) = builtin.variants {
                 if !variants.is_empty() {
                     let mut list = Vec::new();
@@ -337,7 +339,8 @@ impl BlockStateDefinition {
 
         let short_name = base_id.strip_prefix("minecraft:").unwrap_or(base_id);
 
-        if short_name == "chest" || short_name == "trapped_chest" || short_name.ends_with("_chest") {
+        if short_name == "chest" || short_name == "trapped_chest" || short_name.ends_with("_chest")
+        {
             if short_name == "chest_boat" || short_name.ends_with("_chest_boat") {
                 return None;
             }
@@ -435,4 +438,3 @@ impl BlockStateDefinition {
         None
     }
 }
-

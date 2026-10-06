@@ -69,18 +69,24 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
             let size_z = i32::from_le_bytes(data[offset + 20..offset + 24].try_into().unwrap());
             offset += SELECTION_INFO_SIZE;
 
-            let palette_count = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+            let palette_count =
+                u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
             offset += 2;
 
             let mut palette = Vec::with_capacity(palette_count);
             for _ in 0..palette_count {
                 if data.len() < offset + 2 {
-                    return Err(ProtocolError::TruncatedPayload { field: "block_palette" });
+                    return Err(ProtocolError::TruncatedPayload {
+                        field: "block_palette",
+                    });
                 }
-                let str_len = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+                let str_len =
+                    u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
                 offset += 2;
                 if data.len() < offset + str_len {
-                    return Err(ProtocolError::TruncatedPayload { field: "block_palette_entry" });
+                    return Err(ProtocolError::TruncatedPayload {
+                        field: "block_palette_entry",
+                    });
                 }
                 let s = std::str::from_utf8(&data[offset..offset + str_len])
                     .map_err(|e| ProtocolError::Utf8Error {
@@ -93,7 +99,9 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
             }
 
             if data.len() < offset + 1 {
-                return Err(ProtocolError::TruncatedPayload { field: "index_format" });
+                return Err(ProtocolError::TruncatedPayload {
+                    field: "index_format",
+                });
             }
             let index_bytes_per_block = data[offset];
             offset += 1;
@@ -103,7 +111,9 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
 
             if index_bytes_per_block == 1 {
                 if data.len() < offset + total_blocks {
-                    return Err(ProtocolError::TruncatedPayload { field: "grid_indices_u8" });
+                    return Err(ProtocolError::TruncatedPayload {
+                        field: "grid_indices_u8",
+                    });
                 }
                 for &b in &data[offset..offset + total_blocks] {
                     grid_indices.push(b as u16);
@@ -111,10 +121,14 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
                 offset += total_blocks;
             } else if index_bytes_per_block == 2 {
                 if data.len() < offset + total_blocks * 2 {
-                    return Err(ProtocolError::TruncatedPayload { field: "grid_indices_u16" });
+                    return Err(ProtocolError::TruncatedPayload {
+                        field: "grid_indices_u16",
+                    });
                 }
                 for i in 0..total_blocks {
-                    let val = u16::from_le_bytes(data[offset + i * 2..offset + i * 2 + 2].try_into().unwrap());
+                    let val = u16::from_le_bytes(
+                        data[offset + i * 2..offset + i * 2 + 2].try_into().unwrap(),
+                    );
                     grid_indices.push(val);
                 }
                 offset += total_blocks * 2;
@@ -126,14 +140,16 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
             let mut biome_indices = None;
 
             if data.len() >= offset + 2 {
-                let b_count = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+                let b_count =
+                    u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
                 offset += 2;
                 let mut bp = Vec::with_capacity(b_count);
                 for _ in 0..b_count {
                     if data.len() < offset + 2 {
                         break;
                     }
-                    let b_len = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+                    let b_len =
+                        u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
                     offset += 2;
                     if data.len() < offset + b_len {
                         break;
@@ -147,7 +163,7 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
                 if b_count == 1 {
                     biome_indices = Some(vec![0u16; total_blocks]);
                     biome_palette = Some(bp);
-                } else if b_count > 1 && data.len() >= offset + 1 {
+                } else if b_count > 1 && data.len() > offset {
                     let b_idx_bytes = data[offset];
                     offset += 1;
                     let mut bi = Vec::with_capacity(total_blocks);
@@ -157,7 +173,9 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
                         }
                     } else if b_idx_bytes == 2 && data.len() >= offset + total_blocks * 2 {
                         for i in 0..total_blocks {
-                            let val = u16::from_le_bytes(data[offset + i * 2..offset + i * 2 + 2].try_into().unwrap());
+                            let val = u16::from_le_bytes(
+                                data[offset + i * 2..offset + i * 2 + 2].try_into().unwrap(),
+                            );
                             bi.push(val);
                         }
                     }
@@ -189,22 +207,30 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
             let min_x = i32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap());
             let min_y = i32::from_le_bytes(data[offset + 8..offset + 12].try_into().unwrap());
             let min_z = i32::from_le_bytes(data[offset + 12..offset + 16].try_into().unwrap());
-            let change_count = u16::from_le_bytes(data[offset + 16..offset + 18].try_into().unwrap()) as usize;
+            let change_count =
+                u16::from_le_bytes(data[offset + 16..offset + 18].try_into().unwrap()) as usize;
             offset += DELTA_HEADER_SIZE;
 
             let mut changes = Vec::with_capacity(change_count);
             for _ in 0..change_count {
                 if data.len() < offset + DELTA_CHANGE_PREFIX_SIZE {
-                    return Err(ProtocolError::TruncatedPayload { field: "delta_change_prefix" });
+                    return Err(ProtocolError::TruncatedPayload {
+                        field: "delta_change_prefix",
+                    });
                 }
                 let rel_x = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as i32;
-                let rel_y = u16::from_le_bytes(data[offset + 2..offset + 4].try_into().unwrap()) as i32;
-                let rel_z = u16::from_le_bytes(data[offset + 4..offset + 6].try_into().unwrap()) as i32;
-                let str_len = u16::from_le_bytes(data[offset + 6..offset + 8].try_into().unwrap()) as usize;
+                let rel_y =
+                    u16::from_le_bytes(data[offset + 2..offset + 4].try_into().unwrap()) as i32;
+                let rel_z =
+                    u16::from_le_bytes(data[offset + 4..offset + 6].try_into().unwrap()) as i32;
+                let str_len =
+                    u16::from_le_bytes(data[offset + 6..offset + 8].try_into().unwrap()) as usize;
                 offset += DELTA_CHANGE_PREFIX_SIZE;
 
                 if data.len() < offset + str_len {
-                    return Err(ProtocolError::TruncatedPayload { field: "delta_state_str" });
+                    return Err(ProtocolError::TruncatedPayload {
+                        field: "delta_state_str",
+                    });
                 }
                 let state_str = std::str::from_utf8(&data[offset..offset + str_len])
                     .map_err(|e| ProtocolError::Utf8Error {
@@ -235,20 +261,34 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
                 });
             }
             let seq_id = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
-            let section_count = u32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap()) as usize;
+            let section_count =
+                u32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap()) as usize;
             offset += MANIFEST_HEADER_SIZE;
 
             if data.len() < offset + section_count * MANIFEST_ENTRY_SIZE {
-                return Err(ProtocolError::TruncatedPayload { field: "section_manifest_entries" });
+                return Err(ProtocolError::TruncatedPayload {
+                    field: "section_manifest_entries",
+                });
             }
 
             let mut sections = Vec::with_capacity(section_count);
             for i in 0..section_count {
                 let entry_offset = offset + i * MANIFEST_ENTRY_SIZE;
-                let sx = i32::from_le_bytes(data[entry_offset..entry_offset + 4].try_into().unwrap());
-                let sy = i32::from_le_bytes(data[entry_offset + 4..entry_offset + 8].try_into().unwrap());
-                let sz = i32::from_le_bytes(data[entry_offset + 8..entry_offset + 12].try_into().unwrap());
-                let crc = u32::from_le_bytes(data[entry_offset + 12..entry_offset + 16].try_into().unwrap());
+                let sx =
+                    i32::from_le_bytes(data[entry_offset..entry_offset + 4].try_into().unwrap());
+                let sy = i32::from_le_bytes(
+                    data[entry_offset + 4..entry_offset + 8].try_into().unwrap(),
+                );
+                let sz = i32::from_le_bytes(
+                    data[entry_offset + 8..entry_offset + 12]
+                        .try_into()
+                        .unwrap(),
+                );
+                let crc = u32::from_le_bytes(
+                    data[entry_offset + 12..entry_offset + 16]
+                        .try_into()
+                        .unwrap(),
+                );
                 sections.push(ManifestSectionEntry {
                     coord: IVec3::new(sx, sy, sz),
                     crc32: crc,
@@ -277,18 +317,24 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
             let size_y = i32::from_le_bytes(data[offset + 28..offset + 32].try_into().unwrap());
             let size_z = i32::from_le_bytes(data[offset + 32..offset + 36].try_into().unwrap());
 
-            let palette_count = u16::from_le_bytes(data[offset + 36..offset + 38].try_into().unwrap()) as usize;
+            let palette_count =
+                u16::from_le_bytes(data[offset + 36..offset + 38].try_into().unwrap()) as usize;
             offset += SECTION_SNAPSHOT_HEADER_SIZE;
 
             let mut palette = Vec::with_capacity(palette_count);
             for _ in 0..palette_count {
                 if data.len() < offset + 2 {
-                    return Err(ProtocolError::TruncatedPayload { field: "section_palette" });
+                    return Err(ProtocolError::TruncatedPayload {
+                        field: "section_palette",
+                    });
                 }
-                let str_len = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+                let str_len =
+                    u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
                 offset += 2;
                 if data.len() < offset + str_len {
-                    return Err(ProtocolError::TruncatedPayload { field: "section_palette_entry" });
+                    return Err(ProtocolError::TruncatedPayload {
+                        field: "section_palette_entry",
+                    });
                 }
                 let s = std::str::from_utf8(&data[offset..offset + str_len])
                     .map_err(|e| ProtocolError::Utf8Error {
@@ -301,7 +347,9 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
             }
 
             if data.len() < offset + 1 {
-                return Err(ProtocolError::TruncatedPayload { field: "section_index_format" });
+                return Err(ProtocolError::TruncatedPayload {
+                    field: "section_index_format",
+                });
             }
             let index_bytes = data[offset];
             offset += 1;
@@ -311,7 +359,9 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
 
             if index_bytes == 1 {
                 if data.len() < offset + total_blocks {
-                    return Err(ProtocolError::TruncatedPayload { field: "section_indices_u8" });
+                    return Err(ProtocolError::TruncatedPayload {
+                        field: "section_indices_u8",
+                    });
                 }
                 for &b in &data[offset..offset + total_blocks] {
                     grid_indices.push(b as u16);
@@ -319,10 +369,14 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
                 offset += total_blocks;
             } else if index_bytes == 2 {
                 if data.len() < offset + total_blocks * 2 {
-                    return Err(ProtocolError::TruncatedPayload { field: "section_indices_u16" });
+                    return Err(ProtocolError::TruncatedPayload {
+                        field: "section_indices_u16",
+                    });
                 }
                 for i in 0..total_blocks {
-                    let val = u16::from_le_bytes(data[offset + i * 2..offset + i * 2 + 2].try_into().unwrap());
+                    let val = u16::from_le_bytes(
+                        data[offset + i * 2..offset + i * 2 + 2].try_into().unwrap(),
+                    );
                     grid_indices.push(val);
                 }
                 offset += total_blocks * 2;
@@ -334,14 +388,16 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
             let mut biome_indices = None;
 
             if data.len() >= offset + 2 {
-                let b_count = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+                let b_count =
+                    u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
                 offset += 2;
                 let mut bp = Vec::with_capacity(b_count);
                 for _ in 0..b_count {
                     if data.len() < offset + 2 {
                         break;
                     }
-                    let b_len = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+                    let b_len =
+                        u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
                     offset += 2;
                     if data.len() < offset + b_len {
                         break;
@@ -355,7 +411,7 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
                 if b_count == 1 {
                     biome_indices = Some(vec![0u16; total_blocks]);
                     biome_palette = Some(bp);
-                } else if b_count > 1 && data.len() >= offset + 1 {
+                } else if b_count > 1 && data.len() > offset {
                     let b_idx_bytes = data[offset];
                     offset += 1;
                     let mut bi = Vec::with_capacity(total_blocks);
@@ -365,7 +421,9 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
                         }
                     } else if b_idx_bytes == 2 && data.len() >= offset + total_blocks * 2 {
                         for i in 0..total_blocks {
-                            let val = u16::from_le_bytes(data[offset + i * 2..offset + i * 2 + 2].try_into().unwrap());
+                            let val = u16::from_le_bytes(
+                                data[offset + i * 2..offset + i * 2 + 2].try_into().unwrap(),
+                            );
                             bi.push(val);
                         }
                     }
@@ -395,13 +453,18 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
                 });
             }
             let total_sections = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
-            let non_empty_sections = u32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap());
-            let total_volume = u32::from_le_bytes(data[offset + 8..offset + 12].try_into().unwrap());
-            let dim_len = u16::from_le_bytes(data[offset + 12..offset + 14].try_into().unwrap()) as usize;
+            let non_empty_sections =
+                u32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap());
+            let total_volume =
+                u32::from_le_bytes(data[offset + 8..offset + 12].try_into().unwrap());
+            let dim_len =
+                u16::from_le_bytes(data[offset + 12..offset + 14].try_into().unwrap()) as usize;
             offset += HANDSHAKE_INFO_HEADER_SIZE;
 
             if data.len() < offset + dim_len + 2 {
-                return Err(ProtocolError::TruncatedPayload { field: "handshake_dimension_flags" });
+                return Err(ProtocolError::TruncatedPayload {
+                    field: "handshake_dimension_flags",
+                });
             }
             let dimension = std::str::from_utf8(&data[offset..offset + dim_len])
                 .map_err(|e| ProtocolError::Utf8Error {
@@ -430,7 +493,8 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
                 });
             }
             let stream_id = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
-            let total_sections = u32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap());
+            let total_sections =
+                u32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap());
             let flags = u16::from_le_bytes(data[offset + 8..offset + 10].try_into().unwrap());
 
             Ok(Packet::StreamBegin {
@@ -448,7 +512,8 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
                 });
             }
             let stream_id = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
-            let sent_sections = u32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap());
+            let sent_sections =
+                u32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap());
             let status_code = u16::from_le_bytes(data[offset + 8..offset + 10].try_into().unwrap());
 
             Ok(Packet::StreamEnd {
@@ -470,7 +535,9 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
             let count = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
             offset += 2;
             if data.len() < offset + count * 12 {
-                return Err(ProtocolError::TruncatedPayload { field: "req_section_sync_entries" });
+                return Err(ProtocolError::TruncatedPayload {
+                    field: "req_section_sync_entries",
+                });
             }
             let mut sections = Vec::with_capacity(count);
             for i in 0..count {
@@ -517,7 +584,11 @@ pub fn encode_repair_requests(sections: &[IVec3], max_batch_size: usize) -> Vec<
     if sections.is_empty() {
         return Vec::new();
     }
-    let chunk_size = if max_batch_size == 0 { 64 } else { max_batch_size };
+    let chunk_size = if max_batch_size == 0 {
+        64
+    } else {
+        max_batch_size
+    };
     let mut packets = Vec::new();
 
     for chunk in sections.chunks(chunk_size) {

@@ -41,7 +41,6 @@ pub mod voxel {
     pub const fn padded_index(px: usize, py: usize, pz: usize) -> usize {
         px * (PADDED_SIZE * PADDED_SIZE) + py * PADDED_SIZE + pz
     }
-
 }
 
 /// Geometry, tolerance, and UV coordinate domain constants.
@@ -71,7 +70,6 @@ pub mod geometry {
         min: Vec2::ZERO,
         max: Vec2::new(BLOCK_UV_SIZE, BLOCK_UV_SIZE),
     };
-
 }
 
 /// Fluid physics and rendering constants.
@@ -254,4 +252,3 @@ mod tests {
         concurrency::set_hardware_concurrency(0); // cleanup
     }
 }
-

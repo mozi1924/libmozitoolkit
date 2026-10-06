@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use mtk_resource::ResourceLocation;
 use mtk_texture::{AtlasAddressMap, AtlasSpriteLocation};
+use std::collections::HashMap;
 
 use crate::types::GridAtlasSpec;
 
@@ -64,12 +64,40 @@ pub fn clean_identifier(raw: &str) -> String {
 
     // 4. Strip exporter biome suffixes
     let biome_suffixes = [
-        "-desert", "-forest", "-swamp", "-taiga", "-snow", "-ocean", "-jungle",
-        "-badlands", "-savanna", "-dark_forest", "-birch_forest", "-plains",
-        "-meadow", "-mangrove", "-cherry_grove", "-cold_ocean", "-warm_ocean",
-        "_desert", "_forest", "_swamp", "_taiga", "_snow", "_ocean", "_jungle",
-        "_badlands", "_savanna", "_dark_forest", "_birch_forest", "_plains",
-        "_meadow", "_mangrove", "_cherry_grove", "_cold_ocean", "_warm_ocean",
+        "-desert",
+        "-forest",
+        "-swamp",
+        "-taiga",
+        "-snow",
+        "-ocean",
+        "-jungle",
+        "-badlands",
+        "-savanna",
+        "-dark_forest",
+        "-birch_forest",
+        "-plains",
+        "-meadow",
+        "-mangrove",
+        "-cherry_grove",
+        "-cold_ocean",
+        "-warm_ocean",
+        "_desert",
+        "_forest",
+        "_swamp",
+        "_taiga",
+        "_snow",
+        "_ocean",
+        "_jungle",
+        "_badlands",
+        "_savanna",
+        "_dark_forest",
+        "_birch_forest",
+        "_plains",
+        "_meadow",
+        "_mangrove",
+        "_cherry_grove",
+        "_cold_ocean",
+        "_warm_ocean",
         "_y",
     ];
 
@@ -81,7 +109,7 @@ pub fn clean_identifier(raw: &str) -> String {
     }
 
     if !s.contains('/') {
-        s = s.replace(' ', "_").replace('-', "_");
+        s = s.replace([' ', '-'], "_");
     }
 
     s
@@ -89,11 +117,7 @@ pub fn clean_identifier(raw: &str) -> String {
 
 /// Convert a grid atlas UV coordinate (u, v) to its local [0, 1] swatch coordinate based on GridAtlasSpec.
 #[inline]
-pub fn remap_grid_atlas_uv_to_local(
-    u: f32,
-    v: f32,
-    spec: &GridAtlasSpec,
-) -> [f32; 2] {
+pub fn remap_grid_atlas_uv_to_local(u: f32, v: f32, spec: &GridAtlasSpec) -> [f32; 2] {
     let tex_w = spec.image_width.max(1) as f32;
     let tex_h = spec.image_height.max(1) as f32;
 
@@ -110,14 +134,16 @@ pub fn remap_grid_atlas_uv_to_local(
 }
 
 /// Decode a polygon UV coordinate on a grid atlas to its candidate identifiers and local [0, 1] UVs.
-pub fn decode_grid_atlas_uv<'a>(
+pub fn decode_grid_atlas_uv(
     u: f32,
     v: f32,
-    spec: &'a GridAtlasSpec,
-) -> (Option<&'a Vec<String>>, [f32; 2]) {
+    spec: &GridAtlasSpec,
+) -> (Option<&Vec<String>>, [f32; 2]) {
     let tex_w = spec.image_width.max(1) as f32;
     let tex_h = spec.image_height.max(1) as f32;
-    let swatches_per_row = (spec.image_width as f32 / spec.swatch_size).floor().max(1.0) as usize;
+    let swatches_per_row = (spec.image_width as f32 / spec.swatch_size)
+        .floor()
+        .max(1.0) as usize;
 
     let px = u * tex_w;
     let py = (1.0 - v) * tex_h;
@@ -163,7 +189,9 @@ impl MaterialResolver {
         let cleaned = clean_identifier(raw_material_name);
 
         // 0. Built-in fluid alias prioritization (prevents "water" / "lava" from colliding with paintings or particles)
-        if let Some(candidates) = get_fluid_candidates(raw_material_name).or_else(|| get_fluid_candidates(&cleaned)) {
+        if let Some(candidates) =
+            get_fluid_candidates(raw_material_name).or_else(|| get_fluid_candidates(&cleaned))
+        {
             for &cand in candidates {
                 if let Some(sprite_loc) = address_map.lookup_str(cand) {
                     let res_loc = ResourceLocation::parse(cand)
@@ -231,10 +259,9 @@ impl MaterialResolver {
                     "block/redstone_dust_overlay",
                     "block/redstone_dust_dot",
                 ],
-                "redstone_dust_dot" | "redstone_wire_dot" => &[
-                    "block/redstone_dust_dot",
-                    "block/redstone_dust_overlay",
-                ],
+                "redstone_dust_dot" | "redstone_wire_dot" => {
+                    &["block/redstone_dust_dot", "block/redstone_dust_overlay"]
+                }
                 "redstone_dust_angled" | "redstone_wire_angled" => &[
                     "block/redstone_dust_line0",
                     "block/redstone_dust_line1",
@@ -250,9 +277,9 @@ impl MaterialResolver {
                     "block/redstone_dust_line1",
                     "block/redstone_dust_overlay",
                 ],
-                "redstone_dust_overlay" | "redstone_wire_overlay" => &[
-                    "block/redstone_dust_overlay",
-                ],
+                "redstone_dust_overlay" | "redstone_wire_overlay" => {
+                    &["block/redstone_dust_overlay"]
+                }
                 _ => &[],
             };
 
@@ -331,7 +358,9 @@ impl MaterialResolver {
         }
 
         if raw_material_name.contains("sign") {
-            let clean_raw = raw_material_name.strip_prefix("minecraft:").unwrap_or(raw_material_name);
+            let clean_raw = raw_material_name
+                .strip_prefix("minecraft:")
+                .unwrap_or(raw_material_name);
             let raw_stem = clean_raw.rsplit('/').next().unwrap_or("");
             let pure_wood = raw_stem
                 .strip_suffix("_wall_hanging_sign")
@@ -401,7 +430,9 @@ impl MaterialResolver {
 
         if let Some(candidates) = candidates_opt {
             for cand in candidates {
-                if let Some((res_loc, sprite_loc)) = Self::resolve(cand, custom_aliases, address_map) {
+                if let Some((res_loc, sprite_loc)) =
+                    Self::resolve(cand, custom_aliases, address_map)
+                {
                     return Some((res_loc, sprite_loc, local_uv));
                 }
             }

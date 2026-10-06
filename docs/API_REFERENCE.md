@@ -60,6 +60,7 @@ pub struct MeshData {
     pub colors: Option<Vec<[f32; 4]>>,      // 顶点颜色 / Linear RGBA [N, 4]
     pub face_materials: Vec<MaterialSlotId>,// 逐面材质插槽映射 [F]
     pub face_tint_indices: Vec<TintIndex>,  // 逐面染色索引 [F]
+    pub custom_attributes: HashMap<String, MeshAttribute>, // 按名称索引的泛型自定义属性 (Point/Corner/Face/Mesh 域)
 }
 ```
 
@@ -107,26 +108,26 @@ pub struct FlatPolygonMesh {
 ---
 
 ### 2.5 统一错误处理系统 (`MtkError`)
-所有对外公开的高阶 API 均返回 `Result<T, MtkError>`，杜绝 panic 崩溃：
+`libmtk` 顶层门面将所有子领域错误聚合为单一 `MtkError`，并实现 `From<...>` 自动向上传播，杜绝 panic 崩溃：
 ```rust
 pub enum MtkError {
+    Model(mtk_model::ModelError),
+    Voxel(mtk_voxel::VoxelError),
+    Texture(mtk_texture::error::TextureError),
+    Resource(mtk_resource::error::ResourceError),
+    Material(mtk_material::MaterialError),
+    Save(mtk_save::SaveError),          // feature = "save"
     Io(std::io::Error),
     Json(serde_json::Error),
-    Image(image::ImageError),
-    ResourceNotFound(String),
-    ModelNotFound(String),
-    InvalidTextureReference(String),
-    AtlasStitchFailed(String),
-    CacheVersionMismatch { expected: u32, found: u32 },
-    SyncError(String),
-    Custom(String),
+    Bincode(bincode::Error),
+    ThreadPool(String),
 }
 ```
 
 ---
 
 ### 2.5 资产预编译缓存格式规范 (`ASSET_CACHE_FORMAT_VERSION`)
-由 `libmtk::prebake` 产出的资产预编译缓存目录结构受全局版本号严格约束（当前版本：`ASSET_CACHE_FORMAT_VERSION = 3`）：
+由 `libmtk::prebake` 产出的资产预编译缓存目录结构受全局版本号严格约束（当前版本：`ASSET_CACHE_FORMAT_VERSION = 1`）：
 ```
 cache_output_dir/
 ├── cache_manifest.json     # 全局清单、时间戳、CRC 校验与版本号

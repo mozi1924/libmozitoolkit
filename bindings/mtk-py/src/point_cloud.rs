@@ -213,7 +213,10 @@ impl PyVoxelPointCloud {
     }
 
     /// Read-only memoryview of composite light levels (`uint8` per point).
-    pub fn light_levels_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
+    pub fn light_levels_memoryview<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, PyMemoryView>> {
         let bytes = PyBytes::new(py, &self.inner.light_levels);
         PyMemoryView::from(&bytes)
     }
@@ -240,7 +243,11 @@ impl PyVoxelPointCloud {
     pub fn get_block_positions<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
         let list = PyList::empty(py);
         for i in 0..self.inner.len() {
-            let item = (self.inner.block_x[i], self.inner.block_y[i], self.inner.block_z[i]);
+            let item = (
+                self.inner.block_x[i],
+                self.inner.block_y[i],
+                self.inner.block_z[i],
+            );
             let _ = list.append(item);
         }
         list

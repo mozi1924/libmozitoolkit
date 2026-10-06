@@ -5,10 +5,10 @@
 
 use std::ffi::c_char;
 
-use mtk_core::mesh::MeshData;
+use mtk_core::attributes::FaceAttributes;
 use mtk_core::direction::Direction;
 use mtk_core::geometry::Quad;
-use mtk_core::attributes::FaceAttributes;
+use mtk_core::mesh::MeshData;
 
 /// Direct read-only pointer view of contiguous mesh buffer data.
 #[repr(C)]
@@ -50,6 +50,10 @@ pub extern "C" fn mtk_mesh_buffer_new() -> *mut MtkMeshBuffer {
 }
 
 /// Destroys and frees an `MtkMeshBuffer`.
+///
+/// # Safety
+/// `buffer` must be null or a pointer previously returned by [`mtk_mesh_buffer_new`]
+/// that has not already been freed.
 #[no_mangle]
 pub unsafe extern "C" fn mtk_mesh_buffer_free(buffer: *mut MtkMeshBuffer) {
     if !buffer.is_null() {
@@ -58,6 +62,9 @@ pub unsafe extern "C" fn mtk_mesh_buffer_free(buffer: *mut MtkMeshBuffer) {
 }
 
 /// Clears geometry from an existing mesh buffer.
+///
+/// # Safety
+/// `buffer` must be null or a valid pointer returned by [`mtk_mesh_buffer_new`].
 #[no_mangle]
 pub unsafe extern "C" fn mtk_mesh_buffer_clear(buffer: *mut MtkMeshBuffer) {
     if let Some(buf) = buffer.as_mut() {
@@ -66,6 +73,9 @@ pub unsafe extern "C" fn mtk_mesh_buffer_clear(buffer: *mut MtkMeshBuffer) {
 }
 
 /// Appends a unit cube face to the buffer (0: Down, 1: Up, 2: North, 3: South, 4: West, 5: East).
+///
+/// # Safety
+/// `buffer` must be null or a valid pointer returned by [`mtk_mesh_buffer_new`].
 #[no_mangle]
 pub unsafe extern "C" fn mtk_mesh_buffer_append_unit_cube_face(
     buffer: *mut MtkMeshBuffer,
@@ -173,4 +183,3 @@ mod tests {
         }
     }
 }
-

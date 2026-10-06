@@ -10,7 +10,6 @@ use crate::types::MesherConfig;
 
 pub use mtk_core::constants::fluid::MAX_FLUID_HEIGHT;
 
-
 /// Identifies supported Minecraft fluid types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FluidType {
@@ -59,10 +58,7 @@ pub fn get_fluid_base_height(state_str: &str) -> f32 {
         return 0.0;
     }
 
-    let level_int: u32 = props
-        .get("level")
-        .and_then(|l| l.parse().ok())
-        .unwrap_or(0);
+    let level_int: u32 = props.get("level").and_then(|l| l.parse().ok()).unwrap_or(0);
 
     if level_int >= 8 {
         MAX_FLUID_HEIGHT
@@ -78,7 +74,13 @@ pub fn get_fluid_base_height(state_str: &str) -> f32 {
 /// - Returns own height in `(0..1)` if same fluid or waterlogged.
 /// - Returns `-1.0` if solid opaque block (JMC2OBJ boundary preservation, excluded from averaging).
 /// - Returns `0.0` if air or non-solid / non-fluid block.
-pub fn sample_fluid_height<F>(mut get_state: F, x: i32, y: i32, z: i32, fluid_type: FluidType) -> f32
+pub fn sample_fluid_height<F>(
+    mut get_state: F,
+    x: i32,
+    y: i32,
+    z: i32,
+    fluid_type: FluidType,
+) -> f32
 where
     F: FnMut(i32, i32, i32) -> String,
 {
@@ -104,7 +106,9 @@ where
             let a_waterlogged = a_props.get("waterlogged").map(|v| v.as_str()) == Some("true");
             let a_clean = a_clean.strip_prefix("flowing_").unwrap_or(a_clean);
 
-            if (a_clean == fluid_type.name_str()) || (fluid_type == FluidType::Water && a_waterlogged) {
+            if (a_clean == fluid_type.name_str())
+                || (fluid_type == FluidType::Water && a_waterlogged)
+            {
                 return 1.0;
             }
         }
@@ -123,8 +127,8 @@ where
 
     let is_solid_cube = match clean {
         "stone" | "dirt" | "grass_block" | "cobblestone" | "sand" | "gravel" | "oak_planks"
-        | "spruce_planks" | "birch_planks" | "deepslate" | "bedrock" | "obsidian" | "netherrack"
-        | "end_stone" => true,
+        | "spruce_planks" | "birch_planks" | "deepslate" | "bedrock" | "obsidian"
+        | "netherrack" | "end_stone" => true,
         _ => !clean.contains("air") && !clean.contains("sapling") && !clean.contains("flower"),
     };
 
@@ -305,7 +309,9 @@ where
             let n_waterlogged = n_props.get("waterlogged").map(|v| v.as_str()) == Some("true");
             let n_clean = n_clean.strip_prefix("flowing_").unwrap_or(n_clean);
 
-            if (n_clean == fluid_type.name_str()) || (fluid_type == FluidType::Water && n_waterlogged) {
+            if (n_clean == fluid_type.name_str())
+                || (fluid_type == FluidType::Water && n_waterlogged)
+            {
                 let n_h = get_fluid_base_height(&n_state);
                 let diff = own_height - n_h;
                 if diff.abs() > 1e-4 {
@@ -365,10 +371,7 @@ where
     let own_height = get_fluid_base_height(state_str);
     let (flow_vx, flow_vz, flow_angle) =
         calculate_fluid_flow_vector(&mut get_state, x, y, z, fluid_type, own_height);
-    let level_int: u32 = props
-        .get("level")
-        .and_then(|l| l.parse().ok())
-        .unwrap_or(0);
+    let level_int: u32 = props.get("level").and_then(|l| l.parse().ok()).unwrap_or(0);
     let is_flowing = (level_int > 0 && !is_waterlogged)
         || flow_vx.abs() > 1e-4
         || flow_vz.abs() > 1e-4
@@ -385,10 +388,32 @@ where
             FluidType::Water => ("block/water_still", "block/water_flow"),
             FluidType::Lava => ("block/lava_still", "block/lava_flow"),
         };
-        let still = mtk_material::MaterialResolver::resolve(still_name, config.custom_aliases.as_deref(), atlas)
-            .map(|(res, sp)| (res.as_string(), sp.chunk_id, sp.texture_id, sp.frame_0_uv_bounds));
-        let flow = mtk_material::MaterialResolver::resolve(flow_name, config.custom_aliases.as_deref(), atlas)
-            .map(|(res, sp)| (res.as_string(), sp.chunk_id, sp.texture_id, sp.frame_0_uv_bounds));
+        let still = mtk_material::MaterialResolver::resolve(
+            still_name,
+            config.custom_aliases.as_deref(),
+            atlas,
+        )
+        .map(|(res, sp)| {
+            (
+                res.as_string(),
+                sp.chunk_id,
+                sp.texture_id,
+                sp.frame_0_uv_bounds,
+            )
+        });
+        let flow = mtk_material::MaterialResolver::resolve(
+            flow_name,
+            config.custom_aliases.as_deref(),
+            atlas,
+        )
+        .map(|(res, sp)| {
+            (
+                res.as_string(),
+                sp.chunk_id,
+                sp.texture_id,
+                sp.frame_0_uv_bounds,
+            )
+        });
         (still, flow)
     } else {
         (None, None)
@@ -397,7 +422,11 @@ where
     let mut faces_emitted = 0;
 
     // Helper to emit quad face
-    let mut emit_quad = |verts: [Vec3; 4], raw_uvs: [[f32; 2]; 4], norm: Vec3, dir: Direction, face_flowing: bool| {
+    let mut emit_quad = |verts: [Vec3; 4],
+                         raw_uvs: [[f32; 2]; 4],
+                         norm: Vec3,
+                         dir: Direction,
+                         face_flowing: bool| {
         let base_idx = mesh.positions.len() as u32;
         let norm_transformed = config.transform_direction(norm);
         let n = [norm_transformed.x, norm_transformed.y, norm_transformed.z];
@@ -408,31 +437,62 @@ where
             still_sprite.as_ref().or(flow_sprite.as_ref())
         };
 
-        let (final_mat_slot, uvs, chunk_id, tex_id, source_key) = if let Some((res_name, cid, tid, bounds)) = target_sprite {
-            let u_min = bounds[0];
-            let v_min = bounds[1];
-            let u_span = bounds[2] - u_min;
-            let v_span = bounds[3] - v_min;
-            let mapped = [
-                [u_min + raw_uvs[0][0] * u_span, v_min + (1.0 - raw_uvs[0][1]) * v_span],
-                [u_min + raw_uvs[1][0] * u_span, v_min + (1.0 - raw_uvs[1][1]) * v_span],
-                [u_min + raw_uvs[2][0] * u_span, v_min + (1.0 - raw_uvs[2][1]) * v_span],
-                [u_min + raw_uvs[3][0] * u_span, v_min + (1.0 - raw_uvs[3][1]) * v_span],
-            ];
-            (*cid, mapped, *cid as i32, *tid, res_name.clone())
-        } else {
-            let default_name = match fluid_type {
-                FluidType::Water => if face_flowing { "minecraft:block/water_flow" } else { "minecraft:block/water_still" },
-                FluidType::Lava => if face_flowing { "minecraft:block/lava_flow" } else { "minecraft:block/lava_still" },
+        let (final_mat_slot, uvs, chunk_id, tex_id, source_key) =
+            if let Some((res_name, cid, tid, bounds)) = target_sprite {
+                let u_min = bounds[0];
+                let v_min = bounds[1];
+                let u_span = bounds[2] - u_min;
+                let v_span = bounds[3] - v_min;
+                let mapped = [
+                    [
+                        u_min + raw_uvs[0][0] * u_span,
+                        v_min + (1.0 - raw_uvs[0][1]) * v_span,
+                    ],
+                    [
+                        u_min + raw_uvs[1][0] * u_span,
+                        v_min + (1.0 - raw_uvs[1][1]) * v_span,
+                    ],
+                    [
+                        u_min + raw_uvs[2][0] * u_span,
+                        v_min + (1.0 - raw_uvs[2][1]) * v_span,
+                    ],
+                    [
+                        u_min + raw_uvs[3][0] * u_span,
+                        v_min + (1.0 - raw_uvs[3][1]) * v_span,
+                    ],
+                ];
+                (*cid, mapped, *cid as i32, *tid, res_name.clone())
+            } else {
+                let default_name = match fluid_type {
+                    FluidType::Water => {
+                        if face_flowing {
+                            "minecraft:block/water_flow"
+                        } else {
+                            "minecraft:block/water_still"
+                        }
+                    }
+                    FluidType::Lava => {
+                        if face_flowing {
+                            "minecraft:block/lava_flow"
+                        } else {
+                            "minecraft:block/lava_still"
+                        }
+                    }
+                };
+                let mapped_fallback = [
+                    [raw_uvs[0][0], 1.0 - raw_uvs[0][1]],
+                    [raw_uvs[1][0], 1.0 - raw_uvs[1][1]],
+                    [raw_uvs[2][0], 1.0 - raw_uvs[2][1]],
+                    [raw_uvs[3][0], 1.0 - raw_uvs[3][1]],
+                ];
+                (
+                    material_slot,
+                    mapped_fallback,
+                    0,
+                    0,
+                    default_name.to_string(),
+                )
             };
-            let mapped_fallback = [
-                [raw_uvs[0][0], 1.0 - raw_uvs[0][1]],
-                [raw_uvs[1][0], 1.0 - raw_uvs[1][1]],
-                [raw_uvs[2][0], 1.0 - raw_uvs[2][1]],
-                [raw_uvs[3][0], 1.0 - raw_uvs[3][1]],
-            ];
-            (material_slot, mapped_fallback, 0, 0, default_name.to_string())
-        };
 
         for i in 0..4 {
             let p = config.transform_position(verts[i]);
@@ -458,7 +518,11 @@ where
 
         mesh.face_materials.push(final_mat_slot);
         mesh.face_tint_indices
-            .push(if fluid_type == FluidType::Water { 0 } else { -1 });
+            .push(if fluid_type == FluidType::Water {
+                0
+            } else {
+                -1
+            });
 
         if let Some(ref mut col) = collector {
             let (f_tint_data, f_tint_color, f_colormap_uv) = if fluid_type == FluidType::Water {
@@ -519,7 +583,13 @@ where
         let v_ne = Vec3::new(wx + 1.0, wy + c_ne, wz);
 
         let top_uvs = get_fluid_top_uvs(is_flowing, if is_flowing { flow_angle } else { 0.0 });
-        emit_quad([v_nw, v_sw, v_se, v_ne], top_uvs, Vec3::Y, Direction::Up, is_flowing);
+        emit_quad(
+            [v_nw, v_sw, v_se, v_ne],
+            top_uvs,
+            Vec3::Y,
+            Direction::Up,
+            is_flowing,
+        );
     }
 
     // 2. BOTTOM FACE (DOWN)
@@ -544,7 +614,13 @@ where
         let v_se = Vec3::new(wx + 1.0, wy, wz + 1.0);
 
         let bot_uvs = get_fluid_top_uvs(false, 0.0);
-        emit_quad([v_sw, v_nw, v_ne, v_se], bot_uvs, -Vec3::Y, Direction::Down, false);
+        emit_quad(
+            [v_sw, v_nw, v_ne, v_se],
+            bot_uvs,
+            -Vec3::Y,
+            Direction::Down,
+            false,
+        );
     }
 
     // 3. SIDE FACES (North, South, West, East)

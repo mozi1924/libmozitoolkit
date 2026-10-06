@@ -11,13 +11,13 @@ use mtk_core::direction::{DirMask, Direction};
 use mtk_core::geometry::Aabb2d;
 use mtk_core::Vec3;
 
-use crate::rect_ops::extract_quad_face_occlusion_rect;
-use crate::types::{is_full_rect, BlockCullMeta, CullCategory, FULL_FACE_RECT};
 use super::catalog::{
-    is_non_full_or_partial_block, is_non_occluding_block,
-    AIR_NAMES, FLUID_NAMES, GLASS_NAMES, LEAVES_NAMES,
+    is_non_full_or_partial_block, is_non_occluding_block, AIR_NAMES, FLUID_NAMES, GLASS_NAMES,
+    LEAVES_NAMES,
 };
 use super::parametric::derive_parametric_face_shapes;
+use crate::rect_ops::extract_quad_face_occlusion_rect;
+use crate::types::{is_full_rect, BlockCullMeta, CullCategory, FULL_FACE_RECT};
 
 /// Canonical vanilla Minecraft blocks that canonically only exist submerged in water and
 /// do not carry an explicit `waterlogged` property in their blockstate string.
@@ -85,7 +85,11 @@ fn parse_raw_block_name_and_props(state_str: &str) -> (String, BTreeMap<String, 
                         return (name, props);
                     }
                 }
-                let name = raw_state.split(':').next_back().unwrap_or(raw_state).to_string();
+                let name = raw_state
+                    .split(':')
+                    .next_back()
+                    .unwrap_or(raw_state)
+                    .to_string();
                 return (name, props);
             }
         }
@@ -105,7 +109,11 @@ fn parse_raw_block_name_and_props(state_str: &str) -> (String, BTreeMap<String, 
         }
     }
 
-    let name = trimmed.split(':').next_back().unwrap_or(trimmed).to_string();
+    let name = trimmed
+        .split(':')
+        .next_back()
+        .unwrap_or(trimmed)
+        .to_string();
     (name, BTreeMap::new())
 }
 
@@ -118,7 +126,10 @@ pub fn compute_block_cull_meta(
     let (name, props) = parse_block_name_and_props(state_str);
     let name_low = name.to_ascii_lowercase();
 
-    let json_opaque = props.get("__opaque").and_then(|v| v.parse::<i64>().ok()).map(|v| v != 0);
+    let json_opaque = props
+        .get("__opaque")
+        .and_then(|v| v.parse::<i64>().ok())
+        .map(|v| v != 0);
     let effective_opaque_hint = is_opaque_hint.or(json_opaque);
     let json_type = props.get("__type").and_then(|v| v.parse::<i64>().ok());
 
@@ -156,10 +167,20 @@ pub fn compute_block_cull_meta(
         && (is_pane
             || name_low.ends_with("_slab")
             || name_low.ends_with("_stairs")
-            || (name_low.contains("piston") && (props.get("extended").map(|s| s.as_str()) == Some("true") || name_low.contains("head")))
+            || (name_low.contains("piston")
+                && (props.get("extended").map(|s| s.as_str()) == Some("true")
+                    || name_low.contains("head")))
             || is_non_full_or_partial_block(&name_low));
 
-    let (category, is_full_cube, is_opaque, cull_group, face_shapes, full_face_mask, empty_face_mask) = if is_air {
+    let (
+        category,
+        is_full_cube,
+        is_opaque,
+        cull_group,
+        face_shapes,
+        full_face_mask,
+        empty_face_mask,
+    ) = if is_air {
         (
             CullCategory::Air,
             false,

@@ -130,11 +130,11 @@ Python 模块名：`libmtk_py`
 ## 3. 构建、编译与测试指南
 
 > [!IMPORTANT]
-> 必须严格在当前工作区的虚拟环境 (`/home/mozi/libmozitoolkit/.venv`) 中执行构建，严禁使用全局 Python 或 `pip install` 污染全局 `bpy`！
+> 必须严格在当前工作区的虚拟环境 (`./.venv`) 中执行构建，严禁使用全局 Python 或 `pip install` 污染全局 `bpy`！
 
 ### 3.1 激活虚拟环境并编译 Python 模块
 ```bash
-cd /home/mozi/libmozitoolkit
+cd <libmozitoolkit 工作区根目录>
 source .venv/bin/activate
 
 # 本地开发模式构建 (生成动态库供测试)
@@ -147,7 +147,7 @@ maturin build --release -m bindings/mtk-py/Cargo.toml
 ### 3.2 同步至 Blender 插件前端 (`MoziToolKit`)
 ```bash
 # 将编译生成的 .whl 拷贝到 MoziToolKit 的 wheels 目录
-cp target/wheels/libmtk_py-*.whl /home/mozi/MoziToolKit/wheels/
+cp target/wheels/libmtk_py-*.whl ../MoziToolKit/wheels/
 ```
 
 ### 3.3 运行 Python 绑定测试
@@ -156,7 +156,7 @@ cp target/wheels/libmtk_py-*.whl /home/mozi/MoziToolKit/wheels/
 pytest bindings/mtk-py/tests/
 
 # 运行 MoziToolKit 的 Bridge 测试套件
-pytest /home/mozi/MoziToolKit/tests/
+pytest ../MoziToolKit/tests/
 ```
 
 ---

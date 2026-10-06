@@ -1,8 +1,8 @@
 //! # Mesh Extrusion Types & Geometrical Helpers
 
-use alloc::vec::Vec;
 use crate::extrude::{ExtrudeNoiseType, ExtrudeUvMode};
 pub use crate::polygon::FlatPolygonMesh;
+use alloc::vec::Vec;
 
 /// Configuration options for batch mesh extrusion and side UV repair.
 #[derive(Debug, Clone, Copy, PartialEq)]

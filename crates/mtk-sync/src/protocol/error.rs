@@ -19,10 +19,7 @@ pub enum ProtocolError {
     UnknownPacketType(u8),
 
     #[error("UTF-8 decoding error for field '{field}': {detail}")]
-    Utf8Error {
-        field: &'static str,
-        detail: String,
-    },
+    Utf8Error { field: &'static str, detail: String },
 
     #[error("Invalid index format: expected 1 (u8) or 2 (u16), got {0}")]
     InvalidIndexFormat(u8),

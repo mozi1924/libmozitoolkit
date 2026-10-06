@@ -13,6 +13,7 @@ members = [
     "crates/libmtk",
     "crates/mtk-bench",
     "crates/mtk-cli",
+    "crates/mtk-testkit",
     "bindings/mtk-py",
     "bindings/mtk-ffi",
     "bindings/mtk-wasm",
@@ -60,6 +61,32 @@ mtk-texture = { path = "crates/mtk-texture", version = "0.1.0" }
 mtk-material = { path = "crates/mtk-material", version = "0.1.0" }
 mtk-save = { path = "crates/mtk-save", version = "0.1.0" }
 libmtk = { path = "crates/libmtk", version = "0.1.0" }
+mtk-testkit = { path = "crates/mtk-testkit", version = "0.1.0" }
+
+# Workspace-wide Clippy policy (opt in per-crate via `[lints] workspace = true`).
+# Keep this list small and justified: it only suppresses lints that are inherent to the
+# FFI/PyO3 surface, the minimum supported Rust version, or deliberate API naming.
+[workspace.lints.clippy]
+# PyO3 `#[pyfunction]` / mesher batch entry points legitimately accept many flat parameters
+# to avoid per-call allocation and preserve zero-copy semantics.
+too_many_arguments = "allow"
+# Parallel batch APIs return nested Rayon tuple results (e.g. `Vec<(Vec<f32>, Vec<u16>)>`).
+type_complexity = "allow"
+# `is_multiple_of` was stabilized in Rust 1.87, above our declared 1.80 MSRV.
+manual_is_multiple_of = "allow"
+# Deliberate domain-prefixed enum variants and the historical `stitcher::stitcher` layout.
+enum_variant_names = "allow"
+module_inception = "allow"
+# `from_str`/`parse` helpers are internal constructors, not `std::str::FromStr` impls.
+should_implement_trait = "allow"
+# A few enums carry one intentionally large (baked geometry) variant.
+large_enum_variant = "allow"
+# Flat-buffer batch kernels index several parallel arrays in lockstep; iterator rewrites
+# obscure the index arithmetic used for raw pointer offsets.
+needless_range_loop = "allow"
+# Serde `serialize_with` / `deserialize_with` signatures must match the on-disk field type
+# (which is a `Box<[...]>`).
+borrowed_box = "allow"
 
 [profile.release]
 opt-level = 3

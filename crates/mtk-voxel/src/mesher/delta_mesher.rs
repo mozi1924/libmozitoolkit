@@ -53,7 +53,12 @@ impl DeltaMesher {
         for coord in dirty_coords {
             let padded = world.get_section_padded_array(coord);
             if !padded.is_empty {
-                let mesh = SectionMesher::mesh_section_with_source(&padded, culler, &mut model_provider, config);
+                let mesh = SectionMesher::mesh_section_with_source(
+                    &padded,
+                    culler,
+                    &mut model_provider,
+                    config,
+                );
                 results.push((coord, mesh));
             }
         }

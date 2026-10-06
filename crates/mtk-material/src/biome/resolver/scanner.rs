@@ -1,8 +1,8 @@
+use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use serde_json::Value;
 
 use super::super::hardcoded::classify_tint_category;
 use super::types::BiomeResolver;
@@ -23,7 +23,11 @@ impl BiomeResolver {
     pub fn update_models_index(&mut self) {
         self.models_by_stem.clear();
         for (k, v) in &self.models {
-            let stem = k.split('/').last().unwrap_or(k).trim_end_matches(".json");
+            let stem = k
+                .split('/')
+                .next_back()
+                .unwrap_or(k)
+                .trim_end_matches(".json");
             self.models_by_stem.insert(stem.to_string(), v.clone());
         }
     }
@@ -35,9 +39,15 @@ impl BiomeResolver {
         }
         let clean = model_key.trim().to_ascii_lowercase();
         let unname = clean.strip_prefix("minecraft:").unwrap_or(&clean);
-        let stem = unname.split('/').last().unwrap_or(unname).trim_end_matches(".json");
+        let stem = unname
+            .split('/')
+            .next_back()
+            .unwrap_or(unname)
+            .trim_end_matches(".json");
 
-        let model_val = self.models.get(unname)
+        let model_val = self
+            .models
+            .get(unname)
             .or_else(|| self.models.get(stem))
             .or_else(|| self.models_by_stem.get(stem))?;
 
@@ -73,7 +83,11 @@ impl BiomeResolver {
     }
 
     /// Follow #variable reference chains in a model's textures dictionary.
-    pub fn resolve_texture_var<'a>(&self, raw: &'a str, textures: &'a HashMap<String, String>) -> String {
+    pub fn resolve_texture_var<'a>(
+        &self,
+        raw: &'a str,
+        textures: &'a HashMap<String, String>,
+    ) -> String {
         let mut curr = raw;
         for _ in 0..8 {
             if let Some(var_name) = curr.strip_prefix('#') {
@@ -109,7 +123,9 @@ impl BiomeResolver {
             }
 
             // Discover overlay pairs
-            if let (Some(side), Some(overlay)) = (textures_map.get("side"), textures_map.get("overlay")) {
+            if let (Some(side), Some(overlay)) =
+                (textures_map.get("side"), textures_map.get("overlay"))
+            {
                 let clean_side = self.resolve_texture_var(side, &textures_map);
                 let clean_overlay = self.resolve_texture_var(overlay, &textures_map);
                 if !clean_side.is_empty()
@@ -121,7 +137,9 @@ impl BiomeResolver {
                     self.overlay_pairs.insert(clean_side, clean_overlay);
                 }
             }
-            if let (Some(cross), Some(cross_overlay)) = (textures_map.get("cross"), textures_map.get("cross_overlay")) {
+            if let (Some(cross), Some(cross_overlay)) =
+                (textures_map.get("cross"), textures_map.get("cross_overlay"))
+            {
                 let clean_cross = self.resolve_texture_var(cross, &textures_map);
                 let clean_overlay = self.resolve_texture_var(cross_overlay, &textures_map);
                 if !clean_cross.is_empty()
@@ -135,23 +153,37 @@ impl BiomeResolver {
             }
 
             let model_stem = model_name
-                .strip_prefix("block/").unwrap_or(&model_name)
-                .split('/').last().unwrap_or(&model_name)
+                .strip_prefix("block/")
+                .unwrap_or(&model_name)
+                .split('/')
+                .next_back()
+                .unwrap_or(&model_name)
                 .trim_end_matches(".json");
 
             if let Some(elements) = resolved.get("elements").and_then(|e| e.as_array()) {
                 for elem in elements {
                     if let Some(faces) = elem.get("faces").and_then(|f| f.as_object()) {
                         for (_f_name, f_data) in faces {
-                            let tint_idx = f_data.get("tintindex").and_then(|ti| ti.as_i64()).map(|ti| ti as i32);
+                            let tint_idx = f_data
+                                .get("tintindex")
+                                .and_then(|ti| ti.as_i64())
+                                .map(|ti| ti as i32);
                             if let Some(ti) = tint_idx {
                                 if ti >= 0 {
-                                    if let Some(raw_tex) = f_data.get("texture").and_then(|t| t.as_str()) {
-                                        let clean_tex = self.resolve_texture_var(raw_tex, &textures_map);
+                                    if let Some(raw_tex) =
+                                        f_data.get("texture").and_then(|t| t.as_str())
+                                    {
+                                        let clean_tex =
+                                            self.resolve_texture_var(raw_tex, &textures_map);
                                         if !clean_tex.is_empty() && !clean_tex.starts_with('#') {
-                                            let cat = classify_tint_category(&clean_tex, Some(model_stem), Some(ti));
+                                            let cat = classify_tint_category(
+                                                &clean_tex,
+                                                Some(model_stem),
+                                                Some(ti),
+                                            );
                                             if cat != "none" {
-                                                self.texture_tint_categories.insert(clean_tex, cat.to_string());
+                                                self.texture_tint_categories
+                                                    .insert(clean_tex, cat.to_string());
                                             }
                                         }
                                     }
@@ -163,10 +195,11 @@ impl BiomeResolver {
             } else {
                 let cat = classify_tint_category("", Some(model_stem), Some(0));
                 if cat == "foliage" {
-                    for (_k, tex) in &textures_map {
+                    for tex in textures_map.values() {
                         let clean_tex = self.resolve_texture_var(tex, &textures_map);
                         if !clean_tex.is_empty() && !clean_tex.starts_with('#') {
-                            self.texture_tint_categories.insert(clean_tex, cat.to_string());
+                            self.texture_tint_categories
+                                .insert(clean_tex, cat.to_string());
                         }
                     }
                 }
@@ -183,7 +216,7 @@ impl BiomeResolver {
         for entry in std::fs::read_dir(models_dir)? {
             let entry = entry?;
             let path = entry.path();
-            if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
+            if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
                 if let Ok(mut f) = File::open(&path) {
                     let mut s = String::new();
                     if f.read_to_string(&mut s).is_ok() {
@@ -208,7 +241,10 @@ impl BiomeResolver {
             if file.ends_with(".json") {
                 if let Some(bytes) = pack.open(&file) {
                     if let Ok(val) = serde_json::from_slice::<Value>(&bytes) {
-                        let stem = Path::new(&file).file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                        let stem = Path::new(&file)
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("");
                         self.models.insert(format!("block/{}", stem), val.clone());
                         self.models.insert(stem.to_string(), val);
                     }
@@ -227,7 +263,10 @@ impl BiomeResolver {
     }
 
     /// Parse block models from a .jar or .zip resource pack.
-    pub fn load_from_zip<P: AsRef<Path>>(&mut self, zip_path: P) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn load_from_zip<P: AsRef<Path>>(
+        &mut self,
+        zip_path: P,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let file = File::open(zip_path)?;
         let mut archive = zip::ZipArchive::new(file)?;
 
@@ -238,7 +277,10 @@ impl BiomeResolver {
                 let mut s = String::new();
                 if file.read_to_string(&mut s).is_ok() {
                     if let Ok(val) = serde_json::from_str::<Value>(&s) {
-                        let stem = Path::new(&name).file_stem().and_then(|st| st.to_str()).unwrap_or("");
+                        let stem = Path::new(&name)
+                            .file_stem()
+                            .and_then(|st| st.to_str())
+                            .unwrap_or("");
                         self.models.insert(format!("block/{}", stem), val.clone());
                         self.models.insert(stem.to_string(), val);
                     }

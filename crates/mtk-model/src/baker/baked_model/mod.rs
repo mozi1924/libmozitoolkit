@@ -16,9 +16,9 @@ pub use variant_group::*;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use glam::{Vec2, Vec3};
     use mtk_core::direction::Direction;
+    use std::collections::HashMap;
 
     #[test]
     fn test_baked_model_to_mesh() {
@@ -139,26 +139,45 @@ mod tests {
         assert!(db.get("minecraft:smooth_stone_slab[type=bottom]").is_some());
 
         // Tier 2: Stripping non-geometric properties (waterlogged, occupied)
-        let stairs_query = "minecraft:oak_stairs[facing=east,half=bottom,shape=straight,waterlogged=false]";
+        let stairs_query =
+            "minecraft:oak_stairs[facing=east,half=bottom,shape=straight,waterlogged=false]";
         let slab_query = "minecraft:smooth_stone_slab[type=bottom,waterlogged=false]";
         let bed_query = "minecraft:red_bed[facing=north,occupied=false,part=foot]";
 
         let stairs_found = db.get(stairs_query);
-        assert!(stairs_found.is_some(), "Stairs with waterlogged=false must match");
-        assert_eq!(stairs_found.unwrap().block_state, "minecraft:oak_stairs[facing=east,half=bottom,shape=straight]");
+        assert!(
+            stairs_found.is_some(),
+            "Stairs with waterlogged=false must match"
+        );
+        assert_eq!(
+            stairs_found.unwrap().block_state,
+            "minecraft:oak_stairs[facing=east,half=bottom,shape=straight]"
+        );
 
         let slab_found = db.get(slab_query);
-        assert!(slab_found.is_some(), "Slab with waterlogged=false must match");
-        assert_eq!(slab_found.unwrap().block_state, "minecraft:smooth_stone_slab[type=bottom]");
+        assert!(
+            slab_found.is_some(),
+            "Slab with waterlogged=false must match"
+        );
+        assert_eq!(
+            slab_found.unwrap().block_state,
+            "minecraft:smooth_stone_slab[type=bottom]"
+        );
 
         let bed_found = db.get(bed_query);
         assert!(bed_found.is_some(), "Bed with occupied=false must match");
-        assert_eq!(bed_found.unwrap().block_state, "minecraft:red_bed[facing=north,part=foot]");
+        assert_eq!(
+            bed_found.unwrap().block_state,
+            "minecraft:red_bed[facing=north,part=foot]"
+        );
 
         // Tier 3/4: Fallback for chest with state properties to base chest model
         let chest_query = "minecraft:chest[facing=south,type=single,waterlogged=false]";
         let chest_found = db.get(chest_query);
-        assert!(chest_found.is_some(), "Chest with properties must fallback to base chest model");
+        assert!(
+            chest_found.is_some(),
+            "Chest with properties must fallback to base chest model"
+        );
         assert_eq!(chest_found.unwrap().block_state, "minecraft:chest");
 
         // Relaxed fallback: flower_amount=1 falling back to closest variant
@@ -167,7 +186,13 @@ mod tests {
             dummy_model("minecraft:wildflowers[flower_amount=2]"),
         );
         let wf_found = db.get("minecraft:wildflowers[flower_amount=1]");
-        assert!(wf_found.is_some(), "Wildflowers flower_amount=1 must fallback to closest variant");
-        assert_eq!(wf_found.unwrap().block_state, "minecraft:wildflowers[flower_amount=2]");
+        assert!(
+            wf_found.is_some(),
+            "Wildflowers flower_amount=1 must fallback to closest variant"
+        );
+        assert_eq!(
+            wf_found.unwrap().block_state,
+            "minecraft:wildflowers[flower_amount=2]"
+        );
     }
 }

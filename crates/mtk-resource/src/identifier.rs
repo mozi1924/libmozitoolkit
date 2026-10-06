@@ -1,7 +1,7 @@
+use crate::error::ResourceError;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::str::FromStr;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use crate::error::ResourceError;
 
 pub const DEFAULT_NAMESPACE: &str = "minecraft";
 
@@ -31,15 +31,23 @@ impl ResourceLocation {
     pub fn parse(s: &str) -> Result<Self, ResourceError> {
         let s = s.trim();
         if s.is_empty() {
-            return Err(ResourceError::InvalidLocation("Empty resource string".to_string()));
+            return Err(ResourceError::InvalidLocation(
+                "Empty resource string".to_string(),
+            ));
         }
 
         if let Some((ns, path)) = s.split_once(':') {
             if ns.is_empty() {
-                return Err(ResourceError::InvalidLocation(format!("Empty namespace in '{}'", s)));
+                return Err(ResourceError::InvalidLocation(format!(
+                    "Empty namespace in '{}'",
+                    s
+                )));
             }
             if path.is_empty() {
-                return Err(ResourceError::InvalidLocation(format!("Empty path in '{}'", s)));
+                return Err(ResourceError::InvalidLocation(format!(
+                    "Empty path in '{}'",
+                    s
+                )));
             }
             Ok(Self::new(ns, path))
         } else {
@@ -60,7 +68,9 @@ impl ResourceLocation {
     pub fn parse_texture_path(input: &str) -> Result<Self, ResourceError> {
         let input = input.trim().replace('\\', "/");
         if input.is_empty() {
-            return Err(ResourceError::InvalidLocation("Empty texture path".to_string()));
+            return Err(ResourceError::InvalidLocation(
+                "Empty texture path".to_string(),
+            ));
         }
 
         // 1. Check if starts with "assets/<namespace>/textures/<path>"
@@ -103,7 +113,10 @@ impl ResourceLocation {
         if ext.is_empty() {
             format!("assets/{}/{}/{}", self.namespace, category_dir, self.path)
         } else {
-            format!("assets/{}/{}/{}.{}", self.namespace, category_dir, self.path, ext)
+            format!(
+                "assets/{}/{}/{}.{}",
+                self.namespace, category_dir, self.path, ext
+            )
         }
     }
 
@@ -176,7 +189,14 @@ impl ResourceLocation {
         if clean_path.starts_with("block/") || clean_path.starts_with("item/") {
             vec![
                 format!("assets/{}/models/{}.json", ns, clean_path),
-                format!("assets/{}/models/{}.json", ns, clean_path.split_once('/').map(|(_, p)| p).unwrap_or(clean_path)),
+                format!(
+                    "assets/{}/models/{}.json",
+                    ns,
+                    clean_path
+                        .split_once('/')
+                        .map(|(_, p)| p)
+                        .unwrap_or(clean_path)
+                ),
             ]
         } else {
             vec![

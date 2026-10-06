@@ -176,11 +176,17 @@ impl MaterialPropertyRegistry {
         for (k, v) in config.transmissive.sticker_thresholds {
             self.sticker_thresholds.insert(k, v);
         }
-        if (config.transmissive.default_glass_sticker_threshold - default_glass_sticker()).abs() > f32::EPSILON {
-            self.default_glass_sticker_threshold = config.transmissive.default_glass_sticker_threshold;
+        if (config.transmissive.default_glass_sticker_threshold - default_glass_sticker()).abs()
+            > f32::EPSILON
+        {
+            self.default_glass_sticker_threshold =
+                config.transmissive.default_glass_sticker_threshold;
         }
-        if (config.transmissive.default_fluid_sticker_threshold - default_fluid_sticker()).abs() > f32::EPSILON {
-            self.default_fluid_sticker_threshold = config.transmissive.default_fluid_sticker_threshold;
+        if (config.transmissive.default_fluid_sticker_threshold - default_fluid_sticker()).abs()
+            > f32::EPSILON
+        {
+            self.default_fluid_sticker_threshold =
+                config.transmissive.default_fluid_sticker_threshold;
         }
     }
 
@@ -210,7 +216,10 @@ impl MaterialPropertyRegistry {
 
         // 1. Dynamic state resolvers
         if let Some(props) = properties {
-            let is_lit = props.get("lit").map(|s| s.eq_ignore_ascii_case("true")).unwrap_or(false);
+            let is_lit = props
+                .get("lit")
+                .map(|s| s.eq_ignore_ascii_case("true"))
+                .unwrap_or(false);
             match clean_b {
                 "campfire" => return if is_lit { 15.0 } else { 0.0 },
                 "soul_campfire" => return if is_lit { 10.0 } else { 0.0 },
@@ -219,27 +228,45 @@ impl MaterialPropertyRegistry {
                 "redstone_torch" | "redstone_wall_torch" => return if is_lit { 7.0 } else { 0.0 },
                 "redstone_ore" | "deepslate_redstone_ore" => return if is_lit { 9.0 } else { 0.0 },
                 "copper_bulb" | "waxed_copper_bulb" => return if is_lit { 15.0 } else { 0.0 },
-                "exposed_copper_bulb" | "waxed_exposed_copper_bulb" => return if is_lit { 12.0 } else { 0.0 },
-                "weathered_copper_bulb" | "waxed_weathered_copper_bulb" => return if is_lit { 8.0 } else { 0.0 },
-                "oxidized_copper_bulb" | "waxed_oxidized_copper_bulb" => return if is_lit { 4.0 } else { 0.0 },
+                "exposed_copper_bulb" | "waxed_exposed_copper_bulb" => {
+                    return if is_lit { 12.0 } else { 0.0 }
+                }
+                "weathered_copper_bulb" | "waxed_weathered_copper_bulb" => {
+                    return if is_lit { 8.0 } else { 0.0 }
+                }
+                "oxidized_copper_bulb" | "waxed_oxidized_copper_bulb" => {
+                    return if is_lit { 4.0 } else { 0.0 }
+                }
                 "candle_cake" => return if is_lit { 3.0 } else { 0.0 },
                 s if s == "candle" || s.ends_with("_candle") => {
                     if !is_lit {
                         return 0.0;
                     }
-                    let candles = props.get("candles").and_then(|v| v.parse::<f32>().ok()).unwrap_or(1.0);
+                    let candles = props
+                        .get("candles")
+                        .and_then(|v| v.parse::<f32>().ok())
+                        .unwrap_or(1.0);
                     return candles * 3.0;
                 }
                 "sea_pickle" => {
-                    let waterlogged = props.get("waterlogged").map(|v| v.eq_ignore_ascii_case("true")).unwrap_or(true);
+                    let waterlogged = props
+                        .get("waterlogged")
+                        .map(|v| v.eq_ignore_ascii_case("true"))
+                        .unwrap_or(true);
                     if !waterlogged {
                         return 0.0;
                     }
-                    let pickles = props.get("pickles").and_then(|v| v.parse::<f32>().ok()).unwrap_or(1.0);
+                    let pickles = props
+                        .get("pickles")
+                        .and_then(|v| v.parse::<f32>().ok())
+                        .unwrap_or(1.0);
                     return pickles * 3.0 + 3.0;
                 }
                 "respawn_anchor" => {
-                    let charges = props.get("charges").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
+                    let charges = props
+                        .get("charges")
+                        .and_then(|v| v.parse::<i32>().ok())
+                        .unwrap_or(0);
                     return match charges {
                         1 => 3.0,
                         2 => 7.0,
@@ -249,14 +276,23 @@ impl MaterialPropertyRegistry {
                     };
                 }
                 "cave_vines" | "cave_vines_plant" => {
-                    let berries = props.get("berries").map(|v| v.eq_ignore_ascii_case("true")).unwrap_or(false);
+                    let berries = props
+                        .get("berries")
+                        .map(|v| v.eq_ignore_ascii_case("true"))
+                        .unwrap_or(false);
                     return if berries { 14.0 } else { 0.0 };
                 }
                 "light" => {
-                    return props.get("level").and_then(|v| v.parse::<f32>().ok()).unwrap_or(15.0);
+                    return props
+                        .get("level")
+                        .and_then(|v| v.parse::<f32>().ok())
+                        .unwrap_or(15.0);
                 }
                 "redstone_wire" => {
-                    return props.get("power").and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
+                    return props
+                        .get("power")
+                        .and_then(|v| v.parse::<f32>().ok())
+                        .unwrap_or(0.0);
                 }
                 _ => {}
             }
@@ -293,7 +329,9 @@ impl MaterialPropertyRegistry {
         let clean_t = texture_name.map(clean_name).unwrap_or("");
 
         // Exact match in set
-        if self.thin_wall_exact.contains(clean_b) || (!clean_t.is_empty() && self.thin_wall_exact.contains(clean_t)) {
+        if self.thin_wall_exact.contains(clean_b)
+            || (!clean_t.is_empty() && self.thin_wall_exact.contains(clean_t))
+        {
             return true;
         }
 
@@ -313,7 +351,9 @@ impl MaterialPropertyRegistry {
         let clean_t = texture_name.map(clean_name).unwrap_or("");
 
         // Exact match
-        if self.transmissive_exact.contains(clean_b) || (!clean_t.is_empty() && self.transmissive_exact.contains(clean_t)) {
+        if self.transmissive_exact.contains(clean_b)
+            || (!clean_t.is_empty() && self.transmissive_exact.contains(clean_t))
+        {
             return true;
         }
 
@@ -332,7 +372,11 @@ impl MaterialPropertyRegistry {
 
     /// Evaluates transmission weight (1.0 for transmissive, 0.0 otherwise).
     #[inline]
-    pub fn get_block_transmission_weight(&self, block_name: &str, texture_name: Option<&str>) -> f32 {
+    pub fn get_block_transmission_weight(
+        &self,
+        block_name: &str,
+        texture_name: Option<&str>,
+    ) -> f32 {
         if self.is_transmissive_block(block_name, texture_name) {
             1.0
         } else {
@@ -352,10 +396,14 @@ impl MaterialPropertyRegistry {
             return th;
         }
 
-        if clean_b.contains("water") || clean_t.contains("water")
-            || clean_b.contains("ice") || clean_t.contains("ice")
-            || clean_b.contains("slime") || clean_t.contains("slime")
-            || clean_b.contains("honey") || clean_t.contains("honey")
+        if clean_b.contains("water")
+            || clean_t.contains("water")
+            || clean_b.contains("ice")
+            || clean_t.contains("ice")
+            || clean_b.contains("slime")
+            || clean_t.contains("slime")
+            || clean_b.contains("honey")
+            || clean_t.contains("honey")
         {
             return self.default_fluid_sticker_threshold;
         }
@@ -367,7 +415,11 @@ impl MaterialPropertyRegistry {
     #[inline]
     pub fn get_material_props(&self, block_name: &str, texture_name: Option<&str>) -> [f32; 4] {
         let emission = self.get_block_emission_strength(block_name, None, texture_name);
-        let thin_wall = if self.is_thin_wall_block(block_name, texture_name) { 1.0 } else { 0.0 };
+        let thin_wall = if self.is_thin_wall_block(block_name, texture_name) {
+            1.0
+        } else {
+            0.0
+        };
         let transmission = self.get_block_transmission_weight(block_name, texture_name);
         let sticker = self.get_block_sticker_threshold(block_name, texture_name);
         [emission, thin_wall, transmission, sticker]
@@ -400,7 +452,9 @@ pub fn with_global_registry<R, F: FnOnce(&MaterialPropertyRegistry) -> R>(f: F) 
     }
 
     // 3. Read again
-    let guard = GLOBAL_REGISTRY.read().expect("read lock global registry after init");
+    let guard = GLOBAL_REGISTRY
+        .read()
+        .expect("read lock global registry after init");
     f(guard.as_ref().unwrap())
 }
 

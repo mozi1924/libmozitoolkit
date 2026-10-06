@@ -99,7 +99,10 @@ pub fn run_verify_cull(args: VerifyCullArgs) -> Result<(), Box<dyn std::error::E
         instance.glass_cull_mode = glass_mode;
 
         let state_meta = instance.get_meta(&tc.state, None, None);
-        let neighbor_meta = tc.neighbor.as_ref().map(|n| instance.get_meta(n, None, None));
+        let neighbor_meta = tc
+            .neighbor
+            .as_ref()
+            .map(|n| instance.get_meta(n, None, None));
 
         let dir = Direction::parse_loose(&tc.direction).unwrap_or(Direction::East);
         let pos_a = tc.pos_a.map(|p| IVec3::new(p[0], p[1], p[2]));

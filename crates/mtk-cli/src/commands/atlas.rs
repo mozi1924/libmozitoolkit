@@ -23,7 +23,7 @@ pub enum AtlasSubcommand {
 #[derive(Args, Debug)]
 pub struct AtlasBakeVanillaArgs {
     /// Path to Minecraft assets folder or directory
-    #[arg(short, long, default_value = "/home/mozi/mc")]
+    #[arg(short, long, default_value = "mc")]
     pub mc_dir: PathBuf,
 
     /// Max atlas texture dimension (width/height)
@@ -34,11 +34,11 @@ pub struct AtlasBakeVanillaArgs {
 #[derive(Args, Debug)]
 pub struct AtlasBakeAllArgs {
     /// Path to base vanilla JAR file
-    #[arg(short, long, default_value = "/home/mozi/26.2-Fabric.jar")]
+    #[arg(short, long, default_value = "26.2-Fabric.jar")]
     pub jar: PathBuf,
 
     /// Optional top resource pack ZIP file (e.g. SPBR)
-    #[arg(short, long, default_value = "/home/mozi/Desktop/SPBR-21.zip")]
+    #[arg(short, long, default_value = "SPBR-21.zip")]
     pub pack: Option<PathBuf>,
 
     /// Directory where baked PNGs and JSON maps will be written
@@ -53,11 +53,11 @@ pub struct AtlasBakeAllArgs {
 #[derive(Args, Debug)]
 pub struct AtlasBakeDualArgs {
     /// Path to base vanilla JAR file
-    #[arg(short, long, default_value = "/home/mozi/26.2-Fabric.jar")]
+    #[arg(short, long, default_value = "26.2-Fabric.jar")]
     pub jar: PathBuf,
 
     /// Optional top resource pack ZIP file
-    #[arg(short, long, default_value = "/home/mozi/Desktop/SPBR-21.zip")]
+    #[arg(short, long, default_value = "SPBR-21.zip")]
     pub pack: Option<PathBuf>,
 
     /// Root output directory
@@ -74,17 +74,26 @@ pub fn run_atlas(cmd: AtlasSubcommand) -> Result<(), Box<dyn std::error::Error>>
 }
 
 fn run_bake_vanilla(args: AtlasBakeVanillaArgs) -> Result<(), Box<dyn std::error::Error>> {
-    println!("=== Testing Vanilla Atlas Baking on {} ===", args.mc_dir.display());
+    println!(
+        "=== Testing Vanilla Atlas Baking on {} ===",
+        args.mc_dir.display()
+    );
 
     if !args.mc_dir.exists() {
-        println!("Warning: {} does not exist, skipping live test.", args.mc_dir.display());
+        println!(
+            "Warning: {} does not exist, skipping live test.",
+            args.mc_dir.display()
+        );
         return Ok(());
     }
 
     let t0 = Instant::now();
     let mut stack = ResourcePackStack::new();
     if args.mc_dir.is_file() {
-        stack.push_pack(Box::new(ZipPack::from_file("vanilla_client", &args.mc_dir)?));
+        stack.push_pack(Box::new(ZipPack::from_file(
+            "vanilla_client",
+            &args.mc_dir,
+        )?));
     } else {
         stack.push_pack(Box::new(DirectoryPack::new("vanilla_client", &args.mc_dir)));
     }
@@ -92,7 +101,11 @@ fn run_bake_vanilla(args: AtlasBakeVanillaArgs) -> Result<(), Box<dyn std::error
     let blocks_loc = ResourceLocation::parse("minecraft:blocks")?;
     println!("Loading atlas definition: {}", blocks_loc);
     let definition = stack.load_atlas_definition(&blocks_loc)?;
-    println!("Loaded atlas definition with {} sources in {:?}", definition.sources.len(), t0.elapsed());
+    println!(
+        "Loaded atlas definition with {} sources in {:?}",
+        definition.sources.len(),
+        t0.elapsed()
+    );
 
     let builder = AtlasBuilder::new(AtlasBuilderConfig {
         max_width: args.max_size,
@@ -108,7 +121,10 @@ fn run_bake_vanilla(args: AtlasBakeVanillaArgs) -> Result<(), Box<dyn std::error
     println!("--------------------------------------------------");
     println!("Atlas Baking Complete in {:?}", bake_elapsed);
     println!("Total Chunks: {}", baked.chunks.len());
-    println!("Total Registered Sprites: {}", baked.address_map.sprites.len());
+    println!(
+        "Total Registered Sprites: {}",
+        baked.address_map.sprites.len()
+    );
     for chunk in &baked.chunks {
         println!(
             " - Chunk #{}: {}x{} px (Albedo: {} bytes, Normal: {}, Specular: {})",
@@ -234,7 +250,10 @@ fn run_bake_all(args: AtlasBakeAllArgs) -> Result<(), Box<dyn std::error::Error>
         };
 
         if baked.address_map.sprites.is_empty() {
-            println!(" [EMPTY] Category '{}': 0 sprites found, skipping output.", cat_name);
+            println!(
+                " [EMPTY] Category '{}': 0 sprites found, skipping output.",
+                cat_name
+            );
             continue;
         }
 
@@ -352,7 +371,11 @@ fn run_bake_dual(args: AtlasBakeDualArgs) -> Result<(), Box<dyn std::error::Erro
             stack.push_pack(Box::new(spbr_pack));
         }
     }
-    println!("ResourcePackStack ready ({} packs in stack, loading time: {:?})", stack.len(), t_start.elapsed());
+    println!(
+        "ResourcePackStack ready ({} packs in stack, loading time: {:?})",
+        stack.len(),
+        t_start.elapsed()
+    );
 
     // Bake Atlas
     println!("\nBaking Atlas (Static 100% + Animated Strips)...");
@@ -370,8 +393,14 @@ fn run_bake_dual(args: AtlasBakeDualArgs) -> Result<(), Box<dyn std::error::Erro
     let baked = atlas_builder.build(&stack, &definition)?;
     println!(" - Atlas Baking Succeeded in {:?}", t_bake.elapsed());
     println!(" - Total Chunks: {}", baked.chunks.len());
-    println!(" - Total Static Sprites: {}", baked.address_map.sprites.len());
-    println!(" - Total Animated Sprites: {}", baked.address_map.anim_sprites.len());
+    println!(
+        " - Total Static Sprites: {}",
+        baked.address_map.sprites.len()
+    );
+    println!(
+        " - Total Animated Sprites: {}",
+        baked.address_map.anim_sprites.len()
+    );
 
     for chunk in &baked.chunks {
         let albedo_path = atlas_output_dir.join(format!("{}_albedo.png", chunk.file_stem()));

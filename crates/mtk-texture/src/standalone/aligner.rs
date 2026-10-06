@@ -3,9 +3,9 @@
 //! Synchronizes multi-channel PBR textures (Albedo, Normal, Specular, Overlay) by detecting
 //! animations and vertically tiling static/shorter channels to match the target frame count.
 
-use serde::{Deserialize, Serialize};
-use mtk_resource::{AnimationFrame, AnimationMetadata};
 use crate::image::RgbaBuffer;
+use mtk_resource::{AnimationFrame, AnimationMetadata};
+use serde::{Deserialize, Serialize};
 
 /// Available texture channels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -38,10 +38,23 @@ pub struct ChannelData {
 impl ChannelData {
     /// Extract Frame 0 as a 1:1 square static image buffer.
     pub fn static_frame_0(&self) -> RgbaBuffer {
-        let frame_w = self.metadata.as_ref().and_then(|m| m.width).unwrap_or(self.buffer.width);
-        let frame_h = self.metadata.as_ref().and_then(|m| m.height).unwrap_or(frame_w);
+        let frame_w = self
+            .metadata
+            .as_ref()
+            .and_then(|m| m.width)
+            .unwrap_or(self.buffer.width);
+        let frame_h = self
+            .metadata
+            .as_ref()
+            .and_then(|m| m.height)
+            .unwrap_or(frame_w);
         if self.buffer.height > frame_h && frame_h > 0 && frame_w > 0 {
-            self.buffer.crop(0, 0, frame_w.min(self.buffer.width), frame_h.min(self.buffer.height))
+            self.buffer.crop(
+                0,
+                0,
+                frame_w.min(self.buffer.width),
+                frame_h.min(self.buffer.height),
+            )
         } else {
             self.buffer.clone()
         }
@@ -85,7 +98,7 @@ pub fn is_channel_animated(buffer: &RgbaBuffer, metadata: Option<&AnimationMetad
     if let Some(meta) = metadata {
         let frame_w = meta.width.unwrap_or(buffer.width);
         let frame_h = meta.height.unwrap_or(frame_w);
-        let total_frames = if frame_h > 0 { buffer.height / frame_h } else { 1 };
+        let total_frames = buffer.height.checked_div(frame_h).unwrap_or(1);
         if total_frames > 1 {
             return true;
         }
@@ -94,7 +107,7 @@ pub fn is_channel_animated(buffer: &RgbaBuffer, metadata: Option<&AnimationMetad
                 return true;
             }
         }
-    } else if buffer.height > buffer.width && buffer.height % buffer.width == 0 {
+    } else if buffer.height > buffer.width && buffer.height.is_multiple_of(buffer.width) {
         return true;
     }
 
@@ -151,15 +164,11 @@ pub fn align_standalone_channels(mut channels: Vec<ChannelData>) -> StandaloneAl
 
     let ref_frame_w = ref_meta.and_then(|m| m.width).unwrap_or(ref_w);
     let ref_frame_h = ref_meta.and_then(|m| m.height).unwrap_or(ref_frame_w);
-    let target_frame_count = if ref_frame_h > 0 {
-        (ref_h / ref_frame_h).max(1)
-    } else {
-        1
-    };
+    let target_frame_count = ref_h.checked_div(ref_frame_h).unwrap_or(1).max(1);
     let target_frametime = ref_meta.map_or(1, |m| m.frametime.max(1));
-    let target_interpolate = ref_meta.map_or(false, |m| m.interpolate);
+    let target_interpolate = ref_meta.is_some_and(|m| m.interpolate);
 
-    let target_frames: Vec<u32> = if let Some(ref frames) = ref_meta.and_then(|m| m.frames.as_ref()) {
+    let target_frames: Vec<u32> = if let Some(frames) = ref_meta.and_then(|m| m.frames.as_ref()) {
         frames.iter().map(|f| f.index()).collect()
     } else {
         (0..target_frame_count).collect()
@@ -184,11 +193,7 @@ pub fn align_standalone_channels(mut channels: Vec<ChannelData>) -> StandaloneAl
         let ch_meta = ch.metadata.as_ref();
         let ch_frame_w = ch_meta.and_then(|m| m.width).unwrap_or(src_w);
         let ch_frame_h = ch_meta.and_then(|m| m.height).unwrap_or(ch_frame_w);
-        let ch_frame_count = if ch_frame_h > 0 {
-            (src_h / ch_frame_h).max(1)
-        } else {
-            1
-        };
+        let ch_frame_count = src_h.checked_div(ch_frame_h).unwrap_or(1).max(1);
 
         let aligned_h = ch_frame_h * target_frame_count;
 
@@ -207,7 +212,12 @@ pub fn align_standalone_channels(mut channels: Vec<ChannelData>) -> StandaloneAl
             interpolate: target_interpolate,
             width: Some(ch_frame_w),
             height: Some(ch_frame_h),
-            frames: Some(target_frames.iter().map(|&idx| AnimationFrame::Index(idx)).collect()),
+            frames: Some(
+                target_frames
+                    .iter()
+                    .map(|&idx| AnimationFrame::Index(idx))
+                    .collect(),
+            ),
         });
     }
 

@@ -40,4 +40,3 @@ impl BuiltinModelRegistry {
         vanilla::get_builtin_model_by_id(model_id)
     }
 }
-

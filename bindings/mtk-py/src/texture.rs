@@ -41,7 +41,11 @@ impl PyBakedAtlas {
 
     /// Returns chunk metadata dictionary by chunk ID:
     /// `{chunk_id, category, is_animated, width, height, has_normal, has_specular, has_overlay, file_stem, category_chunk_index}`.
-    pub fn get_chunk_info<'py>(&self, py: Python<'py>, chunk_id: u16) -> PyResult<Option<Bound<'py, PyDict>>> {
+    pub fn get_chunk_info<'py>(
+        &self,
+        py: Python<'py>,
+        chunk_id: u16,
+    ) -> PyResult<Option<Bound<'py, PyDict>>> {
         if let Some(cm) = self.inner.get_chunk_meta(chunk_id) {
             let dict = PyDict::new(py);
             dict.set_item("chunk_id", cm.chunk_id)?;
@@ -61,7 +65,10 @@ impl PyBakedAtlas {
     }
 
     /// Returns a list of dictionaries for all chunks in the atlas.
-    pub fn get_all_chunks_info<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, pyo3::types::PyList>> {
+    pub fn get_all_chunks_info<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, pyo3::types::PyList>> {
         let list = pyo3::types::PyList::empty(py);
         for cm in self.inner.address_map.get_chunks() {
             let dict = PyDict::new(py);
@@ -99,7 +106,9 @@ impl PyBakedAtlas {
                 chunk.file_stem(),
             ))
         } else {
-            Err(pyo3::exceptions::PyIndexError::new_err("Chunk index out of bounds"))
+            Err(pyo3::exceptions::PyIndexError::new_err(
+                "Chunk index out of bounds",
+            ))
         }
     }
 
@@ -114,7 +123,9 @@ impl PyBakedAtlas {
             let bytes = PyBytes::new(py, byte_slice);
             PyMemoryView::from(&bytes)
         } else {
-            Err(pyo3::exceptions::PyIndexError::new_err("Chunk index out of bounds"))
+            Err(pyo3::exceptions::PyIndexError::new_err(
+                "Chunk index out of bounds",
+            ))
         }
     }
 
@@ -132,7 +143,9 @@ impl PyBakedAtlas {
                 Ok(None)
             }
         } else {
-            Err(pyo3::exceptions::PyIndexError::new_err("Chunk index out of bounds"))
+            Err(pyo3::exceptions::PyIndexError::new_err(
+                "Chunk index out of bounds",
+            ))
         }
     }
 
@@ -150,7 +163,9 @@ impl PyBakedAtlas {
                 Ok(None)
             }
         } else {
-            Err(pyo3::exceptions::PyIndexError::new_err("Chunk index out of bounds"))
+            Err(pyo3::exceptions::PyIndexError::new_err(
+                "Chunk index out of bounds",
+            ))
         }
     }
 
@@ -175,7 +190,9 @@ impl PyBakedAtlas {
                 .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
             Ok(PyBytes::new(py, &png_bytes))
         } else {
-            Err(pyo3::exceptions::PyIndexError::new_err("Chunk index out of bounds"))
+            Err(pyo3::exceptions::PyIndexError::new_err(
+                "Chunk index out of bounds",
+            ))
         }
     }
 
@@ -195,7 +212,9 @@ impl PyBakedAtlas {
                 Ok(None)
             }
         } else {
-            Err(pyo3::exceptions::PyIndexError::new_err("Chunk index out of bounds"))
+            Err(pyo3::exceptions::PyIndexError::new_err(
+                "Chunk index out of bounds",
+            ))
         }
     }
 
@@ -215,7 +234,9 @@ impl PyBakedAtlas {
                 Ok(None)
             }
         } else {
-            Err(pyo3::exceptions::PyIndexError::new_err("Chunk index out of bounds"))
+            Err(pyo3::exceptions::PyIndexError::new_err(
+                "Chunk index out of bounds",
+            ))
         }
     }
 
@@ -447,9 +468,20 @@ pub fn is_face_transparent_f32(
     threshold: f32,
     invert_y: bool,
 ) -> bool {
-    let vecs: Vec<glam::Vec2> = face_uvs.iter().map(|(u, v)| glam::Vec2::new(*u, *v)).collect();
+    let vecs: Vec<glam::Vec2> = face_uvs
+        .iter()
+        .map(|(u, v)| glam::Vec2::new(*u, *v))
+        .collect();
     let sample_mode = mtk_texture::SampleMode::from_str(mode);
-    mtk_texture::is_face_transparent_f32(&vecs, width, height, &pixels, sample_mode, threshold, invert_y)
+    mtk_texture::is_face_transparent_f32(
+        &vecs,
+        width,
+        height,
+        &pixels,
+        sample_mode,
+        threshold,
+        invert_y,
+    )
 }
 
 #[pyfunction]
@@ -511,4 +543,3 @@ pub fn batch_analyze_transparent_faces_u8(
         )
     })
 }
-

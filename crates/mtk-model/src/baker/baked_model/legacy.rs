@@ -12,7 +12,10 @@ impl BakedModelDatabase {
     pub fn to_bincode(&self) -> Result<Vec<u8>, bincode::Error> {
         let raw_bytes = bincode::serialize(self)?;
         zstd::encode_all(&raw_bytes[..], 3).map_err(|e| {
-            bincode::Error::new(bincode::ErrorKind::Custom(format!("zstd compress error: {}", e)))
+            bincode::Error::new(bincode::ErrorKind::Custom(format!(
+                "zstd compress error: {}",
+                e
+            )))
         })
     }
 
@@ -39,13 +42,19 @@ impl BakedModelDatabase {
         // 1. Current full format with variant_groups
         if let Ok(mut db) = bincode::deserialize::<BakedModelDatabase>(target_bytes) {
             for bm in db.models.values_mut() {
-                if bm.culled_faces.iter().all(|v| v.is_empty()) && bm.unculled_faces.is_empty() && !bm.elements.is_empty() {
+                if bm.culled_faces.iter().all(|v| v.is_empty())
+                    && bm.unculled_faces.is_empty()
+                    && !bm.elements.is_empty()
+                {
                     bm.rebuild_face_buckets();
                 }
             }
             for vg in db.variant_groups.values_mut() {
                 for bm in &mut vg.models {
-                    if bm.culled_faces.iter().all(|v| v.is_empty()) && bm.unculled_faces.is_empty() && !bm.elements.is_empty() {
+                    if bm.culled_faces.iter().all(|v| v.is_empty())
+                        && bm.unculled_faces.is_empty()
+                        && !bm.elements.is_empty()
+                    {
                         bm.rebuild_face_buckets();
                     }
                 }
@@ -56,13 +65,19 @@ impl BakedModelDatabase {
         // 2. Legacy models-only HashMap fallback
         if let Ok(mut models) = bincode::deserialize::<HashMap<String, BakedModel>>(target_bytes) {
             for bm in models.values_mut() {
-                if bm.culled_faces.iter().all(|v| v.is_empty()) && bm.unculled_faces.is_empty() && !bm.elements.is_empty() {
+                if bm.culled_faces.iter().all(|v| v.is_empty())
+                    && bm.unculled_faces.is_empty()
+                    && !bm.elements.is_empty()
+                {
                     bm.rebuild_face_buckets();
                 }
             }
             let mut variant_groups = HashMap::with_capacity(models.len());
             for (st, bm) in &models {
-                variant_groups.insert(st.clone(), super::variant_group::BakedVariantGroup::single(st.clone(), bm.clone()));
+                variant_groups.insert(
+                    st.clone(),
+                    super::variant_group::BakedVariantGroup::single(st.clone(), bm.clone()),
+                );
             }
             return Ok(Self {
                 models,
@@ -87,12 +102,16 @@ impl BakedModelDatabase {
         let make_variant_groups = |models: &HashMap<String, BakedModel>| {
             let mut groups = HashMap::with_capacity(models.len());
             for (st, bm) in models {
-                groups.insert(st.clone(), super::variant_group::BakedVariantGroup::single(st.clone(), bm.clone()));
+                groups.insert(
+                    st.clone(),
+                    super::variant_group::BakedVariantGroup::single(st.clone(), bm.clone()),
+                );
             }
             groups
         };
 
-        if let Ok(legacy_v2) = bincode::deserialize::<HashMap<String, LegacyModelV2>>(target_bytes) {
+        if let Ok(legacy_v2) = bincode::deserialize::<HashMap<String, LegacyModelV2>>(target_bytes)
+        {
             let mut models = HashMap::with_capacity(legacy_v2.len());
             for (st, lm) in legacy_v2 {
                 let mut bm = BakedModel {
@@ -183,7 +202,8 @@ impl BakedModelDatabase {
             atlas_texture_id: None,
         };
 
-        if let Ok(legacy_v1) = bincode::deserialize::<HashMap<String, LegacyModelV1>>(target_bytes) {
+        if let Ok(legacy_v1) = bincode::deserialize::<HashMap<String, LegacyModelV1>>(target_bytes)
+        {
             let mut models = HashMap::with_capacity(legacy_v1.len());
             for (st, lm) in legacy_v1 {
                 let elements = lm
@@ -233,7 +253,8 @@ impl BakedModelDatabase {
             });
         }
 
-        if let Ok(legacy_v0) = bincode::deserialize::<HashMap<String, LegacyModelV0>>(target_bytes) {
+        if let Ok(legacy_v0) = bincode::deserialize::<HashMap<String, LegacyModelV0>>(target_bytes)
+        {
             let mut models = HashMap::with_capacity(legacy_v0.len());
             for (st, lm) in legacy_v0 {
                 let elements = lm
@@ -283,7 +304,10 @@ impl BakedModelDatabase {
 
         let mut models: HashMap<String, BakedModel> = bincode::deserialize(target_bytes)?;
         for bm in models.values_mut() {
-            if bm.culled_faces.iter().all(|v| v.is_empty()) && bm.unculled_faces.is_empty() && !bm.elements.is_empty() {
+            if bm.culled_faces.iter().all(|v| v.is_empty())
+                && bm.unculled_faces.is_empty()
+                && !bm.elements.is_empty()
+            {
                 bm.rebuild_face_buckets();
             }
         }

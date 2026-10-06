@@ -3,10 +3,20 @@ use super::types::BiomeResolver;
 impl BiomeResolver {
     /// Seed authoritative vanilla texture tint categories and overlay pairings (SSOT).
     pub fn seed_defaults(&mut self) {
-        self.overlay_pairs.insert("grass_block_side".to_string(), "grass_block_side_overlay".to_string());
-        self.overlay_pairs.insert("grass_block_snow".to_string(), "grass_block_side_overlay".to_string());
-        self.overlay_pairs.insert("grass_side".to_string(), "grass_side_overlay".to_string());
-        self.overlay_pairs.insert("grass_side_snowed".to_string(), "grass_side_overlay".to_string());
+        self.overlay_pairs.insert(
+            "grass_block_side".to_string(),
+            "grass_block_side_overlay".to_string(),
+        );
+        self.overlay_pairs.insert(
+            "grass_block_snow".to_string(),
+            "grass_block_side_overlay".to_string(),
+        );
+        self.overlay_pairs
+            .insert("grass_side".to_string(), "grass_side_overlay".to_string());
+        self.overlay_pairs.insert(
+            "grass_side_snowed".to_string(),
+            "grass_side_overlay".to_string(),
+        );
 
         // 1. Grass colormap (grass.png)
         for t in &[
@@ -26,7 +36,8 @@ impl BiomeResolver {
             "wildflowers_stem",
             "sugar_cane",
         ] {
-            self.texture_tint_categories.insert(t.to_string(), "grass".to_string());
+            self.texture_tint_categories
+                .insert(t.to_string(), "grass".to_string());
         }
 
         // 2. Foliage colormap (foliage.png)
@@ -40,7 +51,8 @@ impl BiomeResolver {
             "bamboo_large_leaves",
             "bamboo_small_leaves",
         ] {
-            self.texture_tint_categories.insert(t.to_string(), "foliage".to_string());
+            self.texture_tint_categories
+                .insert(t.to_string(), "foliage".to_string());
         }
 
         // 3. Dry foliage colormap (dry_foliage.png)
@@ -51,7 +63,8 @@ impl BiomeResolver {
             "short_dry_grass",
             "tall_dry_grass",
         ] {
-            self.texture_tint_categories.insert(t.to_string(), "dry_foliage".to_string());
+            self.texture_tint_categories
+                .insert(t.to_string(), "dry_foliage".to_string());
         }
 
         // 4. Explicit non-tinted blocks (retain their natural textures)
@@ -73,7 +86,8 @@ impl BiomeResolver {
             "kelp",
             "kelp_plant",
         ] {
-            self.texture_tint_categories.insert(t.to_string(), "none".to_string());
+            self.texture_tint_categories
+                .insert(t.to_string(), "none".to_string());
         }
 
         // 5. Hardcoded non-colormap colors
@@ -87,7 +101,8 @@ impl BiomeResolver {
             "pumpkin_stem",
             "redstone_wire",
         ] {
-            self.texture_tint_categories.insert(t.to_string(), "hardcoded".to_string());
+            self.texture_tint_categories
+                .insert(t.to_string(), "hardcoded".to_string());
         }
     }
 }

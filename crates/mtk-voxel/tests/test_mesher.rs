@@ -66,14 +66,9 @@ fn test_parallel_batch_mesher() {
     let culler = FaceCuller::default();
     let config = MesherConfig::default();
 
-    let results = SectionMesher::mesh_sections_parallel(
-        &[p0, p1],
-        &culler,
-        |_| None,
-        &config,
-        Some(2),
-    )
-    .expect("Parallel meshing should succeed");
+    let results =
+        SectionMesher::mesh_sections_parallel(&[p0, p1], &culler, |_| None, &config, Some(2))
+            .expect("Parallel meshing should succeed");
 
     assert_eq!(results.len(), 2);
     assert_eq!(results[0].0, IVec3::new(0, 0, 0));
@@ -124,10 +119,10 @@ fn test_mesher_custom_attributes() {
 
 #[test]
 fn test_grass_block_meshing_no_duplicate_overlay_faces() {
-    use std::collections::HashMap;
-    use std::sync::Arc;
     use mtk_core::direction::Direction;
     use mtk_model::baker::{BakedElement, BakedFace, BakedModel};
+    use std::collections::HashMap;
+    use std::sync::Arc;
 
     let mut world = VoxelStorage::new();
     world.set_bounds(0, 0, 0, 16, 16, 16);
@@ -161,7 +156,12 @@ fn test_grass_block_meshing_no_duplicate_overlay_faces() {
     }
 
     let mut el1_faces = HashMap::new();
-    for dir in [Direction::North, Direction::South, Direction::West, Direction::East] {
+    for dir in [
+        Direction::North,
+        Direction::South,
+        Direction::West,
+        Direction::East,
+    ] {
         el1_faces.insert(
             dir,
             BakedFace {
@@ -209,24 +209,38 @@ fn test_grass_block_meshing_no_duplicate_overlay_faces() {
     let mesh = SectionMesher::mesh_section(
         &padded,
         &culler,
-        |name| if name.contains("grass_block") { Some(grass_model.clone()) } else { None },
+        |name| {
+            if name.contains("grass_block") {
+                Some(grass_model.clone())
+            } else {
+                None
+            }
+        },
         &config,
     );
 
     // Exactly 6 cube faces should be emitted; the 4 overlay decal faces must be skipped!
-    assert_eq!(mesh.face_count(), 6, "Must emit exactly 6 faces, not 10 faces!");
+    assert_eq!(
+        mesh.face_count(),
+        6,
+        "Must emit exactly 6 faces, not 10 faces!"
+    );
     assert_eq!(mesh.triangle_count(), 12);
     assert_eq!(mesh.vertex_count(), 24);
 
     // Verify tint data attributes
-    let tint_data_attr = mesh.get_custom_attribute("mtk_biome_tint_data").expect("Must have mtk_biome_tint_data");
+    let tint_data_attr = mesh
+        .get_custom_attribute("mtk_biome_tint_data")
+        .expect("Must have mtk_biome_tint_data");
     let tint_data = match &tint_data_attr.data {
         mtk_core::attributes::AttributeData::Float4(v) => v,
         _ => panic!("Expected Float4"),
     };
     assert_eq!(tint_data.len(), 6);
 
-    let dir_attr = mesh.get_custom_attribute("mtk_face_dir").expect("Must have mtk_face_dir");
+    let dir_attr = mesh
+        .get_custom_attribute("mtk_face_dir")
+        .expect("Must have mtk_face_dir");
     let dirs = match &dir_attr.data {
         mtk_core::attributes::AttributeData::UInt8(v) => v,
         _ => panic!("Expected UInt8"),
@@ -243,12 +257,24 @@ fn test_grass_block_meshing_no_duplicate_overlay_faces() {
             assert_eq!(td[3], 1.0, "Top face tint_type must be 1 (GRASS)");
         } else if dir == Direction::Down.to_index() as u8 {
             // Down face: dirt, untinted
-            assert_eq!(td[2], 0.0, "Dirt bottom face tint_weight must be 0.0 (untinted!)");
+            assert_eq!(
+                td[2], 0.0,
+                "Dirt bottom face tint_weight must be 0.0 (untinted!)"
+            );
         } else {
             // Side faces: grass_block_side, base untinted, overlay tinted
-            assert_eq!(td[0], 0.0, "Side face base_weight must be 0.0 (dirt base untinted)");
-            assert_eq!(td[1], 1.0, "Side face overlay_weight must be 1.0 (grass overlay tinted)");
-            assert_eq!(td[2], 1.0, "Side face tint_weight must be 1.0 (tint enabled)");
+            assert_eq!(
+                td[0], 0.0,
+                "Side face base_weight must be 0.0 (dirt base untinted)"
+            );
+            assert_eq!(
+                td[1], 1.0,
+                "Side face overlay_weight must be 1.0 (grass overlay tinted)"
+            );
+            assert_eq!(
+                td[2], 1.0,
+                "Side face tint_weight must be 1.0 (tint enabled)"
+            );
             assert_eq!(td[3], 1.0, "Side face tint_type must be 1 (GRASS)");
         }
     }
@@ -261,13 +287,20 @@ fn test_biome_transition_smoothing() {
     // Left half (x in 0..8): plains, Right half (x in 8..16): desert
     for x in 0..16 {
         for z in 0..16 {
-            let biome = if x < 8 { "minecraft:plains" } else { "minecraft:desert" };
+            let biome = if x < 8 {
+                "minecraft:plains"
+            } else {
+                "minecraft:desert"
+            };
             world.set_block(x, 0, z, "minecraft:grass_block", Some(biome));
         }
     }
 
     let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
-    assert!(padded.biome_data.is_some(), "Padded array must contain smoothed biome data");
+    assert!(
+        padded.biome_data.is_some(),
+        "Padded array must contain smoothed biome data"
+    );
 
     let biome_cols = padded.biome_data.as_ref().unwrap();
     assert_eq!(biome_cols.len(), 256);
@@ -276,7 +309,7 @@ fn test_biome_transition_smoothing() {
     let desert_pal = mtk_material::get_biome_palette("desert");
 
     // Deep in plains (x = 0, z = 8)
-    let col_plains = &biome_cols[0 * 16 + 8];
+    let col_plains = &biome_cols[8];
     // Deep in desert (x = 15, z = 8)
     let col_desert = &biome_cols[15 * 16 + 8];
     // On the transition boundary (x = 7, z = 8 and x = 8, z = 8)
@@ -297,14 +330,18 @@ fn test_biome_transition_smoothing() {
     let config = MesherConfig::default();
     let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
 
-    let cm_attr = mesh.get_custom_attribute("mtk_colormap_uv").expect("Must have mtk_colormap_uv");
+    let cm_attr = mesh
+        .get_custom_attribute("mtk_colormap_uv")
+        .expect("Must have mtk_colormap_uv");
     let cm_uvs = match &cm_attr.data {
         mtk_core::attributes::AttributeData::Float3(v) => v,
         _ => panic!("Expected Float3"),
     };
     assert!(!cm_uvs.is_empty());
 
-    let color_attr = mesh.get_custom_attribute("mtk_biome_tint_color").expect("Must have mtk_biome_tint_color");
+    let color_attr = mesh
+        .get_custom_attribute("mtk_biome_tint_color")
+        .expect("Must have mtk_biome_tint_color");
     let colors = match &color_attr.data {
         mtk_core::attributes::AttributeData::Float4(v) => v,
         _ => panic!("Expected Float4"),
@@ -316,7 +353,10 @@ fn test_biome_transition_smoothing() {
     for uv in cm_uvs {
         distinct_u.insert((uv[0] * 100.0).round() as i32);
     }
-    assert!(distinct_u.len() > 2, "Transition zone must produce continuous blended gradient values, not a binary step!");
+    assert!(
+        distinct_u.len() > 2,
+        "Transition zone must produce continuous blended gradient values, not a binary step!"
+    );
 }
 
 #[test]
@@ -361,17 +401,24 @@ fn test_selection_boundary_no_color_bleeding() {
             assert!(
                 (col.colormap_uv[0] - desert_uv[0]).abs() < 1e-4,
                 "Col ({}, {}) colormap_uv[0] was {}, expected desert {}",
-                lx, lz, col.colormap_uv[0], desert_uv[0]
+                lx,
+                lz,
+                col.colormap_uv[0],
+                desert_uv[0]
             );
             assert!(
                 (col.colormap_uv[1] - desert_uv[1]).abs() < 1e-4,
                 "Col ({}, {}) colormap_uv[1] was {}, expected desert {}",
-                lx, lz, col.colormap_uv[1], desert_uv[1]
+                lx,
+                lz,
+                col.colormap_uv[1],
+                desert_uv[1]
             );
             assert!(
                 (col.grass_color[0] - desert_grass[0]).abs() < 1e-4,
                 "Col ({}, {}) grass_color was contaminated by bleeding",
-                lx, lz
+                lx,
+                lz
             );
         }
     }
@@ -385,7 +432,13 @@ fn test_waterlogged_isolated_block_meshing() {
     // An isolated kelp block in air at (2, 2, 2) (canonical vanilla state without explicit waterlogged)
     world.set_block(2, 2, 2, "minecraft:kelp[age=0]", None);
     // An isolated waterlogged slab in air at (5, 5, 5)
-    world.set_block(5, 5, 5, "minecraft:oak_slab[type=bottom,waterlogged=true]", None);
+    world.set_block(
+        5,
+        5,
+        5,
+        "minecraft:oak_slab[type=bottom,waterlogged=true]",
+        None,
+    );
 
     let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
     let culler = FaceCuller::default();
@@ -408,7 +461,13 @@ fn test_waterlogged_isolated_block_with_baked_model() {
     world.set_bounds(0, 0, 0, 16, 16, 16);
 
     // An isolated waterlogged slab in air at (5, 5, 5)
-    world.set_block(5, 5, 5, "minecraft:oak_slab[type=bottom,waterlogged=true]", None);
+    world.set_block(
+        5,
+        5,
+        5,
+        "minecraft:oak_slab[type=bottom,waterlogged=true]",
+        None,
+    );
 
     let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
     let culler = FaceCuller::default();
@@ -451,7 +510,13 @@ fn test_waterlogged_isolated_block_with_baked_model() {
     let mesh = SectionMesher::mesh_section(
         &padded,
         &culler,
-        |state| if state.contains("oak_slab") { Some(slab_arc.clone()) } else { None },
+        |state| {
+            if state.contains("oak_slab") {
+                Some(slab_arc.clone())
+            } else {
+                None
+            }
+        },
         &config,
     );
 
@@ -461,9 +526,9 @@ fn test_waterlogged_isolated_block_with_baked_model() {
 
 #[test]
 fn test_alternate_blocks_variant_sampling() {
-    use std::sync::Arc;
     use mtk_model::baked::{BakedElement, BakedFace, BakedModel, BakedVariantGroup};
     use mtk_voxel::mesher::ModelSource;
+    use std::sync::Arc;
 
     let mut world = VoxelStorage::new();
     world.set_bounds(0, 0, 0, 16, 16, 16);
@@ -542,14 +607,20 @@ fn test_alternate_blocks_variant_sampling() {
         &config,
     );
 
-    let tex_attr = mesh.get_custom_attribute("mtk_source_texture_key").expect("Must have mtk_source_texture_key");
+    let tex_attr = mesh
+        .get_custom_attribute("mtk_source_texture_key")
+        .expect("Must have mtk_source_texture_key");
     let sampled_textures: std::collections::HashSet<String> = match &tex_attr.data {
         mtk_core::attributes::AttributeData::String(v) => v.iter().cloned().collect(),
         _ => panic!("Expected String attribute"),
     };
 
     // Out of 16 blocks, multiple variants must have been sampled (not just 1 static variant!)
-    assert!(sampled_textures.len() > 1, "Expected multiple variants to be sampled across 16 blocks, got {:?}", sampled_textures);
+    assert!(
+        sampled_textures.len() > 1,
+        "Expected multiple variants to be sampled across 16 blocks, got {:?}",
+        sampled_textures
+    );
 
     // When enable_alternate_blocks is FALSE, only primary variant (dirt_var_0) must be sampled
     let disabled_config = MesherConfig {
@@ -565,7 +636,9 @@ fn test_alternate_blocks_variant_sampling() {
         move |_| ModelSource::Variant(group_clone2.clone()),
         &disabled_config,
     );
-    let disabled_attr = mesh_disabled.get_custom_attribute("mtk_source_texture_key").expect("Must have mtk_source_texture_key");
+    let disabled_attr = mesh_disabled
+        .get_custom_attribute("mtk_source_texture_key")
+        .expect("Must have mtk_source_texture_key");
     let disabled_textures: std::collections::HashSet<String> = match &disabled_attr.data {
         mtk_core::attributes::AttributeData::String(v) => v.iter().cloned().collect(),
         _ => panic!("Expected String attribute"),
@@ -608,13 +681,18 @@ fn test_plant_position_offsets() {
     for pos in &mesh_enabled.positions {
         if (pos[1] - 5.0).abs() < 1.01 {
             let frac_x = pos[0] - 3.0;
-            if (frac_x - (0.0 + offset_3_7.x)).abs() < 1e-4 || (frac_x - (1.0 + offset_3_7.x)).abs() < 1e-4 {
+            if (frac_x - (0.0 + offset_3_7.x)).abs() < 1e-4
+                || (frac_x - (1.0 + offset_3_7.x)).abs() < 1e-4
+            {
                 found_shifted = true;
                 break;
             }
         }
     }
-    assert!(found_shifted, "Plant vertices should be shifted by offset_3_7");
+    assert!(
+        found_shifted,
+        "Plant vertices should be shifted by offset_3_7"
+    );
 
     // 2. With plant offsets disabled
     let config_disabled = MesherConfig {
@@ -629,8 +707,16 @@ fn test_plant_position_offsets() {
     for pos in &mesh_disabled.positions {
         let fx = (pos[0] - pos[0].round()).abs();
         let fz = (pos[2] - pos[2].round()).abs();
-        assert!(fx < 1e-4, "Expected integer X coordinates without offset, got {}", pos[0]);
-        assert!(fz < 1e-4, "Expected integer Z coordinates without offset, got {}", pos[2]);
+        assert!(
+            fx < 1e-4,
+            "Expected integer X coordinates without offset, got {}",
+            pos[0]
+        );
+        assert!(
+            fz < 1e-4,
+            "Expected integer Z coordinates without offset, got {}",
+            pos[2]
+        );
     }
 }
 
@@ -677,5 +763,3 @@ fn test_submerged_seagrass_and_kelp_seamless_meshing() {
         }
     }
 }
-
-

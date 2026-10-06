@@ -28,9 +28,9 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::HashMap;
 use crate::parser::blockstate::BlockState;
 use crate::parser::model_json::FaceJson;
+use std::collections::HashMap;
 
 /// Evaluates standard Minecraft entity box UV mappings into standard face UV coordinates.
 ///
@@ -284,7 +284,11 @@ pub fn eval_miex_string(
 
     // thisBlock.state.<prop>
     if let Some(prop) = trimmed.strip_prefix("thisBlock.state.") {
-        return blockstate.properties.get(prop.trim()).cloned().unwrap_or_else(|| "null".to_string());
+        return blockstate
+            .properties
+            .get(prop.trim())
+            .cloned()
+            .unwrap_or_else(|| "null".to_string());
     }
 
     // String method: substring, indexOf, length
@@ -374,13 +378,17 @@ pub fn eval_miex_condition(
     // Logical OR ||
     if trimmed.contains("||") {
         let parts: Vec<&str> = trimmed.split("||").collect();
-        return parts.iter().any(|p| eval_miex_condition(p.trim(), vars, blockstate));
+        return parts
+            .iter()
+            .any(|p| eval_miex_condition(p.trim(), vars, blockstate));
     }
 
     // Logical AND &&
     if trimmed.contains("&&") {
         let parts: Vec<&str> = trimmed.split("&&").collect();
-        return parts.iter().all(|p| eval_miex_condition(p.trim(), vars, blockstate));
+        return parts
+            .iter()
+            .all(|p| eval_miex_condition(p.trim(), vars, blockstate));
     }
 
     if let Some(rest) = trimmed.strip_prefix('!') {
@@ -400,26 +408,42 @@ pub fn eval_miex_condition(
     }
 
     if let Some((left, right)) = trimmed.split_once(">=") {
-        let l = eval_miex_string(left.trim(), vars, blockstate).parse::<f32>().unwrap_or(0.0);
-        let r = eval_miex_string(right.trim(), vars, blockstate).parse::<f32>().unwrap_or(0.0);
+        let l = eval_miex_string(left.trim(), vars, blockstate)
+            .parse::<f32>()
+            .unwrap_or(0.0);
+        let r = eval_miex_string(right.trim(), vars, blockstate)
+            .parse::<f32>()
+            .unwrap_or(0.0);
         return l >= r;
     }
 
     if let Some((left, right)) = trimmed.split_once("<=") {
-        let l = eval_miex_string(left.trim(), vars, blockstate).parse::<f32>().unwrap_or(0.0);
-        let r = eval_miex_string(right.trim(), vars, blockstate).parse::<f32>().unwrap_or(0.0);
+        let l = eval_miex_string(left.trim(), vars, blockstate)
+            .parse::<f32>()
+            .unwrap_or(0.0);
+        let r = eval_miex_string(right.trim(), vars, blockstate)
+            .parse::<f32>()
+            .unwrap_or(0.0);
         return l <= r;
     }
 
     if let Some((left, right)) = trimmed.split_once('>') {
-        let l = eval_miex_string(left.trim(), vars, blockstate).parse::<f32>().unwrap_or(0.0);
-        let r = eval_miex_string(right.trim(), vars, blockstate).parse::<f32>().unwrap_or(0.0);
+        let l = eval_miex_string(left.trim(), vars, blockstate)
+            .parse::<f32>()
+            .unwrap_or(0.0);
+        let r = eval_miex_string(right.trim(), vars, blockstate)
+            .parse::<f32>()
+            .unwrap_or(0.0);
         return l > r;
     }
 
     if let Some((left, right)) = trimmed.split_once('<') {
-        let l = eval_miex_string(left.trim(), vars, blockstate).parse::<f32>().unwrap_or(0.0);
-        let r = eval_miex_string(right.trim(), vars, blockstate).parse::<f32>().unwrap_or(0.0);
+        let l = eval_miex_string(left.trim(), vars, blockstate)
+            .parse::<f32>()
+            .unwrap_or(0.0);
+        let r = eval_miex_string(right.trim(), vars, blockstate)
+            .parse::<f32>()
+            .unwrap_or(0.0);
         return l < r;
     }
 
@@ -458,7 +482,11 @@ fn eval_miex_operand(
         return "null".to_string();
     }
     if let Some(prop) = trimmed.strip_prefix("thisBlock.state.") {
-        return blockstate.properties.get(prop).cloned().unwrap_or_else(|| "null".to_string());
+        return blockstate
+            .properties
+            .get(prop)
+            .cloned()
+            .unwrap_or_else(|| "null".to_string());
     }
     eval_miex_string(trimmed, vars, blockstate)
 }

@@ -39,10 +39,22 @@ impl BakedFace {
         let u_span = frame_0_uv_bounds[2] - u_min;
         let v_span = frame_0_uv_bounds[3] - v_min;
         self.atlas_uvs = Some([
-            Vec2::new(u_min + self.uvs[0].x * u_span, v_min + (1.0 - self.uvs[0].y) * v_span),
-            Vec2::new(u_min + self.uvs[1].x * u_span, v_min + (1.0 - self.uvs[1].y) * v_span),
-            Vec2::new(u_min + self.uvs[2].x * u_span, v_min + (1.0 - self.uvs[2].y) * v_span),
-            Vec2::new(u_min + self.uvs[3].x * u_span, v_min + (1.0 - self.uvs[3].y) * v_span),
+            Vec2::new(
+                u_min + self.uvs[0].x * u_span,
+                v_min + (1.0 - self.uvs[0].y) * v_span,
+            ),
+            Vec2::new(
+                u_min + self.uvs[1].x * u_span,
+                v_min + (1.0 - self.uvs[1].y) * v_span,
+            ),
+            Vec2::new(
+                u_min + self.uvs[2].x * u_span,
+                v_min + (1.0 - self.uvs[2].y) * v_span,
+            ),
+            Vec2::new(
+                u_min + self.uvs[3].x * u_span,
+                v_min + (1.0 - self.uvs[3].y) * v_span,
+            ),
         ]);
         self.atlas_chunk_id = Some(chunk_id);
         self.atlas_texture_id = Some(texture_id);
@@ -215,7 +227,14 @@ impl Default for BakedModel {
             is_emissive: false,
             emissive_level: 0.0,
             cull_meta: None,
-            culled_faces: [Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new()],
+            culled_faces: [
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            ],
             unculled_faces: Vec::new(),
         }
     }
@@ -226,7 +245,9 @@ impl BakedModel {
     /// Automatically rebuilds `culled_faces` and `unculled_faces` buckets.
     /// Returns the number of removed faces.
     pub fn deduplicate_faces(&mut self) -> usize {
-        if self.elements.len() <= 1 && self.elements.first().map(|e| e.faces.len()).unwrap_or(0) <= 6 {
+        if self.elements.len() <= 1
+            && self.elements.first().map(|e| e.faces.len()).unwrap_or(0) <= 6
+        {
             return 0;
         }
 
@@ -237,7 +258,13 @@ impl BakedModel {
                 || (el.from_pos[2] - el.to_pos[2]).abs() < 1e-4;
             let is_inverted = el.is_inverted();
             for (&dir, f) in &el.faces {
-                face_list.push(((el_idx, dir, is_plane, is_inverted), f.vertices, f.normal, &f.texture, f.tint_index));
+                face_list.push((
+                    (el_idx, dir, is_plane, is_inverted),
+                    f.vertices,
+                    f.normal,
+                    &f.texture,
+                    f.tint_index,
+                ));
             }
         }
 
@@ -245,23 +272,21 @@ impl BakedModel {
         let tolerance = 1e-3;
 
         for i in 0..face_list.len() {
-            if to_remove.contains(&(face_list[i].0.0, face_list[i].0.1)) {
+            if to_remove.contains(&(face_list[i].0 .0, face_list[i].0 .1)) {
                 continue;
             }
-            let ((el_a, dir_a, is_plane_a, is_inverted_a), verts_a, norm_a, tex_a, tint_a) = &face_list[i];
+            let ((el_a, dir_a, is_plane_a, is_inverted_a), verts_a, norm_a, tex_a, tint_a) =
+                &face_list[i];
 
             for j in (i + 1)..face_list.len() {
-                let ((el_b, dir_b, is_plane_b, is_inverted_b), verts_b, norm_b, tex_b, tint_b) = &face_list[j];
+                let ((el_b, dir_b, is_plane_b, is_inverted_b), verts_b, norm_b, tex_b, tint_b) =
+                    &face_list[j];
                 if el_a == el_b || to_remove.contains(&(*el_b, *dir_b)) {
                     continue;
                 }
 
                 if let Some(rel) = mtk_cull::geometry::coplanar::check_coplanar_overlap(
-                    verts_a,
-                    *norm_a,
-                    verts_b,
-                    *norm_b,
-                    tolerance,
+                    verts_a, *norm_a, verts_b, *norm_b, tolerance,
                 ) {
                     use mtk_cull::geometry::coplanar::{CoplanarOverlap, FaceAlignment};
                     match rel.overlap {
@@ -271,7 +296,11 @@ impl BakedModel {
                                 if tex_a == tex_b && tint_a == tint_b {
                                     to_remove.insert((*el_b, *dir_b));
                                 }
-                            } else if !*is_plane_a && !*is_plane_b && !*is_inverted_a && !*is_inverted_b {
+                            } else if !*is_plane_a
+                                && !*is_plane_b
+                                && !*is_inverted_a
+                                && !*is_inverted_b
+                            {
                                 // Solid cuboid back-to-back contacting faces: remove both
                                 to_remove.insert((*el_a, *dir_a));
                                 to_remove.insert((*el_b, *dir_b));
@@ -280,17 +309,26 @@ impl BakedModel {
                         }
                         CoplanarOverlap::ContainedInA => {
                             // Only solid cuboid back-to-back contacting faces: Face B is completely covered by Cuboid A
-                            if rel.alignment == FaceAlignment::OppositeDirection && !*is_plane_a && !*is_plane_b && !*is_inverted_a && !*is_inverted_b {
+                            if rel.alignment == FaceAlignment::OppositeDirection
+                                && !*is_plane_a
+                                && !*is_plane_b
+                                && !*is_inverted_a
+                                && !*is_inverted_b
+                            {
                                 to_remove.insert((*el_b, *dir_b));
                             }
                         }
-                        CoplanarOverlap::ContainedInB => {
+                        CoplanarOverlap::ContainedInB
                             // Only solid cuboid back-to-back contacting faces: Face A is completely covered by Cuboid B
-                            if rel.alignment == FaceAlignment::OppositeDirection && !*is_plane_a && !*is_plane_b && !*is_inverted_a && !*is_inverted_b {
+                            if rel.alignment == FaceAlignment::OppositeDirection
+                                && !*is_plane_a
+                                && !*is_plane_b
+                                && !*is_inverted_a
+                                && !*is_inverted_b
+                            => {
                                 to_remove.insert((*el_a, *dir_a));
                                 break;
                             }
-                        }
                         _ => {}
                     }
                 }
@@ -353,7 +391,11 @@ impl BakedModel {
                 quads.push((self.faces[dir.to_index()].vertices, dir));
             }
         }
-        let quads_slice = if quads.is_empty() { None } else { Some(quads.as_slice()) };
+        let quads_slice = if quads.is_empty() {
+            None
+        } else {
+            Some(quads.as_slice())
+        };
         mtk_cull::compute_block_cull_meta(&self.block_state, quads_slice, Some(self.is_opaque))
     }
 

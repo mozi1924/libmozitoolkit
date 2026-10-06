@@ -1,5 +1,4 @@
 use std::fs;
-use std::path::Path;
 
 use mtk_core::Direction;
 use mtk_model::baked::{BakedElement, BakedFace, BakedModel, BakedVariantGroup};
@@ -59,8 +58,8 @@ fn test_database_compact_serialization_and_zstd() {
     assert_eq!(&compressed_bytes[..4], &[0x28, 0xb5, 0x2f, 0xfd]);
 
     // 4. Deserialize with from_bincode
-    let loaded = BakedModelDatabase::from_bincode(&compressed_bytes)
-        .expect("from_bincode should succeed");
+    let loaded =
+        BakedModelDatabase::from_bincode(&compressed_bytes).expect("from_bincode should succeed");
 
     // Verify models map
     assert_eq!(loaded.models.len(), 2);
@@ -104,26 +103,35 @@ fn test_backward_compatibility_with_uncompressed_legacy_format() {
 
 #[test]
 fn test_real_cache_benchmark_if_available() {
-    let real_cache_path = Path::new("/home/mozi/.config/blender/5.2/datafiles/MoziToolKit/cache/models/models.bin");
-    if !real_cache_path.exists() {
-        eprintln!("Real cache file not found, skipping benchmark");
+    let Some(real_cache_path) = mtk_testkit::models_cache_bin() else {
+        eprintln!("Real cache file not found, skipping benchmark (set MTK_TEST_MODELS_CACHE)");
         return;
-    }
+    };
 
-    let raw_file_bytes = fs::read(real_cache_path).expect("Failed to read real models.bin");
+    let raw_file_bytes = fs::read(&real_cache_path).expect("Failed to read real models.bin");
     let old_size = raw_file_bytes.len();
-    println!("\n[Benchmark] Original models.bin size: {:.2} MB ({} bytes)", old_size as f64 / 1_048_576.0, old_size);
+    println!(
+        "\n[Benchmark] Original models.bin size: {:.2} MB ({} bytes)",
+        old_size as f64 / 1_048_576.0,
+        old_size
+    );
 
     // Load original file
     let t0 = std::time::Instant::now();
     let loaded_db = BakedModelDatabase::from_bincode(&raw_file_bytes)
         .expect("Failed to load original models.bin");
     let load_dur = t0.elapsed();
-    println!("[Benchmark] Loaded {} models in {:.2?}", loaded_db.models.len(), load_dur);
+    println!(
+        "[Benchmark] Loaded {} models in {:.2?}",
+        loaded_db.models.len(),
+        load_dur
+    );
 
     // Re-serialize with new compact format and zstd compression
     let t1 = std::time::Instant::now();
-    let new_bytes = loaded_db.to_bincode().expect("Failed to serialize with compact zstd");
+    let new_bytes = loaded_db
+        .to_bincode()
+        .expect("Failed to serialize with compact zstd");
     let save_dur = t1.elapsed();
     let new_size = new_bytes.len();
     println!(
@@ -133,14 +141,22 @@ fn test_real_cache_benchmark_if_available() {
         save_dur
     );
     let ratio = (old_size as f64 - new_size as f64) / old_size as f64 * 100.0;
-    println!("[Benchmark] Space saved: {:.2}% (compression ratio: {:.2}x)", ratio, old_size as f64 / new_size as f64);
+    println!(
+        "[Benchmark] Space saved: {:.2}% (compression ratio: {:.2}x)",
+        ratio,
+        old_size as f64 / new_size as f64
+    );
 
     // Decompress and verify
     let t2 = std::time::Instant::now();
-    let reloaded = BakedModelDatabase::from_bincode(&new_bytes).expect("Failed to reload compressed data");
+    let reloaded =
+        BakedModelDatabase::from_bincode(&new_bytes).expect("Failed to reload compressed data");
     let reload_dur = t2.elapsed();
     println!("[Benchmark] Reloaded from compressed in {:.2?}", reload_dur);
 
     assert_eq!(loaded_db.models.len(), reloaded.models.len());
-    assert_eq!(loaded_db.variant_groups.len(), reloaded.variant_groups.len());
+    assert_eq!(
+        loaded_db.variant_groups.len(),
+        reloaded.variant_groups.len()
+    );
 }

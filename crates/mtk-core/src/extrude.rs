@@ -78,7 +78,10 @@ pub fn repair_extruded_side_uv_advanced(
     let uv_outward_dir = if norm_len > 1e-6 {
         let mut perp = [-edge_dv / norm_len, edge_du / norm_len];
         if let Some(center) = top_face_uv_center {
-            let edge_mid = [(uv_base_a[0] + uv_base_b[0]) * 0.5, (uv_base_a[1] + uv_base_b[1]) * 0.5];
+            let edge_mid = [
+                (uv_base_a[0] + uv_base_b[0]) * 0.5,
+                (uv_base_a[1] + uv_base_b[1]) * 0.5,
+            ];
             let v_out = [edge_mid[0] - center[0], edge_mid[1] - center[1]];
             if perp[0] * v_out[0] + perp[1] * v_out[1] < 0.0 {
                 perp = [-perp[0], -perp[1]];
@@ -280,7 +283,9 @@ pub fn generate_extrude_heights(
                 ExtrudeNoiseType::Perlin => {
                     (perlin_noise_3d(x * scale, y * scale, z * scale, seed) + 1.0) * 0.5
                 }
-                ExtrudeNoiseType::Cellular => cellular_noise_3d(x * scale, y * scale, z * scale, seed),
+                ExtrudeNoiseType::Cellular => {
+                    cellular_noise_3d(x * scale, y * scale, z * scale, seed)
+                }
             };
 
             let mut h = min_height + t * height_range;
@@ -304,10 +309,10 @@ mod tests {
     fn test_perlin_and_cellular_noise_bounds() {
         for i in 0..10 {
             let val = perlin_noise_3d(i as f32 * 0.3, i as f32 * 0.5, 0.0, 42);
-            assert!(val >= -1.0 && val <= 1.0);
+            assert!((-1.0..=1.0).contains(&val));
 
             let cell = cellular_noise_3d(i as f32 * 0.3, i as f32 * 0.5, 0.0, 42);
-            assert!(cell >= 0.0 && cell <= 1.0);
+            assert!((0.0..=1.0).contains(&cell));
         }
     }
 

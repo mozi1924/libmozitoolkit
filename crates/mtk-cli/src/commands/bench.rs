@@ -16,7 +16,7 @@ pub enum BenchSubcommand {
 #[derive(Args, Debug)]
 pub struct BenchModelArgs {
     /// Path to Minecraft vanilla JAR or assets directory
-    #[arg(short, long, default_value = "/home/mozi/26.2-Fabric.jar")]
+    #[arg(short, long, default_value = "26.2-Fabric.jar")]
     pub jar: PathBuf,
 }
 
@@ -34,7 +34,10 @@ fn run_bench_model(args: BenchModelArgs) -> Result<(), Box<dyn std::error::Error
 
     let mut loader = UniversalAssetLoader::new(&args.jar)?;
     let all_blockstate_names = loader.list_all_blockstates();
-    println!(" Total blockstate JSONs found: {}", all_blockstate_names.len());
+    println!(
+        " Total blockstate JSONs found: {}",
+        all_blockstate_names.len()
+    );
 
     // 1. Collect all blockstate variants across the entire vanilla jar
     let mut all_test_states = Vec::new();
@@ -58,7 +61,11 @@ fn run_bench_model(args: BenchModelArgs) -> Result<(), Box<dyn std::error::Error
         }
     }
     let scan_duration = scan_start.elapsed();
-    println!("Collected {} unique blockstate variants in {:?}", all_test_states.len(), scan_duration);
+    println!(
+        "Collected {} unique blockstate variants in {:?}",
+        all_test_states.len(),
+        scan_duration
+    );
 
     // 2. Full Jar Cold Bake (Single-threaded)
     let mut baker = ModelBaker::new();
@@ -69,7 +76,9 @@ fn run_bench_model(args: BenchModelArgs) -> Result<(), Box<dyn std::error::Error
     for state_str in &all_test_states {
         if let Ok(bs) = BlockState::parse(state_str) {
             let bs_def = loader.load_blockstate(&bs.name);
-            if let Ok(baked) = baker.bake_blockstate(state_str, bs_def.as_ref(), |id| loader.load_model(id)) {
+            if let Ok(baked) =
+                baker.bake_blockstate(state_str, bs_def.as_ref(), |id| loader.load_model(id))
+            {
                 successful_bakes += 1;
                 let mesh = baked.to_mesh(true);
                 total_tris += mesh.triangle_count();
@@ -78,17 +87,29 @@ fn run_bench_model(args: BenchModelArgs) -> Result<(), Box<dyn std::error::Error
     }
     let cold_duration = cold_start.elapsed();
     println!("\n[Benchmark 1: Full Jar Single-Threaded Cold Bake (1 core)]");
-    println!(" Successfully baked: {} / {} states", successful_bakes, all_test_states.len());
+    println!(
+        " Successfully baked: {} / {} states",
+        successful_bakes,
+        all_test_states.len()
+    );
     println!(" Total triangles generated: {}", total_tris);
     println!(" Total time: {:?}", cold_duration);
     if successful_bakes > 0 {
-        println!(" Average time per model: {:.3} µs", (cold_duration.as_secs_f64() * 1_000_000.0) / successful_bakes as f64);
-        println!(" Throughput: {:.2} models/sec", successful_bakes as f64 / cold_duration.as_secs_f64());
+        println!(
+            " Average time per model: {:.3} µs",
+            (cold_duration.as_secs_f64() * 1_000_000.0) / successful_bakes as f64
+        );
+        println!(
+            " Throughput: {:.2} models/sec",
+            successful_bakes as f64 / cold_duration.as_secs_f64()
+        );
     }
 
     // 2.1 Multi-Core Parallel Batch Bake Comparison
     println!("\n[Benchmark 2: Full Jar Multi-Core Parallel Batch Bake]");
-    let available_parallelism = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(2);
+    let available_parallelism = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(2);
     let conservative_threads = ModelBaker::determine_conservative_threads();
     println!(" Detected hardware threads: {}", available_parallelism);
     println!(" Conservative default threads: {}", conservative_threads);
@@ -117,7 +138,10 @@ fn run_bench_model(args: BenchModelArgs) -> Result<(), Box<dyn std::error::Error
     let thread_configs = [
         ("Single-thread (1 thread)", Some(1)),
         ("Conservative Default", None),
-        ("High Performance (8 threads)", Some(8.min(available_parallelism))),
+        (
+            "High Performance (8 threads)",
+            Some(8.min(available_parallelism)),
+        ),
         ("Max Cores (All threads)", Some(available_parallelism)),
     ];
 
@@ -168,11 +192,19 @@ fn run_bench_model(args: BenchModelArgs) -> Result<(), Box<dyn std::error::Error
         }
     }
     let model_names = [
-        "minecraft:block/stone", "minecraft:block/cube_all", "minecraft:block/furnace",
-        "minecraft:block/orientable_with_bottom", "minecraft:block/oak_stairs",
-        "minecraft:block/stairs", "minecraft:block/oak_fence_post", "minecraft:block/oak_fence_side",
-        "minecraft:block/cobblestone_wall_post", "minecraft:block/cobblestone_wall_side",
-        "minecraft:block/lantern", "minecraft:block/chain", "minecraft:block/observer",
+        "minecraft:block/stone",
+        "minecraft:block/cube_all",
+        "minecraft:block/furnace",
+        "minecraft:block/orientable_with_bottom",
+        "minecraft:block/oak_stairs",
+        "minecraft:block/stairs",
+        "minecraft:block/oak_fence_post",
+        "minecraft:block/oak_fence_side",
+        "minecraft:block/cobblestone_wall_post",
+        "minecraft:block/cobblestone_wall_side",
+        "minecraft:block/lantern",
+        "minecraft:block/chain",
+        "minecraft:block/observer",
     ];
     for name in model_names {
         if let Some(m) = loader.load_model(name) {
@@ -196,15 +228,22 @@ fn run_bench_model(args: BenchModelArgs) -> Result<(), Box<dyn std::error::Error
     let mem_duration = mem_start.elapsed();
     println!(" Iterations: {}", iters);
     println!(" Total time: {:?}", mem_duration);
-    println!(" Average time per bake: {:.3} µs", (mem_duration.as_secs_f64() * 1_000_000.0) / iters as f64);
-    println!(" Throughput: {:.2} bakes/sec", iters as f64 / mem_duration.as_secs_f64());
+    println!(
+        " Average time per bake: {:.3} µs",
+        (mem_duration.as_secs_f64() * 1_000_000.0) / iters as f64
+    );
+    println!(
+        " Throughput: {:.2} bakes/sec",
+        iters as f64 / mem_duration.as_secs_f64()
+    );
 
     // 4. Mesh Generation with 2D Hidden Volume Clipping
     println!("\n[Benchmark 4: Mesh Generation & Hidden Volume Culling (100k iters)]");
     let stairs_state = "minecraft:oak_stairs[facing=east,half=bottom,shape=straight]";
     let bs = BlockState::parse(stairs_state)?;
     let def = loader.load_blockstate(&bs.name);
-    let stairs_baked = baker.bake_blockstate(stairs_state, def.as_ref(), |id| loader.load_model(id))?;
+    let stairs_baked =
+        baker.bake_blockstate(stairs_state, def.as_ref(), |id| loader.load_model(id))?;
 
     let mesh_iters = 100_000;
     let mesh_start = Instant::now();
@@ -214,8 +253,14 @@ fn run_bench_model(args: BenchModelArgs) -> Result<(), Box<dyn std::error::Error
     let mesh_duration = mesh_start.elapsed();
     println!(" Stairs to_mesh(true) iterations: {}", mesh_iters);
     println!(" Total time: {:?}", mesh_duration);
-    println!(" Average time per mesh gen: {:.3} µs", (mesh_duration.as_secs_f64() * 1_000_000.0) / mesh_iters as f64);
-    println!(" Throughput: {:.2} meshes/sec", mesh_iters as f64 / mesh_duration.as_secs_f64());
+    println!(
+        " Average time per mesh gen: {:.3} µs",
+        (mesh_duration.as_secs_f64() * 1_000_000.0) / mesh_iters as f64
+    );
+    println!(
+        " Throughput: {:.2} meshes/sec",
+        mesh_iters as f64 / mesh_duration.as_secs_f64()
+    );
 
     Ok(())
 }

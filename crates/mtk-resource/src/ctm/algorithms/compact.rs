@@ -1,12 +1,9 @@
+use crate::ctm::types::get_face_tangents;
 use glam::IVec3;
 use mtk_core::direction::Direction;
-use crate::ctm::types::get_face_tangents;
 
 /// Solves 5-tile compact CTM pattern.
-pub fn solve_compact_ctm<F>(
-    face: Direction,
-    check_connect: &F,
-) -> usize
+pub fn solve_compact_ctm<F>(face: Direction, check_connect: &F) -> usize
 where
     F: Fn(IVec3) -> bool,
 {

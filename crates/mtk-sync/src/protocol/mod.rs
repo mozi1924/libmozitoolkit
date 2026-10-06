@@ -7,7 +7,9 @@ pub mod constants;
 pub mod error;
 pub mod packet;
 
-pub use codec::{decode_packet, encode_full_sync_request, encode_repair_requests, encode_sync_config};
+pub use codec::{
+    decode_packet, encode_full_sync_request, encode_repair_requests, encode_sync_config,
+};
 pub use constants::{
     is_supported_protocol_version, PacketType, StreamStatus, MAX_SUPPORTED_PROTOCOL_VERSION,
     MIN_SUPPORTED_PROTOCOL_VERSION, PROTOCOL_MAGIC, PROTOCOL_VERSION,

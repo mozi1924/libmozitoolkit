@@ -1,0 +1,15 @@
+[package]
+name = "mtk-testkit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "Dev-only test asset resolver and vendored fixtures for the libmtk workspace."
+publish = false
+
+[dependencies]
+
+[lints]
+workspace = true

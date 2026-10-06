@@ -4,8 +4,8 @@
 //! with full support for WebGPU geometry buffers, voxel meshing, occlusion culling,
 //! and multi-threaded Rayon execution via Web Workers (`wasm-bindgen-rayon`).
 
+use js_sys::{Float32Array, Uint16Array, Uint32Array};
 use wasm_bindgen::prelude::*;
-use js_sys::{Float32Array, Uint32Array, Uint16Array};
 
 use mtk_core::attributes::FaceAttributes;
 use mtk_core::constants::concurrency;
@@ -55,6 +55,12 @@ pub struct WasmMeshData {
     pub(crate) inner: MeshData,
 }
 
+impl Default for WasmMeshData {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[wasm_bindgen]
 impl WasmMeshData {
     #[wasm_bindgen(constructor)]
@@ -93,7 +99,11 @@ impl WasmMeshData {
     }
 
     /// Appends a unit cube face in given direction (0: Down, 1: Up, 2: North, 3: South, 4: West, 5: East).
-    pub fn append_unit_cube_face(&mut self, direction_id: u8, material_slot: u16) -> Result<(), JsValue> {
+    pub fn append_unit_cube_face(
+        &mut self,
+        direction_id: u8,
+        material_slot: u16,
+    ) -> Result<(), JsValue> {
         let dir = match direction_id {
             0 => Direction::Down,
             1 => Direction::Up,
@@ -219,14 +229,22 @@ impl WasmFaceCuller {
             1 => LeavesCullMode::Fancy,
             2 => LeavesCullMode::Fast,
             3 => LeavesCullMode::None,
-            _ => return Err(JsValue::from_str("Invalid leaves_cull_mode (0: SingleFace, 1: Fancy, 2: Fast, 3: None)")),
+            _ => {
+                return Err(JsValue::from_str(
+                    "Invalid leaves_cull_mode (0: SingleFace, 1: Fancy, 2: Fast, 3: None)",
+                ))
+            }
         };
 
         let glass = match glass_cull_mode {
             0 => GlassCullMode::Group,
             1 => GlassCullMode::SameBlock,
             2 => GlassCullMode::None,
-            _ => return Err(JsValue::from_str("Invalid glass_cull_mode (0: Group, 1: SameBlock, 2: None)")),
+            _ => {
+                return Err(JsValue::from_str(
+                    "Invalid glass_cull_mode (0: Group, 1: SameBlock, 2: None)",
+                ))
+            }
         };
 
         Ok(Self {
@@ -265,18 +283,17 @@ impl WasmMesherConfig {
         z_up_coordinates: bool,
         num_threads: Option<usize>,
     ) -> Self {
-        let mut inner = MesherConfig::default();
-        inner.enable_ao = enable_ao;
-        inner.mesh_fluids = mesh_fluids;
-        inner.coordinate_system = if z_up_coordinates {
-            mtk_voxel::types::CoordinateSystem::ZUpRightHanded
-        } else {
-            mtk_voxel::types::CoordinateSystem::Minecraft
+        let inner = MesherConfig {
+            enable_ao,
+            mesh_fluids,
+            coordinate_system: if z_up_coordinates {
+                mtk_voxel::types::CoordinateSystem::ZUpRightHanded
+            } else {
+                mtk_voxel::types::CoordinateSystem::Minecraft
+            },
+            ..Default::default()
         };
-        Self {
-            inner,
-            num_threads,
-        }
+        Self { inner, num_threads }
     }
 }
 
@@ -284,6 +301,12 @@ impl WasmMesherConfig {
 #[wasm_bindgen]
 pub struct WasmVoxelStorage {
     pub(crate) inner: VoxelStorage,
+}
+
+impl Default for WasmVoxelStorage {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[wasm_bindgen]
@@ -296,8 +319,17 @@ impl WasmVoxelStorage {
     }
 
     /// Configures the active world bounding box in block coordinates.
-    pub fn set_bounds(&mut self, min_x: i32, min_y: i32, min_z: i32, size_x: i32, size_y: i32, size_z: i32) -> bool {
-        self.inner.set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)
+    pub fn set_bounds(
+        &mut self,
+        min_x: i32,
+        min_y: i32,
+        min_z: i32,
+        size_x: i32,
+        size_y: i32,
+        size_z: i32,
+    ) -> bool {
+        self.inner
+            .set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)
     }
 
     /// Sets the block state at global `(x, y, z)` coordinate.
@@ -429,4 +461,3 @@ mod tests {
         assert_eq!(mesh.face_count(), 6);
     }
 }
-

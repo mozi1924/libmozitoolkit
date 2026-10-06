@@ -6,10 +6,10 @@
 //! - Sanitizes arbitrary `MeshData` buffers
 
 use alloc::vec::Vec;
-use std::collections::HashSet;
 use glam::{Vec2, Vec3};
 use mtk_core::direction::Direction;
 use mtk_core::mesh::MeshData;
+use std::collections::HashSet;
 
 use crate::geometry::coplanar::{check_coplanar_overlap, CoplanarOverlap, FaceAlignment};
 use crate::geometry::volume_cull::{clip_face_excluding_hidden_volume, ClippedQuadPiece};
@@ -42,13 +42,9 @@ impl MeshSanitizer {
                 }
                 let (id_b, verts_b, norm_b) = &quads[j];
 
-                if let Some(rel) = check_coplanar_overlap(
-                    verts_a,
-                    *norm_a,
-                    verts_b,
-                    *norm_b,
-                    tolerance,
-                ) {
+                if let Some(rel) =
+                    check_coplanar_overlap(verts_a, *norm_a, verts_b, *norm_b, tolerance)
+                {
                     match rel.overlap {
                         CoplanarOverlap::Exact => {
                             if rel.alignment == FaceAlignment::SameDirection {

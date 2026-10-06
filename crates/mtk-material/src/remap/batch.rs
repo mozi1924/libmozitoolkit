@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
+use mtk_texture::AtlasAddressMap;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
-use mtk_texture::AtlasAddressMap;
 
 use crate::remap::{
     detect_face_uv_rotation, normalize_face_uv_for_atlas_tiling, remap_local_to_atlas,
@@ -101,7 +101,8 @@ pub fn remap_mesh_uvs_parallel(
     };
 
     #[cfg(feature = "parallel")]
-    let face_results: Vec<(u16, u32, bool)> = (0..face_count).into_par_iter().map(map_face).collect();
+    let face_results: Vec<(u16, u32, bool)> =
+        (0..face_count).into_par_iter().map(map_face).collect();
 
     #[cfg(not(feature = "parallel"))]
     let face_results: Vec<(u16, u32, bool)> = (0..face_count).into_iter().map(map_face).collect();
@@ -213,7 +214,8 @@ pub fn remap_mesh_multi_uvs_parallel(
                 for i in start_idx..end_idx {
                     let [u_in, v_in] = source_uvs[i];
                     let (_, local_uv) = decode_grid_atlas_uv(u_in, v_in, spec);
-                    let target_atlas_uv = remap_local_to_atlas(local_uv[0], local_uv[1], sprite_loc);
+                    let target_atlas_uv =
+                        remap_local_to_atlas(local_uv[0], local_uv[1], sprite_loc);
                     unsafe {
                         *a_ptr.add(i) = target_atlas_uv;
                         *l_ptr.add(i) = local_uv;
@@ -269,7 +271,11 @@ pub fn remap_mesh_multi_uvs_parallel(
                 let target_atlas_uv = remap_local_to_atlas(u_norm, v_norm, sprite_loc);
                 unsafe {
                     *a_ptr.add(loop_idx) = target_atlas_uv;
-                    *l_ptr.add(loop_idx) = if is_tiled || angle.abs() > 1e-4 { [u_norm, v_norm] } else { source_uvs[loop_idx] };
+                    *l_ptr.add(loop_idx) = if is_tiled || angle.abs() > 1e-4 {
+                        [u_norm, v_norm]
+                    } else {
+                        source_uvs[loop_idx]
+                    };
                 }
             }
 

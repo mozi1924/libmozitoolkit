@@ -169,7 +169,14 @@ impl VoxelStorage {
     /// Returns active or computed 3D world bounding box `(min_x, min_y, min_z, size_x, size_y, size_z)`.
     pub fn get_bounds(&self) -> (i32, i32, i32, i32, i32, i32) {
         if self.size_x > 0 && self.size_y > 0 && self.size_z > 0 {
-            (self.min_x, self.min_y, self.min_z, self.size_x, self.size_y, self.size_z)
+            (
+                self.min_x,
+                self.min_y,
+                self.min_z,
+                self.size_x,
+                self.size_y,
+                self.size_z,
+            )
         } else {
             let non_empty = self.get_all_non_empty_sections();
             if non_empty.is_empty() {
@@ -202,14 +209,20 @@ impl VoxelStorage {
         size_z: i32,
     ) -> bool {
         let old_bounds = (
-            self.min_x, self.min_y, self.min_z, self.size_x, self.size_y, self.size_z,
+            self.min_x,
+            self.min_y,
+            self.min_z,
+            self.size_x,
+            self.size_y,
+            self.size_z,
         );
         let new_bounds = (min_x, min_y, min_z, size_x, size_y, size_z);
         if old_bounds == new_bounds {
             return false;
         }
 
-        let old_has_data = self.size_x > 0 && self.size_y > 0 && self.size_z > 0 && !self.sections.is_empty();
+        let old_has_data =
+            self.size_x > 0 && self.size_y > 0 && self.size_z > 0 && !self.sections.is_empty();
 
         if !old_has_data || size_x <= 0 || size_y <= 0 || size_z <= 0 {
             if self.size_x > 0 {
@@ -281,9 +294,8 @@ impl VoxelStorage {
                 && pos.z <= new_max_z
         });
 
-        self.biome_column_map.retain(|&[x, z], _| {
-            x >= min_x && x <= new_max_x && z >= min_z && z <= new_max_z
-        });
+        self.biome_column_map
+            .retain(|&[x, z], _| x >= min_x && x <= new_max_x && z >= min_z && z <= new_max_z);
 
         // Prune out-of-bounds section CRC cache and known empty sections
         self.section_crc_map.retain(|coord, _| {
@@ -332,7 +344,13 @@ impl VoxelStorage {
                         let wy = base_y + ly as i32;
                         for lz in 0..16 {
                             let wz = base_z + lz as i32;
-                            if wx < min_x || wx > new_max_x || wy < min_y || wy > new_max_y || wz < min_z || wz > new_max_z {
+                            if wx < min_x
+                                || wx > new_max_x
+                                || wy < min_y
+                                || wy > new_max_y
+                                || wz < min_z
+                                || wz > new_max_z
+                            {
                                 sec.set_local(lx, ly, lz, "minecraft:air");
                             }
                         }
@@ -361,8 +379,11 @@ impl VoxelStorage {
                         let pal_id = sec.voxels[idx] as usize;
                         if pal_id > 0 && pal_id < sec.palette.len() {
                             let state = &sec.palette[pal_id];
-                            if !state.is_empty() && state != "minecraft:air" && !state.starts_with("minecraft:air") {
-                                result.push((base_x + x as i32, base_y + y as i32, base_z + z as i32, state.clone()));
+                            if !state.is_empty()
+                                && state != "minecraft:air"
+                                && !state.starts_with("minecraft:air")
+                            {
+                                result.push((base_x + x, base_y + y, base_z + z, state.clone()));
                             }
                         }
                     }
@@ -529,7 +550,11 @@ impl crate::source::VoxelReader for VoxelStorage {
         if self.size_x > 0 && self.size_y > 0 && self.size_z > 0 {
             Some((
                 IVec3::new(self.min_x, self.min_y, self.min_z),
-                IVec3::new(self.min_x + self.size_x, self.min_y + self.size_y, self.min_z + self.size_z),
+                IVec3::new(
+                    self.min_x + self.size_x,
+                    self.min_y + self.size_y,
+                    self.min_z + self.size_z,
+                ),
             ))
         } else {
             None
@@ -557,7 +582,15 @@ impl crate::source::VoxelWriter for VoxelStorage {
         self.dirty_sections.insert(IVec3::new(sx, sy, sz));
     }
 
-    fn set_bounds(&mut self, min_x: i32, min_y: i32, min_z: i32, size_x: i32, size_y: i32, size_z: i32) {
+    fn set_bounds(
+        &mut self,
+        min_x: i32,
+        min_y: i32,
+        min_z: i32,
+        size_x: i32,
+        size_y: i32,
+        size_z: i32,
+    ) {
         VoxelStorage::set_bounds(self, min_x, min_y, min_z, size_x, size_y, size_z);
     }
 

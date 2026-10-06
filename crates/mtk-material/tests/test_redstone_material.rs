@@ -1,8 +1,8 @@
 use mtk_material::biome::hardcoded::{
     get_redstone_wire_color, get_redstone_wire_hex, get_redstone_wire_srgb,
 };
-use mtk_material::BiomeResolver;
 use mtk_material::resolver::MaterialResolver;
+use mtk_material::BiomeResolver;
 use mtk_resource::ResourceLocation;
 use mtk_texture::{AtlasAddressMap, AtlasSpriteLocation, SpriteKind};
 
@@ -126,7 +126,8 @@ fn test_material_resolver_redstone_aliases() {
     let res_angled = MaterialResolver::resolve("redstone_dust_angled_on", None, &address_map);
     assert_eq!(res_angled.unwrap().0.path, "block/redstone_dust_line0");
 
-    let res_three_way = MaterialResolver::resolve("redstone_dust_three_way_off", None, &address_map);
+    let res_three_way =
+        MaterialResolver::resolve("redstone_dust_three_way_off", None, &address_map);
     assert_eq!(res_three_way.unwrap().0.path, "block/redstone_dust_line1");
 
     let res_four_way = MaterialResolver::resolve("redstone_dust_four_way_on", None, &address_map);

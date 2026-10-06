@@ -44,5 +44,3 @@ pub use subdivide::{
 
 // Re-export glam types for convenience
 pub use glam::{IVec3, Vec2, Vec3, Vec4};
-
-

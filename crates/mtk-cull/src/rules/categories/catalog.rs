@@ -238,7 +238,9 @@ pub fn is_non_occluding_block(name_low: &str) -> bool {
         || name_low.contains("seagrass")
         || name_low.contains("litter")
         || name_low == "sugar_cane"
-        || (name_low.starts_with("bamboo") && !name_low.contains("block") && !name_low.contains("planks"))
+        || (name_low.starts_with("bamboo")
+            && !name_low.contains("block")
+            && !name_low.contains("planks"))
         || name_low == "lily_pad"
         || name_low == "spore_blossom"
         || name_low == "sea_pickle"
@@ -336,12 +338,13 @@ pub const PARTIAL_SHAPE_EXACT_NAMES: &[&str] = &[
 
 /// Check if block identifier is a non-full or partial block.
 pub fn is_non_full_or_partial_block(name_low: &str) -> bool {
-    if PARTIAL_SHAPE_EXACT_NAMES.contains(&name_low)
-        || is_non_occluding_block(name_low)
-    {
+    if PARTIAL_SHAPE_EXACT_NAMES.contains(&name_low) || is_non_occluding_block(name_low) {
         return true;
     }
-    if PARTIAL_SHAPE_SUFFIXES.iter().any(|&s| name_low.ends_with(s)) {
+    if PARTIAL_SHAPE_SUFFIXES
+        .iter()
+        .any(|&s| name_low.ends_with(s))
+    {
         return true;
     }
     const KEYWORDS: &[&str] = &[

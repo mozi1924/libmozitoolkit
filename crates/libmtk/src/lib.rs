@@ -10,13 +10,13 @@
 pub use mtk_core as core;
 pub use mtk_core::constants;
 pub use mtk_cull as cull;
-pub use mtk_model as model;
-pub use mtk_voxel as voxel;
-pub use mtk_resource as resource;
-pub use mtk_texture as texture;
 pub use mtk_material as material;
+pub use mtk_model as model;
+pub use mtk_resource as resource;
 #[cfg(feature = "save")]
 pub use mtk_save as save;
+pub use mtk_texture as texture;
+pub use mtk_voxel as voxel;
 
 use thiserror::Error;
 
@@ -55,6 +55,31 @@ pub enum MtkError {
     ThreadPool(String),
 }
 
+pub use mtk_core::extrude::{
+    cellular_noise_3d, generate_extrude_heights, perlin_noise_3d, repair_extruded_side_uv,
+    repair_extruded_side_uv_advanced, ExtrudeNoiseType, ExtrudeUvMode,
+};
+pub use mtk_core::extrude_mesh::{
+    process_flat_mesh_extrude_repair, process_mesh_extrude_repair, process_random_extrude_mesh,
+    ExtrudeMeshInput, ExtrudeMeshOutput, FlatPolygonMesh, MeshExtrudeRepairConfig,
+    RandomExtrudeMeshInput, RandomExtrudeMeshOutput,
+};
+pub use mtk_core::geometry::{mc_local_to_centered_z_up, mc_world_to_z_up, Aabb2d, Aabb3d, Quad};
+pub use mtk_core::subdivide::{
+    adaptive_pixel_split_mesh, calculate_face_target_grid, interpolate_bilinear_2d,
+    interpolate_bilinear_3d, interpolate_bilinear_4d, weld_mesh_vertices,
+};
+pub use mtk_core::uv::{
+    calculate_uv_area, calculate_uv_area_2d, get_uv_bounds, get_uv_center, is_uv_collapsed,
+    is_uv_collapsed_2d,
+};
+pub use mtk_cull::mesh_cull::{cull_mesh_faces, MeshCullConfig, MeshCullResult};
+pub use mtk_material::{
+    clean_identifier, decode_grid_atlas_uv, is_quad_uv_diamond, remap_atlas_to_local,
+    remap_grid_atlas_uv_to_local, remap_local_to_atlas, remap_mesh_multi_uvs_parallel,
+    remap_mesh_uvs_parallel, remap_sprite_to_sprite, straighten_diamond_quad_uv, GridAtlasSpec,
+    MaterialResolver, MeshMultiUvRemapResult, MeshRemapResult, SourceUvSpace,
+};
 pub use mtk_resource::{
     coordinate_random, extract_block_name, get_face_tangents, AnimationFrame, AnimationMetadata,
     AtlasDefinition, AtlasSource, BlockMatch, ConnectLogic, CtmMethod, CtmRule, CtmSolver,
@@ -68,45 +93,12 @@ pub use mtk_texture::{
     StandaloneConfig, StandaloneFilePaths, StandaloneMapping, StandaloneResult,
     StandaloneTextureRecord, Stitcher, STANDALONE_FORMAT_VERSION,
 };
-pub use mtk_material::{
-    clean_identifier, decode_grid_atlas_uv, is_quad_uv_diamond, remap_atlas_to_local,
-    remap_grid_atlas_uv_to_local, remap_local_to_atlas, remap_mesh_multi_uvs_parallel,
-    remap_mesh_uvs_parallel, remap_sprite_to_sprite, straighten_diamond_quad_uv,
-    GridAtlasSpec, MaterialResolver, MeshMultiUvRemapResult, MeshRemapResult, SourceUvSpace,
-};
-pub use mtk_core::extrude::{
-    cellular_noise_3d, generate_extrude_heights, perlin_noise_3d, repair_extruded_side_uv,
-    repair_extruded_side_uv_advanced, ExtrudeNoiseType, ExtrudeUvMode,
-};
-pub use mtk_core::uv::{
-    calculate_uv_area, calculate_uv_area_2d, get_uv_bounds, get_uv_center, is_uv_collapsed,
-    is_uv_collapsed_2d,
-};
-pub use mtk_core::extrude_mesh::{
-    process_flat_mesh_extrude_repair, process_mesh_extrude_repair, process_random_extrude_mesh,
-    ExtrudeMeshInput, ExtrudeMeshOutput, FlatPolygonMesh, MeshExtrudeRepairConfig,
-    RandomExtrudeMeshInput, RandomExtrudeMeshOutput,
-};
-pub use mtk_core::geometry::{
-    mc_local_to_centered_z_up, mc_world_to_z_up, Aabb2d, Aabb3d, Quad,
-};
-pub use mtk_core::subdivide::{
-    adaptive_pixel_split_mesh, calculate_face_target_grid, interpolate_bilinear_2d,
-    interpolate_bilinear_3d, interpolate_bilinear_4d, weld_mesh_vertices,
-};
-pub use mtk_cull::mesh_cull::{cull_mesh_faces, MeshCullConfig, MeshCullResult};
 pub mod pipeline;
 pub use pipeline::{
     process_mesh, MeshPipelineConfig, MeshProcessStats, ProcessMeshOutput, ResolvedMaterialInfo,
 };
 
 pub mod prebake;
-pub use prebake::{
-    prebake_all_models, prebake_all_models_with_progress, precompile_all_assets,
-    precompile_all_assets_with_progress, CacheManifest, PrecompileConfig, PrecompileResult,
-    ASSET_CACHE_FORMAT_VERSION,
-};
-pub use mtk_model::baker::{BakedModel, BakedModelDatabase, ModelBaker};
 pub use mtk_cull::engine::{
     compute_block_cull_meta, derive_parametric_face_shapes, get_visible_face_directions,
     is_non_full_or_partial_block, parse_block_name_and_props, FaceCuller,
@@ -119,6 +111,7 @@ pub use mtk_cull::rules::should_skip_rendering;
 pub use mtk_cull::types::{
     BlockCullMeta, CullCategory, GlassCullMode, LeavesCullMode, EMPTY_FACE_RECT, FULL_FACE_RECT,
 };
+pub use mtk_model::baker::{BakedModel, BakedModelDatabase, ModelBaker};
 pub use mtk_model::blockstate::BlockState;
 pub use mtk_model::model_json::BlockModelJson;
 pub use mtk_model::obj::{mesh_to_obj_string, ModObjLoader, WavefrontObjParser};
@@ -126,13 +119,20 @@ pub use mtk_voxel::ao::{ao_level_to_brightness, calculate_face_ao, should_flip_q
 pub use mtk_voxel::biome::{get_biome_meta, get_colormap_uv, get_smoothed_biome_data};
 pub use mtk_voxel::crc::{crc32, get_empty_section_crc, EMPTY_SECTION_CRC};
 pub use mtk_voxel::delta_mesher::DeltaMesher;
-pub use mtk_voxel::fluid::{calculate_fluid_corner_heights, calculate_fluid_flow_vector, FluidType};
+pub use mtk_voxel::fluid::{
+    calculate_fluid_corner_heights, calculate_fluid_flow_vector, FluidType,
+};
 pub use mtk_voxel::mesher::SectionMesher;
 pub use mtk_voxel::source::{ingest_from_source, VoxelReader, VoxelSource, VoxelWriter};
 pub use mtk_voxel::storage::{PaddedVoxelArray, SectionStorage};
 pub use mtk_voxel::types::{CoordinateSystem, MesherConfig, WorldMeshBuildResult};
 pub use mtk_voxel::world::VoxelStorage;
 pub use mtk_voxel::VoxelWorld;
+pub use prebake::{
+    prebake_all_models, prebake_all_models_with_progress, precompile_all_assets,
+    precompile_all_assets_with_progress, CacheManifest, PrecompileConfig, PrecompileResult,
+    ASSET_CACHE_FORMAT_VERSION,
+};
 
 #[cfg(feature = "sync")]
 pub use mtk_sync as sync;
@@ -145,6 +145,3 @@ pub use mtk_sync::protocol::{
 };
 #[cfg(feature = "sync")]
 pub use mtk_sync::{LiveSyncSession, SyncClient, SyncEvent};
-
-
-

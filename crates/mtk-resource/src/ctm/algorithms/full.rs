@@ -1,14 +1,10 @@
-use glam::IVec3;
-use mtk_core::direction::Direction;
 use crate::ctm::tables::CTM_47_LOOKUP;
 use crate::ctm::types::get_face_tangents;
+use glam::IVec3;
+use mtk_core::direction::Direction;
 
 /// Solves full 47-tile CTM pattern.
-pub fn solve_full_ctm<F>(
-    face: Direction,
-    inner_seams: bool,
-    check_connect: &F,
-) -> usize
+pub fn solve_full_ctm<F>(face: Direction, inner_seams: bool, check_connect: &F) -> usize
 where
     F: Fn(IVec3) -> bool,
 {
@@ -50,19 +46,23 @@ where
         if (bits & (1 << 6)) == 0 && check_connect(up.offset() + forward.offset()) {
             bits |= 1 << 6;
         }
-        if (bits & (1 << 5)) == 0 && check_connect(up.offset() + right.offset() + forward.offset()) {
+        if (bits & (1 << 5)) == 0 && check_connect(up.offset() + right.offset() + forward.offset())
+        {
             bits |= 1 << 5;
         }
         if (bits & (1 << 4)) == 0 && check_connect(right.offset() + forward.offset()) {
             bits |= 1 << 4;
         }
-        if (bits & (1 << 3)) == 0 && check_connect(down.offset() + right.offset() + forward.offset()) {
+        if (bits & (1 << 3)) == 0
+            && check_connect(down.offset() + right.offset() + forward.offset())
+        {
             bits |= 1 << 3;
         }
         if (bits & (1 << 2)) == 0 && check_connect(down.offset() + forward.offset()) {
             bits |= 1 << 2;
         }
-        if (bits & (1 << 1)) == 0 && check_connect(down.offset() + left.offset() + forward.offset()) {
+        if (bits & (1 << 1)) == 0 && check_connect(down.offset() + left.offset() + forward.offset())
+        {
             bits |= 1 << 1;
         }
         if (bits & 1) == 0 && check_connect(left.offset() + forward.offset()) {

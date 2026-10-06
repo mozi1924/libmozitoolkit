@@ -1,7 +1,7 @@
-use std::path::Path;
 use glam::IVec3;
 use mtk_save::region::RegionFile;
 use mtk_save::SaveLoader;
+use mtk_testkit::save_world;
 use mtk_voxel::storage::VoxelStorage;
 
 #[test]
@@ -18,30 +18,31 @@ fn test_region_chunk_indexing() {
 
 #[test]
 fn test_real_world_level_dat_if_present() {
-    let test_save_path = Path::new("/home/mozi/.minecraft/versions/26.2-Fabric/saves/New World");
-    if !test_save_path.exists() {
+    let Some(test_save_path) = save_world() else {
+        eprintln!("Skipping: no Minecraft save available (set MTK_TEST_SAVE)");
         return;
-    }
+    };
 
-    let level_data = SaveLoader::read_level_data(test_save_path).expect("Failed reading level.dat");
-    assert_eq!(level_data.level_name, "New World");
+    let level_data =
+        SaveLoader::read_level_data(&test_save_path).expect("Failed reading level.dat");
+    assert!(!level_data.level_name.is_empty());
     assert!(level_data.data_version >= 2844);
     println!("Loaded real level.dat: {:?}", level_data);
 }
 
 #[test]
 fn test_real_world_bounded_box_loading() {
-    let test_save_path = Path::new("/home/mozi/.minecraft/versions/26.2-Fabric/saves/New World");
-    if !test_save_path.exists() {
+    let Some(test_save_path) = save_world() else {
+        eprintln!("Skipping: no Minecraft save available (set MTK_TEST_SAVE)");
         return;
-    }
+    };
 
     let mut storage = VoxelStorage::new();
     let min_coord = IVec3::new(0, -64, 0);
     let max_coord = IVec3::new(15, 64, 15);
 
     let loaded = SaveLoader::load_box_into_storage(
-        test_save_path,
+        &test_save_path,
         "overworld",
         min_coord,
         max_coord,
@@ -49,7 +50,10 @@ fn test_real_world_bounded_box_loading() {
     )
     .expect("Failed loading bounded world box");
 
-    assert!(loaded > 0, "Should have loaded at least one non-empty chunk section");
+    assert!(
+        loaded > 0,
+        "Should have loaded at least one non-empty chunk section"
+    );
     let (bx, by, bz, sx, sy, sz) = storage.get_bounds();
     assert_eq!(bx, 0);
     assert_eq!(by, -64);
@@ -57,5 +61,8 @@ fn test_real_world_bounded_box_loading() {
     assert_eq!(sx, 16);
     assert_eq!(sy, 129);
     assert_eq!(sz, 16);
-    println!("Loaded {} sections. Active bounds: ({}, {}, {}, size: {}x{}x{})", loaded, bx, by, bz, sx, sy, sz);
+    println!(
+        "Loaded {} sections. Active bounds: ({}, {}, {}, size: {}x{}x{})",
+        loaded, bx, by, bz, sx, sy, sz
+    );
 }

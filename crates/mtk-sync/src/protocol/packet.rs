@@ -13,10 +13,7 @@ use crate::protocol::constants::StreamStatus;
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Packet {
     /// 0x01: Selection Bounding Box Information
-    SelectionInfo {
-        min_pos: IVec3,
-        size: IVec3,
-    },
+    SelectionInfo { min_pos: IVec3, size: IVec3 },
 
     /// 0x02: Full Selection Snapshot
     FullSnapshot {
@@ -79,9 +76,7 @@ pub enum Packet {
     ReqFullSync,
 
     /// 0x81: Client requests specific Section Repairs
-    ReqSectionSync {
-        sections: Vec<IVec3>,
-    },
+    ReqSectionSync { sections: Vec<IVec3> },
 
     /// 0x82: Client configuration
     SyncConfig {

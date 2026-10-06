@@ -45,7 +45,14 @@ pub fn uv_to_pixel_coord(u: f32, v: f32, width: u32, height: u32, invert_y: bool
 
 /// Sample alpha [0.0, 1.0] from an RGBA u8 buffer at normalized (u, v).
 #[inline]
-pub fn sample_alpha_u8(width: u32, height: u32, pixels: &[u8], u: f32, v: f32, invert_y: bool) -> f32 {
+pub fn sample_alpha_u8(
+    width: u32,
+    height: u32,
+    pixels: &[u8],
+    u: f32,
+    v: f32,
+    invert_y: bool,
+) -> f32 {
     if width == 0 || height == 0 || pixels.len() < (width * height * 4) as usize {
         return 1.0;
     }
@@ -60,7 +67,14 @@ pub fn sample_alpha_u8(width: u32, height: u32, pixels: &[u8], u: f32, v: f32, i
 
 /// Sample alpha [0.0, 1.0] from an RGBA f32 buffer at normalized (u, v).
 #[inline]
-pub fn sample_alpha_f32(width: u32, height: u32, pixels: &[f32], u: f32, v: f32, invert_y: bool) -> f32 {
+pub fn sample_alpha_f32(
+    width: u32,
+    height: u32,
+    pixels: &[f32],
+    u: f32,
+    v: f32,
+    invert_y: bool,
+) -> f32 {
     if width == 0 || height == 0 || pixels.len() < (width * height * 4) as usize {
         return 1.0;
     }
@@ -99,12 +113,13 @@ pub fn is_face_transparent_u8(
             if center_alpha > threshold {
                 return false;
             }
-            face_uvs.iter().all(|uv| {
-                sample_alpha_u8(width, height, pixels, uv.x, uv.y, invert_y) <= threshold
-            })
+            face_uvs
+                .iter()
+                .all(|uv| sample_alpha_u8(width, height, pixels, uv.x, uv.y, invert_y) <= threshold)
         }
         SampleMode::Average => {
-            let mut sum_alpha = sample_alpha_u8(width, height, pixels, center.x, center.y, invert_y);
+            let mut sum_alpha =
+                sample_alpha_u8(width, height, pixels, center.x, center.y, invert_y);
             for uv in face_uvs {
                 sum_alpha += sample_alpha_u8(width, height, pixels, uv.x, uv.y, invert_y);
             }
@@ -136,7 +151,8 @@ pub fn is_face_transparent_f32(
             alpha <= threshold
         }
         SampleMode::AllCorners => {
-            let center_alpha = sample_alpha_f32(width, height, pixels, center.x, center.y, invert_y);
+            let center_alpha =
+                sample_alpha_f32(width, height, pixels, center.x, center.y, invert_y);
             if center_alpha > threshold {
                 return false;
             }
@@ -145,7 +161,8 @@ pub fn is_face_transparent_f32(
             })
         }
         SampleMode::Average => {
-            let mut sum_alpha = sample_alpha_f32(width, height, pixels, center.x, center.y, invert_y);
+            let mut sum_alpha =
+                sample_alpha_f32(width, height, pixels, center.x, center.y, invert_y);
             for uv in face_uvs {
                 sum_alpha += sample_alpha_f32(width, height, pixels, uv.x, uv.y, invert_y);
             }
@@ -170,7 +187,9 @@ pub fn batch_analyze_transparent_faces_u8(
         if faces_uvs.len() > 256 {
             return faces_uvs
                 .par_iter()
-                .map(|uvs| is_face_transparent_u8(uvs, width, height, pixels, mode, threshold, invert_y))
+                .map(|uvs| {
+                    is_face_transparent_u8(uvs, width, height, pixels, mode, threshold, invert_y)
+                })
                 .collect();
         }
     }
@@ -196,7 +215,9 @@ pub fn batch_analyze_transparent_faces_f32(
         if faces_uvs.len() > 256 {
             return faces_uvs
                 .par_iter()
-                .map(|uvs| is_face_transparent_f32(uvs, width, height, pixels, mode, threshold, invert_y))
+                .map(|uvs| {
+                    is_face_transparent_f32(uvs, width, height, pixels, mode, threshold, invert_y)
+                })
                 .collect();
         }
     }
@@ -246,9 +267,33 @@ mod tests {
         ];
 
         // Center is at (0.2, 0.2) -> pixel (0, 0) -> transparent!
-        assert!(is_face_transparent_u8(&face_quad_00, 2, 2, &pixels, SampleMode::Center, 0.01, false));
-        assert!(is_face_transparent_u8(&face_quad_00, 2, 2, &pixels, SampleMode::AllCorners, 0.01, false));
-        assert!(is_face_transparent_u8(&face_quad_00, 2, 2, &pixels, SampleMode::Average, 0.01, false));
+        assert!(is_face_transparent_u8(
+            &face_quad_00,
+            2,
+            2,
+            &pixels,
+            SampleMode::Center,
+            0.01,
+            false
+        ));
+        assert!(is_face_transparent_u8(
+            &face_quad_00,
+            2,
+            2,
+            &pixels,
+            SampleMode::AllCorners,
+            0.01,
+            false
+        ));
+        assert!(is_face_transparent_u8(
+            &face_quad_00,
+            2,
+            2,
+            &pixels,
+            SampleMode::Average,
+            0.01,
+            false
+        ));
 
         // Quad sampling all 4 quadrants of the 2x2 image
         let sample_all_quad = vec![
@@ -258,10 +303,34 @@ mod tests {
             Vec2::new(0.25, 0.75), // pixel (0, 1): a=255
         ];
         // Center is at (0.5, 0.5) -> pixel (1, 1) -> a=0 -> Center says transparent!
-        assert!(is_face_transparent_u8(&sample_all_quad, 2, 2, &pixels, SampleMode::Center, 0.01, false));
+        assert!(is_face_transparent_u8(
+            &sample_all_quad,
+            2,
+            2,
+            &pixels,
+            SampleMode::Center,
+            0.01,
+            false
+        ));
         // But corners (1,0) and (0,1) have a=255 -> AllCorners says NOT transparent!
-        assert!(!is_face_transparent_u8(&sample_all_quad, 2, 2, &pixels, SampleMode::AllCorners, 0.01, false));
+        assert!(!is_face_transparent_u8(
+            &sample_all_quad,
+            2,
+            2,
+            &pixels,
+            SampleMode::AllCorners,
+            0.01,
+            false
+        ));
         // Average is (0 + 255 + 0 + 255 + 0) / 5 = 102/255 > 0.01 -> NOT transparent!
-        assert!(!is_face_transparent_u8(&sample_all_quad, 2, 2, &pixels, SampleMode::Average, 0.01, false));
+        assert!(!is_face_transparent_u8(
+            &sample_all_quad,
+            2,
+            2,
+            &pixels,
+            SampleMode::Average,
+            0.01,
+            false
+        ));
     }
 }

@@ -52,20 +52,44 @@ impl WavefrontObjParser {
                     }
                 }
                 "v" => {
-                    let x = parts.next().and_then(|s| s.parse::<f32>().ok()).unwrap_or(0.0);
-                    let y = parts.next().and_then(|s| s.parse::<f32>().ok()).unwrap_or(0.0);
-                    let z = parts.next().and_then(|s| s.parse::<f32>().ok()).unwrap_or(0.0);
+                    let x = parts
+                        .next()
+                        .and_then(|s| s.parse::<f32>().ok())
+                        .unwrap_or(0.0);
+                    let y = parts
+                        .next()
+                        .and_then(|s| s.parse::<f32>().ok())
+                        .unwrap_or(0.0);
+                    let z = parts
+                        .next()
+                        .and_then(|s| s.parse::<f32>().ok())
+                        .unwrap_or(0.0);
                     verts.push(Vec3::new(x, y, z));
                 }
                 "vt" => {
-                    let u = parts.next().and_then(|s| s.parse::<f32>().ok()).unwrap_or(0.0);
-                    let v = parts.next().and_then(|s| s.parse::<f32>().ok()).unwrap_or(0.0);
+                    let u = parts
+                        .next()
+                        .and_then(|s| s.parse::<f32>().ok())
+                        .unwrap_or(0.0);
+                    let v = parts
+                        .next()
+                        .and_then(|s| s.parse::<f32>().ok())
+                        .unwrap_or(0.0);
                     uvs.push(Vec2::new(u, v));
                 }
                 "vn" => {
-                    let nx = parts.next().and_then(|s| s.parse::<f32>().ok()).unwrap_or(0.0);
-                    let ny = parts.next().and_then(|s| s.parse::<f32>().ok()).unwrap_or(0.0);
-                    let nz = parts.next().and_then(|s| s.parse::<f32>().ok()).unwrap_or(0.0);
+                    let nx = parts
+                        .next()
+                        .and_then(|s| s.parse::<f32>().ok())
+                        .unwrap_or(0.0);
+                    let ny = parts
+                        .next()
+                        .and_then(|s| s.parse::<f32>().ok())
+                        .unwrap_or(0.0);
+                    let nz = parts
+                        .next()
+                        .and_then(|s| s.parse::<f32>().ok())
+                        .unwrap_or(0.0);
                     normals.push(Vec3::new(nx, ny, nz));
                 }
                 "usemtl" => {
@@ -258,10 +282,13 @@ impl ModObjLoader {
         let auto_scale = if max_span > 2.0 { 1.0 / 16.0 } else { 1.0 };
 
         // Center detection: If vertices are centered [-0.5..0.5] or [-8..8], shift into [0..1]
-        let is_centered = min_x * auto_scale < -0.1
-            || min_y * auto_scale < -0.1
-            || min_z * auto_scale < -0.1;
-        let shift = if is_centered { Vec3::splat(0.5) } else { Vec3::ZERO };
+        let is_centered =
+            min_x * auto_scale < -0.1 || min_y * auto_scale < -0.1 || min_z * auto_scale < -0.1;
+        let shift = if is_centered {
+            Vec3::splat(0.5)
+        } else {
+            Vec3::ZERO
+        };
 
         let uv_scale = if max_uv > 2.0 { 1.0 / 16.0 } else { 1.0 };
 
@@ -298,7 +325,8 @@ impl ModObjLoader {
                     let diff = pos - center;
                     let rad = rot_z.to_radians();
                     let (s, c) = rad.sin_cos();
-                    pos = Vec3::new(diff.x * c - diff.y * s, diff.x * s + diff.y * c, diff.z) + center;
+                    pos = Vec3::new(diff.x * c - diff.y * s, diff.x * s + diff.y * c, diff.z)
+                        + center;
                 }
                 transformed_verts.push(pos);
             }
@@ -344,11 +372,7 @@ impl ModObjLoader {
 }
 
 /// Formats a `MeshData` buffer as a standard Wavefront OBJ string.
-pub fn mesh_to_obj_string(
-    mesh: &MeshData,
-    object_name: &str,
-    material_names: &[String],
-) -> String {
+pub fn mesh_to_obj_string(mesh: &MeshData, object_name: &str, material_names: &[String]) -> String {
     use std::fmt::Write;
 
     let mut out = String::new();

@@ -1,7 +1,6 @@
 use super::super::hardcoded::{
-    classify_tint_category, get_hardcoded_tint_hex,
-    TINT_TYPE_DRY_FOLIAGE, TINT_TYPE_FOLIAGE, TINT_TYPE_GRASS, TINT_TYPE_HARDCODED,
-    TINT_TYPE_WATER,
+    classify_tint_category, get_hardcoded_tint_hex, TINT_TYPE_DRY_FOLIAGE, TINT_TYPE_FOLIAGE,
+    TINT_TYPE_GRASS, TINT_TYPE_HARDCODED, TINT_TYPE_WATER,
 };
 use super::super::palettes::hex_to_linear_rgba;
 use super::types::{BiomeResolver, TintInfo};
@@ -42,7 +41,8 @@ impl BiomeResolver {
         // Special handling for dynamic Redstone Wire signal strength (power 0..15)
         let is_redstone = stem.starts_with("redstone_dust")
             || stem.starts_with("redstone_wire")
-            || block_name.map_or(false, |b| b.contains("redstone_wire") || b.contains("redstone_dust"));
+            || block_name
+                .is_some_and(|b| b.contains("redstone_wire") || b.contains("redstone_dust"));
 
         if is_redstone && stem != "redstone_dust_overlay" {
             let power = block_name
@@ -87,7 +87,9 @@ impl BiomeResolver {
         }
 
         // 3. Check Hardcoded block tints
-        if let Some(hex) = get_hardcoded_tint_hex(stem).or_else(|| block_name.and_then(get_hardcoded_tint_hex)) {
+        if let Some(hex) =
+            get_hardcoded_tint_hex(stem).or_else(|| block_name.and_then(get_hardcoded_tint_hex))
+        {
             let col = hex_to_linear_rgba(hex);
             return TintInfo {
                 tint_type: TINT_TYPE_HARDCODED,
@@ -186,8 +188,12 @@ impl BiomeResolver {
                 hardcoded_hex: None,
             },
             "hardcoded" => {
-                let hex_opt = get_hardcoded_tint_hex(stem).or_else(|| block_name.and_then(get_hardcoded_tint_hex));
-                let hc = self.texture_hardcoded_colors.get(stem).copied()
+                let hex_opt = get_hardcoded_tint_hex(stem)
+                    .or_else(|| block_name.and_then(get_hardcoded_tint_hex));
+                let hc = self
+                    .texture_hardcoded_colors
+                    .get(stem)
+                    .copied()
                     .or_else(|| hex_opt.map(hex_to_linear_rgba))
                     .unwrap_or([0.38, 0.60, 0.38, 1.0]);
                 TintInfo {

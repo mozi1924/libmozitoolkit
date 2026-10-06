@@ -1,8 +1,8 @@
 //! Python bindings for UV geometric algorithms.
 
 use glam::Vec2;
-use pyo3::prelude::*;
 use libmtk::core::uv;
+use pyo3::prelude::*;
 
 #[inline]
 fn tuples_to_vec2(uvs: &[(f32, f32)]) -> Vec<Vec2> {
@@ -143,7 +143,13 @@ pub fn repair_quad_fluid_uv(
     ];
     let norm = normal.map(|(x, y, z)| glam::Vec3::new(x, y, z));
 
-    let repaired = mtk_voxel::fluid_uv::repair_quad_fluid_uv(&v_arr, &mut uv_arr, norm, force, min_slope_threshold);
+    let repaired = mtk_voxel::fluid_uv::repair_quad_fluid_uv(
+        &v_arr,
+        &mut uv_arr,
+        norm,
+        force,
+        min_slope_threshold,
+    );
     let out_uvs = vec2_to_tuples(&uv_arr);
     Ok((repaired, out_uvs))
 }
@@ -203,7 +209,9 @@ pub fn batch_repair_fluid_uv<'py>(
     let normals_slice: Option<&[f32]> = if let Some(ref buf) = py_buf_normals_f32 {
         if buf.is_c_contiguous() {
             normals_vec = None;
-            Some(unsafe { std::slice::from_raw_parts(buf.buf_ptr() as *const f32, buf.item_count()) })
+            Some(unsafe {
+                std::slice::from_raw_parts(buf.buf_ptr() as *const f32, buf.item_count())
+            })
         } else {
             normals_vec = normals_flat.map(|n| n.extract()).transpose()?;
             normals_vec.as_deref()
@@ -253,9 +261,8 @@ pub fn batch_repair_fluid_uv<'py>(
         let is_aligned = (ptr as usize) % std::mem::align_of::<f32>() == 0;
         let is_len_valid = len_bytes % std::mem::size_of::<f32>() == 0;
         if !buf.readonly() && is_aligned && is_len_valid && buf.is_c_contiguous() {
-            let uvs_mut: &mut [f32] = unsafe {
-                std::slice::from_raw_parts_mut(ptr as *mut f32, len_bytes / 4)
-            };
+            let uvs_mut: &mut [f32] =
+                unsafe { std::slice::from_raw_parts_mut(ptr as *mut f32, len_bytes / 4) };
             let count = mtk_voxel::fluid_uv::batch_repair_fluid_uv(
                 verts_slice,
                 uvs_mut,
@@ -403,5 +410,3 @@ pub fn generate_random_extrude_heights(
         discrete_steps,
     )
 }
-
-

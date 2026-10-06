@@ -102,12 +102,12 @@ impl BlockStateResolver {
         props: &BTreeMap<String, String>,
     ) -> bool {
         match condition {
-            MultipartCondition::Or { or } => {
-                or.iter().any(|sub_cond| Self::evaluate_condition(sub_cond, props))
-            }
-            MultipartCondition::And { and } => {
-                and.iter().all(|sub_cond| Self::evaluate_condition(sub_cond, props))
-            }
+            MultipartCondition::Or { or } => or
+                .iter()
+                .any(|sub_cond| Self::evaluate_condition(sub_cond, props)),
+            MultipartCondition::And { and } => and
+                .iter()
+                .all(|sub_cond| Self::evaluate_condition(sub_cond, props)),
             MultipartCondition::Properties(dict) => {
                 for (k, expected_val) in dict {
                     let mut actual_v = props.get(k.as_str()).map(|s| s.as_str());
@@ -130,9 +130,9 @@ impl BlockStateResolver {
                             let num_str = num.to_string();
                             num_str.eq_ignore_ascii_case(actual)
                         }
-                        serde_json::Value::String(s) => {
-                            s.split('|').any(|option| option.trim().eq_ignore_ascii_case(actual))
-                        }
+                        serde_json::Value::String(s) => s
+                            .split('|')
+                            .any(|option| option.trim().eq_ignore_ascii_case(actual)),
                         _ => false,
                     };
                     if !matched {
@@ -205,14 +205,35 @@ impl BlockStateResolver {
                 if !props.contains_key(*vk) {
                     if matches!(
                         *vv,
-                        "false" | "0" | "none" | "straight" | "bottom" | "lower" | "single"
-                            | "foot" | "normal" | "side" | "y" | "north"
+                        "false"
+                            | "0"
+                            | "none"
+                            | "straight"
+                            | "bottom"
+                            | "lower"
+                            | "single"
+                            | "foot"
+                            | "normal"
+                            | "side"
+                            | "y"
+                            | "north"
                     ) {
                         score += 10;
                     } else if matches!(
                         *vv,
-                        "true" | "1" | "top" | "upper" | "head" | "inner" | "outer" | "double"
-                            | "x" | "z" | "south" | "east" | "west"
+                        "true"
+                            | "1"
+                            | "top"
+                            | "upper"
+                            | "head"
+                            | "inner"
+                            | "outer"
+                            | "double"
+                            | "x"
+                            | "z"
+                            | "south"
+                            | "east"
+                            | "west"
                     ) {
                         score -= 10;
                     }

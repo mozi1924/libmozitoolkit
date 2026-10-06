@@ -34,3 +34,7 @@ parallel = [
 ]
 
 [dev-dependencies]
+mtk-testkit = { workspace = true }
+
+[lints]
+workspace = true

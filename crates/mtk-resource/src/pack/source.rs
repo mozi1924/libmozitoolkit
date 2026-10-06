@@ -1,8 +1,8 @@
+use crate::error::ResourceError;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use crate::error::ResourceError;
 
 /// Trait defining a readable Minecraft resource pack source.
 pub trait ResourcePack: Send + Sync {
@@ -68,7 +68,7 @@ impl ResourcePack for DirectoryPack {
         let norm_prefix = prefix.replace('\\', "/");
         let mut results = Vec::new();
         let target_dir = self.root_dir.join(Self::normalize_path(&norm_prefix));
-        
+
         let search_root = if target_dir.is_dir() {
             target_dir
         } else {
@@ -149,7 +149,10 @@ pub struct ZipPack {
 #[cfg(feature = "zip")]
 impl ZipPack {
     /// Load and cache all files from a ZIP or JAR archive into memory.
-    pub fn from_file(name: impl Into<String>, path: impl AsRef<Path>) -> Result<Self, ResourceError> {
+    pub fn from_file(
+        name: impl Into<String>,
+        path: impl AsRef<Path>,
+    ) -> Result<Self, ResourceError> {
         let file = fs::File::open(path)?;
         let mut archive = zip::ZipArchive::new(file)?;
         let mut file_map = HashMap::new();

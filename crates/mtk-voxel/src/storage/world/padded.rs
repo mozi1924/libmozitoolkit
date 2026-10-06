@@ -1,7 +1,7 @@
 use glam::IVec3;
 
-use crate::storage::{PaddedVoxelArray, SectionStorage};
 use super::container::VoxelStorage;
+use crate::storage::{PaddedVoxelArray, SectionStorage};
 
 impl VoxelStorage {
     /// Builds a 18x18x18 padded array for a target section coordinate.
@@ -56,7 +56,7 @@ impl VoxelStorage {
                     for ly in (0..16).rev() {
                         let state = sec.get_local_state(lx as usize, ly as usize, lz as usize);
                         if state != "minecraft:air" && !state.starts_with("minecraft:air") {
-                            sample_y = sec_wy + ly as i32;
+                            sample_y = sec_wy + ly;
                             break;
                         }
                     }
@@ -65,14 +65,24 @@ impl VoxelStorage {
 
                     let col = crate::biome::get_smoothed_column_biome(
                         |bx, y, bz| {
-                            let cbx = if has_bounds { bx.clamp(min_bound_x, max_bound_x) } else { bx };
-                            let cbz = if has_bounds { bz.clamp(min_bound_z, max_bound_z) } else { bz };
+                            let cbx = if has_bounds {
+                                bx.clamp(min_bound_x, max_bound_x)
+                            } else {
+                                bx
+                            };
+                            let cbz = if has_bounds {
+                                bz.clamp(min_bound_z, max_bound_z)
+                            } else {
+                                bz
+                            };
                             let b = self.get_biome(cbx, y, cbz);
                             // Avoid erroneous fallback to plains if the sample column had no data but center_b is non-plains
-                            if b == "minecraft:plains" && center_b != "minecraft:plains" {
-                                if !self.biome_column_map.contains_key(&[cbx, cbz]) && !self.biome_map.contains_key(&IVec3::new(cbx, y, cbz)) {
-                                    return center_b.to_string();
-                                }
+                            if b == "minecraft:plains"
+                                && center_b != "minecraft:plains"
+                                && !self.biome_column_map.contains_key(&[cbx, cbz])
+                                && !self.biome_map.contains_key(&IVec3::new(cbx, y, cbz))
+                            {
+                                return center_b.to_string();
                             }
                             b.to_string()
                         },

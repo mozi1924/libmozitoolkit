@@ -23,3 +23,10 @@ rayon = { workspace = true, optional = true }
 default = ["std", "parallel"]
 std = ["mtk-core/std", "mtk-cull/std", "serde/std", "serde_json/std", "dep:bincode", "dep:zstd"]
 parallel = ["dep:rayon"]
+
+[dev-dependencies]
+mtk-testkit = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

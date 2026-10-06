@@ -15,10 +15,12 @@ use serde::{Deserialize, Serialize};
 /// Computes a deterministic 64-bit pseudo-random seed from integer world coordinates.
 #[inline]
 pub fn mc_coordinate_seed(x: i32, y: i32, z: i32) -> i64 {
-    let mut l = ((x as i64).wrapping_mul(3129871))
-        ^ ((z as i64).wrapping_mul(116129781))
-        ^ (y as i64);
-    l = l.wrapping_mul(l).wrapping_mul(42317861).wrapping_add(l.wrapping_mul(11));
+    let mut l =
+        ((x as i64).wrapping_mul(3129871)) ^ ((z as i64).wrapping_mul(116129781)) ^ (y as i64);
+    l = l
+        .wrapping_mul(l)
+        .wrapping_mul(42317861)
+        .wrapping_add(l.wrapping_mul(11));
     l >> 16
 }
 
@@ -55,7 +57,11 @@ impl JavaRandom {
     /// Advances the LCG and returns the upper `bits` (1 to 32) of the 48-bit state.
     #[inline]
     pub fn next(&mut self, bits: u32) -> i32 {
-        self.seed = (self.seed.wrapping_mul(Self::MULTIPLIER).wrapping_add(Self::ADDEND)) & Self::MASK;
+        self.seed = (self
+            .seed
+            .wrapping_mul(Self::MULTIPLIER)
+            .wrapping_add(Self::ADDEND))
+            & Self::MASK;
         (self.seed >> (48 - bits)) as i32
     }
 
@@ -142,11 +148,12 @@ pub fn determine_block_offset_type(block_id_or_state: &str) -> OffsetType {
         // XZ: Wildflowers, tulips, poppy, dandelion, tall flowers, roots, saplings
         "dandelion" | "poppy" | "blue_orchid" | "allium" | "azure_bluet" | "red_tulip"
         | "orange_tulip" | "white_tulip" | "pink_tulip" | "oxeye_daisy" | "cornflower"
-        | "wither_rose" | "lily_of_the_valley" | "sunflower" | "lilac" | "rose_bush"
-        | "peony" | "tall_grass" | "large_fern" | "pitcher_plant" | "bamboo_sapling"
-        | "warped_roots" | "nether_sprouts" | "crimson_roots" | "hanging_roots"
-        | "open_eyeblossom" | "closed_eyeblossom" | "torchflower" | "mangrove_propagule"
-        | "dead_bush" => OffsetType::XZ,
+        | "wither_rose" | "lily_of_the_valley" | "sunflower" | "lilac" | "rose_bush" | "peony"
+        | "tall_grass" | "large_fern" | "pitcher_plant" | "bamboo_sapling" | "warped_roots"
+        | "nether_sprouts" | "crimson_roots" | "hanging_roots" | "open_eyeblossom"
+        | "closed_eyeblossom" | "torchflower" | "mangrove_propagule" | "dead_bush" => {
+            OffsetType::XZ
+        }
 
         _ => OffsetType::None,
     }
@@ -206,11 +213,29 @@ mod tests {
 
     #[test]
     fn test_determine_block_offset_type() {
-        assert_eq!(determine_block_offset_type("minecraft:short_grass"), OffsetType::XYZ);
-        assert_eq!(determine_block_offset_type("minecraft:fern"), OffsetType::XYZ);
-        assert_eq!(determine_block_offset_type("minecraft:poppy"), OffsetType::XZ);
-        assert_eq!(determine_block_offset_type("minecraft:dandelion[half=lower]"), OffsetType::XZ);
-        assert_eq!(determine_block_offset_type("minecraft:stone"), OffsetType::None);
-        assert_eq!(determine_block_offset_type("minecraft:dirt"), OffsetType::None);
+        assert_eq!(
+            determine_block_offset_type("minecraft:short_grass"),
+            OffsetType::XYZ
+        );
+        assert_eq!(
+            determine_block_offset_type("minecraft:fern"),
+            OffsetType::XYZ
+        );
+        assert_eq!(
+            determine_block_offset_type("minecraft:poppy"),
+            OffsetType::XZ
+        );
+        assert_eq!(
+            determine_block_offset_type("minecraft:dandelion[half=lower]"),
+            OffsetType::XZ
+        );
+        assert_eq!(
+            determine_block_offset_type("minecraft:stone"),
+            OffsetType::None
+        );
+        assert_eq!(
+            determine_block_offset_type("minecraft:dirt"),
+            OffsetType::None
+        );
     }
 }

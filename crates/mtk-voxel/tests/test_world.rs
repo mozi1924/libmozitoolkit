@@ -1,11 +1,13 @@
-use mtk_voxel::VoxelWorld;
 use mtk_voxel::types::MesherConfig;
+use mtk_voxel::VoxelWorld;
 
 #[test]
 fn test_voxel_world_lifecycle_and_used_chunks() {
-    let mut config = MesherConfig::default();
-    config.weld_vertices = true;
-    config.origin_centered = true;
+    let config = MesherConfig {
+        weld_vertices: true,
+        origin_centered: true,
+        ..Default::default()
+    };
 
     let mut world = VoxelWorld::new(Some(config), None, None, true);
     world.set_bounds(0, 0, 0, 16, 16, 16);
@@ -35,9 +37,9 @@ fn test_voxel_world_lifecycle_and_used_chunks() {
 
 #[test]
 fn test_voxel_world_rebuild_with_progress() {
+    use mtk_core::progress::ProgressReport;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
-    use mtk_core::progress::ProgressReport;
 
     let mut world = VoxelWorld::new(None, None, None, true);
     world.set_bounds(0, 0, 0, 32, 16, 16);
@@ -57,4 +59,3 @@ fn test_voxel_world_rebuild_with_progress() {
     // Should have reported progress for meshing and assembly
     assert!(progress_events.load(Ordering::SeqCst) >= 2);
 }
-

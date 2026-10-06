@@ -149,7 +149,10 @@ mod tests {
         let group = BakedVariantGroup::single("minecraft:stone_bricks".to_string(), model);
         assert_eq!(group.len(), 1);
         assert_eq!(group.select_primary().block_state, "minecraft:stone_bricks");
-        assert_eq!(group.select_by_pos(10, 20, 30).block_state, "minecraft:stone_bricks");
+        assert_eq!(
+            group.select_by_pos(10, 20, 30).block_state,
+            "minecraft:stone_bricks"
+        );
     }
 
     #[test]
@@ -168,7 +171,13 @@ mod tests {
         for x in 0..100 {
             for z in 0..100 {
                 let m = group.select_by_pos(x, 64, z);
-                let idx: usize = m.block_state.split('_').last().unwrap().parse().unwrap();
+                let idx: usize = m
+                    .block_state
+                    .split('_')
+                    .next_back()
+                    .unwrap()
+                    .parse()
+                    .unwrap();
                 hits[idx] += 1;
             }
         }
