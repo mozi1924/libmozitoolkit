@@ -10,6 +10,7 @@ members = [
     "crates/mtk-texture",
     "crates/mtk-material",
     "crates/mtk-save",
+    "crates/mtk-package",
     "crates/libmtk",
     "crates/mtk-bench",
     "crates/mtk-cli",
@@ -49,6 +50,8 @@ url = { version = "2.5", default-features = false }
 flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
 rustc-hash = { version = "2.1", features = ["std"] }
 zstd = "0.13"
+crc32fast = "1.4"
+memmap2 = "0.9"
 
 # Internal workspace crates
 mtk-core = { path = "crates/mtk-core", version = "0.1.0" }
@@ -60,6 +63,7 @@ mtk-resource = { path = "crates/mtk-resource", version = "0.1.0" }
 mtk-texture = { path = "crates/mtk-texture", version = "0.1.0" }
 mtk-material = { path = "crates/mtk-material", version = "0.1.0" }
 mtk-save = { path = "crates/mtk-save", version = "0.1.0" }
+mtk-package = { path = "crates/mtk-package", version = "0.1.0" }
 libmtk = { path = "crates/libmtk", version = "0.1.0" }
 mtk-testkit = { path = "crates/mtk-testkit", version = "0.1.0" }
 

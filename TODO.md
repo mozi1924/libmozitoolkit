@@ -92,16 +92,17 @@
 
 ---
 
-## 阶段六：通用二进制中间包与场景交换容器 (`mtk-package` / 规范已就绪 📋 / 待实现 🚧)
+## 阶段六：通用二进制中间包与场景交换容器 (`mtk-package` / 核心已完成 ✅ / 场景交换待开发 🚧)
 - [x] **规范与容器架构设计（✅ 已落地）**
   - [x] 确立统一 Header (64B) + 块级 Zstd 压缩 TOC + 64 字节内存对齐规范（详见 [`docs/PACKAGE_SPEC.md`](docs/PACKAGE_SPEC.md)）。
   - [x] 确立两大业务 Profile：`AssetCache` (`.mtkcache`) 与 `SceneInterchange` (`.mtkscene`)。
-- [ ] **通用二进制容器编解码器 (`crates/mtk-resource::package` 或独立 crate)**
-  - [ ] 实现 `MtkPackageWriter`：流式 Chunk 写入、自动 64 字节边界 Padding、Zstd 块压缩与 xxHash64/CRC32 校验码计算。
-  - [ ] 实现 `MtkPackageReader`：基于 `memmap2` 零内存拷贝打开、Header 校验、TOC 解析与单 Chunk 懒加载。
-- [ ] **全量资产预编译缓存打包迁移 (`libmtk::prebake`)**
-  - [ ] `precompile_all_assets_to_package`：将图集切片、Standalone PBR 贴图、`models.bin`、Biome 映射表打包为单一 `.mtkcache` 文件。
-  - [ ] 提供解包/就地挂载能力，完全替代文件系统散文件展开，降低磁盘 I/O 碎片与复制开销。
+- [x] **通用二进制容器编解码器 (`crates/mtk-package` - ✅ 已完成)**
+  - [x] 实现 `MtkPackageWriter`：流式 Chunk 写入、自动 64 字节边界 Padding、Zstd 块压缩与 CRC32 校验码计算。
+  - [x] 实现 `MtkPackageReader`：基于 `memmap2` 零内存拷贝打开、Header 校验、TOC 解析与单 Chunk 懒加载。
+- [x] **全量资产预编译缓存打包迁移 (`libmtk::prebake` - ✅ 已完成)**
+  - [x] `precompile_all_assets`：将图集切片、Standalone PBR 贴图、模型数据库（`MODL`）、Biome 调色板映射表统一打包为单一 `<fingerprint>.mtkcache` 容器。
+  - [x] 分块压缩策略：原始几何数据与模型使用 Zstd 压缩，贴图保持原始 PNG 流杜绝二次压缩损耗。
+  - [x] 提供 `AssetCacheReader` / `PyAssetCache` 零拷贝内存解析与微秒级 Header 验证，完全替代文件系统散文件展开。
 - [ ] **自包含轻量场景交换包管线 (`mtk-voxel::package`)**
   - [ ] **导出端按需剪枝 (`export_scene_package`)**：
     - [ ] 扫描所选体素世界的 BlockState，提取最小依赖模型与独立贴图闭包（Tree-shaking）。

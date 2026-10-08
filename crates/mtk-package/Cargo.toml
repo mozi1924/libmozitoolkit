@@ -1,0 +1,29 @@
+[package]
+name = "mtk-package"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "High-performance unified binary package container and codec for MoziToolKit."
+
+[dependencies]
+mtk-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+zstd = { workspace = true }
+crc32fast = { workspace = true }
+memmap2 = { workspace = true, optional = true }
+
+[features]
+default = ["std", "mmap"]
+std = []
+mmap = ["dep:memmap2"]
+
+[dev-dependencies]
+tempfile = "3.10"
+
+[lints]
+workspace = true

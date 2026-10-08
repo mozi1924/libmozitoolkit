@@ -1,7 +1,9 @@
 use libmtk::{
-    precompile_all_assets, CacheManifest, MemoryPack, PrecompileConfig, ResourcePackStack,
+    precompile_all_assets, AssetCacheReader, MemoryPack, PrecompileConfig, ResourcePackStack,
+    ASSET_CACHE_FORMAT_VERSION,
 };
 use std::fs;
+use std::path::Path;
 
 #[test]
 fn test_precompile_all_assets_end_to_end() {
@@ -72,20 +74,36 @@ fn test_precompile_all_assets_end_to_end() {
     assert_eq!(result.standalone_textures, 1);
     assert!(result.baked_models >= 1);
 
-    // Verify cache files existence
-    assert!(temp_cache_dir.join("atlas/atlas_mapping.json").exists());
-    assert!(temp_cache_dir
-        .join("standalone/standalone_mapping.json")
-        .exists());
-    assert!(temp_cache_dir.join("models/models.bin").exists());
-    assert!(temp_cache_dir.join("cache_manifest.json").exists());
+    // Verify .mtkcache file existence
+    let package_path = Path::new(&result.package_path);
+    assert!(package_path.exists());
+    assert_eq!(package_path.extension().unwrap(), "mtkcache");
 
-    // Verify manifest
-    let manifest = CacheManifest::read_from_dir(&temp_cache_dir).unwrap();
-    assert_eq!(manifest.format_version, 1);
+    // Verify AssetCacheReader header check & full load
+    assert!(AssetCacheReader::is_valid_cache_file(
+        package_path,
+        &stack.compute_stack_fingerprint()
+    ));
+
+    let reader = AssetCacheReader::open(package_path).unwrap();
+    let manifest = reader.manifest().unwrap();
+    assert_eq!(manifest.format_version, ASSET_CACHE_FORMAT_VERSION);
     assert_eq!(manifest.pack_count, 1);
     assert_eq!(manifest.fingerprint, stack.compute_stack_fingerprint());
-    assert!(manifest.is_valid_for(&stack.compute_stack_fingerprint()));
+
+    let models = reader.load_models().unwrap();
+    assert!(!models.is_empty());
+
+    let atlas_map = reader.load_atlas_mapping().unwrap();
+    assert!(!atlas_map.chunks.is_empty());
+
+    let sa_mapping = reader.load_standalone_mapping().unwrap();
+    assert!(sa_mapping.texture_count >= 1);
+
+    // Verify extracting atlas textures on-demand
+    let extract_dir = temp_cache_dir.join("extracted");
+    let extracted = reader.extract_all_atlas_textures(&extract_dir).unwrap();
+    assert!(!extracted.is_empty());
 
     // Clean up
     let _ = fs::remove_dir_all(&temp_cache_dir);

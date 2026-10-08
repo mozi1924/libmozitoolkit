@@ -42,6 +42,9 @@ pub enum MtkError {
     #[error("Save error: {0}")]
     Save(#[from] mtk_save::SaveError),
 
+    #[error("Package container error: {0}")]
+    Package(#[from] mtk_package::PackageError),
+
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
@@ -129,9 +132,9 @@ pub use mtk_voxel::types::{CoordinateSystem, MesherConfig, WorldMeshBuildResult}
 pub use mtk_voxel::world::VoxelStorage;
 pub use mtk_voxel::VoxelWorld;
 pub use prebake::{
-    prebake_all_models, prebake_all_models_with_progress, precompile_all_assets,
-    precompile_all_assets_with_progress, CacheManifest, PrecompileConfig, PrecompileResult,
-    ASSET_CACHE_FORMAT_VERSION,
+    fingerprint_str_to_bytes16, prebake_all_models, prebake_all_models_with_progress,
+    precompile_all_assets, precompile_all_assets_with_progress, AssetCacheReader, CacheManifest,
+    PrecompileConfig, PrecompileResult, ASSET_CACHE_FORMAT_VERSION,
 };
 
 #[cfg(feature = "sync")]

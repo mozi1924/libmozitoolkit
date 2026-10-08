@@ -108,36 +108,15 @@ impl StandaloneBuilder {
         Self { config }
     }
 
-    /// Precompiles the entire resource pack stack into the target `output_dir`.
-    pub fn build_to_dir(
+    /// Builds all standalone records, mapping, and in-memory PNG files without writing to disk.
+    pub fn build_records(
         &self,
         stack: &ResourcePackStack,
-        output_dir: impl AsRef<Path>,
-    ) -> Result<StandaloneResult, TextureError> {
-        let output_path = output_dir.as_ref().to_path_buf();
-        let parent_dir = output_path
-            .parent()
-            .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| PathBuf::from("."));
-        fs::create_dir_all(&parent_dir)?;
-
-        let pid = std::process::id();
+    ) -> Result<(StandaloneMapping, Vec<(String, Vec<u8>)>), TextureError> {
         let rand_suffix: u32 = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| (d.as_nanos() & 0xFFFF_FFFF) as u32)
             .unwrap_or(12345);
-
-        let staging_name = format!(
-            "{}_staging_{}_{:08x}",
-            output_path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("standalone"),
-            pid,
-            rand_suffix
-        );
-        let staging_dir = parent_dir.join(staging_name);
-        fs::create_dir_all(&staging_dir)?;
 
         let stack_hash = self
             .config
@@ -156,11 +135,6 @@ impl StandaloneBuilder {
         }
         let fallback_bytes = fallback_buf.to_png_bytes()?;
         let fallback_rel = "assets/minecraft/textures/mtk_fallback.png".to_string();
-        let fallback_dest = staging_dir.join(&fallback_rel);
-        if let Some(p) = fallback_dest.parent() {
-            fs::create_dir_all(p)?;
-        }
-        fs::write(fallback_dest, fallback_bytes)?;
 
         let fallback_record = StandaloneTextureRecord {
             namespace: "minecraft".to_string(),
@@ -265,7 +239,6 @@ impl StandaloneBuilder {
                 let mut out_files = Vec::new();
 
                 for ch in align_res.channels {
-                    // 1. Static Frame 0 (1:1 Square) -> assets/<namespace>/textures/<path>[_n/_s/_overlay].png
                     let static_buf = ch.static_frame_0();
                     let static_rel = match ch.channel_type {
                         ChannelType::Albedo => {
@@ -304,7 +277,6 @@ impl StandaloneBuilder {
                         }
                     }
 
-                    // 2. Animated vertical strip (if animated) -> assets/<namespace>/textures/<path>[_n/_s]_anim.png
                     if align_res.is_animated {
                         let anim_rel = match ch.channel_type {
                             ChannelType::Albedo => {
@@ -353,35 +325,17 @@ impl StandaloneBuilder {
             })
             .collect();
 
-        // 4. Write all encoded image files to staging directory
-        #[cfg(feature = "parallel")]
-        records.par_iter().for_each(|(_, _, files)| {
-            for (rel_path, bytes) in files {
-                let p = staging_dir.join(rel_path);
-                if let Some(parent) = p.parent() {
-                    let _ = fs::create_dir_all(parent);
-                }
-                let _ = fs::write(p, bytes);
-            }
-        });
-
-        #[cfg(not(feature = "parallel"))]
+        // 4. Flatten all files including fallback
+        let mut all_files = vec![(fallback_rel, fallback_bytes)];
         for (_, _, files) in &records {
-            for (rel_path, bytes) in files {
-                let p = staging_dir.join(rel_path);
-                if let Some(parent) = p.parent() {
-                    let _ = fs::create_dir_all(parent);
-                }
-                let _ = fs::write(p, bytes);
-            }
+            all_files.extend(files.iter().cloned());
         }
 
         // 5. Construct metadata mapping and alias table
         let mut textures_map = HashMap::new();
         let mut aliases_map = HashMap::new();
 
-        // Insert fallback
-        textures_map.insert("mozi:fallback".to_string(), fallback_record.clone());
+        textures_map.insert("mozi:fallback".to_string(), fallback_record);
 
         for (loc, rec, _) in &records {
             let full_key = loc.as_string();
@@ -398,37 +352,81 @@ impl StandaloneBuilder {
 
         let mapping = StandaloneMapping {
             format_version: STANDALONE_FORMAT_VERSION,
-            stack_hash: stack_hash.clone(),
+            stack_hash,
             texture_count: records.len(),
             textures: textures_map,
             aliases: aliases_map,
         };
+
+        Ok((mapping, all_files))
+    }
+
+    /// Precompiles the entire resource pack stack into the target `output_dir`.
+    pub fn build_to_dir(
+        &self,
+        stack: &ResourcePackStack,
+        output_dir: impl AsRef<Path>,
+    ) -> Result<StandaloneResult, TextureError> {
+        let output_path = output_dir.as_ref().to_path_buf();
+        let parent_dir = output_path
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| PathBuf::from("."));
+        fs::create_dir_all(&parent_dir)?;
+
+        let pid = std::process::id();
+        let rand_suffix: u32 = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| (d.as_nanos() & 0xFFFF_FFFF) as u32)
+            .unwrap_or(12345);
+
+        let staging_name = format!(
+            "{}_staging_{}_{:08x}",
+            output_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("standalone"),
+            pid,
+            rand_suffix
+        );
+        let staging_dir = parent_dir.join(staging_name);
+        fs::create_dir_all(&staging_dir)?;
+
+        let (mapping, all_files) = self.build_records(stack)?;
+
+        #[cfg(feature = "parallel")]
+        all_files.par_iter().for_each(|(rel_path, bytes)| {
+            let p = staging_dir.join(rel_path);
+            if let Some(parent) = p.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            let _ = fs::write(p, bytes);
+        });
+
+        #[cfg(not(feature = "parallel"))]
+        for (rel_path, bytes) in &all_files {
+            let p = staging_dir.join(rel_path);
+            if let Some(parent) = p.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            let _ = fs::write(p, bytes);
+        }
 
         let mapping_path = staging_dir.join("standalone_mapping.json");
         let mapping_json = serde_json::to_string_pretty(&mapping)
             .map_err(|e| TextureError::Baking(e.to_string()))?;
         fs::write(&mapping_path, mapping_json)?;
 
-        // 6. Integrity check
-        if !mapping_path.exists() || fs::metadata(&mapping_path)?.len() == 0 {
-            let _ = fs::remove_dir_all(&staging_dir);
-            return Err(TextureError::Baking(
-                "Failed to generate valid standalone_mapping.json".to_string(),
-            ));
-        }
-
-        // 7. Atomic Publication
         if output_path.exists() {
             let _ = fs::remove_dir_all(&output_path);
         }
-
         fs::rename(&staging_dir, &output_path)?;
 
         let final_mapping_path = output_path.join("standalone_mapping.json");
         Ok(StandaloneResult {
             mapping_path: final_mapping_path,
             output_dir: output_path,
-            texture_count: records.len(),
+            texture_count: mapping.texture_count,
             format_version: STANDALONE_FORMAT_VERSION,
         })
     }

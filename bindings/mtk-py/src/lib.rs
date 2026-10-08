@@ -33,7 +33,10 @@ pub use point_cloud::PyVoxelPointCloud;
 pub use protocol::{
     decode_packet, encode_full_sync_request, encode_repair_requests, encode_sync_config,
 };
-pub use resource::{precompile_all_assets, PyPrecompileResult, PyResourcePackStack};
+pub use resource::{
+    create_test_cache_package, get_cache_manifest, is_valid_cache_package, precompile_all_assets,
+    PyAssetCache, PyPrecompileResult, PyResourcePackStack,
+};
 pub use save::PyLevelData;
 pub use sync::PyLiveSyncSession;
 pub use texture::{PyAtlasBuilder, PyBakedAtlas, PyStandaloneBuilder, PyStandaloneResult};
@@ -141,7 +144,11 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyStandaloneBuilder>()?;
     m.add_class::<PyStandaloneResult>()?;
     m.add_class::<PyPrecompileResult>()?;
+    m.add_class::<PyAssetCache>()?;
     m.add_function(wrap_pyfunction!(precompile_all_assets, m)?)?;
+    m.add_function(wrap_pyfunction!(is_valid_cache_package, m)?)?;
+    m.add_function(wrap_pyfunction!(get_cache_manifest, m)?)?;
+    m.add_function(wrap_pyfunction!(create_test_cache_package, m)?)?;
     m.add_function(wrap_pyfunction!(texture::sample_uv_alpha_f32, m)?)?;
     m.add_function(wrap_pyfunction!(texture::is_face_transparent_f32, m)?)?;
     m.add_function(wrap_pyfunction!(
