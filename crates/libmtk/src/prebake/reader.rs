@@ -125,9 +125,28 @@ impl AssetCacheReader {
 
     /// Loads atlas address mapping directly from package.
     pub fn load_atlas_mapping(&self) -> Result<AtlasAddressMap, MtkError> {
-        let json_str = self.reader.read_chunk_str("atlas/mapping")?;
+        let json_str = self.load_atlas_mapping_json()?;
         let map = AtlasAddressMap::from_json(&json_str)?;
         Ok(map)
+    }
+
+    /// Loads raw atlas mapping JSON string directly from package.
+    pub fn load_atlas_mapping_json(&self) -> Result<String, MtkError> {
+        let json_str = self.reader.read_chunk_str("atlas/mapping")?;
+        Ok(json_str)
+    }
+
+    /// Reads and decodes a texture chunk (PNG) directly into an RgbaBuffer in memory.
+    pub fn read_texture_rgba(&self, chunk_id: &str) -> Result<mtk_texture::RgbaBuffer, MtkError> {
+        let png_bytes = self.reader.read_chunk_decompressed(chunk_id)?;
+        let buf = mtk_texture::RgbaBuffer::from_png_bytes(&png_bytes)?;
+        Ok(buf)
+    }
+
+    /// Reads raw decompressed bytes for any chunk in package.
+    pub fn read_chunk_bytes(&self, chunk_id: &str) -> Result<Vec<u8>, MtkError> {
+        let bytes = self.reader.read_chunk_decompressed(chunk_id)?;
+        Ok(bytes)
     }
 
     /// Loads biome resolver directly from package.
@@ -250,6 +269,21 @@ impl AssetCacheReader {
             }
         }
         Ok(extracted)
+    }
+
+    /// Extracts a specific colormap texture to disk.
+    pub fn extract_colormap(
+        &self,
+        name: &str,
+        output_path: impl AsRef<Path>,
+    ) -> Result<(), MtkError> {
+        let chunk_id = format!("biome/colormap/{}", name);
+        let out_p = output_path.as_ref();
+        if let Some(parent) = out_p.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        self.reader.extract_chunk_to_file(&chunk_id, out_p)?;
+        Ok(())
     }
 
     /// Raw package reader accessor.

@@ -282,6 +282,50 @@ impl PyAssetCache {
             .load_standalone_mapping_json()
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
+
+    /// Loads raw atlas mapping JSON string directly from package.
+    pub fn load_atlas_mapping(&self) -> PyResult<String> {
+        self.inner
+            .load_atlas_mapping_json()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+    }
+
+    /// Reads and decodes a texture chunk directly in memory into RGBA8 bytes: `(width, height, memoryview)`.
+    pub fn read_texture_rgba<'py>(
+        &self,
+        py: Python<'py>,
+        chunk_id: &str,
+    ) -> PyResult<(u32, u32, Bound<'py, pyo3::types::PyMemoryView>)> {
+        let buf = self
+            .inner
+            .read_texture_rgba(chunk_id)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        let width = buf.width;
+        let height = buf.height;
+        let py_bytes = pyo3::types::PyBytes::new(py, &buf.pixels);
+        let memview = pyo3::types::PyMemoryView::from(&py_bytes)?;
+        Ok((width, height, memview))
+    }
+
+    /// Reads raw decompressed chunk bytes directly from package.
+    pub fn read_chunk_bytes<'py>(
+        &self,
+        py: Python<'py>,
+        chunk_id: &str,
+    ) -> PyResult<Bound<'py, pyo3::types::PyBytes>> {
+        let bytes = self
+            .inner
+            .read_chunk_bytes(chunk_id)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        Ok(pyo3::types::PyBytes::new(py, &bytes))
+    }
+
+    /// Extracts a single colormap texture to the specified destination path.
+    pub fn extract_colormap(&self, name: &str, output_path: &str) -> PyResult<()> {
+        self.inner
+            .extract_colormap(name, output_path)
+            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))
+    }
 }
 
 /// Checks if a `.mtkcache` file at `path` is valid for `fingerprint` using 64-byte header.
