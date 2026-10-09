@@ -86,12 +86,20 @@ pub fn adaptive_pixel_split_mesh(
         let uv2 = mesh.uvs.get(idx2).copied().unwrap_or([1.0, 1.0]);
         let uv3 = mesh.uvs.get(idx3).copied().unwrap_or([0.0, 1.0]);
 
-        let (tex_w, tex_h) = face_resolutions
-            .get(face_idx)
-            .and_then(|&res| res)
-            .unwrap_or(default_resolution);
+        let resolution = if face_resolutions.is_empty() {
+            Some(default_resolution)
+        } else {
+            face_resolutions.get(face_idx).copied().flatten()
+        };
 
-        let (u_factors, v_factors) = if pixels_per_face <= 1.0 {
+        let (tex_w, tex_h) = match resolution {
+            Some(res) if res.0 > 0 && res.1 > 0 => res,
+            _ => (0, 0),
+        };
+
+        let (u_factors, v_factors) = if tex_w == 0 || tex_h == 0 {
+            (vec![0.0, 1.0], vec![0.0, 1.0])
+        } else if pixels_per_face <= 1.0 {
             calculate_pixel_grid_cut_factors(
                 &[uv0, uv1, uv2, uv3],
                 tex_w,

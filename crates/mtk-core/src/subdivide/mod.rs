@@ -138,6 +138,44 @@ mod tests {
     }
 
     #[test]
+    fn test_adaptive_pixel_split_selective_skip() {
+        let mut mesh = MeshData::new();
+        // 2 quads
+        mesh.positions = vec![
+            [-0.5, -0.5, 0.0],
+            [0.5, -0.5, 0.0],
+            [0.5, 0.5, 0.0],
+            [-0.5, 0.5, 0.0],
+            [0.5, -0.5, 0.0],
+            [1.5, -0.5, 0.0],
+            [1.5, 0.5, 0.0],
+            [0.5, 0.5, 0.0],
+        ];
+        mesh.normals = vec![[0.0, 0.0, 1.0]; 8];
+        mesh.uvs = vec![
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [1.0, 1.0],
+            [0.0, 1.0],
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [1.0, 1.0],
+            [0.0, 1.0],
+        ];
+        mesh.indices = vec![0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7];
+        mesh.face_materials = vec![0, 1];
+        mesh.face_tint_indices = vec![-1, -1];
+
+        // Face 0: None (skipped, keep 1 quad), Face 1: Some((2, 2)) (subdivided into 4 quads)
+        let res = adaptive_pixel_split_mesh(&mesh, &[None, Some((2, 2))], (16, 16), 1.0, 64, 0.0);
+        // Total output faces: 1 (original) + 4 (subdivided) = 5 quads = 30 indices
+        assert_eq!(res.indices.len(), 5 * 6);
+        assert_eq!(res.face_materials.len(), 5);
+        assert_eq!(res.face_materials[0], 0);
+        assert_eq!(res.face_materials[1], 1);
+    }
+
+    #[test]
     fn test_slice_face_by_pixel_grid_rotated_45() {
         // Quad on a 3D unit cube face (Z = 0)
         let positions = [
