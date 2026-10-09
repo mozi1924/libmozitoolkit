@@ -44,7 +44,8 @@ Python 模块名：`libmtk_py`
 - **`MeshData` (`PyMeshData`)**：连续内存紧凑几何网格缓冲容器。
   - 属性：`vertex_count`, `triangle_count`, `face_count`, `is_empty`
   - 构造与修改：`MeshData()`, `MeshData.with_capacity(verts, indices, faces)`, `append_mesh(other)`, `append_unit_cube_face(dir, slot, tint)`, `clear()`
-  - 内存视图（零拷贝）：`positions_memoryview()`, `normals_memoryview()`, `uvs_memoryview()`, `secondary_uvs_memoryview()`, `indices_memoryview()`, `material_slots_memoryview()`, `tint_indices_memoryview()`, `flags_memoryview()`
+  - 内存视图（零拷贝）：`positions_memoryview()`, `normals_memoryview()`, `uvs_memoryview()`, `secondary_uvs_memoryview()`, `indices_memoryview()`, `quad_indices_memoryview()`, `loop_uvs_memoryview()`, `loop_starts_memoryview()`, `loop_totals_memoryview()`, `face_materials_memoryview()`, `tint_indices_memoryview()`, `flags_memoryview()`
+  - 直接指针直写（硬件带宽级零拷贝通道）：`direct_copy_positions_to_ptr(ptr)`, `direct_copy_normals_to_ptr(ptr)`, `direct_copy_indices_to_ptr(ptr)`, `direct_copy_quad_indices_to_ptr(ptr)`, `direct_copy_loop_uvs_to_ptr(ptr)`, `direct_copy_loop_starts_to_ptr(ptr)`, `direct_copy_loop_totals_to_ptr(ptr)`, `direct_copy_face_materials_to_ptr(ptr)`, `direct_copy_colors_to_ptr(ptr)`
   - 扁平列表提取：`get_flat_positions()`, `get_flat_normals()`, `get_flat_uvs()`, `get_flat_secondary_uvs()`, `get_indices()`, `get_face_materials()`, `get_face_tints()`
   - 顶点与面自定义属性：`add_string_attribute(name, domain, values)`, `add_attribute_from_buffer(name, domain, data_type, buffer)`, `get_attribute_data(name)`, `has_attribute(name)`, `list_attributes()`
 - **`AttributeDomain`**：属性域枚举，支持 `"point"` (顶点) 与 `"face"` (面)。
