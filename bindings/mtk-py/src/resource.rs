@@ -291,8 +291,8 @@ impl PyAssetCache {
     }
 
     /// Reads and decodes a texture chunk directly in memory into RGBA8 bytes: `(width, height, memoryview)`.
-    /// `flip_v`: If True, flips rows vertically (V-axis inversion) natively in Rust.
-    #[pyo3(signature = (chunk_id, flip_v=false))]
+    /// `flip_v`: If True, flips rows vertically (V-axis inversion) natively in Rust. Defaults to true for Blender layout.
+    #[pyo3(signature = (chunk_id, flip_v=true))]
     pub fn read_texture_rgba<'py>(
         &self,
         py: Python<'py>,
@@ -306,6 +306,30 @@ impl PyAssetCache {
         let width = buf.width;
         let height = buf.height;
         let py_bytes = pyo3::types::PyBytes::new(py, &buf.pixels);
+        let memview = pyo3::types::PyMemoryView::from(&py_bytes)?;
+        Ok((width, height, memview))
+    }
+
+    /// Reads and decodes a texture chunk directly in memory into normalized float32 pixel memoryview: `(width, height, memoryview)`.
+    /// `flip_v`: If True (default True for Blender Image.pixels convention), flips rows vertically natively in Rust.
+    #[pyo3(signature = (chunk_id, flip_v=true))]
+    pub fn read_texture_f32<'py>(
+        &self,
+        py: Python<'py>,
+        chunk_id: &str,
+        flip_v: bool,
+    ) -> PyResult<(u32, u32, Bound<'py, pyo3::types::PyMemoryView>)> {
+        let (width, height, f32_pixels) = self
+            .inner
+            .read_texture_f32_with_orientation(chunk_id, flip_v)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        let byte_slice = unsafe {
+            std::slice::from_raw_parts(
+                f32_pixels.as_ptr() as *const u8,
+                f32_pixels.len() * std::mem::size_of::<f32>(),
+            )
+        };
+        let py_bytes = pyo3::types::PyBytes::new(py, byte_slice);
         let memview = pyo3::types::PyMemoryView::from(&py_bytes)?;
         Ok((width, height, memview))
     }

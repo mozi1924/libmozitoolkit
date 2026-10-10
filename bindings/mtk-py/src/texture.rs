@@ -113,13 +113,45 @@ impl PyBakedAtlas {
     }
 
     /// Read-only memoryview of Albedo RGBA pixel bytes (`width * height * 4`).
+    /// `flip_v`: If True (default True for Blender convention), flips rows vertically.
+    #[pyo3(signature = (index, flip_v=true))]
     pub fn get_chunk_albedo_memoryview<'py>(
         &self,
         py: Python<'py>,
         index: usize,
+        flip_v: bool,
     ) -> PyResult<Bound<'py, PyMemoryView>> {
         if let Some(chunk) = self.inner.chunks.get(index) {
-            let byte_slice = &chunk.albedo.pixels;
+            let bytes = if flip_v {
+                PyBytes::new(py, &chunk.albedo.to_flipped_v().pixels)
+            } else {
+                PyBytes::new(py, &chunk.albedo.pixels)
+            };
+            PyMemoryView::from(&bytes)
+        } else {
+            Err(pyo3::exceptions::PyIndexError::new_err(
+                "Chunk index out of bounds",
+            ))
+        }
+    }
+
+    /// Read-only memoryview of Albedo normalized float32 pixels (`width * height * 4`).
+    /// `flip_v`: If True (default True for Blender convention), flips rows vertically.
+    #[pyo3(signature = (index, flip_v=true))]
+    pub fn get_chunk_albedo_f32<'py>(
+        &self,
+        py: Python<'py>,
+        index: usize,
+        flip_v: bool,
+    ) -> PyResult<Bound<'py, PyMemoryView>> {
+        if let Some(chunk) = self.inner.chunks.get(index) {
+            let f32_buf = chunk.albedo.to_f32_buffer(flip_v);
+            let byte_slice = unsafe {
+                std::slice::from_raw_parts(
+                    f32_buf.as_ptr() as *const u8,
+                    f32_buf.len() * std::mem::size_of::<f32>(),
+                )
+            };
             let bytes = PyBytes::new(py, byte_slice);
             PyMemoryView::from(&bytes)
         } else {
@@ -130,14 +162,49 @@ impl PyBakedAtlas {
     }
 
     /// Read-only memoryview of Normal companion RGBA pixel bytes (if present).
+    #[pyo3(signature = (index, flip_v=true))]
     pub fn get_chunk_normal_memoryview<'py>(
         &self,
         py: Python<'py>,
         index: usize,
+        flip_v: bool,
     ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
         if let Some(chunk) = self.inner.chunks.get(index) {
             if let Some(ref n) = chunk.normal {
-                let bytes = PyBytes::new(py, &n.pixels);
+                let bytes = if flip_v {
+                    PyBytes::new(py, &n.to_flipped_v().pixels)
+                } else {
+                    PyBytes::new(py, &n.pixels)
+                };
+                Ok(Some(PyMemoryView::from(&bytes)?))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Err(pyo3::exceptions::PyIndexError::new_err(
+                "Chunk index out of bounds",
+            ))
+        }
+    }
+
+    /// Read-only memoryview of Normal companion normalized float32 pixels (if present).
+    #[pyo3(signature = (index, flip_v=true))]
+    pub fn get_chunk_normal_f32<'py>(
+        &self,
+        py: Python<'py>,
+        index: usize,
+        flip_v: bool,
+    ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
+        if let Some(chunk) = self.inner.chunks.get(index) {
+            if let Some(ref n) = chunk.normal {
+                let f32_buf = n.to_f32_buffer(flip_v);
+                let byte_slice = unsafe {
+                    std::slice::from_raw_parts(
+                        f32_buf.as_ptr() as *const u8,
+                        f32_buf.len() * std::mem::size_of::<f32>(),
+                    )
+                };
+                let bytes = PyBytes::new(py, byte_slice);
                 Ok(Some(PyMemoryView::from(&bytes)?))
             } else {
                 Ok(None)
@@ -150,14 +217,104 @@ impl PyBakedAtlas {
     }
 
     /// Read-only memoryview of Specular companion RGBA pixel bytes (if present).
+    #[pyo3(signature = (index, flip_v=true))]
     pub fn get_chunk_specular_memoryview<'py>(
         &self,
         py: Python<'py>,
         index: usize,
+        flip_v: bool,
     ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
         if let Some(chunk) = self.inner.chunks.get(index) {
             if let Some(ref s) = chunk.specular {
-                let bytes = PyBytes::new(py, &s.pixels);
+                let bytes = if flip_v {
+                    PyBytes::new(py, &s.to_flipped_v().pixels)
+                } else {
+                    PyBytes::new(py, &s.pixels)
+                };
+                Ok(Some(PyMemoryView::from(&bytes)?))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Err(pyo3::exceptions::PyIndexError::new_err(
+                "Chunk index out of bounds",
+            ))
+        }
+    }
+
+    /// Read-only memoryview of Specular companion normalized float32 pixels (if present).
+    #[pyo3(signature = (index, flip_v=true))]
+    pub fn get_chunk_specular_f32<'py>(
+        &self,
+        py: Python<'py>,
+        index: usize,
+        flip_v: bool,
+    ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
+        if let Some(chunk) = self.inner.chunks.get(index) {
+            if let Some(ref s) = chunk.specular {
+                let f32_buf = s.to_f32_buffer(flip_v);
+                let byte_slice = unsafe {
+                    std::slice::from_raw_parts(
+                        f32_buf.as_ptr() as *const u8,
+                        f32_buf.len() * std::mem::size_of::<f32>(),
+                    )
+                };
+                let bytes = PyBytes::new(py, byte_slice);
+                Ok(Some(PyMemoryView::from(&bytes)?))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Err(pyo3::exceptions::PyIndexError::new_err(
+                "Chunk index out of bounds",
+            ))
+        }
+    }
+
+    /// Read-only memoryview of Overlay companion RGBA pixel bytes (if present).
+    #[pyo3(signature = (index, flip_v=true))]
+    pub fn get_chunk_overlay_memoryview<'py>(
+        &self,
+        py: Python<'py>,
+        index: usize,
+        flip_v: bool,
+    ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
+        if let Some(chunk) = self.inner.chunks.get(index) {
+            if let Some(ref o) = chunk.overlay {
+                let bytes = if flip_v {
+                    PyBytes::new(py, &o.to_flipped_v().pixels)
+                } else {
+                    PyBytes::new(py, &o.pixels)
+                };
+                Ok(Some(PyMemoryView::from(&bytes)?))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Err(pyo3::exceptions::PyIndexError::new_err(
+                "Chunk index out of bounds",
+            ))
+        }
+    }
+
+    /// Read-only memoryview of Overlay companion normalized float32 pixels (if present).
+    #[pyo3(signature = (index, flip_v=true))]
+    pub fn get_chunk_overlay_f32<'py>(
+        &self,
+        py: Python<'py>,
+        index: usize,
+        flip_v: bool,
+    ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
+        if let Some(chunk) = self.inner.chunks.get(index) {
+            if let Some(ref o) = chunk.overlay {
+                let f32_buf = o.to_f32_buffer(flip_v);
+                let byte_slice = unsafe {
+                    std::slice::from_raw_parts(
+                        f32_buf.as_ptr() as *const u8,
+                        f32_buf.len() * std::mem::size_of::<f32>(),
+                    )
+                };
+                let bytes = PyBytes::new(py, byte_slice);
                 Ok(Some(PyMemoryView::from(&bytes)?))
             } else {
                 Ok(None)

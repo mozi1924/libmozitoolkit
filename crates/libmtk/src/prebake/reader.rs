@@ -155,6 +155,19 @@ impl AssetCacheReader {
         Ok(buf)
     }
 
+    /// Reads and decodes a texture chunk (PNG) directly into normalized [0.0, 1.0] float32 pixels with optional vertical flipping.
+    pub fn read_texture_f32_with_orientation(
+        &self,
+        chunk_id: &str,
+        flip_v: bool,
+    ) -> Result<(u32, u32, Vec<f32>), MtkError> {
+        let png_bytes = self.reader.read_chunk_decompressed(chunk_id)?;
+        let buf = mtk_texture::RgbaBuffer::from_png_bytes(&png_bytes)?;
+        let (w, h) = (buf.width, buf.height);
+        let f32_pixels = buf.to_f32_buffer(flip_v);
+        Ok((w, h, f32_pixels))
+    }
+
     /// Reads raw decompressed bytes for any chunk in package.
     pub fn read_chunk_bytes(&self, chunk_id: &str) -> Result<Vec<u8>, MtkError> {
         let bytes = self.reader.read_chunk_decompressed(chunk_id)?;

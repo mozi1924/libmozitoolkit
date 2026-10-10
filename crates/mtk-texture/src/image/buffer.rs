@@ -234,6 +234,31 @@ impl RgbaBuffer {
         cloned.flip_v();
         cloned
     }
+
+    /// Converts the RGBA8 buffer to a normalized [0.0, 1.0] float32 buffer (`width * height * 4`).
+    /// If `flip_v` is true, rows are streamed bottom-to-top (Blender native Image.pixels coordinate system).
+    pub fn to_f32_buffer(&self, flip_v: bool) -> Vec<f32> {
+        let total_floats = (self.width * self.height * 4) as usize;
+        let mut f32_buf = Vec::with_capacity(total_floats);
+        let row_bytes = (self.width * 4) as usize;
+        let h = self.height as usize;
+        let scale = 1.0f32 / 255.0f32;
+
+        if flip_v {
+            for y in (0..h).rev() {
+                let row_start = y * row_bytes;
+                let row_slice = &self.pixels[row_start..row_start + row_bytes];
+                for &b in row_slice {
+                    f32_buf.push(b as f32 * scale);
+                }
+            }
+        } else {
+            for &b in &self.pixels {
+                f32_buf.push(b as f32 * scale);
+            }
+        }
+        f32_buf
+    }
 }
 
 #[cfg(test)]
@@ -258,5 +283,30 @@ mod tests {
         // Row 1 should be old Row 0 (Red, Green)
         assert_eq!(buf.get_pixel(0, 1), [255, 0, 0, 255]);
         assert_eq!(buf.get_pixel(1, 1), [0, 255, 0, 255]);
+    }
+
+    #[test]
+    fn test_rgba_buffer_to_f32_buffer() {
+        let mut buf = RgbaBuffer::new(2, 2);
+        // Row 0: Red, Green
+        buf.set_pixel(0, 0, [255, 0, 0, 255]);
+        buf.set_pixel(1, 0, [0, 255, 0, 255]);
+        // Row 1: Blue, White
+        buf.set_pixel(0, 1, [0, 0, 255, 255]);
+        buf.set_pixel(1, 1, [255, 255, 255, 255]);
+
+        let f32_flipped = buf.to_f32_buffer(true);
+        assert_eq!(f32_flipped.len(), 16);
+        // Row 0 (bottom row in Blender) should be Blue [0, 0, 1, 1]
+        assert!((f32_flipped[0] - 0.0).abs() < 1e-4);
+        assert!((f32_flipped[1] - 0.0).abs() < 1e-4);
+        assert!((f32_flipped[2] - 1.0).abs() < 1e-4);
+        assert!((f32_flipped[3] - 1.0).abs() < 1e-4);
+
+        // Row 1 (top row in Blender) should be Red [1, 0, 0, 1]
+        assert!((f32_flipped[8] - 1.0).abs() < 1e-4);
+        assert!((f32_flipped[9] - 0.0).abs() < 1e-4);
+        assert!((f32_flipped[10] - 0.0).abs() < 1e-4);
+        assert!((f32_flipped[11] - 1.0).abs() < 1e-4);
     }
 }
