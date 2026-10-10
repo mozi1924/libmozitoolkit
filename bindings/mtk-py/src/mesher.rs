@@ -91,11 +91,11 @@ impl PySectionMesher {
                 .map_err(|e| e.to_string())?;
 
                 let section_meshes: Vec<_> = results.iter().map(|(_, m)| m).collect();
-                let mut merged = mtk_core::mesh::MeshData::merge_all_refs(&section_meshes);
-
-                if cfg.weld_vertices {
-                    merged.weld_spatial_vertices(1e-4);
-                }
+                let merged = if cfg.weld_vertices {
+                    mtk_core::mesh::MeshData::merge_welded_sections(&section_meshes, 1e-4)
+                } else {
+                    mtk_core::mesh::MeshData::merge_all_refs(&section_meshes)
+                };
 
                 Ok(merged)
             })

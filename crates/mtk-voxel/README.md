@@ -76,14 +76,15 @@
 | **`storage::point_cloud`** | 全量无剔除体素点云存储 (`VoxelPointCloud`)，支持点网格 Attributes 双向重建与雕刻编辑源 (`PointCloudVoxelSource`)。 |
 | **`storage::crc`** | 快速 CRC32 计算器、规范 BlockState 字符串提取器与空区块 CRC 表。 |
 | **`source`** | 统一体素源抽象 Trait：`VoxelReader`、`VoxelWriter`、`VoxelSource` 及批量灌流管线 `ingest_from_source`。 |
-| **`mesher::section_mesher`**| 高性能区块网格化器 (`SectionMesher`)，集成遮挡判定、AO、着色元数据绑定与顶点空间焊接。 |
+| **`mesher::section_mesher`**| 高性能区块网格化器 (`SectionMesher`)，集成遮挡判定、AO、着色元数据绑定、`GridVertexPool` 直接网格焊接发射与条件式后处理。 |
+| **`mesher::grid_pool`**     | 17×17×17 (4,913 格点) 紧凑角点顶点池 (`GridVertexPool`)，发射 Unit Cube 面时实现零堆分配的直接流形拓扑焊接。 |
 | **`mesher::delta_mesher`**  | 增量网格化器 (`DeltaMesher`)，脏区块识别与 3×3×3 邻域涟漪扩散重构。 |
 | **`mesher::ao`**            | 原版 4 顶点平滑环境光遮蔽算法与各向异性对角线翻转决策 (`should_flip_quad_diagonal`)。 |
 | **`mesher::shading`**       | 材质着色元数据解析、CTM 调度与 Palette 级别预解算缓存 (`PaletteMeshingData`)。 |
 | **`mesher::collector`**     | 逐面材质槽、图集 ID、Biome 染色与纹理键属性收集器 (`FaceAttributesCollector`)。 |
 | **`fluid`**                 | 物理流体表面高度解算、流向矢量 (`vx, vz`)、流体 Top/Side UV 映射与网格发射。 |
 | **`biome`**                 | 5×5 (R=2) 反距离权重核平滑生物群系柱计算 (`SmoothedBiomeColumn`) 与边界钳位防护。 |
-| **`world`**                 | 统一 3D 场景引擎 (`VoxelWorld`)，封装存储管理、Rayon 并行重建、物理进度实时汇报 (`rebuild_all_with_progress`)、显式线程池配置 (`num_threads`)、零拷贝引用合并 (`merge_all_refs`)、Section 增量网格缓存与清空 (`clear_cache`)、动态资产热重载 (`hot_reload_assets`)、使用图集 Chunk 追踪 (`used_chunk_ids`) 与多源摄取。 |
+| **`world`**                 | 统一 3D 场景引擎 (`VoxelWorld`)，封装存储管理、Rayon 并行重建、物理进度实时汇报 (`rebuild_all_with_progress`)、显式线程池配置 (`num_threads`)、单阶段流式跨区块缝合 (`merge_welded_sections`)、Section 增量网格缓存与清空 (`clear_cache`)、动态资产热重载 (`hot_reload_assets`)、使用图集 Chunk 追踪 (`used_chunk_ids`) 与多源摄取。 |
 | **`types`**                 | 配置参数 `MesherConfig`、坐标系枚举 `CoordinateSystem`、统计结果 `WorldMeshBuildResult` 与错误类型 `VoxelError`。 |
 
 ---

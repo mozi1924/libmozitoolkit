@@ -42,7 +42,7 @@
 
 | 类型 / 结构体 | 说明 |
 | :--- | :--- |
-| [`MeshData`](src/mesh.rs) | 核心连续网格缓冲，包含 `positions`, `normals`, `indices`, `uvs`, `secondary_uvs`, `colors`, `face_materials`, `face_tint_indices`, `quad_indices`, `custom_attributes`。提供 `merge_all(&[MeshData])`、零拷贝引用合并 `merge_all_refs(&[&MeshData])` 以及基于 `FxHashMap` 极速哈希去重的 `weld_spatial_vertices(tolerance)`。 |
+| [`MeshData`](src/mesh/mod.rs) | 核心连续网格缓冲，包含 `positions`, `normals`, `indices`, `uvs`, `secondary_uvs`, `colors`, `face_materials`, `face_tint_indices`, `quad_indices`, `custom_attributes`。提供 `merge_all(&[MeshData])`、零拷贝引用合并 `merge_all_refs(&[&MeshData])`、单阶段流式跨区块缝合合并 `merge_welded_sections(&[&MeshData], tolerance)` 以及基于 `FxHashMap` 极速哈希去重的 `weld_spatial_vertices(tolerance)`。 |
 | [`Quad`](src/geometry.rs) | 4 顶点平面四边形基元。支持 `Quad::unit_cube_face(Direction)` 生成标准单位立方体面（对齐 Minecraft 1.21+ FaceInfo 逆时针环绕规范）。 |
 | [`FlatPolygonMesh`](src/polygon.rs) | 连续 1D 循环拓扑网格表示，提供 `face_vertices(i)` 与 `face_uvs(i)` 零拷贝切片访问器。 |
 | [`Aabb2d`](src/geometry.rs) / [`Aabb3d`](src/geometry.rs) | 2D / 3D 轴对齐包围盒，提供相交、包含判定与矩形布尔运算。 |

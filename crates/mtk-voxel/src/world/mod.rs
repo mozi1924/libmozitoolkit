@@ -361,10 +361,11 @@ impl VoxelWorld {
     fn assemble_world_mesh(&mut self, full_weld: bool) {
         if self.unified_mesh {
             let meshes: Vec<&MeshData> = self.section_mesh_cache.values().collect();
-            let mut merged = MeshData::merge_all_refs(&meshes);
-            if self.config.weld_vertices && full_weld {
-                merged.weld_spatial_vertices(1e-4);
-            }
+            let merged = if self.config.weld_vertices && full_weld {
+                MeshData::merge_welded_sections(&meshes, 1e-4)
+            } else {
+                MeshData::merge_all_refs(&meshes)
+            };
             self.used_chunk_ids = merged
                 .used_materials()
                 .into_iter()

@@ -122,6 +122,14 @@ impl SectionMesher {
         let world_offset_x = (padded.coord.x * 16) as f32;
         let world_offset_y = (padded.coord.y * 16) as f32;
         let world_offset_z = (padded.coord.z * 16) as f32;
+        let world_origin = glam::Vec3::new(world_offset_x, world_offset_y, world_offset_z);
+
+        let mut grid_pool = if config.weld_vertices {
+            Some(super::grid_pool::GridVertexPool::new())
+        } else {
+            None
+        };
+        let mut has_non_grid_geometry = false;
 
         let is_opaque_fn = |px: usize, py: usize, pz: usize| -> bool {
             let idx = padded.get_padded_idx(px, py, pz) as usize;
@@ -159,6 +167,7 @@ impl SectionMesher {
 
                     // 1. Fluid Meshing (Water, Lava, or Waterlogged)
                     if config.mesh_fluids && (meta.is_fluid || meta.is_waterlogged) {
+                        has_non_grid_geometry = true;
                         let get_state = |nx: i32, ny: i32, nz: i32| -> String {
                             let n_px = (nx - block_pos.x + px as i32) as usize;
                             let n_py = (ny - block_pos.y + py as i32) as usize;
@@ -217,6 +226,7 @@ impl SectionMesher {
 
                     let offset_type = palette_offsets[pal_idx];
                     let plant_offset = if offset_type != OffsetType::None {
+                        has_non_grid_geometry = true;
                         get_block_offset(offset_type, block_pos.x, block_pos.y, block_pos.z)
                     } else {
                         glam::Vec3::ZERO
@@ -245,6 +255,7 @@ impl SectionMesher {
                     };
 
                     if !source.is_none() {
+                        has_non_grid_geometry = true;
                         let (culled_faces, unculled_faces) = match &palette_meshing_data[pal_idx] {
                             PaletteMeshingData::Model {
                                 culled_faces,
@@ -436,6 +447,10 @@ impl SectionMesher {
                                 shading.colormap_uv,
                             );
 
+                            let grid_ctx = grid_pool
+                                .as_mut()
+                                .map(|pool| (pool, [lx, ly, lz], world_origin));
+
                             emit_unit_cube_face(
                                 &mut mesh,
                                 dir,
@@ -449,6 +464,7 @@ impl SectionMesher {
                                 final_tint_color,
                                 final_colormap_uv,
                                 block_pos,
+                                grid_ctx,
                             );
                         }
                     }
@@ -457,7 +473,7 @@ impl SectionMesher {
         }
 
         collector.attach_to_mesh(&mut mesh);
-        if config.weld_vertices {
+        if config.weld_vertices && has_non_grid_geometry {
             mesh.weld_spatial_vertices(1e-4);
         }
         mesh
