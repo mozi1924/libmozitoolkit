@@ -20,10 +20,6 @@ pub const DEBUG_WORLD_Y: i32 = 70;
 /// Canonical Minecraft debug world barrier ground floor elevation.
 pub const DEBUG_BARRIER_Y: i32 = 60;
 
-/// Legacy constant preserved for crate-level export compatibility.
-#[deprecated(note = "Embedded snapshot is superseded by pure-code debug world generator")]
-pub const DEBUG_WORLD_SNAPSHOT_GZ: &[u8] = &[];
-
 static CACHED_DEBUG_STORAGE: RwLock<Option<VoxelStorage>> = RwLock::new(None);
 
 /// Returns true if the blockstate string represents any variant of air.

@@ -421,14 +421,14 @@ impl VoxelWorld {
             .map(|&coord| self.storage.get_section_padded_array(coord))
             .collect();
 
-        let db_opt = self.model_db.clone();
-        let model_lookup = move |state: &str| -> crate::mesher::ModelSource {
-            if let Some(ref db) = db_opt {
+        let db_opt = self.model_db.as_deref();
+        let model_lookup = |state: &str| -> crate::mesher::ModelSource {
+            if let Some(db) = db_opt {
                 if let Some(group) = db.get_variant_group(state) {
-                    return crate::mesher::ModelSource::Variant(Arc::new(group.clone()));
+                    return crate::mesher::ModelSource::Variant(group);
                 }
                 if let Some(model) = db.get(state) {
-                    return crate::mesher::ModelSource::Single(Arc::new(model.clone()));
+                    return crate::mesher::ModelSource::Single(model);
                 }
             }
             crate::mesher::ModelSource::None
@@ -475,14 +475,14 @@ impl VoxelWorld {
 
         self.sync_selection_bounds();
 
-        let db_opt = self.model_db.clone();
-        let model_lookup = move |state: &str| -> crate::mesher::ModelSource {
-            if let Some(ref db) = db_opt {
+        let db_opt = self.model_db.as_deref();
+        let model_lookup = |state: &str| -> crate::mesher::ModelSource {
+            if let Some(db) = db_opt {
                 if let Some(group) = db.get_variant_group(state) {
-                    return crate::mesher::ModelSource::Variant(Arc::new(group.clone()));
+                    return crate::mesher::ModelSource::Variant(group);
                 }
                 if let Some(model) = db.get(state) {
-                    return crate::mesher::ModelSource::Single(Arc::new(model.clone()));
+                    return crate::mesher::ModelSource::Single(model);
                 }
             }
             crate::mesher::ModelSource::None
@@ -513,14 +513,14 @@ impl VoxelWorld {
         self.sync_selection_bounds();
 
         let padded = self.storage.get_section_padded_array(sec_coord);
-        let db_opt = self.model_db.clone();
-        let model_lookup = move |state: &str| -> crate::mesher::ModelSource {
-            if let Some(ref db) = db_opt {
+        let db_opt = self.model_db.as_deref();
+        let model_lookup = |state: &str| -> crate::mesher::ModelSource {
+            if let Some(db) = db_opt {
                 if let Some(group) = db.get_variant_group(state) {
-                    return crate::mesher::ModelSource::Variant(Arc::new(group.clone()));
+                    return crate::mesher::ModelSource::Variant(group);
                 }
                 if let Some(model) = db.get(state) {
-                    return crate::mesher::ModelSource::Single(Arc::new(model.clone()));
+                    return crate::mesher::ModelSource::Single(model);
                 }
             }
             crate::mesher::ModelSource::None

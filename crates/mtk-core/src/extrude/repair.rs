@@ -4,15 +4,14 @@
 //! and feature edge crease tagging.
 
 use alloc::collections::{BTreeMap, BTreeSet};
-use alloc::vec;
 use alloc::vec::Vec;
 use glam::Vec2;
 
 use super::types::{
-    compute_face_normal, ExtrudeMeshInput, ExtrudeMeshOutput, FlatPolygonMesh,
+    compute_face_normal, ExtrudeMeshInput, ExtrudeMeshOutput, ExtrudeUvMode, FlatPolygonMesh,
     MeshExtrudeRepairConfig,
 };
-use crate::extrude::ExtrudeUvMode;
+use super::uv::repair_extruded_side_uv_advanced;
 use crate::geometry::Aabb2d;
 use crate::uv::is_uv_collapsed_2d as is_uv_collapsed;
 
@@ -328,7 +327,7 @@ pub fn process_flat_mesh_extrude_repair(
                 }
 
                 let adj_arr = adjacent_strip.map(|(ba, bb, ta, tb)| [ba, bb, tb, ta]);
-                let repaired_quad = crate::extrude::repair_extruded_side_uv_advanced(
+                let repaired_quad = repair_extruded_side_uv_advanced(
                     uv_a,
                     uv_b,
                     top_normal,
@@ -343,8 +342,9 @@ pub fn process_flat_mesh_extrude_repair(
 
                 if config.repair_uv {
                     // Match corner vertices to repaired quad UVs
-                    let mut new_uvs = vec![[0.0, 0.0]; 4];
-                    for (k, &sv) in side_verts.iter().enumerate() {
+                    let mut new_uvs = cur_side_uvs.to_vec();
+                    for k in 0..4 {
+                        let sv = side_verts[k];
                         if sv == v_top_a {
                             new_uvs[k] = repaired_quad[0];
                         } else if sv == v_top_b {

@@ -9,7 +9,6 @@ pub mod rules;
 pub mod sanitizer;
 pub mod types;
 
-#[allow(deprecated)]
 pub use engine::is_inherently_waterlogged_name;
 pub use engine::{
     compute_block_cull_meta, derive_parametric_face_shapes, get_visible_face_directions,

@@ -238,6 +238,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // 12. Dedicated Blender Direct Memory Accelerator (Feature gated, enabled by default)
     #[cfg(feature = "blender")]
     {
+        m.add_class::<mesh::PyBlenderDirectMesh>()?;
         let py = m.py();
         blender::register_submodule(py, m)?;
     }

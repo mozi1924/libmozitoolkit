@@ -25,5 +25,9 @@ harness = false
 name = "bench_4000_chunks"
 harness = false
 
+[[bench]]
+name = "bench_pipeline_stages"
+harness = false
+
 [lints]
 workspace = true

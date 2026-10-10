@@ -10,5 +10,3 @@ pub mod padded;
 pub mod snapshot;
 
 pub use container::*;
-#[allow(deprecated)]
-pub use debug::DEBUG_WORLD_SNAPSHOT_GZ;

@@ -599,11 +599,10 @@ fn test_alternate_blocks_variant_sampling() {
         ..Default::default()
     };
 
-    let group_clone = group.clone();
     let mesh = SectionMesher::mesh_section_with_source(
         &padded,
         &culler,
-        move |_| ModelSource::Variant(group_clone.clone()),
+        |_| ModelSource::Variant(&group),
         &config,
     );
 
@@ -629,11 +628,10 @@ fn test_alternate_blocks_variant_sampling() {
         enable_alternate_blocks: false,
         ..Default::default()
     };
-    let group_clone2 = group.clone();
     let mesh_disabled = SectionMesher::mesh_section_with_source(
         &padded,
         &culler,
-        move |_| ModelSource::Variant(group_clone2.clone()),
+        |_| ModelSource::Variant(&group),
         &disabled_config,
     );
     let disabled_attr = mesh_disabled

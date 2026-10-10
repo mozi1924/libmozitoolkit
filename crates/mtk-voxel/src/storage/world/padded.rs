@@ -17,7 +17,7 @@ impl VoxelStorage {
             let wx = sec_wx + lx;
             let wy = sec_wy + ly;
             let wz = sec_wz + lz;
-            self.get_block(wx, wy, wz).to_string()
+            self.get_block(wx, wy, wz)
         });
 
         if self.has_explicit_bounds {

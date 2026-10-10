@@ -1,11 +1,39 @@
 //! # Mesh Extrusion Types & Geometrical Helpers
 
-use crate::extrude::{ExtrudeNoiseType, ExtrudeUvMode};
-pub use crate::polygon::FlatPolygonMesh;
 use alloc::vec::Vec;
+
+pub use crate::polygon::FlatPolygonMesh;
+
+/// UV repair mode for extruded side polygons.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum ExtrudeUvMode {
+    /// Smart projection mode: evaluates dot product of extrude vector and top face normal.
+    /// Extrusion outward (>= -1e-6) uses INWARD sampling; indentation (< -1e-6) uses OUTWARD sampling.
+    #[default]
+    Smart,
+    /// Inward sampling: samples from top face perimeter into the interior (by 0.1 pixel step).
+    Inward,
+    /// Outward sampling: extends UV coordinates from the adjacent base polygon.
+    Outward,
+}
+
+/// Noise algorithm for random extrusion height generation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum ExtrudeNoiseType {
+    /// Uniform pseudo-random distribution.
+    #[default]
+    UniformRandom,
+    /// Continuous 3D Perlin gradient noise for smooth undulating terrain.
+    Perlin,
+    /// Voronoi / Cellular grid noise for flat faceted stone / brick steps.
+    Cellular,
+}
 
 /// Configuration options for batch mesh extrusion and side UV repair.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MeshExtrudeRepairConfig {
     pub uv_mode: ExtrudeUvMode,
     pub repair_uv: bool,

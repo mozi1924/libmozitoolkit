@@ -34,14 +34,14 @@ impl DeltaMesher {
     }
 
     /// Re-meshes all currently dirty sections in `world` and clears their dirty state using a unified ModelSource lookup.
-    pub fn rebuild_dirty_sections_with_source<F>(
+    pub fn rebuild_dirty_sections_with_source<'a, F>(
         world: &mut VoxelStorage,
         culler: &FaceCuller,
         mut model_provider: F,
         config: &MesherConfig,
     ) -> Vec<(IVec3, MeshData)>
     where
-        F: FnMut(&str) -> ModelSource,
+        F: FnMut(&str) -> ModelSource<'a>,
     {
         let dirty_coords: Vec<IVec3> = world.dirty_sections.iter().copied().collect();
         if dirty_coords.is_empty() {

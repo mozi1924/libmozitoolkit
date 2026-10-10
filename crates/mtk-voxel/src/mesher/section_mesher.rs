@@ -44,14 +44,14 @@ impl SectionMesher {
     }
 
     /// Meshes a single `PaddedVoxelArray` into a complete `MeshData` buffer using a unified `ModelSource` lookup.
-    pub fn mesh_section_with_source<F>(
+    pub fn mesh_section_with_source<'a, F>(
         padded: &PaddedVoxelArray,
         culler: &FaceCuller,
         mut get_model_source: F,
         config: &MesherConfig,
     ) -> MeshData
     where
-        F: FnMut(&str) -> ModelSource,
+        F: FnMut(&str) -> ModelSource<'a>,
     {
         if padded.is_empty {
             return MeshData::new();
@@ -496,20 +496,20 @@ impl SectionMesher {
     }
 
     /// Meshes a batch of `PaddedVoxelArray`s using a unified `ModelSource` provider.
-    pub fn mesh_sections_with_source<F>(
+    pub fn mesh_sections_with_source<'a, F>(
         sections: &[PaddedVoxelArray],
         culler: &FaceCuller,
         model_provider: F,
         config: &MesherConfig,
     ) -> Result<Vec<(IVec3, MeshData)>, VoxelError>
     where
-        F: Fn(&str) -> ModelSource + Sync + Send,
+        F: Fn(&str) -> ModelSource<'a> + Sync + Send,
     {
         Self::mesh_sections_with_source_and_progress(sections, culler, model_provider, config, None)
     }
 
     /// Meshes a batch of `PaddedVoxelArray`s with optional progress feedback.
-    pub fn mesh_sections_with_source_and_progress<F>(
+    pub fn mesh_sections_with_source_and_progress<'a, F>(
         sections: &[PaddedVoxelArray],
         culler: &FaceCuller,
         model_provider: F,
@@ -517,7 +517,7 @@ impl SectionMesher {
         progress: Option<ProgressCallback>,
     ) -> Result<Vec<(IVec3, MeshData)>, VoxelError>
     where
-        F: Fn(&str) -> ModelSource + Sync + Send,
+        F: Fn(&str) -> ModelSource<'a> + Sync + Send,
     {
         let throttler = ProgressThrottler::new("meshing_sections", sections.len(), progress)
             .with_prefix("Meshing chunk");
@@ -581,7 +581,7 @@ impl SectionMesher {
     }
 
     /// Meshes a batch of `PaddedVoxelArray`s with optional explicit thread pool count using a unified `ModelSource` provider.
-    pub fn mesh_sections_parallel_with_source<F>(
+    pub fn mesh_sections_parallel_with_source<'a, F>(
         sections: &[PaddedVoxelArray],
         culler: &FaceCuller,
         model_provider: F,
@@ -589,7 +589,7 @@ impl SectionMesher {
         num_threads: Option<usize>,
     ) -> Result<Vec<(IVec3, MeshData)>, VoxelError>
     where
-        F: Fn(&str) -> ModelSource + Sync + Send,
+        F: Fn(&str) -> ModelSource<'a> + Sync + Send,
     {
         Self::mesh_sections_parallel_with_source_and_progress(
             sections,
@@ -602,7 +602,7 @@ impl SectionMesher {
     }
 
     /// Meshes a batch of `PaddedVoxelArray`s with optional thread pool count and progress feedback.
-    pub fn mesh_sections_parallel_with_source_and_progress<F>(
+    pub fn mesh_sections_parallel_with_source_and_progress<'a, F>(
         sections: &[PaddedVoxelArray],
         culler: &FaceCuller,
         model_provider: F,
@@ -611,7 +611,7 @@ impl SectionMesher {
         progress: Option<ProgressCallback>,
     ) -> Result<Vec<(IVec3, MeshData)>, VoxelError>
     where
-        F: Fn(&str) -> ModelSource + Sync + Send,
+        F: Fn(&str) -> ModelSource<'a> + Sync + Send,
     {
         mtk_core::constants::concurrency::execute_parallel(num_threads, || {
             Self::mesh_sections_with_source_and_progress(

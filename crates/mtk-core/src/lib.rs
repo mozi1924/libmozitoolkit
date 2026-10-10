@@ -7,7 +7,7 @@ pub mod attributes;
 pub mod constants;
 pub mod direction;
 pub mod extrude;
-pub mod extrude_mesh;
+pub use extrude as extrude_mesh;
 pub mod geometry;
 pub mod mesh;
 pub mod polygon;
@@ -23,13 +23,11 @@ pub use attributes::{
 pub use constants::concurrency;
 pub use direction::{DirMask, Direction};
 pub use extrude::{
-    cellular_noise_3d, generate_extrude_heights, perlin_noise_3d, repair_extruded_side_uv,
-    ExtrudeNoiseType, ExtrudeUvMode,
-};
-pub use extrude_mesh::{
-    calculate_uv_area, is_uv_collapsed as is_mesh_uv_collapsed, process_mesh_extrude_repair,
-    process_random_extrude_mesh, ExtrudeMeshInput, ExtrudeMeshOutput, MeshExtrudeRepairConfig,
-    RandomExtrudeMeshInput, RandomExtrudeMeshOutput,
+    calculate_uv_area, cellular_noise_3d, generate_extrude_heights,
+    is_uv_collapsed as is_mesh_uv_collapsed, perlin_noise_3d, process_mesh_extrude_repair,
+    process_random_extrude_mesh, repair_extruded_side_uv, ExtrudeMeshInput, ExtrudeMeshOutput,
+    ExtrudeNoiseType, ExtrudeUvMode, MeshExtrudeRepairConfig, RandomExtrudeMeshInput,
+    RandomExtrudeMeshOutput,
 };
 pub use geometry::{mc_local_to_centered_z_up, mc_world_to_z_up, Aabb2d, Aabb3d, Quad};
 pub use mesh::MeshData;

@@ -48,14 +48,17 @@ pub struct ModelFaceBuckets {
 }
 
 /// Source representation of a block model (single model, multi-variant group, or unit cube fallback).
-#[derive(Clone, Debug)]
-pub enum ModelSource {
+#[derive(Clone, Debug, Default)]
+pub enum ModelSource<'a> {
+    #[default]
     None,
-    Single(Arc<BakedModel>),
-    Variant(Arc<BakedVariantGroup>),
+    Single(&'a BakedModel),
+    Variant(&'a BakedVariantGroup),
+    OwnedSingle(Arc<BakedModel>),
+    OwnedVariant(Arc<BakedVariantGroup>),
 }
 
-impl ModelSource {
+impl<'a> ModelSource<'a> {
     #[inline]
     pub fn is_none(&self) -> bool {
         matches!(self, ModelSource::None)
@@ -65,15 +68,17 @@ impl ModelSource {
     pub fn primary_model(&self) -> Option<&BakedModel> {
         match self {
             ModelSource::None => None,
-            ModelSource::Single(m) => Some(m),
+            ModelSource::Single(m) => Some(*m),
             ModelSource::Variant(g) => Some(g.select_primary()),
+            ModelSource::OwnedSingle(m) => Some(m.as_ref()),
+            ModelSource::OwnedVariant(g) => Some(g.select_primary()),
         }
     }
 }
 
-impl From<Option<Arc<BakedModel>>> for ModelSource {
+impl<'a> From<Option<&'a BakedModel>> for ModelSource<'a> {
     #[inline]
-    fn from(opt: Option<Arc<BakedModel>>) -> Self {
+    fn from(opt: Option<&'a BakedModel>) -> Self {
         match opt {
             Some(m) => ModelSource::Single(m),
             None => ModelSource::None,
@@ -81,16 +86,33 @@ impl From<Option<Arc<BakedModel>>> for ModelSource {
     }
 }
 
-impl From<Arc<BakedModel>> for ModelSource {
+impl<'a> From<&'a BakedModel> for ModelSource<'a> {
     #[inline]
-    fn from(m: Arc<BakedModel>) -> Self {
+    fn from(m: &'a BakedModel) -> Self {
         ModelSource::Single(m)
     }
 }
 
-impl From<Option<Arc<BakedVariantGroup>>> for ModelSource {
+impl<'a> From<Option<Arc<BakedModel>>> for ModelSource<'a> {
     #[inline]
-    fn from(opt: Option<Arc<BakedVariantGroup>>) -> Self {
+    fn from(opt: Option<Arc<BakedModel>>) -> Self {
+        match opt {
+            Some(m) => ModelSource::OwnedSingle(m),
+            None => ModelSource::None,
+        }
+    }
+}
+
+impl<'a> From<Arc<BakedModel>> for ModelSource<'a> {
+    #[inline]
+    fn from(m: Arc<BakedModel>) -> Self {
+        ModelSource::OwnedSingle(m)
+    }
+}
+
+impl<'a> From<Option<&'a BakedVariantGroup>> for ModelSource<'a> {
+    #[inline]
+    fn from(opt: Option<&'a BakedVariantGroup>) -> Self {
         match opt {
             Some(g) => ModelSource::Variant(g),
             None => ModelSource::None,
@@ -98,10 +120,27 @@ impl From<Option<Arc<BakedVariantGroup>>> for ModelSource {
     }
 }
 
-impl From<Arc<BakedVariantGroup>> for ModelSource {
+impl<'a> From<&'a BakedVariantGroup> for ModelSource<'a> {
+    #[inline]
+    fn from(g: &'a BakedVariantGroup) -> Self {
+        ModelSource::Variant(g)
+    }
+}
+
+impl<'a> From<Option<Arc<BakedVariantGroup>>> for ModelSource<'a> {
+    #[inline]
+    fn from(opt: Option<Arc<BakedVariantGroup>>) -> Self {
+        match opt {
+            Some(g) => ModelSource::OwnedVariant(g),
+            None => ModelSource::None,
+        }
+    }
+}
+
+impl<'a> From<Arc<BakedVariantGroup>> for ModelSource<'a> {
     #[inline]
     fn from(g: Arc<BakedVariantGroup>) -> Self {
-        ModelSource::Variant(g)
+        ModelSource::OwnedVariant(g)
     }
 }
 
@@ -265,9 +304,9 @@ fn resolve_model_buckets(
 }
 
 /// Pre-resolves palette meshing data (Atlas UVs, material slots, tint) outside the meshing hot loop.
-pub fn build_palette_meshing_data(
+pub fn build_palette_meshing_data<'a>(
     padded: &PaddedVoxelArray,
-    palette_sources: &[ModelSource],
+    palette_sources: &[ModelSource<'a>],
     config: &MesherConfig,
 ) -> Vec<PaletteMeshingData> {
     padded
@@ -292,7 +331,35 @@ pub fn build_palette_meshing_data(
                         unculled_faces: b.unculled_faces,
                     }
                 }
+                ModelSource::OwnedSingle(baked) => {
+                    let b = resolve_model_buckets(baked.as_ref(), emission, state_str, config);
+                    PaletteMeshingData::Model {
+                        culled_faces: b.culled_faces,
+                        unculled_faces: b.unculled_faces,
+                    }
+                }
                 ModelSource::Variant(group) => {
+                    if group.len() <= 1 || !config.enable_alternate_blocks {
+                        let primary = group.select_primary();
+                        let b = resolve_model_buckets(primary, emission, state_str, config);
+                        PaletteMeshingData::Model {
+                            culled_faces: b.culled_faces,
+                            unculled_faces: b.unculled_faces,
+                        }
+                    } else {
+                        let variants = group
+                            .models
+                            .iter()
+                            .map(|m| resolve_model_buckets(m, emission, state_str, config))
+                            .collect();
+                        PaletteMeshingData::VariantModel {
+                            variants,
+                            weights: group.weights.clone(),
+                            total_weight: group.total_weight,
+                        }
+                    }
+                }
+                ModelSource::OwnedVariant(group) => {
                     if group.len() <= 1 || !config.enable_alternate_blocks {
                         let primary = group.select_primary();
                         let b = resolve_model_buckets(primary, emission, state_str, config);
@@ -405,7 +472,7 @@ pub fn build_palette_meshing_data_from_models(
     palette_models: &[Option<Arc<BakedModel>>],
     config: &MesherConfig,
 ) -> Vec<PaletteMeshingData> {
-    let sources: Vec<ModelSource> = palette_models.iter().map(|m| m.clone().into()).collect();
+    let sources: Vec<ModelSource> = palette_models.iter().map(|m| m.as_deref().into()).collect();
     build_palette_meshing_data(padded, &sources, config)
 }
 

@@ -54,7 +54,7 @@ fn main() {
         }
 
         let sec = SectionStorage::from_slice(coord, &core_blocks);
-        let padded = sec.build_padded_array(|_x, _y, _z| "minecraft:air".to_string());
+        let padded = sec.build_padded_array(|_x, _y, _z| "minecraft:air");
         sections.push(padded);
     }
     println!(

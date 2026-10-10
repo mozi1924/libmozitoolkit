@@ -4,6 +4,8 @@
 //! buffer protocol and memoryview support for ultrafast Blender vertex injection.
 
 pub mod attributes;
+#[cfg(feature = "blender")]
+pub mod blender_direct;
 pub mod memoryview;
 
 use std::collections::HashMap;
@@ -17,6 +19,8 @@ use mtk_core::geometry::Quad;
 use mtk_core::mesh::MeshData;
 
 pub use crate::attributes::PyAttributeDomain;
+#[cfg(feature = "blender")]
+pub use blender_direct::PyBlenderDirectMesh;
 
 /// Python-facing wrapper around contiguous `MeshData`.
 #[pyclass(name = "MeshData")]
@@ -381,6 +385,13 @@ impl PyMeshData {
     // -------------------------------------------------------------------------
     // Dedicated Blender Direct Memory Transfer Delegates (enabled by default)
     // -------------------------------------------------------------------------
+
+    /// Returns the dedicated Blender Direct Memory injection sub-interface.
+    #[cfg(feature = "blender")]
+    #[getter]
+    pub fn blender_direct(slf: Py<Self>) -> PyBlenderDirectMesh {
+        PyBlenderDirectMesh { mesh: slf }
+    }
 
     /// Copies vertex positions directly into the destination host pointer (`float32 * 3` per vertex).
     #[cfg(feature = "blender")]

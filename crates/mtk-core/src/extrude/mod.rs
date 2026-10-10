@@ -1,18 +1,23 @@
-//! # Batch Data-In Data-Out Mesh Extrusion & UV Repair Engine
+//! # Auto Extrude, UV Repair & Random Noise Extrude Engine
 //!
-//! Provides high-performance full-mesh topological analysis, smart inward/outward UV reconstruction,
-//! anisotropic pixel grid snapping, atlas clamping, crease marking, and random discrete noise extrusion.
+//! Provides geometric UV reconstruction for newly extruded side faces, collapsed UV detection,
+//! Atlas Safe Padding Clamping, 3D Perlin / Cellular noise generators for terrain extrusion,
+//! and batch whole-mesh topological analysis and feature edge crease tagging.
 
+pub mod noise;
 pub mod random;
 pub mod repair;
 pub mod types;
+pub mod uv;
 
+pub use noise::{cellular_noise_3d, generate_extrude_heights, hash_3d, perlin_noise_3d};
 pub use random::process_random_extrude_mesh;
 pub use repair::{process_flat_mesh_extrude_repair, process_mesh_extrude_repair};
 pub use types::{
-    ExtrudeMeshInput, ExtrudeMeshOutput, FlatPolygonMesh, MeshExtrudeRepairConfig,
-    RandomExtrudeMeshInput, RandomExtrudeMeshOutput,
+    ExtrudeMeshInput, ExtrudeMeshOutput, ExtrudeNoiseType, ExtrudeUvMode, FlatPolygonMesh,
+    MeshExtrudeRepairConfig, RandomExtrudeMeshInput, RandomExtrudeMeshOutput,
 };
+pub use uv::{repair_extruded_side_uv, repair_extruded_side_uv_advanced};
 
 pub use crate::uv::{
     calculate_uv_area_2d as calculate_uv_area, is_uv_collapsed_2d as is_uv_collapsed,
@@ -21,7 +26,34 @@ pub use crate::uv::{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::extrude::ExtrudeUvMode;
+
+    #[test]
+    fn test_perlin_and_cellular_noise_bounds() {
+        for i in 0..10 {
+            let val = perlin_noise_3d(i as f32 * 0.3, i as f32 * 0.5, 0.0, 42);
+            assert!((-1.0..=1.0).contains(&val));
+
+            let cell = cellular_noise_3d(i as f32 * 0.3, i as f32 * 0.5, 0.0, 42);
+            assert!((0.0..=1.0).contains(&cell));
+        }
+    }
+
+    #[test]
+    fn test_generate_extrude_heights_discrete() {
+        let centers = vec![[0.0, 0.0, 0.0], [1.0, 1.0, 1.0], [2.0, 2.0, 2.0]];
+        let heights = generate_extrude_heights(
+            &centers,
+            ExtrudeNoiseType::UniformRandom,
+            0.0,
+            1.0,
+            1.0,
+            123,
+            Some(3), // 3 steps: 0.0, 0.5, 1.0
+        );
+        for h in heights {
+            assert!(h == 0.0 || (h - 0.5).abs() < 1e-4 || (h - 1.0).abs() < 1e-4);
+        }
+    }
 
     #[test]
     fn test_batch_extrude_repair_cube_top_protrusion() {

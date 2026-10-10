@@ -206,9 +206,9 @@ impl SectionStorage {
     ///
     /// `get_neighbor` receives local coordinates `(lx, ly, lz)` in `-1..=16`
     /// for voxels outside the `0..16` section boundary.
-    pub fn build_padded_array<F>(&self, mut get_neighbor: F) -> PaddedVoxelArray
+    pub fn build_padded_array<'a, F>(&self, mut get_neighbor: F) -> PaddedVoxelArray
     where
-        F: FnMut(i32, i32, i32) -> String,
+        F: FnMut(i32, i32, i32) -> &'a str,
     {
         let mut palette_map = HashMap::<String, u16>::new();
         let mut palette = self.palette.clone();
@@ -221,8 +221,9 @@ impl SectionStorage {
                 id
             } else {
                 let id = palette.len() as u16;
-                palette.push(st.to_string());
-                palette_map.insert(st.to_string(), id);
+                let s = st.to_string();
+                palette.push(s.clone());
+                palette_map.insert(s, id);
                 id
             }
         };
@@ -245,7 +246,7 @@ impl SectionStorage {
                         self.voxels[core_idx]
                     } else {
                         let n_state = get_neighbor(lx, ly, lz);
-                        get_or_insert(extract_canonical_state_str(&n_state))
+                        get_or_insert(extract_canonical_state_str(n_state))
                     };
 
                     padded[pad_idx] = pal_idx;
@@ -327,9 +328,9 @@ mod tests {
 
         let padded = sec.build_padded_array(|lx, ly, lz| {
             if lx == -1 && ly == 0 && lz == 0 {
-                "minecraft:gold_block".to_string()
+                "minecraft:gold_block"
             } else {
-                "minecraft:air".to_string()
+                "minecraft:air"
             }
         });
 

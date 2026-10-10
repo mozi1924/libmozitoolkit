@@ -6,12 +6,12 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
+use super::noise::generate_extrude_heights;
 use super::repair::process_flat_mesh_extrude_repair;
 use super::types::{
     compute_face_normal, FlatPolygonMesh, MeshExtrudeRepairConfig, RandomExtrudeMeshInput,
     RandomExtrudeMeshOutput,
 };
-use crate::extrude::generate_extrude_heights;
 
 /// Performs complete discrete face extrusion, noise vertex displacement, topology rebuilding,
 /// and automatic side UV repair in a single batch pass.
