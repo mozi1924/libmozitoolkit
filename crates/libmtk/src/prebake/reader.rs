@@ -138,8 +138,20 @@ impl AssetCacheReader {
 
     /// Reads and decodes a texture chunk (PNG) directly into an RgbaBuffer in memory.
     pub fn read_texture_rgba(&self, chunk_id: &str) -> Result<mtk_texture::RgbaBuffer, MtkError> {
+        self.read_texture_rgba_with_orientation(chunk_id, false)
+    }
+
+    /// Reads and decodes a texture chunk (PNG) with optional vertical flipping.
+    pub fn read_texture_rgba_with_orientation(
+        &self,
+        chunk_id: &str,
+        flip_v: bool,
+    ) -> Result<mtk_texture::RgbaBuffer, MtkError> {
         let png_bytes = self.reader.read_chunk_decompressed(chunk_id)?;
-        let buf = mtk_texture::RgbaBuffer::from_png_bytes(&png_bytes)?;
+        let mut buf = mtk_texture::RgbaBuffer::from_png_bytes(&png_bytes)?;
+        if flip_v {
+            buf.flip_v();
+        }
         Ok(buf)
     }
 

@@ -54,7 +54,7 @@ bindings/
   - `indices_memoryview(py)`: 零拷贝返回 `[M]` u32 三角形/多边形索引。
   - `quad_indices_memoryview(py)`: 零拷贝返回 `[Q, 4]` u32 四边形顶角索引缓冲。
   - `face_materials_memoryview(py)`: 逐面材质插槽 ID。
-  - `direct_copy_*_to_ptr(dst_ptr)`: 硬件带宽级直接 C 指针内存拷贝通道（支持 positions, normals, indices, quad_indices, loop_uvs, loop_starts, loop_totals, face_materials, colors），直通 Blender C++ 连续通用属性内存。
+  - **Blender 专用加速通道隔离 (`mtk-blender`)**：所有裸指针直写接口 (`copy_*_to_ptr`) 已物理隔离至专用的 `mtk-blender` 扩展 (`libmtk_blender`)，并内建指针非空与 `max_bytes` 溢出防御守卫；通用 `mtk-py` 专注提供 100% 内存安全的标准 Buffer Protocol。
   - `cull_faces(cull_duplicates=True, cull_coplanar_opposite=False, tolerance=1e-4) -> PyMeshData`: 执行空间遮挡与叠面剔除，无缝保留所有自定义属性与 Quad 拓扑。
 - `PyBakedModelDatabase`:
   - `deduplicate_all() -> int`: 批量对数据库中所有烘焙模型执行 Element 面去重与内部接触面剔除，返回消除的总面数。

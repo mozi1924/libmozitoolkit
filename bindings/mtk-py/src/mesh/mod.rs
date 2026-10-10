@@ -4,7 +4,6 @@
 //! buffer protocol and memoryview support for ultrafast Blender vertex injection.
 
 pub mod attributes;
-pub mod direct_ptr;
 pub mod memoryview;
 
 use std::collections::HashMap;
@@ -377,55 +376,6 @@ impl PyMeshData {
     /// Compacts face material slot IDs into contiguous 0..N-1 and returns original mapping.
     pub fn compact_materials(&mut self) -> Vec<u16> {
         self.inner.compact_materials()
-    }
-
-    // -------------------------------------------------------------------------
-    // Direct Pointer Memory Transfer Delegates (implemented in direct_ptr.rs)
-    // -------------------------------------------------------------------------
-
-    /// Copies vertex positions directly into the destination host pointer (`float32 * 3` per vertex).
-    pub fn direct_copy_positions_to_ptr(&self, dst_ptr: usize) -> PyResult<usize> {
-        direct_ptr::direct_copy_positions_to_ptr(self, dst_ptr)
-    }
-
-    /// Copies vertex normals directly into the destination host pointer (`float32 * 3` per vertex).
-    pub fn direct_copy_normals_to_ptr(&self, dst_ptr: usize) -> PyResult<usize> {
-        direct_ptr::direct_copy_normals_to_ptr(self, dst_ptr)
-    }
-
-    /// Copies triangle indices directly into the destination host pointer (`uint32` per index).
-    pub fn direct_copy_indices_to_ptr(&self, dst_ptr: usize) -> PyResult<usize> {
-        direct_ptr::direct_copy_indices_to_ptr(self, dst_ptr)
-    }
-
-    /// Copies reconstructed quad indices directly into the destination host pointer (`uint32` per index).
-    pub fn direct_copy_quad_indices_to_ptr(&self, dst_ptr: usize) -> PyResult<usize> {
-        direct_ptr::direct_copy_quad_indices_to_ptr(self, dst_ptr)
-    }
-
-    /// Copies expanded per-loop UVs directly into the destination host pointer (`float32 * 2` per loop).
-    pub fn direct_copy_loop_uvs_to_ptr(&self, dst_ptr: usize) -> PyResult<usize> {
-        direct_ptr::direct_copy_loop_uvs_to_ptr(self, dst_ptr)
-    }
-
-    /// Copies polygon loop start offsets directly into the destination host pointer (`int32` per polygon).
-    pub fn direct_copy_loop_starts_to_ptr(&self, dst_ptr: usize) -> PyResult<usize> {
-        direct_ptr::direct_copy_loop_starts_to_ptr(self, dst_ptr)
-    }
-
-    /// Copies polygon loop totals directly into the destination host pointer (`int32` per polygon).
-    pub fn direct_copy_loop_totals_to_ptr(&self, dst_ptr: usize) -> PyResult<usize> {
-        direct_ptr::direct_copy_loop_totals_to_ptr(self, dst_ptr)
-    }
-
-    /// Copies face material slots converted to 32-bit integers directly into the destination host pointer.
-    pub fn direct_copy_face_materials_to_ptr(&self, dst_ptr: usize) -> PyResult<usize> {
-        direct_ptr::direct_copy_face_materials_to_ptr(self, dst_ptr)
-    }
-
-    /// Copies vertex RGBA colors directly into the destination host pointer (`float32 * 4` per vertex).
-    pub fn direct_copy_colors_to_ptr(&self, dst_ptr: usize) -> PyResult<usize> {
-        direct_ptr::direct_copy_colors_to_ptr(self, dst_ptr)
     }
 
     // -------------------------------------------------------------------------

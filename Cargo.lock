@@ -669,6 +669,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mtk-blender"
+version = "0.1.0"
+dependencies = [
+ "pyo3",
+]
+
+[[package]]
 name = "mtk-cli"
 version = "0.1.0"
 dependencies = [

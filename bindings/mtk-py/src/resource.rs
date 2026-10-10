@@ -291,14 +291,17 @@ impl PyAssetCache {
     }
 
     /// Reads and decodes a texture chunk directly in memory into RGBA8 bytes: `(width, height, memoryview)`.
+    /// `flip_v`: If True, flips rows vertically (V-axis inversion) natively in Rust.
+    #[pyo3(signature = (chunk_id, flip_v=false))]
     pub fn read_texture_rgba<'py>(
         &self,
         py: Python<'py>,
         chunk_id: &str,
+        flip_v: bool,
     ) -> PyResult<(u32, u32, Bound<'py, pyo3::types::PyMemoryView>)> {
         let buf = self
             .inner
-            .read_texture_rgba(chunk_id)
+            .read_texture_rgba_with_orientation(chunk_id, flip_v)
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         let width = buf.width;
         let height = buf.height;

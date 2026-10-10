@@ -211,4 +211,52 @@ impl RgbaBuffer {
             }
         }
     }
+
+    /// In-place vertically flip (V-axis / Y-axis inversion) the pixel rows.
+    pub fn flip_v(&mut self) {
+        if self.height <= 1 || self.width == 0 {
+            return;
+        }
+        let row_bytes = (self.width * 4) as usize;
+        let half = (self.height / 2) as usize;
+        let h = self.height as usize;
+        for y in 0..half {
+            let top_idx = y * row_bytes;
+            let bot_idx = (h - 1 - y) * row_bytes;
+            let (first, second) = self.pixels.split_at_mut(bot_idx);
+            first[top_idx..top_idx + row_bytes].swap_with_slice(&mut second[..row_bytes]);
+        }
+    }
+
+    /// Returns a vertically flipped copy of the buffer.
+    pub fn to_flipped_v(&self) -> Self {
+        let mut cloned = self.clone();
+        cloned.flip_v();
+        cloned
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rgba_buffer_flip_v() {
+        let mut buf = RgbaBuffer::new(2, 2);
+        // Row 0: Red, Green
+        buf.set_pixel(0, 0, [255, 0, 0, 255]);
+        buf.set_pixel(1, 0, [0, 255, 0, 255]);
+        // Row 1: Blue, White
+        buf.set_pixel(0, 1, [0, 0, 255, 255]);
+        buf.set_pixel(1, 1, [255, 255, 255, 255]);
+
+        buf.flip_v();
+
+        // After flip, Row 0 should be old Row 1 (Blue, White)
+        assert_eq!(buf.get_pixel(0, 0), [0, 0, 255, 255]);
+        assert_eq!(buf.get_pixel(1, 0), [255, 255, 255, 255]);
+        // Row 1 should be old Row 0 (Red, Green)
+        assert_eq!(buf.get_pixel(0, 1), [255, 0, 0, 255]);
+        assert_eq!(buf.get_pixel(1, 1), [0, 255, 0, 255]);
+    }
 }
