@@ -379,6 +379,109 @@ impl PyMeshData {
     }
 
     // -------------------------------------------------------------------------
+    // Dedicated Blender Direct Memory Transfer Delegates (enabled by default)
+    // -------------------------------------------------------------------------
+
+    /// Copies vertex positions directly into the destination host pointer (`float32 * 3` per vertex).
+    #[cfg(feature = "blender")]
+    #[pyo3(signature = (dst_ptr, max_bytes=None))]
+    pub fn direct_copy_positions_to_ptr(
+        &self,
+        dst_ptr: usize,
+        max_bytes: Option<usize>,
+    ) -> PyResult<usize> {
+        crate::blender::direct_copy_positions_to_ptr(self, dst_ptr, max_bytes)
+    }
+
+    /// Copies vertex normals directly into the destination host pointer (`float32 * 3` per vertex).
+    #[cfg(feature = "blender")]
+    #[pyo3(signature = (dst_ptr, max_bytes=None))]
+    pub fn direct_copy_normals_to_ptr(
+        &self,
+        dst_ptr: usize,
+        max_bytes: Option<usize>,
+    ) -> PyResult<usize> {
+        crate::blender::direct_copy_normals_to_ptr(self, dst_ptr, max_bytes)
+    }
+
+    /// Copies triangle indices directly into the destination host pointer (`uint32` per index).
+    #[cfg(feature = "blender")]
+    #[pyo3(signature = (dst_ptr, max_bytes=None))]
+    pub fn direct_copy_indices_to_ptr(
+        &self,
+        dst_ptr: usize,
+        max_bytes: Option<usize>,
+    ) -> PyResult<usize> {
+        crate::blender::direct_copy_indices_to_ptr(self, dst_ptr, max_bytes)
+    }
+
+    /// Copies reconstructed quad indices directly into the destination host pointer (`uint32` per index).
+    #[cfg(feature = "blender")]
+    #[pyo3(signature = (dst_ptr, max_bytes=None))]
+    pub fn direct_copy_quad_indices_to_ptr(
+        &self,
+        dst_ptr: usize,
+        max_bytes: Option<usize>,
+    ) -> PyResult<usize> {
+        crate::blender::direct_copy_quad_indices_to_ptr(self, dst_ptr, max_bytes)
+    }
+
+    /// Copies expanded per-loop UVs directly into the destination host pointer (`float32 * 2` per loop).
+    #[cfg(feature = "blender")]
+    #[pyo3(signature = (dst_ptr, max_bytes=None))]
+    pub fn direct_copy_loop_uvs_to_ptr(
+        &self,
+        dst_ptr: usize,
+        max_bytes: Option<usize>,
+    ) -> PyResult<usize> {
+        crate::blender::direct_copy_loop_uvs_to_ptr(self, dst_ptr, max_bytes)
+    }
+
+    /// Copies polygon loop start offsets directly into the destination host pointer (`int32` per polygon).
+    #[cfg(feature = "blender")]
+    #[pyo3(signature = (dst_ptr, max_bytes=None))]
+    pub fn direct_copy_loop_starts_to_ptr(
+        &self,
+        dst_ptr: usize,
+        max_bytes: Option<usize>,
+    ) -> PyResult<usize> {
+        crate::blender::direct_copy_loop_starts_to_ptr(self, dst_ptr, max_bytes)
+    }
+
+    /// Copies polygon loop totals directly into the destination host pointer (`int32` per polygon).
+    #[cfg(feature = "blender")]
+    #[pyo3(signature = (dst_ptr, max_bytes=None))]
+    pub fn direct_copy_loop_totals_to_ptr(
+        &self,
+        dst_ptr: usize,
+        max_bytes: Option<usize>,
+    ) -> PyResult<usize> {
+        crate::blender::direct_copy_loop_totals_to_ptr(self, dst_ptr, max_bytes)
+    }
+
+    /// Copies face material slots converted to 32-bit integers directly into the destination host pointer.
+    #[cfg(feature = "blender")]
+    #[pyo3(signature = (dst_ptr, max_bytes=None))]
+    pub fn direct_copy_face_materials_to_ptr(
+        &self,
+        dst_ptr: usize,
+        max_bytes: Option<usize>,
+    ) -> PyResult<usize> {
+        crate::blender::direct_copy_face_materials_to_ptr(self, dst_ptr, max_bytes)
+    }
+
+    /// Copies vertex RGBA colors directly into the destination host pointer (`float32 * 4` per vertex).
+    #[cfg(feature = "blender")]
+    #[pyo3(signature = (dst_ptr, max_bytes=None))]
+    pub fn direct_copy_colors_to_ptr(
+        &self,
+        dst_ptr: usize,
+        max_bytes: Option<usize>,
+    ) -> PyResult<usize> {
+        crate::blender::direct_copy_colors_to_ptr(self, dst_ptr, max_bytes)
+    }
+
+    // -------------------------------------------------------------------------
     // Custom Attributes & List Delegates (implemented in attributes.rs)
     // -------------------------------------------------------------------------
 

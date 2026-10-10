@@ -19,6 +19,9 @@ pub mod texture;
 pub mod uv;
 pub mod voxel;
 
+#[cfg(feature = "blender")]
+pub mod blender;
+
 use pyo3::prelude::*;
 
 pub use cull::PyFaceCuller;
@@ -231,6 +234,13 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // 11. Metadata
     m.add_function(wrap_pyfunction!(version, m)?)?;
+
+    // 12. Dedicated Blender Direct Memory Accelerator (Feature gated, enabled by default)
+    #[cfg(feature = "blender")]
+    {
+        let py = m.py();
+        blender::register_submodule(py, m)?;
+    }
 
     Ok(())
 }

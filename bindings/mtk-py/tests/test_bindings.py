@@ -126,6 +126,38 @@ class TestLibMtkPy(unittest.TestCase):
         loop_uv_arr = np.frombuffer(loop_uv_mv, dtype=np.float32)
         self.assertEqual(len(loop_uv_arr), 12)
 
+    def test_mesh_data_direct_copy_to_ptr(self):
+        import ctypes
+        import numpy as np
+
+        positions = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
+        uvs = [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
+        indices = [0, 1, 2, 0, 2, 3]
+        mesh = libmtk_py.MeshData.from_raw_buffers(positions, uvs, indices)
+
+        if not hasattr(mesh, "direct_copy_positions_to_ptr"):
+            self.skipTest("libmtk_py built without blender feature")
+
+        # Test direct_copy_positions_to_ptr
+        dst_pos = np.zeros(12, dtype=np.float32)
+        bytes_copied = mesh.direct_copy_positions_to_ptr(dst_pos.ctypes.data)
+        self.assertEqual(bytes_copied, 12 * 4)
+        np.testing.assert_allclose(dst_pos, positions)
+
+        # Test direct_copy_indices_to_ptr
+        dst_idx = np.zeros(6, dtype=np.uint32)
+        bytes_copied = mesh.direct_copy_indices_to_ptr(dst_idx.ctypes.data)
+        self.assertEqual(bytes_copied, 6 * 4)
+        np.testing.assert_array_equal(dst_idx, indices)
+
+        # Test bounds protection overflow
+        with self.assertRaises(ValueError):
+            mesh.direct_copy_positions_to_ptr(dst_pos.ctypes.data, max_bytes=10)
+
+        # Test null pointer rejection
+        with self.assertRaises(ValueError):
+            mesh.direct_copy_positions_to_ptr(0)
+
 
 if __name__ == "__main__":
     unittest.main()

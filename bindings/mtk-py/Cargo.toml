@@ -29,10 +29,11 @@ pyo3 = { workspace = true, features = ["abi3-py311"] }
 rayon = { workspace = true, optional = true }
 
 [features]
-default = ["zip", "parallel"]
+default = ["zip", "parallel", "blender"]
 extension-module = ["pyo3/extension-module"]
 zip = ["mtk-resource/zip"]
 parallel = ["dep:rayon", "libmtk/parallel", "mtk-core/parallel", "mtk-voxel/parallel"]
+blender = []
 
 [dev-dependencies]
 pyo3 = { workspace = true, features = ["auto-initialize"] }

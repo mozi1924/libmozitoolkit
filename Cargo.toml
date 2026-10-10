@@ -16,7 +16,6 @@ members = [
     "crates/mtk-cli",
     "crates/mtk-testkit",
     "bindings/mtk-py",
-    "bindings/mtk-blender",
     "bindings/mtk-ffi",
     "bindings/mtk-wasm",
 ]
