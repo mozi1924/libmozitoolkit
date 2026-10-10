@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 //! # mtk-material
 //!
 //! High-performance, host-agnostic material name resolution, external alias mapping,

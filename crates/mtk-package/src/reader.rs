@@ -41,12 +41,29 @@ impl MtkPackageReader {
     }
 
     /// Opens a package file from disk using memory mapping.
+    ///
+    /// # Safety (OS level)
+    /// This uses `memmap2::MmapOptions::map` internally. Memory-mapped files assume
+    /// the underlying file is not truncated or concurrently modified by an external process.
     #[cfg(feature = "mmap")]
     pub fn open_file(path: impl AsRef<Path>) -> PackageResult<Self> {
         let file = File::open(path)?;
-        // Safety: We treat the memory map as a read-only byte slice.
+        // SAFETY: We map the file in read-only mode and do not modify the file descriptor.
+        // It is assumed the underlying package file is not truncated concurrently by external processes.
         let mmap = unsafe { memmap2::MmapOptions::new().map(&file)? };
         Self::from_storage(Storage::Mmap(mmap))
+    }
+
+    /// Opens a package file from disk by reading it into memory safely without memory mapping.
+    pub fn open_file_buffered(path: impl AsRef<Path>) -> PackageResult<Self> {
+        let bytes = std::fs::read(path)?;
+        Self::from_bytes(bytes)
+    }
+
+    /// Opens a package file from disk (buffered fallback when `mmap` feature is disabled).
+    #[cfg(not(feature = "mmap"))]
+    pub fn open_file(path: impl AsRef<Path>) -> PackageResult<Self> {
+        Self::open_file_buffered(path)
     }
 
     /// Creates a package reader from in-memory bytes.

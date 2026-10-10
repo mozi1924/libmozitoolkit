@@ -131,54 +131,19 @@ impl AttributeData {
 
     /// Read-only slice of raw underlying contiguous bytes (None for non-POD types like String).
     pub fn as_bytes(&self) -> Option<&[u8]> {
-        unsafe {
-            match self {
-                Self::Float(v) => Some(std::slice::from_raw_parts(
-                    v.as_ptr() as *const u8,
-                    v.len() * std::mem::size_of::<f32>(),
-                )),
-                Self::Float2(v) => Some(std::slice::from_raw_parts(
-                    v.as_ptr() as *const u8,
-                    v.len() * std::mem::size_of::<[f32; 2]>(),
-                )),
-                Self::Float3(v) => Some(std::slice::from_raw_parts(
-                    v.as_ptr() as *const u8,
-                    v.len() * std::mem::size_of::<[f32; 3]>(),
-                )),
-                Self::Float4(v) => Some(std::slice::from_raw_parts(
-                    v.as_ptr() as *const u8,
-                    v.len() * std::mem::size_of::<[f32; 4]>(),
-                )),
-                Self::Int8(v) => Some(std::slice::from_raw_parts(
-                    v.as_ptr() as *const u8,
-                    v.len() * std::mem::size_of::<i8>(),
-                )),
-                Self::Int16(v) => Some(std::slice::from_raw_parts(
-                    v.as_ptr() as *const u8,
-                    v.len() * std::mem::size_of::<i16>(),
-                )),
-                Self::Int32(v) => Some(std::slice::from_raw_parts(
-                    v.as_ptr() as *const u8,
-                    v.len() * std::mem::size_of::<i32>(),
-                )),
-                Self::UInt8(v) => Some(std::slice::from_raw_parts(
-                    v.as_ptr(),
-                    v.len() * std::mem::size_of::<u8>(),
-                )),
-                Self::UInt16(v) => Some(std::slice::from_raw_parts(
-                    v.as_ptr() as *const u8,
-                    v.len() * std::mem::size_of::<u16>(),
-                )),
-                Self::UInt32(v) => Some(std::slice::from_raw_parts(
-                    v.as_ptr() as *const u8,
-                    v.len() * std::mem::size_of::<u32>(),
-                )),
-                Self::Bool(v) => Some(std::slice::from_raw_parts(
-                    v.as_ptr() as *const u8,
-                    v.len() * std::mem::size_of::<bool>(),
-                )),
-                Self::String(_) => None,
-            }
+        match self {
+            Self::Float(v) => Some(bytemuck::cast_slice(v)),
+            Self::Float2(v) => Some(bytemuck::cast_slice(v)),
+            Self::Float3(v) => Some(bytemuck::cast_slice(v)),
+            Self::Float4(v) => Some(bytemuck::cast_slice(v)),
+            Self::Int8(v) => Some(bytemuck::cast_slice(v)),
+            Self::Int16(v) => Some(bytemuck::cast_slice(v)),
+            Self::Int32(v) => Some(bytemuck::cast_slice(v)),
+            Self::UInt8(v) => Some(v.as_slice()),
+            Self::UInt16(v) => Some(bytemuck::cast_slice(v)),
+            Self::UInt32(v) => Some(bytemuck::cast_slice(v)),
+            Self::Bool(v) => Some(bytemuck::cast_slice(v)),
+            Self::String(_) => None,
         }
     }
 }
@@ -382,5 +347,27 @@ impl FaceAttributes {
         self.biome_tint_data = data;
         self.colormap_uv = colormap_uv;
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_attribute_data_as_bytes() {
+        let f = AttributeData::Float(vec![1.0, 2.0]);
+        let bytes = f.as_bytes().unwrap();
+        assert_eq!(bytes.len(), 8);
+
+        let f3 = AttributeData::Float3(vec![[1.0, 2.0, 3.0]]);
+        assert_eq!(f3.as_bytes().unwrap().len(), 12);
+
+        let b = AttributeData::Bool(vec![true, false, true]);
+        let bytes = b.as_bytes().unwrap();
+        assert_eq!(bytes, &[1, 0, 1]);
+
+        let s = AttributeData::String(vec!["hello".to_string()]);
+        assert!(s.as_bytes().is_none());
     }
 }

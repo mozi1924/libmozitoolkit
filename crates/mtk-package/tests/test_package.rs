@@ -124,4 +124,10 @@ fn test_package_file_and_header_only() {
     assert!(reader.has_chunk("biome/mapping"));
     let str_val = reader.read_chunk_str("biome/mapping").unwrap();
     assert_eq!(str_val, r#"{"biomes":["plains","forest"]}"#);
+
+    // Verify buffered reader (safe path)
+    let buffered_reader = MtkPackageReader::open_file_buffered(&file_path).unwrap();
+    assert!(buffered_reader.has_chunk("biome/mapping"));
+    let str_val_buf = buffered_reader.read_chunk_str("biome/mapping").unwrap();
+    assert_eq!(str_val_buf, r#"{"biomes":["plains","forest"]}"#);
 }

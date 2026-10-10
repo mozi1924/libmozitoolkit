@@ -546,34 +546,25 @@ impl MeshData {
     /// Memory layout is guaranteed continuous `f32` with no padding.
     #[inline]
     pub fn positions_flat(&self) -> &[f32] {
-        unsafe {
-            std::slice::from_raw_parts(
-                self.positions.as_ptr() as *const f32,
-                self.positions.len() * 3,
-            )
-        }
+        bytemuck::cast_slice(&self.positions)
     }
 
     /// Returns a flat contiguous slice of vertex normals `[nx0, ny0, nz0, nx1, ny1, nz1, ...]`.
     #[inline]
     pub fn normals_flat(&self) -> &[f32] {
-        unsafe {
-            std::slice::from_raw_parts(self.normals.as_ptr() as *const f32, self.normals.len() * 3)
-        }
+        bytemuck::cast_slice(&self.normals)
     }
 
     /// Returns a flat contiguous slice of primary UVs `[u0, v0, u1, v1, ...]`.
     #[inline]
     pub fn uvs_flat(&self) -> &[f32] {
-        unsafe { std::slice::from_raw_parts(self.uvs.as_ptr() as *const f32, self.uvs.len() * 2) }
+        bytemuck::cast_slice(&self.uvs)
     }
 
     /// Returns a flat contiguous slice of vertex colors `[r0, g0, b0, a0, ...]` if present.
     #[inline]
     pub fn colors_flat(&self) -> Option<&[f32]> {
-        self.colors.as_ref().map(|cols| unsafe {
-            std::slice::from_raw_parts(cols.as_ptr() as *const f32, cols.len() * 4)
-        })
+        self.colors.as_ref().map(|cols| bytemuck::cast_slice(cols))
     }
 
     /// Populates all standard Face attributes from an ordered slice of `FaceAttributes`.
@@ -875,5 +866,19 @@ mod tests {
         assert_eq!(original_mapping, vec![0, 5, 12]);
         assert_eq!(mesh.face_materials, vec![1, 0, 1, 2, 0]);
         assert_eq!(mesh.used_materials(), vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn test_mesh_flat_accessors() {
+        let mut mesh = MeshData::new();
+        mesh.positions = vec![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]];
+        mesh.normals = vec![[0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+        mesh.uvs = vec![[0.1, 0.2], [0.3, 0.4]];
+        mesh.colors = Some(vec![[1.0, 0.0, 0.0, 1.0]]);
+
+        assert_eq!(mesh.positions_flat(), &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        assert_eq!(mesh.normals_flat(), &[0.0, 1.0, 0.0, 0.0, 0.0, 1.0]);
+        assert_eq!(mesh.uvs_flat(), &[0.1, 0.2, 0.3, 0.4]);
+        assert_eq!(mesh.colors_flat().unwrap(), &[1.0, 0.0, 0.0, 1.0]);
     }
 }

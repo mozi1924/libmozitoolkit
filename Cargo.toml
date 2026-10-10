@@ -52,6 +52,7 @@ rustc-hash = { version = "2.1", features = ["std"] }
 zstd = "0.13"
 crc32fast = "1.4"
 memmap2 = "0.9"
+bytemuck = { version = "1.25", default-features = false }
 
 # Internal workspace crates
 mtk-core = { path = "crates/mtk-core", version = "0.1.0" }
