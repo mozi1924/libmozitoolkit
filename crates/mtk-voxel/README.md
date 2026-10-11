@@ -157,6 +157,7 @@ pub struct VoxelPointCloud {
 - `to_point_cloud(config) -> VoxelPointCloud`：全量提取所有非空体素（**绝对不参与任何面遮挡剔除**，内部实心方块 100% 完整保留）。
 - `from_point_cloud(cloud) -> VoxelStorage`：从点云无损重建 `VoxelStorage`，支持用户手动删除局部点后自动生成空腔和露出内表面。
 - `to_mesh_data() / from_mesh_data()`：与标准纯点 `MeshData`（无多边形面）互转，无缝桥接 DCC 属性。
+- `build_state_palette_indices() / build_biome_palette_indices()`：在 Rust 端高速提取唯一调色板和每个点的紧凑 `i32` 索引数组，用于零拷贝灌入与高效传输。
 
 ---
 

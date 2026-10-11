@@ -378,6 +378,46 @@ impl VoxelPointCloud {
         storage
     }
 
+    /// Builds a unique state palette and corresponding per-point palette indices.
+    pub fn build_state_palette_indices(&self) -> (Vec<String>, Vec<i32>) {
+        let count = self.block_states.len();
+        if count == 0 {
+            return (Vec::new(), Vec::new());
+        }
+        let mut palette = Vec::new();
+        let mut map = HashMap::new();
+        let mut indices = Vec::with_capacity(count);
+        for s in &self.block_states {
+            let idx = *map.entry(s.as_str()).or_insert_with(|| {
+                let id = palette.len() as i32;
+                palette.push(s.clone());
+                id
+            });
+            indices.push(idx);
+        }
+        (palette, indices)
+    }
+
+    /// Builds a unique biome palette and corresponding per-point palette indices.
+    pub fn build_biome_palette_indices(&self) -> (Vec<String>, Vec<i32>) {
+        let count = self.biomes.len();
+        if count == 0 {
+            return (Vec::new(), Vec::new());
+        }
+        let mut palette = Vec::new();
+        let mut map = HashMap::new();
+        let mut indices = Vec::with_capacity(count);
+        for b in &self.biomes {
+            let idx = *map.entry(b.as_str()).or_insert_with(|| {
+                let id = palette.len() as i32;
+                palette.push(b.clone());
+                id
+            });
+            indices.push(idx);
+        }
+        (palette, indices)
+    }
+
     /// Creates an abstract `VoxelSource` wrapping this point cloud.
     pub fn as_source(&self) -> PointCloudVoxelSource {
         PointCloudVoxelSource::from_point_cloud(self)

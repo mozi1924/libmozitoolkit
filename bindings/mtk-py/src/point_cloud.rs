@@ -253,6 +253,121 @@ impl PyVoxelPointCloud {
         list
     }
 
+    /// Builds a unique state palette and corresponding per-point palette indices.
+    pub fn build_state_palette_indices(&self) -> (Vec<String>, Vec<i32>) {
+        self.inner.build_state_palette_indices()
+    }
+
+    /// Builds a unique biome palette and corresponding per-point palette indices.
+    pub fn build_biome_palette_indices(&self) -> (Vec<String>, Vec<i32>) {
+        self.inner.build_biome_palette_indices()
+    }
+
+    /// Copies 3D positions directly into a destination memory pointer (`float32 * 3` per point).
+    #[cfg(feature = "blender")]
+    #[pyo3(signature = (dst_ptr, max_bytes=None))]
+    pub fn direct_copy_positions_to_ptr(
+        &self,
+        dst_ptr: usize,
+        max_bytes: Option<usize>,
+    ) -> PyResult<usize> {
+        crate::blender::direct_copy_point_cloud_positions_to_ptr(self, dst_ptr, max_bytes)
+    }
+
+    /// Copies discrete integer block X coordinates directly into a destination pointer (`int32` per point).
+    #[cfg(feature = "blender")]
+    #[pyo3(signature = (dst_ptr, max_bytes=None))]
+    pub fn direct_copy_block_x_to_ptr(
+        &self,
+        dst_ptr: usize,
+        max_bytes: Option<usize>,
+    ) -> PyResult<usize> {
+        crate::blender::direct_copy_point_cloud_block_x_to_ptr(self, dst_ptr, max_bytes)
+    }
+
+    /// Copies discrete integer block Y coordinates directly into a destination pointer (`int32` per point).
+    #[cfg(feature = "blender")]
+    #[pyo3(signature = (dst_ptr, max_bytes=None))]
+    pub fn direct_copy_block_y_to_ptr(
+        &self,
+        dst_ptr: usize,
+        max_bytes: Option<usize>,
+    ) -> PyResult<usize> {
+        crate::blender::direct_copy_point_cloud_block_y_to_ptr(self, dst_ptr, max_bytes)
+    }
+
+    /// Copies discrete integer block Z coordinates directly into a destination pointer (`int32` per point).
+    #[cfg(feature = "blender")]
+    #[pyo3(signature = (dst_ptr, max_bytes=None))]
+    pub fn direct_copy_block_z_to_ptr(
+        &self,
+        dst_ptr: usize,
+        max_bytes: Option<usize>,
+    ) -> PyResult<usize> {
+        crate::blender::direct_copy_point_cloud_block_z_to_ptr(self, dst_ptr, max_bytes)
+    }
+
+    /// Converts block states into a palette and copies int32 palette indices into a destination pointer.
+    /// Returns `(palette, bytes_written)`.
+    #[cfg(feature = "blender")]
+    #[pyo3(signature = (dst_ptr, max_bytes=None))]
+    pub fn direct_copy_state_indices_to_ptr(
+        &self,
+        dst_ptr: usize,
+        max_bytes: Option<usize>,
+    ) -> PyResult<(Vec<String>, usize)> {
+        crate::blender::direct_copy_point_cloud_state_indices_to_ptr(self, dst_ptr, max_bytes)
+    }
+
+    /// Converts biomes into a palette and copies int32 palette indices into a destination pointer.
+    /// Returns `(biome_palette, bytes_written)`.
+    #[cfg(feature = "blender")]
+    #[pyo3(signature = (dst_ptr, max_bytes=None))]
+    pub fn direct_copy_biome_indices_to_ptr(
+        &self,
+        dst_ptr: usize,
+        max_bytes: Option<usize>,
+    ) -> PyResult<(Vec<String>, usize)> {
+        crate::blender::direct_copy_point_cloud_biome_indices_to_ptr(self, dst_ptr, max_bytes)
+    }
+
+    /// Copies light levels directly into a destination pointer (`uint8` per point).
+    #[cfg(feature = "blender")]
+    #[pyo3(signature = (dst_ptr, max_bytes=None))]
+    pub fn direct_copy_light_levels_to_ptr(
+        &self,
+        dst_ptr: usize,
+        max_bytes: Option<usize>,
+    ) -> PyResult<usize> {
+        crate::blender::direct_copy_point_cloud_light_levels_to_ptr(self, dst_ptr, max_bytes)
+    }
+
+    /// Batch copies all available voxel point cloud attributes directly into destination pointers in a single call.
+    /// Returns `(Option<state_palette>, Option<biome_palette>)`.
+    #[cfg(feature = "blender")]
+    #[pyo3(signature = (pos_ptr=None, block_x_ptr=None, block_y_ptr=None, block_z_ptr=None, state_idx_ptr=None, biome_idx_ptr=None, light_ptr=None))]
+    pub fn direct_copy_to_ptrs(
+        &self,
+        pos_ptr: Option<usize>,
+        block_x_ptr: Option<usize>,
+        block_y_ptr: Option<usize>,
+        block_z_ptr: Option<usize>,
+        state_idx_ptr: Option<usize>,
+        biome_idx_ptr: Option<usize>,
+        light_ptr: Option<usize>,
+    ) -> PyResult<(Option<Vec<String>>, Option<Vec<String>>)> {
+        crate::blender::direct_copy_point_cloud_to_ptrs(
+            self,
+            pos_ptr,
+            block_x_ptr,
+            block_y_ptr,
+            block_z_ptr,
+            state_idx_ptr,
+            biome_idx_ptr,
+            light_ptr,
+        )
+    }
+
     fn __repr__(&self) -> String {
         format!("<VoxelPointCloud len={}>", self.inner.len())
     }

@@ -240,3 +240,53 @@ fn test_point_cloud_origin_centered_alignment() {
     let restored = cloud.reconstruct_storage();
     assert_eq!(restored.get_bounds(), (0, 0, 0, 10, 10, 10));
 }
+
+#[test]
+fn test_point_cloud_palette_indices_building() {
+    let mut cloud = VoxelPointCloud::new();
+    cloud.push(
+        [0.0, 0.0, 0.0],
+        [0, 0, 0],
+        "minecraft:stone".into(),
+        "minecraft:plains".into(),
+        0,
+    );
+    cloud.push(
+        [1.0, 0.0, 0.0],
+        [1, 0, 0],
+        "minecraft:dirt".into(),
+        "minecraft:plains".into(),
+        0,
+    );
+    cloud.push(
+        [2.0, 0.0, 0.0],
+        [2, 0, 0],
+        "minecraft:stone".into(),
+        "minecraft:desert".into(),
+        0,
+    );
+    cloud.push(
+        [3.0, 0.0, 0.0],
+        [3, 0, 0],
+        "minecraft:stone".into(),
+        "minecraft:plains".into(),
+        0,
+    );
+
+    let (state_pal, state_indices) = cloud.build_state_palette_indices();
+    assert_eq!(
+        state_pal,
+        vec!["minecraft:stone".to_string(), "minecraft:dirt".to_string()]
+    );
+    assert_eq!(state_indices, vec![0, 1, 0, 0]);
+
+    let (biome_pal, biome_indices) = cloud.build_biome_palette_indices();
+    assert_eq!(
+        biome_pal,
+        vec![
+            "minecraft:plains".to_string(),
+            "minecraft:desert".to_string()
+        ]
+    );
+    assert_eq!(biome_indices, vec![0, 0, 1, 0]);
+}

@@ -80,6 +80,8 @@ Python 模块名：`libmtk_py`
 - **`VoxelPointCloud` (`PyVoxelPointCloud`)**：全量无剔除 3D 体素点云容器，支持 Blender 点网格 attributes 往返和零拷贝内存视图。
   - `to_mesh_data() -> MeshData`, `from_mesh_data(mesh) -> VoxelPointCloud`
   - `to_storage() -> VoxelStorage`, `from_arrays(...)`
+  - `direct_copy_to_ptrs(...)`, `direct_copy_positions_to_ptr(...)`, `direct_copy_state_indices_to_ptr(...)`：硬件加速 DNA 裸指针零拷贝写入
+  - `build_state_palette_indices() -> (palette, indices)`, `build_biome_palette_indices() -> (palette, indices)`
   - `positions_memoryview()`, `block_x_memoryview()`, `block_y_memoryview()`, `block_z_memoryview()`, `light_levels_memoryview()`
   - `get_block_states()`, `get_biomes()`, `get_block_positions()`
 - **`VoxelStorage` (`PyVoxelStorage`)**：16x16x16 稀疏 Chunk Section 体素容器，带脏标记追踪。
