@@ -32,6 +32,7 @@
 | **[`mtk-testkit`](crates/mtk-testkit)** | **Dev (测试基建)** | 仅用于测试的资产解析器与内置 JSON fixtures（`publish = false`），统一真包位置发现与缺省跳过策略 | [📖 `crates/mtk-testkit/README.md`](crates/mtk-testkit/README.md) |
 | **[`mtk-ffi`](bindings/mtk-ffi)** | **P2 (远期预备)** | 纯 C-ABI 动态与静态链接库及 C 头文件 (`mtk.h`)，供 C/C++、C# (Unity)、Go、Godot 跨语言调用 | [📖 `bindings/mtk-ffi/README.md`](bindings/mtk-ffi/README.md) |
 | **[`mtk-wasm`](bindings/mtk-wasm)** | **P2 (远期预备)** | 基于 wasm-bindgen 的 WebAssembly 绑定，支持浏览器/Node.js/WebGPU 零拷贝 TypedArray 视图 | [📖 `bindings/mtk-wasm/README.md`](bindings/mtk-wasm/README.md) |
+| **[`mtk-blender-dna`](bindings/mtk-blender-dna)** | **P0 (DNA 适配)** | Blender DNA 裸内存指针零拷贝直写适配层，严格隔离 unsafe 操作，提供带边界防护的硬件级内存灌入 | [📖 `bindings/mtk-blender-dna/README.md`](bindings/mtk-blender-dna/README.md) |
 
 ---
 

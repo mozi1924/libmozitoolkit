@@ -669,6 +669,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mtk-blender-dna"
+version = "0.1.0"
+dependencies = [
+ "mtk-core",
+ "mtk-voxel",
+ "thiserror",
+]
+
+[[package]]
 name = "mtk-cli"
 version = "0.1.0"
 dependencies = [
@@ -771,6 +780,7 @@ version = "0.1.0"
 dependencies = [
  "glam",
  "libmtk",
+ "mtk-blender-dna",
  "mtk-core",
  "mtk-cull",
  "mtk-material",

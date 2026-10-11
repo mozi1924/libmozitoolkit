@@ -158,6 +158,32 @@ class TestLibMtkPy(unittest.TestCase):
         with self.assertRaises(ValueError):
             mesh.direct_copy_positions_to_ptr(0)
 
+    def test_unstable_blender_dna_submodule(self):
+        import numpy as np
+
+        if not hasattr(libmtk_py, "unstable") or not hasattr(libmtk_py.unstable, "blender_dna"):
+            self.skipTest("libmtk_py built without blender feature or unstable submodule")
+
+        dna = libmtk_py.unstable.blender_dna
+        positions = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
+        uvs = [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
+        indices = [0, 1, 2, 0, 2, 3]
+        mesh = libmtk_py.MeshData.from_raw_buffers(positions, uvs, indices)
+
+        dst_pos = np.zeros(12, dtype=np.float32)
+        copied = dna.copy_positions_to_ptr(mesh, dst_pos.ctypes.data)
+        self.assertEqual(copied, 12 * 4)
+        np.testing.assert_allclose(dst_pos, positions)
+
+        # Buffer copy
+        src_bytes = b"HelloBlenderDNA"
+        dst_buf = bytearray(len(src_bytes))
+        import ctypes
+        dst_ptr = ctypes.addressof(ctypes.c_char.from_buffer(dst_buf))
+        copied_buf = dna.copy_buffer_to_ptr(src_bytes, dst_ptr, len(src_bytes))
+        self.assertEqual(copied_buf, len(src_bytes))
+        self.assertEqual(dst_buf, src_bytes)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -18,6 +18,7 @@ members = [
     "bindings/mtk-py",
     "bindings/mtk-ffi",
     "bindings/mtk-wasm",
+    "bindings/mtk-blender-dna",
 ]
 
 [workspace.package]
@@ -67,6 +68,7 @@ mtk-save = { path = "crates/mtk-save", version = "0.1.0" }
 mtk-package = { path = "crates/mtk-package", version = "0.1.0" }
 libmtk = { path = "crates/libmtk", version = "0.1.0" }
 mtk-testkit = { path = "crates/mtk-testkit", version = "0.1.0" }
+mtk-blender-dna = { path = "bindings/mtk-blender-dna", version = "0.1.0" }
 
 # Workspace-wide Clippy policy (opt in per-crate via `[lints] workspace = true`).
 # Keep this list small and justified: it only suppresses lints that are inherent to the

@@ -21,6 +21,7 @@ pub mod voxel;
 
 #[cfg(feature = "blender")]
 pub mod blender;
+pub mod unstable;
 
 use pyo3::prelude::*;
 
@@ -241,6 +242,12 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_class::<mesh::PyBlenderDirectMesh>()?;
         let py = m.py();
         blender::register_submodule(py, m)?;
+    }
+
+    // 13. Unstable and experimental APIs
+    {
+        let py = m.py();
+        unstable::register_submodule(py, m)?;
     }
 
     Ok(())
