@@ -895,6 +895,12 @@ impl PyVoxelWorld {
         self.inner.load_from_point_cloud(&point_cloud.inner);
     }
 
+    /// Syncs world storage with updated storage (e.g. from carved point cloud)
+    /// and marks only sections with CRC checksum differences as dirty.
+    pub fn sync_from_storage(&mut self, new_storage: &PyVoxelStorage) -> usize {
+        self.inner.sync_from_storage(&new_storage.inner)
+    }
+
     /// Clears the cached section meshes and unified world mesh, marking all storage sections as dirty.
     pub fn clear_cache(&mut self) {
         self.inner.clear_cache();

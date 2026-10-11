@@ -18,6 +18,38 @@ pub struct PyVoxelPointCloud {
     pub(crate) inner: VoxelPointCloud,
 }
 
+fn extract_f32_slice<'a>(
+    py_obj: &'a Bound<'_, PyAny>,
+    holder: &'a mut Vec<f32>,
+) -> PyResult<&'a [f32]> {
+    use pyo3::buffer::PyBuffer;
+    if let Ok(buf) = PyBuffer::<f32>::get(py_obj) {
+        if buf.is_c_contiguous() {
+            return Ok(unsafe {
+                std::slice::from_raw_parts(buf.buf_ptr() as *const f32, buf.item_count())
+            });
+        }
+    }
+    *holder = py_obj.extract::<Vec<f32>>()?;
+    Ok(holder.as_slice())
+}
+
+fn extract_i32_slice<'a>(
+    py_obj: &'a Bound<'_, PyAny>,
+    holder: &'a mut Vec<i32>,
+) -> PyResult<&'a [i32]> {
+    use pyo3::buffer::PyBuffer;
+    if let Ok(buf) = PyBuffer::<i32>::get(py_obj) {
+        if buf.is_c_contiguous() {
+            return Ok(unsafe {
+                std::slice::from_raw_parts(buf.buf_ptr() as *const i32, buf.item_count())
+            });
+        }
+    }
+    *holder = py_obj.extract::<Vec<i32>>()?;
+    Ok(holder.as_slice())
+}
+
 #[pymethods]
 impl PyVoxelPointCloud {
     #[new]
@@ -146,6 +178,56 @@ impl PyVoxelPointCloud {
                 bounds,
             },
         })
+    }
+
+    /// High-performance batch constructor from palette indices using buffer protocol / memoryview.
+    #[staticmethod]
+    #[pyo3(signature = (positions, block_x, block_y, block_z, state_indices, state_palette, biome_indices=None, biome_palette=None, light_levels=None, bounds=None))]
+    pub fn from_indexed_arrays(
+        positions: &Bound<'_, PyAny>,
+        block_x: &Bound<'_, PyAny>,
+        block_y: &Bound<'_, PyAny>,
+        block_z: &Bound<'_, PyAny>,
+        state_indices: &Bound<'_, PyAny>,
+        state_palette: Vec<String>,
+        biome_indices: Option<&Bound<'_, PyAny>>,
+        biome_palette: Option<Vec<String>>,
+        light_levels: Option<Vec<u8>>,
+        bounds: Option<[i32; 6]>,
+    ) -> PyResult<Self> {
+        let mut pos_holder = Vec::new();
+        let mut bx_holder = Vec::new();
+        let mut by_holder = Vec::new();
+        let mut bz_holder = Vec::new();
+        let mut st_holder = Vec::new();
+        let mut bm_holder = Vec::new();
+
+        let pos_slice = extract_f32_slice(positions, &mut pos_holder)?;
+        let bx_slice = extract_i32_slice(block_x, &mut bx_holder)?;
+        let by_slice = extract_i32_slice(block_y, &mut by_holder)?;
+        let bz_slice = extract_i32_slice(block_z, &mut bz_holder)?;
+        let st_slice = extract_i32_slice(state_indices, &mut st_holder)?;
+
+        let bm_slice = match biome_indices {
+            Some(obj) => Some(extract_i32_slice(obj, &mut bm_holder)?),
+            None => None,
+        };
+
+        let cloud = VoxelPointCloud::from_indexed_arrays(
+            pos_slice.to_vec(),
+            bx_slice.to_vec(),
+            by_slice.to_vec(),
+            bz_slice.to_vec(),
+            st_slice,
+            &state_palette,
+            bm_slice,
+            biome_palette.as_deref(),
+            light_levels,
+            bounds,
+        )
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+
+        Ok(Self { inner: cloud })
     }
 
     /// Read-only memoryview of 3D vertex positions as raw bytes (`float32 * 3` per point).

@@ -91,6 +91,84 @@ impl VoxelPointCloud {
         self.light_levels.push(light);
     }
 
+    /// Efficient batch constructor from palette indices, avoiding allocating millions of strings on the host.
+    pub fn from_indexed_arrays(
+        positions: Vec<f32>,
+        block_x: Vec<i32>,
+        block_y: Vec<i32>,
+        block_z: Vec<i32>,
+        state_indices: &[i32],
+        state_palette: &[String],
+        biome_indices: Option<&[i32]>,
+        biome_palette: Option<&[String]>,
+        light_levels: Option<Vec<u8>>,
+        bounds: Option<[i32; 6]>,
+    ) -> Result<Self, VoxelError> {
+        let count = block_x.len();
+        if positions.len() != count * 3
+            || block_y.len() != count
+            || block_z.len() != count
+            || state_indices.len() != count
+        {
+            return Err(VoxelError::InvalidPointCloud(format!(
+                "Array lengths mismatch: positions={}, block_x={}, block_y={}, block_z={}, state_indices={}",
+                positions.len(),
+                block_x.len(),
+                block_y.len(),
+                block_z.len(),
+                state_indices.len()
+            )));
+        }
+
+        let mut block_states = Vec::with_capacity(count);
+        let pal_len = state_palette.len();
+        for &idx in state_indices {
+            let u = idx as usize;
+            if u < pal_len {
+                block_states.push(state_palette[u].clone());
+            } else if !state_palette.is_empty() {
+                block_states.push(state_palette[0].clone());
+            } else {
+                block_states.push("minecraft:air".to_string());
+            }
+        }
+
+        let biomes = if let (Some(b_indices), Some(b_pal)) = (biome_indices, biome_palette) {
+            if b_indices.len() == count {
+                let b_pal_len = b_pal.len();
+                let mut b_vec = Vec::with_capacity(count);
+                for &idx in b_indices {
+                    let u = idx as usize;
+                    if u < b_pal_len {
+                        b_vec.push(b_pal[u].clone());
+                    } else if !b_pal.is_empty() {
+                        b_vec.push(b_pal[0].clone());
+                    } else {
+                        b_vec.push("minecraft:plains".to_string());
+                    }
+                }
+                b_vec
+            } else {
+                vec!["minecraft:plains".to_string(); count]
+            }
+        } else {
+            vec!["minecraft:plains".to_string(); count]
+        };
+
+        let lights = light_levels.unwrap_or_else(|| vec![0u8; count]);
+
+        Ok(Self {
+            positions,
+            block_x,
+            block_y,
+            block_z,
+            block_states,
+            biomes,
+            light_levels: lights,
+            bounds,
+        })
+    }
+
     /// Converts this `VoxelPointCloud` into a pure-point `MeshData` with standard
     /// attributes attached on the `Point` domain (without edges or polygons).
     pub fn to_mesh_data(&self) -> MeshData {
@@ -325,6 +403,8 @@ impl VoxelPointCloud {
     ///
     /// Computes discrete section placements, updates palettes, calculates bounding box,
     /// and marks all populated sections as dirty for subsequent meshing.
+    /// Employs fast section grouping and single-allocation primary biome heuristics
+    /// to avoid multimillion-entry hash table allocations.
     pub fn reconstruct_storage(&self) -> VoxelStorage {
         let mut storage = VoxelStorage::new();
         let count = self.len();
@@ -339,18 +419,26 @@ impl VoxelPointCloud {
         let mut max_y = i32::MIN;
         let mut max_z = i32::MIN;
 
+        // Establish Biomes efficiently without inserting millions of duplicate entries into biome_map.
+        let mut primary_biome = "minecraft:plains";
+        let mut has_varying_biomes = false;
+        if !self.biomes.is_empty() {
+            let first_b = &self.biomes[0];
+            primary_biome = first_b.as_str();
+            for b in &self.biomes[1..] {
+                if b != first_b {
+                    has_varying_biomes = true;
+                    break;
+                }
+            }
+        }
+        storage.primary_biome = Some(primary_biome.to_string());
+
         for i in 0..count {
             let bx = self.block_x[i];
             let by = self.block_y[i];
             let bz = self.block_z[i];
             let state = &self.block_states[i];
-            let biome = if i < self.biomes.len() {
-                Some(self.biomes[i].as_str())
-            } else {
-                None
-            };
-
-            storage.set_block(bx, by, bz, state, biome);
 
             min_x = min_x.min(bx);
             min_y = min_y.min(by);
@@ -358,6 +446,32 @@ impl VoxelPointCloud {
             max_x = max_x.max(bx);
             max_y = max_y.max(by);
             max_z = max_z.max(bz);
+
+            if has_varying_biomes && i < self.biomes.len() {
+                let b = &self.biomes[i];
+                if b != primary_biome {
+                    let col_key = [bx, bz];
+                    if let Some(existing_col_b) = storage.biome_column_map.get(&col_key) {
+                        if existing_col_b != b {
+                            // Column has 3D height-varying biomes
+                            storage.biome_map.insert(IVec3::new(bx, by, bz), b.clone());
+                        }
+                    } else {
+                        storage.biome_column_map.insert(col_key, b.clone());
+                    }
+                }
+            }
+
+            let sec_coord = IVec3::new(bx >> 4, by >> 4, bz >> 4);
+            let lx = (bx & 15) as usize;
+            let ly = (by & 15) as usize;
+            let lz = (bz & 15) as usize;
+
+            let sec = storage
+                .sections
+                .entry(sec_coord)
+                .or_insert_with(|| SectionStorage::new(sec_coord));
+            sec.set_local(lx, ly, lz, state);
         }
 
         // If bounds were recorded on the cloud, preserve exact bounds for origin stability.
