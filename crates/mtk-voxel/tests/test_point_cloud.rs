@@ -290,3 +290,34 @@ fn test_point_cloud_palette_indices_building() {
     );
     assert_eq!(biome_indices, vec![0, 0, 1, 0]);
 }
+
+#[test]
+fn test_point_cloud_explicit_bounds_clipping() {
+    let mut storage = VoxelStorage::new();
+    // Section 0 covers [0..16, 0..16, 0..16]
+    // Set explicit bounds to [0, 0, 0] with size [5, 5, 5] (i.e. x,y,z in 0..5)
+    storage.set_bounds(0, 0, 0, 5, 5, 5);
+
+    // Place block inside bounds
+    storage.set_block(2, 2, 2, "minecraft:stone", None);
+    // Place blocks outside bounds but inside the same section (0, 0, 0)
+    storage.set_block(6, 2, 2, "minecraft:dirt", None);
+    storage.set_block(15, 15, 15, "minecraft:sand", None);
+
+    // Also populate a neighbor section that is completely outside bounds
+    storage.set_block(20, 2, 2, "minecraft:glass", None);
+
+    let config = MesherConfig::default();
+    let cloud = storage.to_point_cloud(&config);
+
+    // Only the block at (2, 2, 2) should be present
+    assert_eq!(
+        cloud.len(),
+        1,
+        "Only blocks within explicit bounds should be extracted"
+    );
+    assert_eq!(cloud.block_x[0], 2);
+    assert_eq!(cloud.block_y[0], 2);
+    assert_eq!(cloud.block_z[0], 2);
+    assert_eq!(cloud.block_states[0], "minecraft:stone");
+}

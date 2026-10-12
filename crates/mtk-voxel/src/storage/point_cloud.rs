@@ -364,6 +364,45 @@ impl VoxelPointCloud {
                 let base_y = sec_coord.y * 16;
                 let base_z = sec_coord.z * 16;
 
+                let (is_fully_inside, is_fully_outside) =
+                    if storage.has_explicit_bounds && has_bounds {
+                        let b_min_x = bx;
+                        let b_max_x = bx + sx - 1;
+                        let b_min_y = by;
+                        let b_max_y = by + sy - 1;
+                        let b_min_z = bz;
+                        let b_max_z = bz + sz - 1;
+
+                        let sec_min_x = base_x;
+                        let sec_max_x = base_x + 15;
+                        let sec_min_y = base_y;
+                        let sec_max_y = base_y + 15;
+                        let sec_min_z = base_z;
+                        let sec_max_z = base_z + 15;
+
+                        let outside = sec_max_x < b_min_x
+                            || sec_min_x > b_max_x
+                            || sec_max_y < b_min_y
+                            || sec_min_y > b_max_y
+                            || sec_max_z < b_min_z
+                            || sec_min_z > b_max_z;
+
+                        let inside = sec_min_x >= b_min_x
+                            && sec_max_x <= b_max_x
+                            && sec_min_y >= b_min_y
+                            && sec_max_y <= b_max_y
+                            && sec_min_z >= b_min_z
+                            && sec_max_z <= b_max_z;
+
+                        (inside, outside)
+                    } else {
+                        (true, false)
+                    };
+
+                if is_fully_outside {
+                    continue;
+                }
+
                 for lx in 0..16 {
                     for ly in 0..16 {
                         for lz in 0..16 {
@@ -375,6 +414,10 @@ impl VoxelPointCloud {
                             let wx = base_x + lx as i32;
                             let wy = base_y + ly as i32;
                             let wz = base_z + lz as i32;
+
+                            if !is_fully_inside && !storage.contains(wx, wy, wz) {
+                                continue;
+                            }
 
                             // Compute center point under active coordinate transform and centering
                             let center =
