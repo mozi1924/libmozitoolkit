@@ -23,6 +23,24 @@ pub fn validate_pointer_and_bounds(
     Ok(())
 }
 
+/// Validates that `dst_ptr` is non-null, aligned to `align` bytes, and that writing `required_bytes` does not exceed `max_bytes`.
+#[inline]
+pub fn validate_aligned_pointer_and_bounds(
+    dst_ptr: usize,
+    required_bytes: usize,
+    align: usize,
+    max_bytes: Option<usize>,
+) -> DnaResult<()> {
+    validate_pointer_and_bounds(dst_ptr, required_bytes, max_bytes)?;
+    if align > 1 && dst_ptr % align != 0 {
+        return Err(DnaError::MisalignedPointer {
+            ptr: dst_ptr,
+            align,
+        });
+    }
+    Ok(())
+}
+
 /// Copies raw contiguous buffer bytes directly into a destination memory pointer with bounds checking.
 pub fn copy_buffer_to_ptr(
     src_bytes: &[u8],
@@ -94,5 +112,17 @@ mod tests {
 
         // Overflow test
         assert!(copy_buffer_to_ptr(&src, dst_ptr, Some(3)).is_err());
+    }
+
+    #[test]
+    fn test_validate_aligned_pointer_and_bounds() {
+        assert_eq!(
+            validate_aligned_pointer_and_bounds(0x1001, 16, 4, None),
+            Err(DnaError::MisalignedPointer {
+                ptr: 0x1001,
+                align: 4
+            })
+        );
+        assert!(validate_aligned_pointer_and_bounds(0x1004, 16, 4, None).is_ok());
     }
 }

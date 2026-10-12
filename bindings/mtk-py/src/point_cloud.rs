@@ -18,36 +18,56 @@ pub struct PyVoxelPointCloud {
     pub(crate) inner: VoxelPointCloud,
 }
 
-fn extract_f32_slice<'a>(
-    py_obj: &'a Bound<'_, PyAny>,
-    holder: &'a mut Vec<f32>,
-) -> PyResult<&'a [f32]> {
-    use pyo3::buffer::PyBuffer;
-    if let Ok(buf) = PyBuffer::<f32>::get(py_obj) {
-        if buf.is_c_contiguous() {
-            return Ok(unsafe {
-                std::slice::from_raw_parts(buf.buf_ptr() as *const f32, buf.item_count())
-            });
-        }
-    }
-    *holder = py_obj.extract::<Vec<f32>>()?;
-    Ok(holder.as_slice())
+enum BorrowedF32Buffer {
+    Py(pyo3::buffer::PyBuffer<f32>),
+    Owned(Vec<f32>),
 }
 
-fn extract_i32_slice<'a>(
-    py_obj: &'a Bound<'_, PyAny>,
-    holder: &'a mut Vec<i32>,
-) -> PyResult<&'a [i32]> {
-    use pyo3::buffer::PyBuffer;
-    if let Ok(buf) = PyBuffer::<i32>::get(py_obj) {
-        if buf.is_c_contiguous() {
-            return Ok(unsafe {
-                std::slice::from_raw_parts(buf.buf_ptr() as *const i32, buf.item_count())
-            });
+impl BorrowedF32Buffer {
+    fn extract(py_obj: &Bound<'_, PyAny>) -> PyResult<Self> {
+        if let Ok(buf) = pyo3::buffer::PyBuffer::<f32>::get(py_obj) {
+            if buf.is_c_contiguous() {
+                return Ok(Self::Py(buf));
+            }
+        }
+        let vec = py_obj.extract::<Vec<f32>>()?;
+        Ok(Self::Owned(vec))
+    }
+
+    fn as_slice(&self) -> &[f32] {
+        match self {
+            Self::Py(buf) => unsafe {
+                std::slice::from_raw_parts(buf.buf_ptr() as *const f32, buf.item_count())
+            },
+            Self::Owned(vec) => vec.as_slice(),
         }
     }
-    *holder = py_obj.extract::<Vec<i32>>()?;
-    Ok(holder.as_slice())
+}
+
+enum BorrowedI32Buffer {
+    Py(pyo3::buffer::PyBuffer<i32>),
+    Owned(Vec<i32>),
+}
+
+impl BorrowedI32Buffer {
+    fn extract(py_obj: &Bound<'_, PyAny>) -> PyResult<Self> {
+        if let Ok(buf) = pyo3::buffer::PyBuffer::<i32>::get(py_obj) {
+            if buf.is_c_contiguous() {
+                return Ok(Self::Py(buf));
+            }
+        }
+        let vec = py_obj.extract::<Vec<i32>>()?;
+        Ok(Self::Owned(vec))
+    }
+
+    fn as_slice(&self) -> &[i32] {
+        match self {
+            Self::Py(buf) => unsafe {
+                std::slice::from_raw_parts(buf.buf_ptr() as *const i32, buf.item_count())
+            },
+            Self::Owned(vec) => vec.as_slice(),
+        }
+    }
 }
 
 #[pymethods]
@@ -195,23 +215,23 @@ impl PyVoxelPointCloud {
         light_levels: Option<Vec<u8>>,
         bounds: Option<[i32; 6]>,
     ) -> PyResult<Self> {
-        let mut pos_holder = Vec::new();
-        let mut bx_holder = Vec::new();
-        let mut by_holder = Vec::new();
-        let mut bz_holder = Vec::new();
-        let mut st_holder = Vec::new();
-        let mut bm_holder = Vec::new();
+        let pos_buf = BorrowedF32Buffer::extract(positions)?;
+        let bx_buf = BorrowedI32Buffer::extract(block_x)?;
+        let by_buf = BorrowedI32Buffer::extract(block_y)?;
+        let bz_buf = BorrowedI32Buffer::extract(block_z)?;
+        let st_buf = BorrowedI32Buffer::extract(state_indices)?;
 
-        let pos_slice = extract_f32_slice(positions, &mut pos_holder)?;
-        let bx_slice = extract_i32_slice(block_x, &mut bx_holder)?;
-        let by_slice = extract_i32_slice(block_y, &mut by_holder)?;
-        let bz_slice = extract_i32_slice(block_z, &mut bz_holder)?;
-        let st_slice = extract_i32_slice(state_indices, &mut st_holder)?;
-
-        let bm_slice = match biome_indices {
-            Some(obj) => Some(extract_i32_slice(obj, &mut bm_holder)?),
+        let bm_buf = match biome_indices {
+            Some(obj) => Some(BorrowedI32Buffer::extract(obj)?),
             None => None,
         };
+
+        let pos_slice = pos_buf.as_slice();
+        let bx_slice = bx_buf.as_slice();
+        let by_slice = by_buf.as_slice();
+        let bz_slice = bz_buf.as_slice();
+        let st_slice = st_buf.as_slice();
+        let bm_slice = bm_buf.as_ref().map(|b| b.as_slice());
 
         let cloud = VoxelPointCloud::from_indexed_arrays(
             pos_slice.to_vec(),

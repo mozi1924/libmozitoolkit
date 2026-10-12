@@ -3,7 +3,7 @@
 use mtk_voxel::storage::point_cloud::VoxelPointCloud;
 
 use crate::error::DnaResult;
-use crate::guard::validate_pointer_and_bounds;
+use crate::guard::validate_aligned_pointer_and_bounds;
 
 /// Directly copies voxel point cloud 3D positions into a destination memory pointer as raw float32 triples (`len * 3`).
 pub fn copy_point_cloud_positions_to_ptr(
@@ -16,7 +16,12 @@ pub fn copy_point_cloud_positions_to_ptr(
         return Ok(0);
     }
     let byte_size = cloud.positions.len() * std::mem::size_of::<f32>();
-    validate_pointer_and_bounds(dst_ptr, byte_size, max_bytes)?;
+    validate_aligned_pointer_and_bounds(
+        dst_ptr,
+        byte_size,
+        std::mem::align_of::<f32>(),
+        max_bytes,
+    )?;
     unsafe {
         std::ptr::copy_nonoverlapping(
             cloud.positions.as_ptr() as *const u8,
@@ -38,7 +43,12 @@ pub fn copy_point_cloud_block_x_to_ptr(
         return Ok(0);
     }
     let byte_size = count * std::mem::size_of::<i32>();
-    validate_pointer_and_bounds(dst_ptr, byte_size, max_bytes)?;
+    validate_aligned_pointer_and_bounds(
+        dst_ptr,
+        byte_size,
+        std::mem::align_of::<i32>(),
+        max_bytes,
+    )?;
     unsafe {
         std::ptr::copy_nonoverlapping(
             cloud.block_x.as_ptr() as *const u8,
@@ -60,7 +70,12 @@ pub fn copy_point_cloud_block_y_to_ptr(
         return Ok(0);
     }
     let byte_size = count * std::mem::size_of::<i32>();
-    validate_pointer_and_bounds(dst_ptr, byte_size, max_bytes)?;
+    validate_aligned_pointer_and_bounds(
+        dst_ptr,
+        byte_size,
+        std::mem::align_of::<i32>(),
+        max_bytes,
+    )?;
     unsafe {
         std::ptr::copy_nonoverlapping(
             cloud.block_y.as_ptr() as *const u8,
@@ -82,7 +97,12 @@ pub fn copy_point_cloud_block_z_to_ptr(
         return Ok(0);
     }
     let byte_size = count * std::mem::size_of::<i32>();
-    validate_pointer_and_bounds(dst_ptr, byte_size, max_bytes)?;
+    validate_aligned_pointer_and_bounds(
+        dst_ptr,
+        byte_size,
+        std::mem::align_of::<i32>(),
+        max_bytes,
+    )?;
     unsafe {
         std::ptr::copy_nonoverlapping(
             cloud.block_z.as_ptr() as *const u8,
@@ -106,7 +126,12 @@ pub fn copy_point_cloud_state_indices_to_ptr(
     }
     let (palette, indices) = cloud.build_state_palette_indices();
     let byte_size = count * std::mem::size_of::<i32>();
-    validate_pointer_and_bounds(dst_ptr, byte_size, max_bytes)?;
+    validate_aligned_pointer_and_bounds(
+        dst_ptr,
+        byte_size,
+        std::mem::align_of::<i32>(),
+        max_bytes,
+    )?;
     unsafe {
         std::ptr::copy_nonoverlapping(indices.as_ptr() as *const u8, dst_ptr as *mut u8, byte_size);
     }
@@ -126,7 +151,12 @@ pub fn copy_point_cloud_biome_indices_to_ptr(
     }
     let (palette, indices) = cloud.build_biome_palette_indices();
     let byte_size = count * std::mem::size_of::<i32>();
-    validate_pointer_and_bounds(dst_ptr, byte_size, max_bytes)?;
+    validate_aligned_pointer_and_bounds(
+        dst_ptr,
+        byte_size,
+        std::mem::align_of::<i32>(),
+        max_bytes,
+    )?;
     unsafe {
         std::ptr::copy_nonoverlapping(indices.as_ptr() as *const u8, dst_ptr as *mut u8, byte_size);
     }
@@ -144,7 +174,7 @@ pub fn copy_point_cloud_light_levels_to_ptr(
         return Ok(0);
     }
     let byte_size = count * std::mem::size_of::<u8>();
-    validate_pointer_and_bounds(dst_ptr, byte_size, max_bytes)?;
+    validate_aligned_pointer_and_bounds(dst_ptr, byte_size, std::mem::align_of::<u8>(), max_bytes)?;
     unsafe {
         std::ptr::copy_nonoverlapping(cloud.light_levels.as_ptr(), dst_ptr as *mut u8, byte_size);
     }

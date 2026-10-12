@@ -319,7 +319,7 @@ pub fn face_materials_memoryview<'py>(
     PyMemoryView::from(&bytes)
 }
 
-/// Read-only memoryview of face tint indices (`int8` per face).
+/// Read-only memoryview of face tint indices (`int16` per face).
 pub fn face_tint_indices_memoryview<'py>(
     mesh: &PyMeshData,
     py: Python<'py>,
@@ -331,7 +331,8 @@ pub fn face_tint_indices_memoryview<'py>(
     let byte_slice = unsafe {
         std::slice::from_raw_parts(
             mesh.inner.face_tint_indices.as_ptr() as *const u8,
-            mesh.inner.face_tint_indices.len() * std::mem::size_of::<i8>(),
+            mesh.inner.face_tint_indices.len()
+                * std::mem::size_of::<mtk_core::attributes::TintIndex>(),
         )
     };
     let bytes = PyBytes::new(py, byte_slice);

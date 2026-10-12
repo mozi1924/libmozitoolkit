@@ -24,6 +24,9 @@ pub fn copy_buffer_to_ptr(
     max_bytes: Option<usize>,
 ) -> PyResult<usize> {
     let py_buf: PyBuffer<u8> = PyBuffer::get(src_buffer)?;
+    if !py_buf.is_c_contiguous() {
+        return Err(PyValueError::new_err("Source buffer must be C-contiguous"));
+    }
     let len = py_buf.len_bytes();
     if len == 0 {
         return Ok(0);

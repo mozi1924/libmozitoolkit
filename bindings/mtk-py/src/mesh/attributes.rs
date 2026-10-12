@@ -32,6 +32,11 @@ pub fn add_attribute_from_buffer(
     let domain_enum = crate::attributes::parse_domain_str(domain)?;
 
     let py_buf: PyBuffer<u8> = PyBuffer::get(buffer)?;
+    if !py_buf.is_c_contiguous() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "Attribute buffer must be C-contiguous",
+        ));
+    }
     let raw_bytes: &[u8] =
         unsafe { std::slice::from_raw_parts(py_buf.buf_ptr() as *const u8, py_buf.len_bytes()) };
 
