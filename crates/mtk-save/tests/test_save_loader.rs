@@ -65,4 +65,18 @@ fn test_real_world_bounded_box_loading() {
         "Loaded {} sections. Active bounds: ({}, {}, {}, size: {}x{}x{})",
         loaded, bx, by, bz, sx, sy, sz
     );
+
+    assert!(
+        storage.primary_biome.is_some(),
+        "primary_biome must be populated from chunk NBT biomes"
+    );
+    let pb = storage.primary_biome.as_ref().unwrap();
+    println!("Loaded real primary biome: {}", pb);
+    assert!(
+        !storage.biome_column_map.is_empty(),
+        "biome_column_map must contain column biomes"
+    );
+    println!("Biome columns count: {}", storage.biome_column_map.len());
+    let sampled = storage.get_biome(0, 64, 0);
+    println!("Sampled biome at (0, 64, 0): {}", sampled);
 }

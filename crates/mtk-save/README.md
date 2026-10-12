@@ -136,9 +136,21 @@ pub struct RegionFile {
 ```rust
 pub struct ChunkParser;
 
+pub struct SectionBiomes {
+    pub palette: Vec<String>,
+    pub indices: Vec<u8>,
+}
+
+pub struct ParsedChunk {
+    pub sections: Vec<SectionStorage>,
+    pub biomes: HashMap<i32, SectionBiomes>,
+}
+
 pub fn format_canonical_blockstate(block_comp: &NbtCompound) -> String;
 ```
-- `ChunkParser::parse_chunk_sections(bytes: &[u8]) -> Result<HashMap<i8, SectionData>, SaveError>`: 解密 Chunk NBT，逐 Section 解包 BlockStates 与 Biomes。
+- `ChunkParser::parse_chunk(bytes: &[u8], min_y: i32, max_y: i32) -> Result<ParsedChunk, SaveError>`: 解密 Chunk NBT，逐 Section 解包 BlockStates 与 3D 4x4x4 quart 生物群系。
+- `ChunkParser::parse_biomes(sec_comp: &NbtCompound) -> Option<SectionBiomes>`: 解码单 Section 内的 `biomes` 调色板与位压缩索引。
+- `ChunkParser::parse_chunk_sections(bytes: &[u8], min_y: i32, max_y: i32) -> Result<Vec<SectionStorage>, SaveError>`: 解密区块内所有几何 Section。
 - `format_canonical_blockstate`: 保证方块状态属性键值升序排列，生成全局一致的权威规范状态字符串。
 
 ---
@@ -177,8 +189,8 @@ pub struct AnvilWorldSource {
 | `SaveLoader::load_box_into_storage` | `(save_dir, dimension, min_coord, max_coord, &mut storage) -> Result<usize, SaveError>`：按 3D 边界范围切片加载体素。 |
 | `SaveLoader::load_box_into_storage_with_progress` | `(..., &mut storage, progress: Option<ProgressCallback>) -> Result<usize, SaveError>`：带进度汇报的切片加载。 |
 | `RegionFile::open` | `(path: impl AsRef<Path>) -> Result<Self, SaveError>`：解析 Anvil 区域文件寻址头。 |
-| `RegionFile::read_chunk_decompressed` | `(&mut self, cx, cz) -> Result<Option<Vec<u8>>, SaveError>`：直接解压单区块 NBT。 |
-| `ChunkParser::parse_chunk_sections` | `(bytes: &[u8]) -> Result<HashMap<i8, SectionData>, SaveError>`：解密区块内所有 Section。 |
+| `ChunkParser::parse_chunk` | `(bytes: &[u8], min_y, max_y) -> Result<ParsedChunk, SaveError>`：解密区块内所有 Section 与 3D Biomes。 |
+| `ChunkParser::parse_chunk_sections` | `(bytes: &[u8], min_y, max_y) -> Result<Vec<SectionStorage>, SaveError>`：解密区块内所有几何 Section。 |
 | `AnvilWorldSource::new` | `(save_dir, dimension, min_bound, max_bound) -> Self`：创建流式体素源。 |
 
 ---

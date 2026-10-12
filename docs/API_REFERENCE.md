@@ -162,9 +162,9 @@ cache_output_dir/
 为支持现代 Minecraft 1.18+ / 1.20+ / 1.21+ (`DataVersion` >= 2844) 大规模存档按需读取与极速渲染，系统建立了流式空间切片与零拷贝解包契约：
 - **`LevelData`**: 从 `level.dat` 零拷贝读取世界元数据（`level_name`、`version_name`、`data_version`、`spawn` 三维坐标、`time`、`day_time`、`hardcore` 等）。
 - **`RegionFile`**: 针对 32x32 区块 Anvil `.mca` 文件直接寻址 4096 字节 Location Table，按扇区偏移直接 Seek 并仅解压目标区块。
-- **`ChunkParser`**: 解密现代 Section 结构，对紧凑长整型数组（`bits_per_block >= 4`）进行纯位解包，并将 Palette 状态规范化为唯一排序属性字符串（如 `minecraft:oak_stairs[facing=north,half=bottom]`）。
+- **`ChunkParser`**: 解密现代 Section 结构，对紧凑长整型数组（`bits_per_block >= 4`）进行纯位解包并将 Palette 状态规范化为唯一排序属性字符串（如 `minecraft:oak_stairs[facing=north,half=bottom]`）；同时解包 `biomes` 调色板与 4x4x4 quart 3D 生物群系，产出 `ParsedChunk`。
 - **按需切片加载器 (`SaveLoader`)**:
-  - `load_box_into_storage(save_dir, dimension, min_block, max_block, &mut storage)`: 依据用户 3D 边界盒直接定位所需相交的 Region / Chunk / Section，仅加载并填充所选区域进入 `VoxelStorage`，彻底杜绝数十 GB 全图扫描。
+  - `load_box_into_storage(save_dir, dimension, min_block, max_block, &mut storage)`: 依据用户 3D 边界盒直接定位所需相交的 Region / Chunk / Section，仅加载并填充所选区域进入 `VoxelStorage`，彻底杜绝数十 GB 全图扫描；同步解构 2D 柱群系与 3D 纵向变动群系（洞穴群系等），确立全域 `primary_biome` 与 `biome_column_map`。
   - `AnvilWorldSource`: 遵循统一 `VoxelSource` 接口，支持向 `VoxelWorld` 持续提供体素切片流。
 
 ---

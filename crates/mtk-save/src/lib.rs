@@ -18,7 +18,7 @@ pub mod nbt;
 pub mod region;
 pub mod source;
 
-pub use chunk::{format_canonical_blockstate, ChunkParser};
+pub use chunk::{format_canonical_blockstate, ChunkParser, ParsedChunk, SectionBiomes};
 pub use error::SaveError;
 pub use level::LevelData;
 pub use loader::SaveLoader;
