@@ -146,14 +146,7 @@ impl PyBakedAtlas {
     ) -> PyResult<Bound<'py, PyMemoryView>> {
         if let Some(chunk) = self.inner.chunks.get(index) {
             let f32_buf = chunk.albedo.to_f32_buffer(flip_v);
-            let byte_slice = unsafe {
-                std::slice::from_raw_parts(
-                    f32_buf.as_ptr() as *const u8,
-                    f32_buf.len() * std::mem::size_of::<f32>(),
-                )
-            };
-            let bytes = PyBytes::new(py, byte_slice);
-            PyMemoryView::from(&bytes)
+            crate::buffer::create_owned_f32_memoryview(py, f32_buf)
         } else {
             Err(pyo3::exceptions::PyIndexError::new_err(
                 "Chunk index out of bounds",
@@ -198,14 +191,9 @@ impl PyBakedAtlas {
         if let Some(chunk) = self.inner.chunks.get(index) {
             if let Some(ref n) = chunk.normal {
                 let f32_buf = n.to_f32_buffer(flip_v);
-                let byte_slice = unsafe {
-                    std::slice::from_raw_parts(
-                        f32_buf.as_ptr() as *const u8,
-                        f32_buf.len() * std::mem::size_of::<f32>(),
-                    )
-                };
-                let bytes = PyBytes::new(py, byte_slice);
-                Ok(Some(PyMemoryView::from(&bytes)?))
+                Ok(Some(crate::buffer::create_owned_f32_memoryview(
+                    py, f32_buf,
+                )?))
             } else {
                 Ok(None)
             }
@@ -253,14 +241,9 @@ impl PyBakedAtlas {
         if let Some(chunk) = self.inner.chunks.get(index) {
             if let Some(ref s) = chunk.specular {
                 let f32_buf = s.to_f32_buffer(flip_v);
-                let byte_slice = unsafe {
-                    std::slice::from_raw_parts(
-                        f32_buf.as_ptr() as *const u8,
-                        f32_buf.len() * std::mem::size_of::<f32>(),
-                    )
-                };
-                let bytes = PyBytes::new(py, byte_slice);
-                Ok(Some(PyMemoryView::from(&bytes)?))
+                Ok(Some(crate::buffer::create_owned_f32_memoryview(
+                    py, f32_buf,
+                )?))
             } else {
                 Ok(None)
             }
@@ -308,14 +291,9 @@ impl PyBakedAtlas {
         if let Some(chunk) = self.inner.chunks.get(index) {
             if let Some(ref o) = chunk.overlay {
                 let f32_buf = o.to_f32_buffer(flip_v);
-                let byte_slice = unsafe {
-                    std::slice::from_raw_parts(
-                        f32_buf.as_ptr() as *const u8,
-                        f32_buf.len() * std::mem::size_of::<f32>(),
-                    )
-                };
-                let bytes = PyBytes::new(py, byte_slice);
-                Ok(Some(PyMemoryView::from(&bytes)?))
+                Ok(Some(crate::buffer::create_owned_f32_memoryview(
+                    py, f32_buf,
+                )?))
             } else {
                 Ok(None)
             }

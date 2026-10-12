@@ -251,76 +251,70 @@ impl PyVoxelPointCloud {
     }
 
     /// Read-only memoryview of 3D vertex positions as raw bytes (`float32 * 3` per point).
-    pub fn positions_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
-        if self.inner.positions.is_empty() {
+    pub fn positions_memoryview<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyMemoryView>> {
+        let py = slf.py();
+        let inner = &slf.borrow().inner;
+        if inner.positions.is_empty() {
             let bytes = PyBytes::new(py, &[]);
             return PyMemoryView::from(&bytes);
         }
-        let byte_slice = unsafe {
-            std::slice::from_raw_parts(
-                self.inner.positions.as_ptr() as *const u8,
-                self.inner.positions.len() * std::mem::size_of::<f32>(),
-            )
-        };
-        let bytes = PyBytes::new(py, byte_slice);
-        PyMemoryView::from(&bytes)
+        let ptr = inner.positions.as_ptr() as *const u8;
+        let len = inner.positions.len() * std::mem::size_of::<f32>();
+        crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
     }
 
     /// Read-only memoryview of native integer X block coordinates (`int32` per point).
-    pub fn block_x_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
-        if self.inner.block_x.is_empty() {
+    pub fn block_x_memoryview<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyMemoryView>> {
+        let py = slf.py();
+        let inner = &slf.borrow().inner;
+        if inner.block_x.is_empty() {
             let bytes = PyBytes::new(py, &[]);
             return PyMemoryView::from(&bytes);
         }
-        let byte_slice = unsafe {
-            std::slice::from_raw_parts(
-                self.inner.block_x.as_ptr() as *const u8,
-                self.inner.block_x.len() * std::mem::size_of::<i32>(),
-            )
-        };
-        let bytes = PyBytes::new(py, byte_slice);
-        PyMemoryView::from(&bytes)
+        let ptr = inner.block_x.as_ptr() as *const u8;
+        let len = inner.block_x.len() * std::mem::size_of::<i32>();
+        crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
     }
 
     /// Read-only memoryview of native integer Y block coordinates (`int32` per point).
-    pub fn block_y_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
-        if self.inner.block_y.is_empty() {
+    pub fn block_y_memoryview<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyMemoryView>> {
+        let py = slf.py();
+        let inner = &slf.borrow().inner;
+        if inner.block_y.is_empty() {
             let bytes = PyBytes::new(py, &[]);
             return PyMemoryView::from(&bytes);
         }
-        let byte_slice = unsafe {
-            std::slice::from_raw_parts(
-                self.inner.block_y.as_ptr() as *const u8,
-                self.inner.block_y.len() * std::mem::size_of::<i32>(),
-            )
-        };
-        let bytes = PyBytes::new(py, byte_slice);
-        PyMemoryView::from(&bytes)
+        let ptr = inner.block_y.as_ptr() as *const u8;
+        let len = inner.block_y.len() * std::mem::size_of::<i32>();
+        crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
     }
 
     /// Read-only memoryview of native integer Z block coordinates (`int32` per point).
-    pub fn block_z_memoryview<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyMemoryView>> {
-        if self.inner.block_z.is_empty() {
+    pub fn block_z_memoryview<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyMemoryView>> {
+        let py = slf.py();
+        let inner = &slf.borrow().inner;
+        if inner.block_z.is_empty() {
             let bytes = PyBytes::new(py, &[]);
             return PyMemoryView::from(&bytes);
         }
-        let byte_slice = unsafe {
-            std::slice::from_raw_parts(
-                self.inner.block_z.as_ptr() as *const u8,
-                self.inner.block_z.len() * std::mem::size_of::<i32>(),
-            )
-        };
-        let bytes = PyBytes::new(py, byte_slice);
-        PyMemoryView::from(&bytes)
+        let ptr = inner.block_z.as_ptr() as *const u8;
+        let len = inner.block_z.len() * std::mem::size_of::<i32>();
+        crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
     }
 
     /// Read-only memoryview of composite light levels (`uint8` per point).
     pub fn light_levels_memoryview<'py>(
-        &self,
-        py: Python<'py>,
+        slf: &Bound<'py, Self>,
     ) -> PyResult<Bound<'py, PyMemoryView>> {
-        let bytes = PyBytes::new(py, &self.inner.light_levels);
-        PyMemoryView::from(&bytes)
+        let py = slf.py();
+        let inner = &slf.borrow().inner;
+        if inner.light_levels.is_empty() {
+            let bytes = PyBytes::new(py, &[]);
+            return PyMemoryView::from(&bytes);
+        }
+        let ptr = inner.light_levels.as_ptr();
+        let len = inner.light_levels.len();
+        crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
     }
 
     /// Returns the list of canonical Minecraft blockstate strings.

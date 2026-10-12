@@ -21,33 +21,17 @@ pub struct FaceCuller {
     pub leaves_cull_mode: LeavesCullMode,
     pub glass_cull_mode: GlassCullMode,
     #[cfg(feature = "std")]
-    meta_cache: std::sync::RwLock<HashMap<String, Arc<BlockCullMeta>>>,
+    meta_cache: std::sync::Arc<std::sync::RwLock<HashMap<String, Arc<BlockCullMeta>>>>,
     #[cfg(not(feature = "std"))]
-    meta_cache: RefCell<HashMap<String, Arc<BlockCullMeta>>>,
+    meta_cache: std::rc::Rc<RefCell<HashMap<String, Arc<BlockCullMeta>>>>,
 }
 
 impl Clone for FaceCuller {
     fn clone(&self) -> Self {
-        #[cfg(feature = "std")]
-        {
-            let cache_clone = self
-                .meta_cache
-                .read()
-                .map(|g| g.clone())
-                .unwrap_or_default();
-            Self {
-                leaves_cull_mode: self.leaves_cull_mode,
-                glass_cull_mode: self.glass_cull_mode,
-                meta_cache: std::sync::RwLock::new(cache_clone),
-            }
-        }
-        #[cfg(not(feature = "std"))]
-        {
-            Self {
-                leaves_cull_mode: self.leaves_cull_mode,
-                glass_cull_mode: self.glass_cull_mode,
-                meta_cache: RefCell::new(self.meta_cache.borrow().clone()),
-            }
+        Self {
+            leaves_cull_mode: self.leaves_cull_mode,
+            glass_cull_mode: self.glass_cull_mode,
+            meta_cache: self.meta_cache.clone(),
         }
     }
 }
@@ -65,9 +49,9 @@ impl FaceCuller {
             leaves_cull_mode,
             glass_cull_mode,
             #[cfg(feature = "std")]
-            meta_cache: std::sync::RwLock::new(HashMap::new()),
+            meta_cache: std::sync::Arc::new(std::sync::RwLock::new(HashMap::new())),
             #[cfg(not(feature = "std"))]
-            meta_cache: RefCell::new(HashMap::new()),
+            meta_cache: std::rc::Rc::new(RefCell::new(HashMap::new())),
         }
     }
 

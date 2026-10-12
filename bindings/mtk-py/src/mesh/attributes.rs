@@ -2,20 +2,27 @@
 
 use pyo3::buffer::PyBuffer;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyList, PyMemoryView};
+use pyo3::types::{PyList, PyMemoryView};
 
 use super::PyMeshData;
 
 /// Read-only zero-copy memoryview of a numeric custom attribute by name.
 pub fn attribute_memoryview<'py>(
-    mesh: &PyMeshData,
-    py: Python<'py>,
+    mesh: &Bound<'py, PyMeshData>,
     name: &str,
 ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
-    if let Some(attr) = mesh.inner.get_custom_attribute(name) {
+    let py = mesh.py();
+    let inner = &mesh.borrow().inner;
+    if let Some(attr) = inner.get_custom_attribute(name) {
         if let Some(bytes_slice) = attr.as_bytes() {
-            let bytes = PyBytes::new(py, bytes_slice);
-            return Ok(Some(PyMemoryView::from(&bytes)?));
+            let ptr = bytes_slice.as_ptr();
+            let len = bytes_slice.len();
+            return Ok(Some(crate::buffer::create_zerocopy_memoryview(
+                py,
+                ptr,
+                len,
+                mesh.as_any(),
+            )?));
         }
     }
     Ok(None)

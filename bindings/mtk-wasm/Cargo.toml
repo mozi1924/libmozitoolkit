@@ -11,7 +11,6 @@ description = "WebAssembly bindings for libmozitoolkit using wasm-bindgen."
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-libmtk = { workspace = true }
 mtk-core = { workspace = true }
 mtk-cull = { workspace = true }
 mtk-voxel = { workspace = true }
@@ -29,7 +28,6 @@ getrandom = { version = "0.3", features = ["wasm_js"] }
 [features]
 default = ["std"]
 std = [
-    "libmtk/std",
     "mtk-core/std",
     "mtk-cull/std",
     "mtk-voxel/std",
@@ -38,7 +36,6 @@ std = [
 ]
 parallel = [
     "dep:wasm-bindgen-rayon",
-    "libmtk/parallel",
     "mtk-core/parallel",
     "mtk-voxel/parallel",
     "mtk-model/parallel",

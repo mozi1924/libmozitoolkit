@@ -21,6 +21,7 @@ pub mod voxel;
 
 #[cfg(feature = "blender")]
 pub mod blender;
+pub mod buffer;
 pub mod unstable;
 
 use pyo3::prelude::*;
@@ -111,6 +112,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // 1. Mesh & Core
     m.add_class::<PyAttributeDomain>()?;
     m.add_class::<PyMeshData>()?;
+    m.add_class::<buffer::PyBufferOwner>()?;
     m.add_function(wrap_pyfunction!(process_mesh, m)?)?;
     m.add_function(wrap_pyfunction!(subdivide::calculate_face_target_grid, m)?)?;
     m.add_function(wrap_pyfunction!(
@@ -261,25 +263,25 @@ mod tests {
     fn test_python_mesh_data_inner() {
         pyo3::prepare_freethreaded_python();
         Python::with_gil(|py| {
-            let mut mesh = PyMeshData::new();
-            assert_eq!(mesh.vertex_count(), 0);
-            assert!(mesh.is_empty());
+            let mesh = Bound::new(py, PyMeshData::new()).unwrap();
+            assert_eq!(mesh.borrow().vertex_count(), 0);
+            assert!(mesh.borrow().is_empty());
 
-            let res = mesh.append_unit_cube_face(1, 7, -1);
+            let res = mesh.borrow_mut().append_unit_cube_face(1, 7, -1);
             assert!(res.is_ok());
-            assert_eq!(mesh.vertex_count(), 4);
-            assert_eq!(mesh.triangle_count(), 2);
-            assert_eq!(mesh.face_count(), 1);
+            assert_eq!(mesh.borrow().vertex_count(), 4);
+            assert_eq!(mesh.borrow().triangle_count(), 2);
+            assert_eq!(mesh.borrow().face_count(), 1);
 
-            let memview = mesh.positions_memoryview(py).unwrap();
+            let memview = PyMeshData::positions_memoryview(&mesh).unwrap();
             assert_eq!(memview.len().unwrap(), 4 * 3 * 4); // 4 verts * 3 floats * 4 bytes
 
-            let indices_mem = mesh.indices_memoryview(py).unwrap();
+            let indices_mem = PyMeshData::indices_memoryview(&mesh).unwrap();
             assert_eq!(indices_mem.len().unwrap(), 6 * 4); // 6 indices * 4 bytes
 
-            mesh.clear();
-            assert_eq!(mesh.vertex_count(), 0);
-            assert!(mesh.is_empty());
+            mesh.borrow_mut().clear();
+            assert_eq!(mesh.borrow().vertex_count(), 0);
+            assert!(mesh.borrow().is_empty());
         });
     }
 
@@ -409,7 +411,8 @@ mod tests {
                     .unwrap(),
                 2
             );
-            let sec_uvs = out_mesh.secondary_uvs_memoryview(py).unwrap();
+            let bound_out = Bound::new(py, out_mesh).unwrap();
+            let sec_uvs = PyMeshData::secondary_uvs_memoryview(&bound_out).unwrap();
             assert!(sec_uvs.is_some());
         });
     }

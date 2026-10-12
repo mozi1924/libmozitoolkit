@@ -323,14 +323,7 @@ impl PyAssetCache {
             .inner
             .read_texture_f32_with_orientation(chunk_id, flip_v)
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-        let byte_slice = unsafe {
-            std::slice::from_raw_parts(
-                f32_pixels.as_ptr() as *const u8,
-                f32_pixels.len() * std::mem::size_of::<f32>(),
-            )
-        };
-        let py_bytes = pyo3::types::PyBytes::new(py, byte_slice);
-        let memview = pyo3::types::PyMemoryView::from(&py_bytes)?;
+        let memview = crate::buffer::create_owned_f32_memoryview(py, f32_pixels)?;
         Ok((width, height, memview))
     }
 
