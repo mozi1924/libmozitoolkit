@@ -29,12 +29,7 @@ impl PySectionMesher {
     ) -> PyResult<PyMeshData> {
         let default_config = MesherConfig::default();
         let mut cfg = config.map(|c| c.inner.clone()).unwrap_or(default_config);
-        if cfg.origin_centered && cfg.selection_bounds.is_none() {
-            let (min_x, min_y, min_z, sz_x, sz_y, sz_z) = storage.inner.get_bounds();
-            if sz_x > 0 && sz_y > 0 && sz_z > 0 {
-                cfg.selection_bounds = Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]));
-            }
-        }
+        cfg.ensure_selection_bounds(&storage.inner);
         let num_threads = config.and_then(|c| c.num_threads);
 
         let default_culler = FaceCuller::default();
@@ -49,17 +44,8 @@ impl PySectionMesher {
         let merged_mesh = py
             .allow_threads(|| -> Result<mtk_core::mesh::MeshData, String> {
                 let db_ref = model_db_opt.as_deref();
-                let model_lookup = |state: &str| -> mtk_voxel::mesher::ModelSource {
-                    if let Some(db) = db_ref {
-                        if let Some(group) = db.get_variant_group(state) {
-                            return mtk_voxel::mesher::ModelSource::Variant(group);
-                        }
-                        if let Some(model) = db.get(state) {
-                            return mtk_voxel::mesher::ModelSource::Single(model);
-                        }
-                    }
-                    mtk_voxel::mesher::ModelSource::None
-                };
+                let model_lookup =
+                    |state: &str| mtk_voxel::VoxelWorld::model_source_for_state(db_ref, state);
 
                 let padded_sections =
                     mtk_core::constants::concurrency::execute_parallel(num_threads, || {
@@ -115,12 +101,7 @@ impl PySectionMesher {
     ) -> PyResult<Bound<'py, PyDict>> {
         let default_config = MesherConfig::default();
         let mut cfg = config.map(|c| c.inner.clone()).unwrap_or(default_config);
-        if cfg.origin_centered && cfg.selection_bounds.is_none() {
-            let (min_x, min_y, min_z, sz_x, sz_y, sz_z) = storage.inner.get_bounds();
-            if sz_x > 0 && sz_y > 0 && sz_z > 0 {
-                cfg.selection_bounds = Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]));
-            }
-        }
+        cfg.ensure_selection_bounds(&storage.inner);
         let num_threads = config.and_then(|c| c.num_threads);
 
         let default_culler = FaceCuller::default();
@@ -138,17 +119,8 @@ impl PySectionMesher {
             .allow_threads(
                 || -> Result<Vec<(glam::IVec3, mtk_core::mesh::MeshData)>, String> {
                     let db_ref = model_db_opt.as_deref();
-                    let model_lookup = |state: &str| -> mtk_voxel::mesher::ModelSource {
-                        if let Some(db) = db_ref {
-                            if let Some(group) = db.get_variant_group(state) {
-                                return mtk_voxel::mesher::ModelSource::Variant(group);
-                            }
-                            if let Some(model) = db.get(state) {
-                                return mtk_voxel::mesher::ModelSource::Single(model);
-                            }
-                        }
-                        mtk_voxel::mesher::ModelSource::None
-                    };
+                    let model_lookup =
+                        |state: &str| mtk_voxel::VoxelWorld::model_source_for_state(db_ref, state);
 
                     let padded_sections =
                         mtk_core::constants::concurrency::execute_parallel(num_threads, || {
@@ -204,12 +176,7 @@ impl PySectionMesher {
     ) -> PyResult<Bound<'py, PyDict>> {
         let default_config = MesherConfig::default();
         let mut cfg = config.map(|c| c.inner.clone()).unwrap_or(default_config);
-        if cfg.origin_centered && cfg.selection_bounds.is_none() {
-            let (min_x, min_y, min_z, sz_x, sz_y, sz_z) = storage.inner.get_bounds();
-            if sz_x > 0 && sz_y > 0 && sz_z > 0 {
-                cfg.selection_bounds = Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]));
-            }
-        }
+        cfg.ensure_selection_bounds(&storage.inner);
 
         let default_culler = FaceCuller::default();
         let cul = culler.map(|c| &c.inner).unwrap_or(&default_culler);
@@ -217,17 +184,8 @@ impl PySectionMesher {
         let model_db_opt = model_db.map(|db| db.inner.clone());
         let results = py.allow_threads(|| {
             let db_ref = model_db_opt.as_deref();
-            let model_lookup = |state: &str| -> mtk_voxel::mesher::ModelSource {
-                if let Some(db) = db_ref {
-                    if let Some(group) = db.get_variant_group(state) {
-                        return mtk_voxel::mesher::ModelSource::Variant(group);
-                    }
-                    if let Some(model) = db.get(state) {
-                        return mtk_voxel::mesher::ModelSource::Single(model);
-                    }
-                }
-                mtk_voxel::mesher::ModelSource::None
-            };
+            let model_lookup =
+                |state: &str| mtk_voxel::VoxelWorld::model_source_for_state(db_ref, state);
 
             DeltaMesher::rebuild_dirty_sections_with_source(
                 &mut storage.inner,

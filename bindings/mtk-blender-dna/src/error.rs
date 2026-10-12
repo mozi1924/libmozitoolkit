@@ -28,10 +28,6 @@ pub enum DnaError {
         /// Required byte alignment.
         align: usize,
     },
-
-    /// Specified Blender DNA layout or structure is not supported.
-    #[error("Unsupported DNA version or layout: {0}")]
-    UnsupportedLayout(String),
 }
 
 /// Convenience Result type for DNA operations.

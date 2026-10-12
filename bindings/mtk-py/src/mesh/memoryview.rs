@@ -136,20 +136,8 @@ pub fn loop_uvs_memoryview<'py>(
 ) -> PyResult<Bound<'py, PyMemoryView>> {
     let py = mesh.py();
     let inner = &mesh.borrow().inner;
-    let is_quad = inner.quad_indices.is_some()
-        || (!inner.indices.is_empty()
-            && inner.indices.len() % 6 == 0
-            && inner.face_materials.len() == inner.indices.len() / 6);
-
-    let total_loops = if is_quad {
-        if let Some(ref quads) = inner.quad_indices {
-            quads.len()
-        } else {
-            (inner.indices.len() / 6) * 4
-        }
-    } else {
-        inner.indices.len()
-    };
+    let is_quad = inner.is_quad_topology();
+    let total_loops = inner.loop_count();
 
     if total_loops == 0 {
         let bytes = PyBytes::new(py, &[]);
@@ -210,19 +198,8 @@ pub fn loop_starts_memoryview<'py>(
 ) -> PyResult<Bound<'py, PyMemoryView>> {
     let py = mesh.py();
     let inner = &mesh.borrow().inner;
-    let is_quad = inner.quad_indices.is_some()
-        || (!inner.indices.is_empty()
-            && inner.indices.len() % 6 == 0
-            && inner.face_materials.len() == inner.indices.len() / 6);
-    let count = if is_quad {
-        if let Some(ref quads) = inner.quad_indices {
-            quads.len() / 4
-        } else {
-            inner.indices.len() / 6
-        }
-    } else {
-        inner.indices.len() / 3
-    };
+    let is_quad = inner.is_quad_topology();
+    let count = inner.poly_count();
     if count == 0 {
         let bytes = PyBytes::new(py, &[]);
         return PyMemoryView::from(&bytes);
@@ -241,19 +218,8 @@ pub fn loop_totals_memoryview<'py>(
 ) -> PyResult<Bound<'py, PyMemoryView>> {
     let py = mesh.py();
     let inner = &mesh.borrow().inner;
-    let is_quad = inner.quad_indices.is_some()
-        || (!inner.indices.is_empty()
-            && inner.indices.len() % 6 == 0
-            && inner.face_materials.len() == inner.indices.len() / 6);
-    let count = if is_quad {
-        if let Some(ref quads) = inner.quad_indices {
-            quads.len() / 4
-        } else {
-            inner.indices.len() / 6
-        }
-    } else {
-        inner.indices.len() / 3
-    };
+    let is_quad = inner.is_quad_topology();
+    let count = inner.poly_count();
     if count == 0 {
         let bytes = PyBytes::new(py, &[]);
         return PyMemoryView::from(&bytes);

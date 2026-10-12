@@ -1,0 +1,325 @@
+//! VoxelWorld Python bindings.
+
+use super::config::PyMesherConfig;
+use super::storage::PyVoxelStorage;
+use pyo3::prelude::*;
+
+/// Python wrapper for `VoxelWorld` 3D scene engine.
+#[pyclass(name = "VoxelWorld")]
+#[derive(Clone)]
+pub struct PyVoxelWorld {
+    pub(crate) inner: mtk_voxel::VoxelWorld,
+}
+
+#[pymethods]
+impl PyVoxelWorld {
+    #[new]
+    #[pyo3(signature = (config=None, culler=None, model_db=None, unified_mesh=true))]
+    pub fn new(
+        config: Option<&PyMesherConfig>,
+        culler: Option<&crate::cull::PyFaceCuller>,
+        model_db: Option<&crate::model::PyBakedModelDatabase>,
+        unified_mesh: bool,
+    ) -> Self {
+        let cfg = config.map(|c| c.inner.clone());
+        let cul = culler.map(|c| c.inner.clone());
+        let mdb = model_db.map(|db| db.inner.clone());
+        Self {
+            inner: mtk_voxel::VoxelWorld::new(cfg, cul, mdb, unified_mesh),
+        }
+    }
+
+    /// Creates a `VoxelWorld` taking initial data from an existing `VoxelStorage`.
+    #[staticmethod]
+    #[pyo3(signature = (storage, config=None, culler=None, model_db=None, unified_mesh=true, num_threads=None))]
+    pub fn from_storage(
+        storage: &PyVoxelStorage,
+        config: Option<&PyMesherConfig>,
+        culler: Option<&crate::cull::PyFaceCuller>,
+        model_db: Option<&crate::model::PyBakedModelDatabase>,
+        unified_mesh: bool,
+        num_threads: Option<usize>,
+    ) -> Self {
+        let cfg = config.map(|c| c.inner.clone());
+        let cul = culler.map(|c| c.inner.clone());
+        let mdb = model_db.map(|db| db.inner.clone());
+        let threads = num_threads.or_else(|| config.and_then(|c| c.num_threads));
+        Self {
+            inner: mtk_voxel::VoxelWorld::from_storage_with_threads(
+                storage.inner.clone(),
+                cfg,
+                cul,
+                mdb,
+                unified_mesh,
+                threads,
+            ),
+        }
+    }
+
+    /// Loads or generates the canonical Minecraft debug world into a new `VoxelWorld`.
+    #[staticmethod]
+    #[pyo3(signature = (config=None, culler=None, model_db=None, unified_mesh=true, num_threads=None, states=None, stack=None))]
+    pub fn create_debug_world(
+        config: Option<&PyMesherConfig>,
+        culler: Option<&crate::cull::PyFaceCuller>,
+        model_db: Option<&crate::model::PyBakedModelDatabase>,
+        unified_mesh: bool,
+        num_threads: Option<usize>,
+        states: Option<Vec<String>>,
+        stack: Option<&crate::resource::PyResourcePackStack>,
+    ) -> PyResult<Self> {
+        let cfg = config.map(|c| c.inner.clone());
+        let cul = culler.map(|c| c.inner.clone());
+        let mdb = model_db.map(|db| db.inner.clone());
+        let threads = num_threads.or_else(|| config.and_then(|c| c.num_threads));
+
+        let world = if let Some(st) = states {
+            mtk_voxel::VoxelWorld::create_debug_world_from_states(
+                &st,
+                cfg,
+                cul,
+                mdb,
+                unified_mesh,
+                threads,
+            )
+        } else if let Some(s) = stack {
+            mtk_voxel::VoxelWorld::create_debug_world_from_pack_stack(
+                &s.inner,
+                cfg,
+                cul,
+                mdb,
+                unified_mesh,
+                threads,
+            )
+        } else {
+            mtk_voxel::VoxelWorld::create_debug_world_with_threads(
+                cfg,
+                cul,
+                mdb,
+                unified_mesh,
+                threads,
+            )
+        }
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        Ok(Self { inner: world })
+    }
+
+    /// Gets the number of worker threads configured for meshing.
+    #[getter]
+    pub fn num_threads(&self) -> Option<usize> {
+        self.inner.num_threads()
+    }
+
+    /// Sets the number of worker threads configured for meshing.
+    #[setter]
+    pub fn set_num_threads(&mut self, val: Option<usize>) {
+        self.inner.set_num_threads(val);
+    }
+
+    /// Re-meshes all non-empty sections in parallel and returns the unified `MeshData`.
+    #[pyo3(signature = (callback=None))]
+    pub fn rebuild_all(
+        &mut self,
+        py: Python<'_>,
+        callback: Option<PyObject>,
+    ) -> PyResult<crate::mesh::PyMeshData> {
+        let mesh = if let Some(cb) = callback {
+            let cb_ref = &cb;
+            py.allow_threads(|| {
+                self.inner
+                    .rebuild_all_with_progress(Some(&|prog| {
+                        Python::with_gil(|py| {
+                            let dict = pyo3::types::PyDict::new(py);
+                            let _ = dict.set_item("stage", prog.stage);
+                            let _ = dict.set_item("current", prog.current);
+                            let _ = dict.set_item("total", prog.total);
+                            let _ = dict.set_item("message", &prog.message);
+                            let _ = dict.set_item("percent", prog.percent());
+                            let _ = cb_ref.call1(py, (dict,));
+                        });
+                    }))
+                    .cloned()
+            })
+        } else {
+            py.allow_threads(|| self.inner.rebuild_all().cloned())
+        }
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        Ok(crate::mesh::PyMeshData { inner: mesh })
+    }
+
+    /// Incrementally rebuilds only the modified/dirty sections and returns a dict mapping (sx, sy, sz) to PyMeshData.
+    pub fn rebuild_dirty<'py>(
+        &mut self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+        let rebuilt = py
+            .allow_threads(|| self.inner.rebuild_dirty())
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        let dict = pyo3::types::PyDict::new(py);
+        for (coord, mesh) in rebuilt {
+            dict.set_item(
+                (coord.x, coord.y, coord.z),
+                crate::mesh::PyMeshData { inner: mesh },
+            )?;
+        }
+        Ok(dict)
+    }
+
+    /// Returns the current full merged world geometry directly as a PyMeshData buffer.
+    pub fn get_world_mesh(&self) -> crate::mesh::PyMeshData {
+        let mesh = self.inner.get_world_mesh().cloned().unwrap_or_default();
+        crate::mesh::PyMeshData { inner: mesh }
+    }
+
+    /// Returns the list of unique Atlas Chunk IDs used by the active world mesh.
+    pub fn used_chunk_ids(&self) -> Vec<u32> {
+        self.inner.used_chunk_ids().to_vec()
+    }
+
+    /// Compacts material indices on the world mesh into contiguous 0..N-1 and returns original chunk mapping.
+    pub fn compact_world_mesh_materials(&mut self) -> Vec<u16> {
+        self.inner.compact_world_mesh_materials()
+    }
+
+    /// Sets the active 3D selection bounding box.
+    pub fn set_bounds(
+        &mut self,
+        min_x: i32,
+        min_y: i32,
+        min_z: i32,
+        size_x: i32,
+        size_y: i32,
+        size_z: i32,
+    ) -> bool {
+        self.inner
+            .set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)
+    }
+
+    /// Returns the bounding box: (min_x, min_y, min_z, size_x, size_y, size_z).
+    pub fn get_bounds(&self) -> (i32, i32, i32, i32, i32, i32) {
+        self.inner.get_bounds()
+    }
+
+    /// Gets the blockstate identifier string at world coordinate (x, y, z).
+    pub fn get_block(&self, x: i32, y: i32, z: i32) -> &str {
+        self.inner.get_block(x, y, z)
+    }
+
+    /// Sets the blockstate at world coordinate (x, y, z).
+    #[pyo3(signature = (x, y, z, state, biome=None))]
+    pub fn set_block(&mut self, x: i32, y: i32, z: i32, state: &str, biome: Option<&str>) -> bool {
+        self.inner.set_block(x, y, z, state, biome)
+    }
+
+    /// Ingests a full snapshot packet.
+    #[pyo3(signature = (min_x, min_y, min_z, size_x, size_y, size_z, palette, grid_indices, biome_palette=None, biome_indices=None))]
+    pub fn set_full_snapshot(
+        &mut self,
+        min_x: i32,
+        min_y: i32,
+        min_z: i32,
+        size_x: i32,
+        size_y: i32,
+        size_z: i32,
+        palette: Vec<String>,
+        grid_indices: Vec<u16>,
+        biome_palette: Option<Vec<String>>,
+        biome_indices: Option<Vec<u16>>,
+    ) {
+        self.inner.set_full_snapshot(
+            min_x,
+            min_y,
+            min_z,
+            size_x,
+            size_y,
+            size_z,
+            &palette,
+            &grid_indices,
+            biome_palette.as_deref(),
+            biome_indices.as_deref(),
+        );
+    }
+
+    /// Applies a batch of block delta modifications.
+    pub fn apply_delta_update(
+        &mut self,
+        min_x: i32,
+        min_y: i32,
+        min_z: i32,
+        changes: Vec<(i32, i32, i32, String)>,
+    ) -> Vec<(i32, i32, i32, String, String)> {
+        let borrowed: Vec<(i32, i32, i32, &str)> = changes
+            .iter()
+            .map(|(x, y, z, s)| (*x, *y, *z, s.as_str()))
+            .collect();
+        self.inner
+            .apply_delta_update(min_x, min_y, min_z, &borrowed)
+    }
+
+    /// Updates mesher configuration.
+    pub fn set_config(&mut self, config: &PyMesherConfig) {
+        self.inner.set_config(config.inner.clone());
+    }
+
+    /// Updates or replaces the prebaked model database.
+    pub fn set_model_db(&mut self, model_db: Option<&crate::model::PyBakedModelDatabase>) {
+        self.inner.set_model_db(model_db.map(|db| db.inner.clone()));
+    }
+
+    /// Toggles single unified world mesh mode vs individual section mode.
+    pub fn set_unified_mesh(&mut self, unified_mesh: bool) {
+        self.inner.set_unified_mesh(unified_mesh);
+    }
+
+    /// Returns a copy of the underlying VoxelStorage.
+    pub fn get_storage(&self) -> PyVoxelStorage {
+        PyVoxelStorage {
+            inner: self.inner.storage.clone(),
+        }
+    }
+
+    /// Extracts an unculled point cloud representation of the current world geometry.
+    pub fn to_point_cloud(&self) -> crate::point_cloud::PyVoxelPointCloud {
+        crate::point_cloud::PyVoxelPointCloud {
+            inner: self.inner.to_point_cloud(),
+        }
+    }
+
+    /// Reconstructs world storage from a point cloud and clears cached meshes.
+    pub fn load_from_point_cloud(&mut self, point_cloud: &crate::point_cloud::PyVoxelPointCloud) {
+        self.inner.load_from_point_cloud(&point_cloud.inner);
+    }
+
+    /// Syncs world storage with updated storage (e.g. from carved point cloud)
+    /// and marks only sections with CRC checksum differences as dirty.
+    pub fn sync_from_storage(&mut self, new_storage: &PyVoxelStorage) -> usize {
+        self.inner.sync_from_storage(&new_storage.inner)
+    }
+
+    /// Clears the cached section meshes and unified world mesh, marking all storage sections as dirty.
+    pub fn clear_cache(&mut self) {
+        self.inner.clear_cache();
+    }
+
+    /// Hot-reloads mesher configuration and model database, clearing all cached section meshes.
+    #[pyo3(signature = (config=None, model_db=None))]
+    pub fn hot_reload(
+        &mut self,
+        config: Option<&PyMesherConfig>,
+        model_db: Option<&crate::model::PyBakedModelDatabase>,
+    ) {
+        if let Some(cfg) = config {
+            self.inner.set_config(cfg.inner.clone());
+        }
+        if let Some(mdb) = model_db {
+            self.inner.set_model_db(Some(mdb.inner.clone()));
+        }
+        self.inner.clear_cache();
+    }
+
+    /// Clears world storage and meshes.
+    pub fn clear(&mut self) {
+        self.inner.clear();
+    }
+}

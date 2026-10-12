@@ -3,117 +3,15 @@ use std::collections::HashMap;
 use glam::{Vec2, Vec3};
 use mtk_core::direction::Direction;
 
+use super::emissive::{get_block_emissive_level, is_block_emissive};
+use super::planar::should_skip_zero_thickness_face;
+use super::rules::{is_known_non_cube, is_opaque_block};
 use crate::baked::{BakedElement, BakedFace, BakedModel, BakedVariantGroup};
 use crate::blockstate::{BlockState, BlockStateDefinition, BlockStateResolver, VariantMatch};
 use crate::builtin::BuiltinModelRegistry;
 use crate::error::ModelError;
 use crate::math::{bake_face_exact, rotate_direction};
 use crate::model_json::{BlockModelJson, ResolvedBlockModel};
-use crate::obj::{ModObjLoader, WavefrontObjParser};
-
-use super::emissive::{get_block_emissive_level, is_block_emissive};
-
-const KNOWN_NON_CUBES: &[&str] = &[
-    "glass_pane",
-    "pane",
-    "fence",
-    "door",
-    "trapdoor",
-    "bars",
-    "chain",
-    "lantern",
-    "stairs",
-    "slab",
-    "chest",
-    "banner",
-    "bed",
-    "carpet",
-    "pot",
-    "sign",
-    "hanging_sign",
-    "head",
-    "skull",
-    "rod",
-    "hook",
-    "lever",
-    "rail",
-    "torch",
-    "candle",
-    "flower",
-    "plant",
-    "sapling",
-    "vine",
-    "bush",
-    "wire",
-    "repeater",
-    "comparator",
-    "cauldron",
-    "hopper",
-    "bell",
-    "anvil",
-    "stand",
-    "frame",
-    "portal",
-    "conduit",
-    "grindstone",
-    "stonecutter",
-    "scaffolding",
-    "dripstone",
-    "amethyst",
-    "sensor",
-    "shrieker",
-];
-
-const NON_OPAQUE_SUBSTRINGS: &[&str] = &[
-    "glass",
-    "leaves",
-    "ice",
-    "water",
-    "air",
-    "pane",
-    "fence",
-    "door",
-    "trapdoor",
-    "bars",
-    "chain",
-    "lantern",
-    "stairs",
-    "slab",
-    "chest",
-    "banner",
-    "bed",
-    "carpet",
-    "pot",
-    "sign",
-    "hanging_sign",
-    "head",
-    "skull",
-    "rod",
-    "hook",
-    "lever",
-    "rail",
-    "torch",
-    "candle",
-    "flower",
-    "plant",
-    "sapling",
-    "vine",
-    "bush",
-    "wire",
-    "repeater",
-    "comparator",
-    "cauldron",
-    "hopper",
-    "bell",
-    "anvil",
-    "stand",
-    "frame",
-    "portal",
-    "conduit",
-    "grindstone",
-    "cutter",
-    "piston",
-];
 
 /// Universal, headless Minecraft Model Baker.
 ///
@@ -311,10 +209,6 @@ impl ModelBaker {
                 // define duplicate back-to-back faces with opposite normals purely to counteract OpenGL backface culling.
                 // In modern DCC pipelines (Blender), double-sided rendering is handled via shaders, and overlapping
                 // coplanar geometry causes Z-fighting and gets mistakenly culled as occluded interior contact faces.
-                let is_zero_x = (from_pos[0] - to_pos[0]).abs() < 1e-4;
-                let is_zero_y = (from_pos[1] - to_pos[1]).abs() < 1e-4;
-                let is_zero_z = (from_pos[2] - to_pos[2]).abs() < 1e-4;
-
                 let is_full_cuboid = from_pos == [0.0, 0.0, 0.0]
                     && to_pos == [16.0, 16.0, 16.0]
                     && elem_rot.is_none();
@@ -332,74 +226,8 @@ impl ModelBaker {
                         None => continue,
                     };
 
-                    // For zero-thickness planes, collapse back-to-back faces with identical textures/tints
-                    // into a single canonical face facing outwards (or canonical DCC orientation for center planes).
-                    if is_zero_z {
-                        // Skip degenerate edge faces parallel to normal
-                        if orig_dir != Direction::North && orig_dir != Direction::South {
-                            continue;
-                        }
-                        if let (Some(f_north), Some(f_south)) =
-                            (elem.faces.get("north"), elem.faces.get("south"))
-                        {
-                            if f_north.texture == f_south.texture
-                                && f_north.tintindex == f_south.tintindex
-                            {
-                                let keep_dir = if from_pos[2] > 8.0 + 1e-4 {
-                                    Direction::North
-                                } else if from_pos[2] < 8.0 - 1e-4 {
-                                    Direction::South
-                                } else {
-                                    Direction::North
-                                };
-                                if orig_dir != keep_dir {
-                                    continue;
-                                }
-                            }
-                        }
-                    } else if is_zero_x {
-                        // Skip degenerate edge faces parallel to normal
-                        if orig_dir != Direction::West && orig_dir != Direction::East {
-                            continue;
-                        }
-                        if let (Some(f_west), Some(f_east)) =
-                            (elem.faces.get("west"), elem.faces.get("east"))
-                        {
-                            if f_west.texture == f_east.texture
-                                && f_west.tintindex == f_east.tintindex
-                            {
-                                let keep_dir = if from_pos[0] > 8.0 + 1e-4 {
-                                    Direction::West
-                                } else if from_pos[0] < 8.0 - 1e-4 {
-                                    Direction::East
-                                } else {
-                                    Direction::West
-                                };
-                                if orig_dir != keep_dir {
-                                    continue;
-                                }
-                            }
-                        }
-                    } else if is_zero_y {
-                        // Skip degenerate edge faces parallel to normal
-                        if orig_dir != Direction::Down && orig_dir != Direction::Up {
-                            continue;
-                        }
-                        if let (Some(f_down), Some(f_up)) =
-                            (elem.faces.get("down"), elem.faces.get("up"))
-                        {
-                            if f_down.texture == f_up.texture && f_down.tintindex == f_up.tintindex
-                            {
-                                let keep_dir = if from_pos[1] >= 15.0 - 1e-4 {
-                                    Direction::Down
-                                } else {
-                                    Direction::Up
-                                };
-                                if orig_dir != keep_dir {
-                                    continue;
-                                }
-                            }
-                        }
+                    if should_skip_zero_thickness_face(from_pos, to_pos, orig_dir, &elem.faces) {
+                        continue;
                     }
 
                     let cullface_dir = face_data
@@ -533,34 +361,14 @@ impl ModelBaker {
         let is_double_slab = short_name.ends_with("_slab")
             && blockstate.properties.get("type").map(|s| s.as_str()) == Some("double");
 
-        // Bedrock is always a full opaque cube; beds are named "bed" or end with "_bed" (e.g. "red_bed").
-        let is_bed = short_name == "bed" || short_name.ends_with("_bed");
-        let is_known_non_cube = !is_double_slab
-            && short_name != "bedrock"
-            && (is_bed
-                || KNOWN_NON_CUBES.iter().any(|&w| {
-                    if w == "bed" {
-                        false
-                    } else {
-                        short_name.contains(w)
-                    }
-                }));
-
+        let is_known_non_cube = is_known_non_cube(short_name, is_double_slab);
         let is_cube = !is_known_non_cube
             && !baked_elements.is_empty()
             && baked_elements
                 .iter()
                 .all(|el| el.from_pos == [0.0, 0.0, 0.0] && el.to_pos == [16.0, 16.0, 16.0]);
 
-        let is_opaque = short_name == "bedrock"
-            || (!is_bed
-                && !NON_OPAQUE_SUBSTRINGS.iter().any(|&w| {
-                    if w == "bed" {
-                        false
-                    } else {
-                        short_name.contains(w)
-                    }
-                }));
+        let is_opaque = is_opaque_block(short_name);
 
         let emissive = is_block_emissive(blockstate);
         let emissive_level = get_block_emissive_level(blockstate);
@@ -617,98 +425,17 @@ impl ModelBaker {
         offset: Vec3,
         object_filter: Option<&[&str]>,
     ) -> Result<BakedModel, ModelError> {
-        let raw_faces = WavefrontObjParser::parse_str(obj_text, object_filter);
-        let baked_obj_faces = ModObjLoader::process_raw_faces(
-            &raw_faces,
+        super::obj_baker::bake_obj_model_impl(
+            block_state,
+            obj_text,
             texture_mappings,
             fallback_texture,
             rot_x,
             rot_y,
             rot_z,
             offset,
-        );
-
-        let mut six_faces = [
-            BakedFace::default(),
-            BakedFace::default(),
-            BakedFace::default(),
-            BakedFace::default(),
-            BakedFace::default(),
-            BakedFace::default(),
-        ];
-
-        for dir in Direction::ALL {
-            let idx = dir.to_index();
-            if let Some(matching) = baked_obj_faces.iter().find(|f| f.direction == dir) {
-                let mut v4 = [Vec3::ZERO; 4];
-                let mut u4 = [Vec2::ZERO; 4];
-                let count = matching.vertices.len().min(4);
-                v4[..count].copy_from_slice(&matching.vertices[..count]);
-                u4[..count].copy_from_slice(&matching.uvs[..count]);
-                six_faces[idx] = BakedFace {
-                    direction: dir,
-                    texture: matching.texture.clone(),
-                    uv_rot: 0.0,
-                    uv_bounds: [0.0, 0.0, 1.0, 1.0],
-                    tint_index: matching.tint_index,
-                    cullface: None,
-                    vertices: v4,
-                    uvs: u4,
-                    normal: matching.normal,
-                    ..Default::default()
-                };
-            } else if let Some(first) = baked_obj_faces.first() {
-                let mut v4 = [Vec3::ZERO; 4];
-                let mut u4 = [Vec2::ZERO; 4];
-                let count = first.vertices.len().min(4);
-                v4[..count].copy_from_slice(&first.vertices[..count]);
-                u4[..count].copy_from_slice(&first.uvs[..count]);
-                six_faces[idx] = BakedFace {
-                    direction: dir,
-                    texture: first.texture.clone(),
-                    uv_rot: 0.0,
-                    uv_bounds: [0.0, 0.0, 1.0, 1.0],
-                    tint_index: first.tint_index,
-                    cullface: None,
-                    vertices: v4,
-                    uvs: u4,
-                    normal: dir.normal(),
-                    ..Default::default()
-                };
-            } else {
-                six_faces[idx] = BakedFace {
-                    direction: dir,
-                    texture: fallback_texture.to_string(),
-                    normal: dir.normal(),
-                    ..Default::default()
-                };
-            }
-        }
-
-        let blockstate = BlockState::parse(block_state).unwrap_or_else(|_| BlockState {
-            namespace: "minecraft".to_string(),
-            name: "custom_obj".to_string(),
-            properties: std::collections::BTreeMap::new(),
-        });
-        let emissive = is_block_emissive(&blockstate);
-        let emissive_level = get_block_emissive_level(&blockstate);
-        let cull_meta = mtk_cull::compute_block_cull_meta(block_state, None, Some(false));
-
-        let mut baked_model = BakedModel {
-            block_state: block_state.to_string(),
-            elements: Vec::new(),
-            obj_faces: baked_obj_faces,
-            faces: six_faces,
-            is_cube: false,
-            is_opaque: false,
-            is_emissive: emissive,
-            emissive_level,
-            cull_meta: Some(cull_meta),
-            culled_faces: Default::default(),
-            unculled_faces: Default::default(),
-        };
-        baked_model.rebuild_face_buckets();
-        Ok(baked_model)
+            object_filter,
+        )
     }
 }
 

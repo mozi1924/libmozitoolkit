@@ -1,0 +1,17 @@
+libmozitoolkit
+Copyright (c) 2024-2026 MoziToolKit Contributors.
+
+This project is licensed under GNU General Public License v3.0 or later (GPL-3.0-or-later).
+
+========================================================================
+Third-Party Software Notices and Licenses
+========================================================================
+
+This project includes code derived or adapted from:
+
+1. MiEx (Minecraft World Exporter / USD & Model Evaluator)
+   Copyright (c) 2023, Bram Stout
+   License: BSD 3-Clause License
+   Source: https://github.com/BramStout/MiEx
+   License text: assets/builtins/LICENSE-MIEX
+   Used in: crates/mtk-model (builtin model evaluation, OBJ parser, and mathematical helpers)

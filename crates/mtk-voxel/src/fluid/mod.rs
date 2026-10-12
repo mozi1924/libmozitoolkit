@@ -1,3 +1,4 @@
+pub mod height;
 pub mod mesher;
 pub mod uv;
 

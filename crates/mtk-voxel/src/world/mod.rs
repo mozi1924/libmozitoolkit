@@ -8,7 +8,7 @@
 //!
 //! Fully host-agnostic and decoupled from WebSocket network synchronization.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use glam::IVec3;
@@ -20,6 +20,9 @@ use mtk_model::baked::BakedModelDatabase;
 use crate::mesher::{DeltaMesher, SectionMesher};
 use crate::source::VoxelSource;
 use crate::types::{MesherConfig, VoxelError};
+
+pub mod debug;
+pub mod sync;
 
 // Re-export storage world items for backward compatibility
 pub use crate::storage::world::*;
@@ -100,83 +103,6 @@ impl VoxelWorld {
             world_mesh: None,
             used_chunk_ids: Vec::new(),
         }
-    }
-
-    /// Loads the canonical embedded Minecraft debug world into a new `VoxelWorld`.
-    pub fn create_debug_world(
-        config: Option<MesherConfig>,
-        culler: Option<FaceCuller>,
-        model_db: Option<Arc<BakedModelDatabase>>,
-        unified_mesh: bool,
-    ) -> Result<Self, VoxelError> {
-        Self::create_debug_world_with_threads(config, culler, model_db, unified_mesh, None)
-    }
-
-    /// Loads the canonical embedded Minecraft debug world into a new `VoxelWorld` with explicit thread configuration.
-    pub fn create_debug_world_with_threads(
-        config: Option<MesherConfig>,
-        culler: Option<FaceCuller>,
-        model_db: Option<Arc<BakedModelDatabase>>,
-        unified_mesh: bool,
-        num_threads: Option<usize>,
-    ) -> Result<Self, VoxelError> {
-        let storage = if let Some(ref db) = model_db {
-            if !db.is_empty() {
-                VoxelStorage::create_debug_world_from_model_db(db)?
-            } else {
-                VoxelStorage::create_debug_world()?
-            }
-        } else {
-            VoxelStorage::create_debug_world()?
-        };
-        Ok(Self::from_storage_with_threads(
-            storage,
-            config,
-            culler,
-            model_db,
-            unified_mesh,
-            num_threads,
-        ))
-    }
-
-    /// Creates a debug `VoxelWorld` from an explicit list of blockstate strings.
-    pub fn create_debug_world_from_states<S: AsRef<str>>(
-        states: &[S],
-        config: Option<MesherConfig>,
-        culler: Option<FaceCuller>,
-        model_db: Option<Arc<BakedModelDatabase>>,
-        unified_mesh: bool,
-        num_threads: Option<usize>,
-    ) -> Result<Self, VoxelError> {
-        let storage = VoxelStorage::create_debug_world_from_states(states)?;
-        Ok(Self::from_storage_with_threads(
-            storage,
-            config,
-            culler,
-            model_db,
-            unified_mesh,
-            num_threads,
-        ))
-    }
-
-    /// Creates a debug `VoxelWorld` by enumerating blockstates across a `ResourcePackStack`.
-    pub fn create_debug_world_from_pack_stack(
-        stack: &mtk_resource::ResourcePackStack,
-        config: Option<MesherConfig>,
-        culler: Option<FaceCuller>,
-        model_db: Option<Arc<BakedModelDatabase>>,
-        unified_mesh: bool,
-        num_threads: Option<usize>,
-    ) -> Result<Self, VoxelError> {
-        let storage = VoxelStorage::create_debug_world_from_pack_stack(stack)?;
-        Ok(Self::from_storage_with_threads(
-            storage,
-            config,
-            culler,
-            model_db,
-            unified_mesh,
-            num_threads,
-        ))
     }
 
     /// Sets the worker thread count for parallel meshing.
@@ -375,6 +301,23 @@ impl VoxelWorld {
         }
     }
 
+    /// Resolves the model source (variant group or single model) for a blockstate.
+    #[inline]
+    pub fn model_source_for_state<'a>(
+        db: Option<&'a BakedModelDatabase>,
+        state: &str,
+    ) -> crate::mesher::ModelSource<'a> {
+        if let Some(db) = db {
+            if let Some(group) = db.get_variant_group(state) {
+                return crate::mesher::ModelSource::Variant(group);
+            }
+            if let Some(model) = db.get(state) {
+                return crate::mesher::ModelSource::Single(model);
+            }
+        }
+        crate::mesher::ModelSource::None
+    }
+
     /// Re-meshes all non-empty sections in parallel and updates the section cache.
     pub fn rebuild_all(&mut self) -> Result<&MeshData, VoxelError> {
         self.rebuild_all_with_progress(None)
@@ -422,17 +365,7 @@ impl VoxelWorld {
             .collect();
 
         let db_opt = self.model_db.as_deref();
-        let model_lookup = |state: &str| -> crate::mesher::ModelSource {
-            if let Some(db) = db_opt {
-                if let Some(group) = db.get_variant_group(state) {
-                    return crate::mesher::ModelSource::Variant(group);
-                }
-                if let Some(model) = db.get(state) {
-                    return crate::mesher::ModelSource::Single(model);
-                }
-            }
-            crate::mesher::ModelSource::None
-        };
+        let model_lookup = |state: &str| Self::model_source_for_state(db_opt, state);
 
         let results = SectionMesher::mesh_sections_parallel_with_source_and_progress(
             &padded_sections,
@@ -476,17 +409,7 @@ impl VoxelWorld {
         self.sync_selection_bounds();
 
         let db_opt = self.model_db.as_deref();
-        let model_lookup = |state: &str| -> crate::mesher::ModelSource {
-            if let Some(db) = db_opt {
-                if let Some(group) = db.get_variant_group(state) {
-                    return crate::mesher::ModelSource::Variant(group);
-                }
-                if let Some(model) = db.get(state) {
-                    return crate::mesher::ModelSource::Single(model);
-                }
-            }
-            crate::mesher::ModelSource::None
-        };
+        let model_lookup = |state: &str| Self::model_source_for_state(db_opt, state);
 
         let rebuilt = DeltaMesher::rebuild_dirty_sections_with_source(
             &mut self.storage,
@@ -514,17 +437,7 @@ impl VoxelWorld {
 
         let padded = self.storage.get_section_padded_array(sec_coord);
         let db_opt = self.model_db.as_deref();
-        let model_lookup = |state: &str| -> crate::mesher::ModelSource {
-            if let Some(db) = db_opt {
-                if let Some(group) = db.get_variant_group(state) {
-                    return crate::mesher::ModelSource::Variant(group);
-                }
-                if let Some(model) = db.get(state) {
-                    return crate::mesher::ModelSource::Single(model);
-                }
-            }
-            crate::mesher::ModelSource::None
-        };
+        let model_lookup = |state: &str| Self::model_source_for_state(db_opt, state);
 
         let mesh = SectionMesher::mesh_section_with_source(
             &padded,
@@ -581,88 +494,6 @@ impl VoxelWorld {
         self.world_mesh = None;
         self.used_chunk_ids.clear();
         self.sync_selection_bounds();
-    }
-
-    /// Syncs world storage with an updated storage instance and marks only sections
-    /// with modified CRC checksums (and their immediate boundary neighbors) as dirty.
-    /// Returns the number of dirty sections requiring meshing.
-    pub fn sync_from_storage(&mut self, new_storage: &VoxelStorage) -> usize {
-        let mut dirty = HashSet::new();
-
-        // 1. Check sections removed in new_storage
-        for &coord in self.storage.sections.keys() {
-            if !new_storage.sections.contains_key(&coord) {
-                dirty.insert(coord);
-                for offset in [
-                    IVec3::new(1, 0, 0),
-                    IVec3::new(-1, 0, 0),
-                    IVec3::new(0, 1, 0),
-                    IVec3::new(0, -1, 0),
-                    IVec3::new(0, 0, 1),
-                    IVec3::new(0, 0, -1),
-                ] {
-                    dirty.insert(coord + offset);
-                }
-            }
-        }
-
-        // 2. Check sections added or modified in new_storage
-        for (&coord, new_sec) in &new_storage.sections {
-            if let Some(old_sec) = self.storage.sections.get_mut(&coord) {
-                let old_crc = old_sec.compute_crc();
-                let mut new_sec_clone = new_sec.clone();
-                let new_crc = new_sec_clone.compute_crc();
-                if old_crc != new_crc {
-                    dirty.insert(coord);
-                    for offset in [
-                        IVec3::new(1, 0, 0),
-                        IVec3::new(-1, 0, 0),
-                        IVec3::new(0, 1, 0),
-                        IVec3::new(0, -1, 0),
-                        IVec3::new(0, 0, 1),
-                        IVec3::new(0, 0, -1),
-                    ] {
-                        dirty.insert(coord + offset);
-                    }
-                    *old_sec = new_sec_clone;
-                }
-            } else {
-                dirty.insert(coord);
-                for offset in [
-                    IVec3::new(1, 0, 0),
-                    IVec3::new(-1, 0, 0),
-                    IVec3::new(0, 1, 0),
-                    IVec3::new(0, -1, 0),
-                    IVec3::new(0, 0, 1),
-                    IVec3::new(0, 0, -1),
-                ] {
-                    dirty.insert(coord + offset);
-                }
-                self.storage.sections.insert(coord, new_sec.clone());
-            }
-        }
-
-        // Remove sections from old storage that are missing in new_storage
-        self.storage
-            .sections
-            .retain(|coord, _| new_storage.sections.contains_key(coord));
-
-        // Sync bounds and biomes
-        self.storage.min_x = new_storage.min_x;
-        self.storage.min_y = new_storage.min_y;
-        self.storage.min_z = new_storage.min_z;
-        self.storage.size_x = new_storage.size_x;
-        self.storage.size_y = new_storage.size_y;
-        self.storage.size_z = new_storage.size_z;
-        self.storage.has_explicit_bounds = new_storage.has_explicit_bounds;
-        self.storage.primary_biome = new_storage.primary_biome.clone();
-        self.storage.biome_column_map = new_storage.biome_column_map.clone();
-        self.storage.biome_map = new_storage.biome_map.clone();
-
-        let count = dirty.len();
-        self.storage.dirty_sections = dirty;
-        self.sync_selection_bounds();
-        count
     }
 
     /// Clears the cached section meshes and unified world mesh, and marks all storage sections dirty.

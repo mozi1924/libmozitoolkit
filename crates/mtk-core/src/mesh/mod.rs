@@ -92,6 +92,40 @@ impl MeshData {
         }
     }
 
+    /// Returns true if the mesh topology represents quad polygons
+    /// (either explicitly through `quad_indices` or canonically pairing 2 triangles per face material).
+    #[inline]
+    pub fn is_quad_topology(&self) -> bool {
+        self.quad_indices.is_some()
+            || (!self.indices.is_empty()
+                && self.indices.len() % 6 == 0
+                && self.face_materials.len() == self.indices.len() / 6)
+    }
+
+    /// Number of polygons in the mesh (quad count if quad topology, triangle count otherwise).
+    #[inline]
+    pub fn poly_count(&self) -> usize {
+        if self.is_quad_topology() {
+            self.quad_count()
+        } else {
+            self.triangle_count()
+        }
+    }
+
+    /// Total number of corner loops in the mesh (4 per quad, 3 per triangle).
+    #[inline]
+    pub fn loop_count(&self) -> usize {
+        if self.is_quad_topology() {
+            if let Some(ref quads) = self.quad_indices {
+                quads.len()
+            } else {
+                (self.indices.len() / 6) * 4
+            }
+        } else {
+            self.indices.len()
+        }
+    }
+
     /// Quad polygon vertex indices `[v0, v1, v2, v3, ...]` (4 u32 per quad).
     ///
     /// If `quad_indices` is present, returns a clone.

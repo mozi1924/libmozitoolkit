@@ -1,6 +1,7 @@
 //! Minecraft Biome Palettes, Model Tintindex Resolution, and Mesh Attribute Generation.
 
 pub mod batch;
+pub mod canonical_data;
 pub mod hardcoded;
 pub mod palettes;
 pub mod resolver;

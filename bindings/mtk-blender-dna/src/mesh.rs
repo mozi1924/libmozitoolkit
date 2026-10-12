@@ -168,20 +168,8 @@ pub fn copy_loop_uvs_to_ptr(
     dst_ptr: usize,
     max_bytes: Option<usize>,
 ) -> DnaResult<usize> {
-    let is_quad = mesh.quad_indices.is_some()
-        || (!mesh.indices.is_empty()
-            && mesh.indices.len() % 6 == 0
-            && mesh.face_materials.len() == mesh.indices.len() / 6);
-
-    let total_loops = if is_quad {
-        if let Some(ref quads) = mesh.quad_indices {
-            quads.len()
-        } else {
-            (mesh.indices.len() / 6) * 4
-        }
-    } else {
-        mesh.indices.len()
-    };
+    let is_quad = mesh.is_quad_topology();
+    let total_loops = mesh.loop_count();
 
     if total_loops == 0 {
         return Ok(0);
@@ -301,15 +289,8 @@ pub fn copy_loop_starts_to_ptr(
     dst_ptr: usize,
     max_bytes: Option<usize>,
 ) -> DnaResult<usize> {
-    let is_quad = mesh.quad_indices.is_some()
-        || (!mesh.indices.is_empty()
-            && mesh.indices.len() % 6 == 0
-            && mesh.face_materials.len() == mesh.indices.len() / 6);
-    let poly_count = if is_quad {
-        mesh.face_materials.len().max(mesh.indices.len() / 6)
-    } else {
-        mesh.indices.len() / 3
-    };
+    let is_quad = mesh.is_quad_topology();
+    let poly_count = mesh.poly_count();
     if poly_count == 0 {
         return Ok(0);
     }
@@ -337,15 +318,8 @@ pub fn copy_loop_totals_to_ptr(
     dst_ptr: usize,
     max_bytes: Option<usize>,
 ) -> DnaResult<usize> {
-    let is_quad = mesh.quad_indices.is_some()
-        || (!mesh.indices.is_empty()
-            && mesh.indices.len() % 6 == 0
-            && mesh.face_materials.len() == mesh.indices.len() / 6);
-    let poly_count = if is_quad {
-        mesh.face_materials.len().max(mesh.indices.len() / 6)
-    } else {
-        mesh.indices.len() / 3
-    };
+    let is_quad = mesh.is_quad_topology();
+    let poly_count = mesh.poly_count();
     if poly_count == 0 {
         return Ok(0);
     }
