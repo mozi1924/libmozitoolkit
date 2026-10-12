@@ -113,3 +113,59 @@
     - [ ] 内存现场构建场景专属微型图集（On-the-fly Atlas）或独立材质槽。
     - [ ] 执行 `SectionMesher` 动态重构世界几何并零拷贝灌入宿主网格。
 
+---
+
+## 阶段七：原版静态悬挂实体与地图数据解码 (`mtk-save::entity`, `mtk-save::map`)
+- [ ] **`entities/r.X.Z.mca` 独立实体区域文件解析器**
+  - [ ] 扩展 MCA 读取器，支持 Minecraft 1.17+ 独立实体区域文件以及旧版 Chunk 内嵌 `Entities` 标签；
+  - [ ] 基于选区 AABB 过滤空间相交的实体化合物。
+- [ ] **艺术画 (`PaintingEntity`) 解析与三维画框生成**
+  - [ ] 提取 `Pos`, `Rotation`, `Facing`, `variant`；
+  - [ ] 内置原版 40+ 种画作尺寸规格查找表（1x1, 2x1, 2x2, 4x4, 4x2, 4x3 等）；
+  - [ ] 生成规整带外框与背板的三维画框网格，并设置对应贴图坐标。
+- [ ] **物品展示框 (`ItemFrameEntity`) 解析**
+  - [ ] 提取 `TileX/Y/Z`（或 `Pos`）、`Facing`、`ItemRotation`、`Invisible`、`Item` 复合标签；
+  - [ ] 支持发光物品展示框 (`glow_item_frame`)；
+  - [ ] 导出展示框底座网格及内容物类型指示（方块/平面物品/地图）。
+- [ ] **原版填充地图数据解码器 (`mtk-save::map`)**
+  - [ ] 解析 `data/map_<id>.dat` Gzip NBT 文件；
+  - [ ] 内置原版 60+ 种 `MapColor` 基础色彩表与 4 级明暗倍率算法；
+  - [ ] 快速将 128×128 调色板字节流解码为连续 RGBA8 像素内存，供上层直接生成贴图。
+
+---
+
+## 阶段八：真实 3D Quart Biome 染色采样与 5x5 平滑过渡核 (`mtk-voxel::tint`, `mtk-voxel::mesher`)
+- [ ] **打通 `SectionMesher` 真实群系采样通道**
+  - [ ] 废弃 `mesher/tint.rs` 中写死平原（`plains`）的 fallback 逻辑；
+  - [ ] 从 `VoxelSource` / `ParsedChunk` 的 `SectionBiomes` 中按方块局部与世界坐标查询真实 Biome；
+  - [ ] 输出精准的草方块、树叶、水体、沼泽水（深灰绿）、恶地/沙漠（枯黄）染色色彩与 Colormap UV。
+- [ ] **5×5 (R=2) 原版生物群系平滑混合（Biome Blend）**
+  - [ ] 针对草方块和水面实现水平 5×5 邻域加权平均卷积核；
+  - [ ] 消除群系硬切接缝，保持与原版渲染完全一致的自然渐变。
+
+---
+
+## 阶段九：CTM 预编译、图集装箱与端到端集成测试 (`mtk-resource`, `libmtk::prebake`, `mtk-voxel`)
+- [ ] **资源包预编译接入 CTM 规则 (`libmtk::prebake`)**
+  - [ ] 扫描活跃资源包中的 `assets/*/optifine/ctm/` 及 Continuity `.properties` 规则；
+  - [ ] 将 CTM 的 0~46 等衍生子切片纳入 `mtk-texture` 图集装箱流程；
+  - [ ] 将编译后的 `CtmSolver` 序列化并打包存入 `.mtkcache` 单文件容器。
+- [ ] **`SectionMesher` 与 Python 绑定贯通 CTM**
+  - [ ] `MesherConfig` 开放 `enable_ctm` 并接收 `Arc<CtmSolver>`；
+  - [ ] 在 `bindings/mtk-py` 暴露 CTM 求解配置与测试接口。
+- [ ] **测试夹具与端到端集成测试 (`mtk-testkit`)**
+  - [ ] 引入无缝玻璃（Connected Glass）与连续书架（Bookshelf）测试夹具；
+  - [ ] 编写跨 Section 边界的连续性与连通性回归测试用例。
+
+---
+
+## 阶段十：高级方块实体 NBT 图元生成器 (`mtk-model::ber_nbt`)
+- [ ] **告示牌与悬挂告示牌文字生成器 (Sign Text)**
+  - [ ] 解析 `front_text` / `back_text`，按原版点阵或矢量排版生成面文字图元；
+  - [ ] 支持 16 色染料与发光墨囊辉光材质标记。
+- [ ] **旗帜多层花纹合成 (Banner Patterns)**
+  - [ ] 解析 `Patterns` 列表，依照原版公式按顺序进行 16 种颜色的多层 Alpha 混合合成。
+- [ ] **双箱 (Double Chest) 空间相交检测与大箱子几何生成**
+  - [ ] 依据 BlockState 的 `type=left / type=right` 自动缝合为宽箱子网格，并为箱盖预留铰链轴心。
+
+
