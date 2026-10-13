@@ -182,7 +182,9 @@ fn resolve_model_face(
     emission: f32,
     config: &MesherConfig,
 ) -> PreResolvedModelFace {
-    let (final_tex_key, override_uvs, mat_slot, chunk_id, tex_id) =
+    let (final_tex_key, override_uvs, mat_slot, chunk_id, tex_id) = if let Some(atlas) =
+        &config.atlas_address_map
+    {
         if let Some(ref atlas_uvs) = face.atlas_uvs {
             (
                 face.texture.clone(),
@@ -191,7 +193,7 @@ fn resolve_model_face(
                 face.atlas_chunk_id.unwrap_or(0) as i32,
                 face.atlas_texture_id.unwrap_or(0),
             )
-        } else if let Some(atlas) = &config.atlas_address_map {
+        } else {
             let base_loc = if !face.texture.is_empty() {
                 mtk_resource::ResourceLocation::parse(&face.texture).ok()
             } else {
@@ -247,9 +249,16 @@ fn resolve_model_face(
                     0u32,
                 )
             }
-        } else {
-            (face.texture.clone(), None, 0u16, 0i32, 0u32)
-        };
+        }
+    } else {
+        (
+            face.texture.clone(),
+            None,
+            face.atlas_chunk_id.unwrap_or(0),
+            face.atlas_chunk_id.unwrap_or(0) as i32,
+            face.atlas_texture_id.unwrap_or(0),
+        )
+    };
 
     let (tint_data, tint_color, colormap_uv) = compute_face_tint(
         &final_tex_key,

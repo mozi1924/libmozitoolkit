@@ -194,10 +194,13 @@ impl CtmRule {
             return false;
         }
         if !self.match_tiles.is_empty() {
-            if let Some(bt) = base_tile {
-                if !self.match_tiles.contains(bt) {
-                    return false;
+            match base_tile {
+                Some(bt) => {
+                    if !self.match_tiles.contains(bt) {
+                        return false;
+                    }
                 }
+                None => return false,
             }
         }
         true
