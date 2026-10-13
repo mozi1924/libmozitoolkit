@@ -221,10 +221,10 @@ pub fn extract_block_name(state: &str) -> &str {
 #[inline]
 pub const fn get_face_tangents(face: Direction) -> (Direction, Direction) {
     match face {
-        Direction::North => (Direction::Up, Direction::West),
-        Direction::South => (Direction::Up, Direction::East),
-        Direction::East => (Direction::Up, Direction::North),
-        Direction::West => (Direction::Up, Direction::South),
+        Direction::North => (Direction::Up, Direction::East),
+        Direction::South => (Direction::Up, Direction::West),
+        Direction::East => (Direction::Up, Direction::South),
+        Direction::West => (Direction::Up, Direction::North),
         Direction::Up => (Direction::North, Direction::West),
         Direction::Down => (Direction::South, Direction::West),
     }
