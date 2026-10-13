@@ -645,31 +645,45 @@ where
     }
 }
 
-/// Samples per-column biome tint colors and colormap UVs based on face tint configuration.
+/// Samples per-column/3D quart biome tint colors and colormap UVs based on face tint configuration.
 pub fn sample_biome_tint(
     biome_data: Option<&[SmoothedBiomeColumn]>,
-    col_idx: usize,
-    tint_data: [f32; 4],
+    lx: usize,
+    ly: usize,
+    lz: usize,
+    mut tint_data: [f32; 4],
     default_tint_color: [f32; 4],
     default_colormap_uv: [f32; 3],
-) -> ([f32; 4], [f32; 3]) {
+) -> ([f32; 4], [f32; 4], [f32; 3]) {
     if let Some(biome_cols) = biome_data {
+        let col_idx = if biome_cols.len() == 1024 {
+            let qy = (ly >> 2) & 3;
+            (qy << 8) | ((lx & 15) << 4) | (lz & 15)
+        } else {
+            (lx & 15) * 16 + (lz & 15)
+        };
         if col_idx < biome_cols.len() && tint_data[2] > 0.0 {
             let col = &biome_cols[col_idx];
             let uv = [col.colormap_uv[0], col.colormap_uv[1], 0.0];
-            let c = match tint_data[3] as u8 {
-                mtk_material::TINT_TYPE_GRASS => col.grass_color,
-                mtk_material::TINT_TYPE_FOLIAGE => col.foliage_color,
-                mtk_material::TINT_TYPE_DRY_FOLIAGE => col.dry_foliage_color,
-                mtk_material::TINT_TYPE_WATER => col.water_color,
-                mtk_material::TINT_TYPE_HARDCODED => default_tint_color,
-                _ => default_tint_color,
+            let tt = tint_data[3] as u8;
+            let (c, has_custom) = match tt {
+                mtk_material::TINT_TYPE_GRASS => (col.grass_color, col.has_custom_grass),
+                mtk_material::TINT_TYPE_FOLIAGE => (col.foliage_color, col.has_custom_foliage),
+                mtk_material::TINT_TYPE_DRY_FOLIAGE => {
+                    (col.dry_foliage_color, col.has_custom_dry_foliage)
+                }
+                mtk_material::TINT_TYPE_WATER => (col.water_color, false),
+                mtk_material::TINT_TYPE_HARDCODED => (default_tint_color, true),
+                _ => (default_tint_color, false),
             };
-            (c, uv)
+            if has_custom {
+                tint_data[3] = mtk_material::TINT_TYPE_HARDCODED as f32;
+            }
+            (tint_data, c, uv)
         } else {
-            (default_tint_color, default_colormap_uv)
+            (tint_data, default_tint_color, default_colormap_uv)
         }
     } else {
-        (default_tint_color, default_colormap_uv)
+        (tint_data, default_tint_color, default_colormap_uv)
     }
 }

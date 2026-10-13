@@ -277,3 +277,100 @@ pub fn compute_mesh_biome_attributes(
         colormap_uvs,
     }
 }
+
+/// Compute biome tinting attributes in parallel across mesh faces with individual per-face biome names.
+pub fn compute_mesh_biome_attributes_per_face(
+    face_texture_keys: &[String],
+    face_biomes: &[String],
+    resolver: &BiomeResolver,
+) -> MeshBiomeAttributesResult {
+    let face_count = face_texture_keys.len();
+    if face_count == 0 {
+        return MeshBiomeAttributesResult {
+            packed_tint_data: Vec::new(),
+            tint_colors: Vec::new(),
+            colormap_uvs: Vec::new(),
+        };
+    }
+
+    let default_biome = "plains".to_string();
+
+    let compute_face = |(key, b_name): (&String, &String)| -> ([f32; 4], [f32; 4], [f32; 3]) {
+        let pal = get_biome_palette(b_name);
+        let grass_col = pal.grass_linear();
+        let foliage_col = pal.foliage_linear();
+        let dry_foliage_col = pal.dry_foliage_linear();
+        let water_col = pal.water_linear();
+        let base_uv = pal.colormap_uv();
+
+        let tint_info = resolver.get_tint_info(key, None, None);
+        let tw = tint_info.tint_weight;
+        let base_w = tint_info.base_tint_weight;
+        let overlay_w = tint_info.overlay_tint_weight;
+        let tt = tint_info.tint_type;
+        let is_hc = tint_info.is_hardcoded;
+
+        let has_custom = match tt {
+            TINT_TYPE_GRASS => pal.has_custom_grass,
+            TINT_TYPE_FOLIAGE => pal.has_custom_foliage,
+            TINT_TYPE_DRY_FOLIAGE => pal.has_custom_dry_foliage,
+            _ => false,
+        };
+
+        let tint_type_val = if is_hc || has_custom {
+            TINT_TYPE_HARDCODED as f32
+        } else {
+            tt as f32
+        };
+
+        let packed_data = [base_w, overlay_w, tw, tint_type_val];
+
+        let final_col = match tt {
+            TINT_TYPE_GRASS => grass_col,
+            TINT_TYPE_FOLIAGE => foliage_col,
+            TINT_TYPE_DRY_FOLIAGE => dry_foliage_col,
+            TINT_TYPE_WATER => water_col,
+            TINT_TYPE_HARDCODED => tint_info.hardcoded_color.unwrap_or([1.0, 1.0, 1.0, 1.0]),
+            _ => {
+                if is_hc {
+                    tint_info.hardcoded_color.unwrap_or([1.0, 1.0, 1.0, 1.0])
+                } else {
+                    [1.0, 1.0, 1.0, 1.0]
+                }
+            }
+        };
+
+        let colormap_uv_3 = [base_uv[0], base_uv[1], 0.0f32];
+        (packed_data, final_col, colormap_uv_3)
+    };
+
+    let pairs: Vec<(&String, &String)> = face_texture_keys
+        .iter()
+        .enumerate()
+        .map(|(i, k)| (k, face_biomes.get(i).unwrap_or(&default_biome)))
+        .collect();
+
+    #[cfg(feature = "parallel")]
+    let results: Vec<([f32; 4], [f32; 4], [f32; 3])> =
+        pairs.into_par_iter().map(compute_face).collect();
+
+    #[cfg(not(feature = "parallel"))]
+    let results: Vec<([f32; 4], [f32; 4], [f32; 3])> =
+        pairs.into_iter().map(compute_face).collect();
+
+    let mut packed_tint_data = Vec::with_capacity(face_count);
+    let mut tint_colors = Vec::with_capacity(face_count);
+    let mut colormap_uvs = Vec::with_capacity(face_count);
+
+    for (p, c, u) in results {
+        packed_tint_data.push(p);
+        tint_colors.push(c);
+        colormap_uvs.push(u);
+    }
+
+    MeshBiomeAttributesResult {
+        packed_tint_data,
+        tint_colors,
+        colormap_uvs,
+    }
+}

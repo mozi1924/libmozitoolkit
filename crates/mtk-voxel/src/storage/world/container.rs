@@ -5,7 +5,7 @@ use glam::IVec3;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::storage::{SectionStorage, VoxelPointCloud};
+use crate::storage::{SectionBiomes, SectionStorage, VoxelPointCloud};
 use crate::types::MesherConfig;
 
 #[cfg(feature = "serde")]
@@ -427,15 +427,17 @@ impl VoxelStorage {
         let ly = (y & 15) as usize;
         let lz = (z & 15) as usize;
 
-        if let Some(b) = biome {
-            self.biome_map.insert(IVec3::new(x, y, z), b.to_string());
-            self.biome_column_map.insert([x, z], b.to_string());
-        }
-
         let sec = self
             .sections
             .entry(sec_coord)
             .or_insert_with(|| SectionStorage::new(sec_coord));
+
+        if let Some(b) = biome {
+            self.biome_map.insert(IVec3::new(x, y, z), b.to_string());
+            self.biome_column_map.insert([x, z], b.to_string());
+            let sec_biomes = sec.biomes.get_or_insert_with(|| SectionBiomes::uniform(b));
+            sec_biomes.set_biome(lx, ly, lz, b);
+        }
 
         let changed = sec.set_local(lx, ly, lz, state);
         if changed {
@@ -472,6 +474,17 @@ impl VoxelStorage {
 
     /// Returns the biome registry identifier for block coordinate `(x, y, z)`.
     pub fn get_biome(&self, x: i32, y: i32, z: i32) -> &str {
+        let sec_coord = IVec3::new(x >> 4, y >> 4, z >> 4);
+        if let Some(sec) = self.sections.get(&sec_coord) {
+            if let Some(ref biomes) = sec.biomes {
+                let lx = (x & 15) as usize;
+                let ly = (y & 15) as usize;
+                let lz = (z & 15) as usize;
+                if let Some(b) = biomes.get_biome(lx, ly, lz) {
+                    return b;
+                }
+            }
+        }
         if !self.biome_map.is_empty() {
             if let Some(b) = self.biome_map.get(&IVec3::new(x, y, z)) {
                 return b;
@@ -486,10 +499,21 @@ impl VoxelStorage {
             return b;
         }
         // If coordinate is outside active selection bounds, horizontally clamp to nearest valid column
-        if self.size_x > 0 && self.size_z > 0 && !self.biome_column_map.is_empty() {
+        if self.size_x > 0 && self.size_z > 0 {
             let cx = x.clamp(self.min_x, self.min_x + self.size_x - 1);
             let cz = z.clamp(self.min_z, self.min_z + self.size_z - 1);
             if cx != x || cz != z {
+                let c_sec_coord = IVec3::new(cx >> 4, y >> 4, cz >> 4);
+                if let Some(sec) = self.sections.get(&c_sec_coord) {
+                    if let Some(ref biomes) = sec.biomes {
+                        let clx = (cx & 15) as usize;
+                        let cly = (y & 15) as usize;
+                        let clz = (cz & 15) as usize;
+                        if let Some(b) = biomes.get_biome(clx, cly, clz) {
+                            return b;
+                        }
+                    }
+                }
                 if !self.biome_map.is_empty() {
                     if let Some(b) = self.biome_map.get(&IVec3::new(cx, y, cz)) {
                         return b;

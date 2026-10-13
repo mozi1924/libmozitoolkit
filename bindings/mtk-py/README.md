@@ -117,7 +117,7 @@ Python 模块名：`libmtk_py`
 - **`BiomeResolver` (`PyBiomeResolver`)**：原版 66 种生物群系调色板映射与混合器。
 - **`MaterialResolver` (`PyMaterialResolver`)**：着色器材质槽位与外部别名解算器。
 - **`GridAtlasSpec` (`PyGridAtlasSpec`)**：网格图集元数据规范。
-- **色彩数学**：`compute_biome_tint_attributes`, `blend_biome_colors`, `sample_colormap_pixel`, `srgb_to_linear`, `linear_to_srgb`
+- **色彩数学**：`compute_biome_tint_attributes`, `compute_mesh_biome_attributes_from_storage`, `blend_biome_colors`, `sample_colormap_pixel`, `srgb_to_linear`, `linear_to_srgb`
 
 ### 2.9 模型烘焙 (`model`)
 - **`ModelBaker` (`PyModelBaker`)**：无头 1.21+ BlockState 模型烘焙引擎。

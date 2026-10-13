@@ -134,14 +134,14 @@
 
 ---
 
-## 阶段八：真实 3D Quart Biome 染色采样与 5x5 平滑过渡核 (`mtk-voxel::tint`, `mtk-voxel::mesher`)
-- [ ] **打通 `SectionMesher` 真实群系采样通道**
-  - [ ] 废弃 `mesher/tint.rs` 中写死平原（`plains`）的 fallback 逻辑；
-  - [ ] 从 `VoxelSource` / `ParsedChunk` 的 `SectionBiomes` 中按方块局部与世界坐标查询真实 Biome；
-  - [ ] 输出精准的草方块、树叶、水体、沼泽水（深灰绿）、恶地/沙漠（枯黄）染色色彩与 Colormap UV。
-- [ ] **5×5 (R=2) 原版生物群系平滑混合（Biome Blend）**
-  - [ ] 针对草方块和水面实现水平 5×5 邻域加权平均卷积核；
-  - [ ] 消除群系硬切接缝，保持与原版渲染完全一致的自然渐变。
+## 阶段八：真实 3D Quart Biome 染色采样与 5x5 平滑过渡核 (`mtk-voxel::biome`, `mtk-voxel::mesher` - ✅ 已完成)
+- [x] **打通 `SectionMesher` 真实 3D 群系采样通道**
+  - [x] 废弃全局 fallback 平原（`plains`）的逻辑，将 `SectionBiomes` 4×4×4 Quart 调色板下沉至 `mtk-voxel::storage`；
+  - [x] 从 `VoxelSource` / `ParsedChunk` 的 `SectionBiomes` 中按方块局部与世界坐标查询真实 3D Biome（自适应 256 柱表 vs 1024 3D Quart 表）；
+  - [x] 输出精准的草方块、树叶、水体、沼泽水（深灰绿）、沼泽 2D Perlin 噪声双色草、黑森林（`#507A32`）、恶地/沙漠（枯黄）染色色彩、Colormap UV 与特异群系 `TINT_TYPE_HARDCODED` 标记。
+- [x] **5×5 (R=2) 原版生物群系平滑混合（Biome Blend）**
+  - [x] 针对草方块、树叶和水面实现水平 5×5 均匀盒式滤波（Uniform Box Filter, weight=1.0）邻域平均卷积核；
+  - [x] 消除群系硬切接缝，保持与原版渲染完全一致的自然渐变与选区边界防溢色。
 
 ---
 

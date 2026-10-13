@@ -116,7 +116,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         water_hex: "#3F76E4",
         temperature: 0.7,
         humidity: 0.8,
-        has_custom_grass: false,
+        has_custom_grass: true,
         has_custom_foliage: false,
         has_custom_dry_foliage: true,
     },

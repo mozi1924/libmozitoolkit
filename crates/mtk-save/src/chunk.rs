@@ -6,60 +6,7 @@ use mtk_voxel::storage::SectionStorage;
 use std::collections::HashMap;
 use std::io::Cursor;
 
-/// 3D 4x4x4 quart paletted biome storage for a 16x16x16 chunk section.
-#[derive(Debug, Clone, PartialEq)]
-pub struct SectionBiomes {
-    /// Biome resource identifiers (e.g. `["minecraft:taiga", "minecraft:lush_caves"]`).
-    pub palette: Vec<String>,
-    /// 64 palette indices mapping each 4x4x4 block quart `(qy << 4) | (qz << 2) | qx`.
-    /// When `palette.len() <= 1`, this is empty (all quarts implicitly index 0).
-    pub indices: Vec<u8>,
-}
-
-impl SectionBiomes {
-    /// Returns the biome identifier for local section block coordinate `(lx, ly, lz)`.
-    #[inline]
-    pub fn get_biome(&self, lx: usize, ly: usize, lz: usize) -> Option<&str> {
-        if self.palette.is_empty() {
-            return None;
-        }
-        if self.palette.len() == 1 || self.indices.is_empty() {
-            return Some(&self.palette[0]);
-        }
-        let qx = (lx >> 2) & 3;
-        let qy = (ly >> 2) & 3;
-        let qz = (lz >> 2) & 3;
-        let idx = (qy << 4) | (qz << 2) | qx;
-        if let Some(&pal_idx) = self.indices.get(idx) {
-            self.palette
-                .get(pal_idx as usize)
-                .map(|s| s.as_str())
-                .or_else(|| self.palette.first().map(|s| s.as_str()))
-        } else {
-            Some(&self.palette[0])
-        }
-    }
-
-    /// Returns the biome identifier for quart coordinate `(qx, qy, qz)` where each is in `0..4`.
-    #[inline]
-    pub fn get_quart_biome(&self, qx: usize, qy: usize, qz: usize) -> Option<&str> {
-        if self.palette.is_empty() {
-            return None;
-        }
-        if self.palette.len() == 1 || self.indices.is_empty() {
-            return Some(&self.palette[0]);
-        }
-        let idx = ((qy & 3) << 4) | ((qz & 3) << 2) | (qx & 3);
-        if let Some(&pal_idx) = self.indices.get(idx) {
-            self.palette
-                .get(pal_idx as usize)
-                .map(|s| s.as_str())
-                .or_else(|| self.palette.first().map(|s| s.as_str()))
-        } else {
-            Some(&self.palette[0])
-        }
-    }
-}
+pub use mtk_voxel::storage::SectionBiomes;
 
 /// Parsed chunk data containing populated sections and 3D section biomes.
 #[derive(Debug, Clone)]
@@ -235,10 +182,7 @@ impl ChunkParser {
         let palette: Vec<String> = pal_strings.iter().map(|s| s.as_str().to_string()).collect();
 
         if palette.len() <= 1 {
-            return Some(SectionBiomes {
-                palette,
-                indices: Vec::new(),
-            });
+            return Some(SectionBiomes::new(palette, Vec::new()));
         }
 
         let pal_len = palette.len() as u32;
@@ -248,12 +192,7 @@ impl ChunkParser {
 
         let data_longs = match biomes_comp.long_array("data") {
             Some(d) => d,
-            None => {
-                return Some(SectionBiomes {
-                    palette,
-                    indices: Vec::new(),
-                })
-            }
+            None => return Some(SectionBiomes::new(palette, Vec::new())),
         };
 
         let mut indices = Vec::with_capacity(64);
@@ -267,7 +206,7 @@ impl ChunkParser {
             indices.push(raw_pal_idx);
         }
 
-        Some(SectionBiomes { palette, indices })
+        Some(SectionBiomes::new(palette, indices))
     }
 
     /// Parses a single section compound, returning its geometry section and paletted biomes.
@@ -276,7 +215,10 @@ impl ChunkParser {
         section_comp: &NbtCompound,
     ) -> Result<(Option<SectionStorage>, Option<SectionBiomes>), SaveError> {
         let biomes = Self::parse_biomes(section_comp);
-        let storage = Self::parse_section(chunk_coord, section_comp)?;
+        let mut storage = Self::parse_section(chunk_coord, section_comp)?;
+        if let Some(ref mut sec) = storage {
+            sec.biomes = biomes.clone();
+        }
         Ok((storage, biomes))
     }
 
@@ -320,10 +262,12 @@ impl ChunkParser {
             if let Some(y_byte) = sec_comp.byte("Y") {
                 let sec_y = y_byte as i32;
                 if sec_y >= min_section_y && sec_y <= max_section_y {
-                    if let Some(biome_data) = Self::parse_biomes(&sec_comp) {
-                        biomes.insert(sec_y, biome_data);
+                    let biome_data = Self::parse_biomes(&sec_comp);
+                    if let Some(ref b) = biome_data {
+                        biomes.insert(sec_y, b.clone());
                     }
-                    if let Some(section) = Self::parse_section(chunk_coord, &sec_comp)? {
+                    if let Some(mut section) = Self::parse_section(chunk_coord, &sec_comp)? {
+                        section.biomes = biome_data;
                         sections.push(section);
                     }
                 }
@@ -352,10 +296,7 @@ mod tests {
 
     #[test]
     fn test_single_biome_section() {
-        let biomes = SectionBiomes {
-            palette: vec!["minecraft:desert".to_string()],
-            indices: Vec::new(),
-        };
+        let biomes = SectionBiomes::new(vec!["minecraft:desert".to_string()], Vec::new());
         assert_eq!(biomes.get_biome(0, 0, 0), Some("minecraft:desert"));
         assert_eq!(biomes.get_biome(15, 15, 15), Some("minecraft:desert"));
         assert_eq!(biomes.get_quart_biome(2, 3, 1), Some("minecraft:desert"));

@@ -79,7 +79,8 @@ bindings/
 - `classify_tint_category(clean_stem, block_name=None, tint_index=None) -> str`: 权威染色语义分类器。
 - `blend_biome_colors(biome_weights, tint_type="grass") -> [f32; 4]`: 多群系平滑线性色彩过渡混合。
 - `sample_colormap_pixel(image_bytes, width, height, temp, hum, channels=4) -> [f32; 3]`: 原版 256x256 三角形 Colormap 像素采样。
-- `compute_biome_tint_attributes(...)`: Rayon 多线程批量计算网格面的 Tint 颜色与 Colormap UV 属性。
+- `compute_biome_tint_attributes(...)`: Rayon 多线程批量计算网格面的 Tint 颜色与 Colormap UV 属性（支持全局预设、多群系加权及 `face_biomes` 逐面生物群系数组）。
+- `compute_mesh_biome_attributes_from_storage(face_texture_keys, block_xs, block_ys, block_zs, storage, resolver=None, smooth=True)`: 按每个面的真实 3D 世界坐标从 `VoxelStorage` 查询 3D Quart Biome 并执行 5×5 (R=2) 平滑混合计算面染色属性。
 - `get_biome_meta(name)` / `get_all_biomes()`: 查询 66 原版生物群系规范参数（温度、湿度、草方块/树叶/水体颜色）。
 - `srgb_to_linear(color)` / `linear_to_srgb(color)` / `get_colormap_uv(temp, humidity)`: 线性色彩空间数学。
 - `MaterialResolver`: 材质别名解算与多通道 UV 重映射 (`remap_mesh_multi_uvs_parallel`)。

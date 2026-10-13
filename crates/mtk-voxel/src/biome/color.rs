@@ -1,33 +1,33 @@
 pub use mtk_material::get_colormap_uv;
 use std::collections::HashMap;
 
-/// Precomputed inverse distance weights for 2D horizontal kernel radius `R=2`.
+/// Precomputed sample offsets and weights for 2D horizontal kernel radius `R=2` (5x5 uniform box filter matching Vanilla).
 pub const BIOME_KERNEL_R2: &[(i32, i32, f32)] = &[
-    (-2, -2, 0.2612),
-    (-2, -1, 0.3090),
-    (-2, 0, 0.3333),
-    (-2, 1, 0.3090),
-    (-2, 2, 0.2612),
-    (-1, -2, 0.3090),
-    (-1, -1, 0.4142),
-    (-1, 0, 0.5000),
-    (-1, 1, 0.4142),
-    (-1, 2, 0.3090),
-    (0, -2, 0.3333),
-    (0, -1, 0.5000),
-    (0, 0, 1.0000),
-    (0, 1, 0.5000),
-    (0, 2, 0.3333),
-    (1, -2, 0.3090),
-    (1, -1, 0.4142),
-    (1, 0, 0.5000),
-    (1, 1, 0.4142),
-    (1, 2, 0.3090),
-    (2, -2, 0.2612),
-    (2, -1, 0.3090),
-    (2, 0, 0.3333),
-    (2, 1, 0.3090),
-    (2, 2, 0.2612),
+    (-2, -2, 1.0),
+    (-2, -1, 1.0),
+    (-2, 0, 1.0),
+    (-2, 1, 1.0),
+    (-2, 2, 1.0),
+    (-1, -2, 1.0),
+    (-1, -1, 1.0),
+    (-1, 0, 1.0),
+    (-1, 1, 1.0),
+    (-1, 2, 1.0),
+    (0, -2, 1.0),
+    (0, -1, 1.0),
+    (0, 0, 1.0),
+    (0, 1, 1.0),
+    (0, 2, 1.0),
+    (1, -2, 1.0),
+    (1, -1, 1.0),
+    (1, 0, 1.0),
+    (1, 1, 1.0),
+    (1, 2, 1.0),
+    (2, -2, 1.0),
+    (2, -1, 1.0),
+    (2, 0, 1.0),
+    (2, 1, 1.0),
+    (2, 2, 1.0),
 ];
 
 /// Metadata and color properties for a single Minecraft biome (delegated to authoritative mtk-material).
@@ -71,6 +71,9 @@ pub struct SmoothedBiomeColumn {
     pub foliage_color: [f32; 4],
     pub dry_foliage_color: [f32; 4],
     pub water_color: [f32; 4],
+    pub has_custom_grass: bool,
+    pub has_custom_foliage: bool,
+    pub has_custom_dry_foliage: bool,
 }
 
 impl Default for SmoothedBiomeColumn {
@@ -82,14 +85,49 @@ impl Default for SmoothedBiomeColumn {
             foliage_color: pal.foliage_linear(),
             dry_foliage_color: pal.dry_foliage_linear(),
             water_color: pal.water_linear(),
+            has_custom_grass: pal.has_custom_grass,
+            has_custom_foliage: pal.has_custom_foliage,
+            has_custom_dry_foliage: pal.has_custom_dry_foliage,
         }
     }
 }
 
+/// Computes unsmoothed single-point biome colors and colormap UVs at `(x, z)` (preserving swamp Perlin noise).
+pub fn get_point_column_biome(biome: &str, x: i32, z: i32) -> SmoothedBiomeColumn {
+    let pal = mtk_material::get_biome_palette(biome);
+    let is_swamp = pal.id == "swamp" || pal.id == "mangrove_swamp";
+    let grass_color = if is_swamp {
+        let n = mtk_core::extrude::perlin_noise_3d(x as f32 * 0.0225, 0.0, z as f32 * 0.0225, 2345);
+        if n < -0.1 {
+            mtk_material::hex_to_linear_rgba("#4C763C")
+        } else {
+            mtk_material::hex_to_linear_rgba("#6A7039")
+        }
+    } else {
+        pal.grass_linear()
+    };
+    SmoothedBiomeColumn {
+        colormap_uv: pal.colormap_uv(),
+        grass_color,
+        foliage_color: pal.foliage_linear(),
+        dry_foliage_color: pal.dry_foliage_linear(),
+        water_color: pal.water_linear(),
+        has_custom_grass: pal.has_custom_grass,
+        has_custom_foliage: pal.has_custom_foliage,
+        has_custom_dry_foliage: pal.has_custom_dry_foliage,
+    }
+}
+
 /// Computes smooth biome blending over `(x ± 2, z ± 2)` horizontal neighborhood for all color channels.
-pub fn get_smoothed_column_biome<F>(mut get_biome: F, x: i32, y: i32, z: i32) -> SmoothedBiomeColumn
+pub fn get_smoothed_column_biome<F, S>(
+    mut get_biome: F,
+    x: i32,
+    y: i32,
+    z: i32,
+) -> SmoothedBiomeColumn
 where
-    F: FnMut(i32, i32, i32) -> String,
+    F: FnMut(i32, i32, i32) -> S,
+    S: AsRef<str>,
 {
     let mut total_w = 0.0f32;
     let mut sum_u = 0.0f32;
@@ -98,28 +136,58 @@ where
     let mut sum_foliage = [0.0f32; 4];
     let mut sum_dry = [0.0f32; 4];
     let mut sum_water = [0.0f32; 4];
+    let mut any_custom_grass = false;
+    let mut any_custom_foliage = false;
+    let mut any_custom_dry_foliage = false;
 
     let mut cache = HashMap::<String, (&'static mtk_material::BiomePalette, [f32; 2])>::new();
 
     for &(dx, dz, weight) in BIOME_KERNEL_R2 {
         let bx = x + dx;
         let bz = z + dz;
-        let b_name = get_biome(bx, y, bz);
+        let b_raw = get_biome(bx, y, bz);
+        let b_name = b_raw.as_ref();
 
-        let (pal, uv) = if let Some(&(pal, uv)) = cache.get(&b_name) {
+        let (pal, uv) = if let Some(&(pal, uv)) = cache.get(b_name) {
             (pal, uv)
         } else {
-            let pal = mtk_material::get_biome_palette(&b_name);
+            let pal = mtk_material::get_biome_palette(b_name);
             let uv = mtk_material::get_colormap_uv(pal.temperature, pal.humidity);
-            cache.insert(b_name, (pal, uv));
+            cache.insert(b_name.to_string(), (pal, uv));
             (pal, uv)
         };
+
+        if pal.has_custom_grass {
+            any_custom_grass = true;
+        }
+        if pal.has_custom_foliage {
+            any_custom_foliage = true;
+        }
+        if pal.has_custom_dry_foliage {
+            any_custom_dry_foliage = true;
+        }
 
         total_w += weight;
         sum_u += uv[0] * weight;
         sum_v += uv[1] * weight;
 
-        let gc = pal.grass_linear();
+        let is_swamp = pal.id == "swamp" || pal.id == "mangrove_swamp";
+        let gc = if is_swamp {
+            let n = mtk_core::extrude::perlin_noise_3d(
+                bx as f32 * 0.0225,
+                0.0,
+                bz as f32 * 0.0225,
+                2345,
+            );
+            if n < -0.1 {
+                mtk_material::hex_to_linear_rgba("#4C763C")
+            } else {
+                mtk_material::hex_to_linear_rgba("#6A7039")
+            }
+        } else {
+            pal.grass_linear()
+        };
+
         sum_grass[0] += gc[0] * weight;
         sum_grass[1] += gc[1] * weight;
         sum_grass[2] += gc[2] * weight;
@@ -171,14 +239,18 @@ where
             sum_water[2] * inv_w,
             sum_water[3] * inv_w,
         ],
+        has_custom_grass: any_custom_grass,
+        has_custom_foliage: any_custom_foliage,
+        has_custom_dry_foliage: any_custom_dry_foliage,
     }
 }
 
 /// Computes smooth biome blending over `(x ± 2, z ± 2)` horizontal neighborhood.
 /// Returns `(smoothed_colormap_uv, smoothed_water_linear_rgba)`.
-pub fn get_smoothed_biome_data<F>(get_biome: F, x: i32, y: i32, z: i32) -> ([f32; 2], [f32; 4])
+pub fn get_smoothed_biome_data<F, S>(get_biome: F, x: i32, y: i32, z: i32) -> ([f32; 2], [f32; 4])
 where
-    F: FnMut(i32, i32, i32) -> String,
+    F: FnMut(i32, i32, i32) -> S,
+    S: AsRef<str>,
 {
     let col = get_smoothed_column_biome(get_biome, x, y, z);
     (col.colormap_uv, col.water_color)

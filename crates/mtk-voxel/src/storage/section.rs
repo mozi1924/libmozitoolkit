@@ -26,6 +26,9 @@ pub struct SectionStorage {
     pub non_air_count: u32,
     /// Cached CRC32 checksum for this section.
     pub cached_crc: Option<u32>,
+    /// Optional 3D 4x4x4 quart paletted biomes for this section.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub biomes: Option<super::biome::SectionBiomes>,
 }
 
 #[cfg(feature = "serde")]
@@ -76,6 +79,7 @@ impl SectionStorage {
             voxels: Box::new([0u16; SECTION_VOLUME]),
             non_air_count: 0,
             cached_crc: Some(EMPTY_SECTION_CRC),
+            biomes: None,
         }
     }
 
@@ -85,6 +89,7 @@ impl SectionStorage {
         self.voxels.fill(0);
         self.non_air_count = 0;
         self.cached_crc = Some(EMPTY_SECTION_CRC);
+        self.biomes = None;
     }
 
     /// Creates a section pre-populated from a 4096-element blockstate slice.

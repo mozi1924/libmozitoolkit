@@ -257,17 +257,19 @@ pub fn should_flip_quad_diagonal(ao: [u8; 4]) -> bool {
 
 ---
 
-### 4.4 5×5 (R=2) 生物群系平滑过渡与边界防渗色
+### 4.4 3D Quart Biome 存储、5×5 (R=2) 均匀盒式平滑过渡与边界防渗色
 
-内置 Minecraft 原版 5×5 ($R=2$) 反距离权重卷积核 (`BIOME_KERNEL_R2`)：
+对齐 Minecraft 1.18+ (Caves & Cliffs) 三维生物群系架构与原版客户端 `LevelRenderer` 5×5 ($R=2$) 均匀盒式滤波核 (`BIOME_KERNEL_R2`)：
 
 ```rust
 pub const BIOME_KERNEL_R2: &[(i32, i32, f32)] = &[
-    (-2, -2, 0.2612), (-2, -1, 0.3090), ... (0, 0, 1.0000), ... (2, 2, 0.2612),
+    (-2, -2, 1.0), (-2, -1, 1.0), ... (0, 0, 1.0), ... (2, 2, 1.0),
 ];
 ```
 
-- 在构建 `PaddedVoxelArray` 时，为切片的 256 列 ($16\times 16$) 预计算 `SmoothedBiomeColumn`（包含草方块、树叶、干枯树叶、水体的线性 RGBA 颜色及 Colormap 采样 UV）。
+- **3D 4×4×4 Quart 调色板存储 (`SectionBiomes`)**：每个 `SectionStorage` 原生携带 64 格（$4\times 4\times 4$ Quarts）调色板生物群系数据，实现 $O(1)$ 三维生物群系查询。
+- **自适应 256 / 1024 查表 (`PaddedVoxelArray`)**：当区块内生物群系无垂直变化时仅预计算 256 列（$16\times 16$）；当存在三维垂直群系分层（如地表 `dark_forest`、地下 `lush_caves`）时自动扩展为 1024 项（$4\times 16\times 16$）预计算 `SmoothedBiomeColumn`。
+- **沼泽 2D Perlin 噪声与特异群系路由**：内置沼泽 (`swamp` / `mangrove_swamp`) 2D Perlin 噪声（缩放 `0.0225`，阈值 `-0.1`）双色草方块斑驳采样；当邻域包含特异色彩群系（恶地、沼泽、黑森林、樱花树林、苍白之园）时自动标记 `has_custom_*` 并将面 `tint_type` 路由至 `TINT_TYPE_HARDCODED (4.0)`。
 - **选区边缘钳位防护 (Edge Clamping)**：针对选区外部未加载区域，采样坐标被严格钳位至选区有效边界，彻底杜绝边界处因外推默认值产生 Plains 平原默认色彩渗色。
 
 ---

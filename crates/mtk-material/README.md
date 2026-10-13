@@ -179,6 +179,7 @@ pub fn compute_mesh_material_props(
 | `get_redstone_wire_hex(power: u8) -> &'static str` | 获取红石引线对应信号强度（0..15）的十六进制颜色代码。 |
 | `blend_biome_colors(weights: &[(&str, f32)], category: &str) -> [f32; 4]` | 多生物群系加权线性混合色彩。 |
 | `compute_mesh_biome_attributes(texture_keys, biome, multi_biomes, resolver)` | Rayon 并行计算全网格染色面属性数组。 |
+| `compute_mesh_biome_attributes_per_face(texture_keys, face_biomes, resolver)` | Rayon 并行按逐面生物群系数组计算染色面属性与特异群系路由。 |
 
 ### 3.2 材质与 UV 重映射
 | 函数签名 | 描述 |

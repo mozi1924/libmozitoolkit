@@ -761,3 +761,46 @@ fn test_submerged_seagrass_and_kelp_seamless_meshing() {
         }
     }
 }
+
+#[test]
+fn test_3d_caves_and_cliffs_biome_tinting() {
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+
+    let mut sec = mtk_voxel::storage::SectionStorage::new(IVec3::new(0, 0, 0));
+    let mut biomes = mtk_voxel::storage::SectionBiomes::uniform("minecraft:lush_caves");
+    for qx in 0..4 {
+        for qz in 0..4 {
+            for qy in 2..4 {
+                biomes.set_quart_biome(qx, qy, qz, "minecraft:dark_forest");
+            }
+        }
+    }
+    assert!(biomes.varies_vertically());
+    sec.biomes = Some(biomes);
+
+    sec.set_local(4, 1, 4, "minecraft:grass_block");
+    sec.set_local(4, 12, 4, "minecraft:grass_block");
+    world.sections.insert(IVec3::new(0, 0, 0), sec);
+
+    let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
+    assert!(padded.biome_data.is_some());
+    let biome_cols = padded.biome_data.as_ref().unwrap();
+    assert_eq!(
+        biome_cols.len(),
+        1024,
+        "3D biome section must generate 1024 quart entries"
+    );
+
+    let bottom_idx = (4 << 4) | 4;
+    let top_idx = (3 << 8) | (4 << 4) | 4;
+    let bottom_col = &biome_cols[bottom_idx];
+    let top_col = &biome_cols[top_idx];
+
+    assert_ne!(bottom_col.grass_color, top_col.grass_color);
+
+    let culler = FaceCuller::default();
+    let config = MesherConfig::default();
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+    assert!(mesh.face_count() > 0);
+}

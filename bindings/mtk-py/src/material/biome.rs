@@ -1,6 +1,7 @@
 //! Standalone Biome, Colormap, and Material attribute functions.
 
 use super::resolver::PyBiomeResolver;
+use crate::voxel::PyVoxelStorage;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use std::collections::HashMap;
@@ -131,6 +132,7 @@ pub fn linear_to_srgb(color: [f32; 4]) -> [f32; 4] {
     has_custom_grass=false,
     has_custom_foliage=false,
     has_custom_dry_foliage=false,
+    face_biomes=None,
 ))]
 pub fn compute_biome_tint_attributes(
     py: Python<'_>,
@@ -147,12 +149,19 @@ pub fn compute_biome_tint_attributes(
     has_custom_grass: bool,
     has_custom_foliage: bool,
     has_custom_dry_foliage: bool,
+    face_biomes: Option<Vec<String>>,
 ) -> PyResult<PyObject> {
     let default_resolver = mtk_material::BiomeResolver::new();
     let res_ref = resolver.map(|r| &r.inner).unwrap_or(&default_resolver);
 
     let res = py.allow_threads(|| {
-        if biome_name.eq_ignore_ascii_case("custom")
+        if let Some(ref biomes) = face_biomes {
+            mtk_material::compute_mesh_biome_attributes_per_face(
+                &face_texture_keys,
+                biomes,
+                res_ref,
+            )
+        } else if biome_name.eq_ignore_ascii_case("custom")
             || custom_temp.is_some()
             || custom_humidity.is_some()
             || custom_grass.is_some()
@@ -189,6 +198,115 @@ pub fn compute_biome_tint_attributes(
     dict.set_item("packed_tint_data", res.packed_tint_data)?;
     dict.set_item("tint_colors", res.tint_colors)?;
     dict.set_item("colormap_uvs", res.colormap_uvs)?;
+    Ok(dict.into())
+}
+
+/// Compute 3D coordinate-aware biome tinting attributes using a VoxelStorage container.
+#[pyfunction]
+#[pyo3(signature = (
+    face_texture_keys,
+    block_xs,
+    block_ys,
+    block_zs,
+    storage,
+    resolver=None,
+    smooth=true,
+))]
+pub fn compute_mesh_biome_attributes_from_storage(
+    py: Python<'_>,
+    face_texture_keys: Vec<String>,
+    block_xs: Vec<i32>,
+    block_ys: Vec<i32>,
+    block_zs: Vec<i32>,
+    storage: &PyVoxelStorage,
+    resolver: Option<&PyBiomeResolver>,
+    smooth: bool,
+) -> PyResult<PyObject> {
+    let face_count = face_texture_keys.len();
+    let default_resolver = mtk_material::BiomeResolver::new();
+    let res_ref = resolver.map(|r| &r.inner).unwrap_or(&default_resolver);
+
+    let (packed_tint_data, tint_colors, colormap_uvs) = py.allow_threads(|| {
+        let mut packed = Vec::with_capacity(face_count);
+        let mut cols = Vec::with_capacity(face_count);
+        let mut uvs = Vec::with_capacity(face_count);
+
+        for i in 0..face_count {
+            let key = &face_texture_keys[i];
+            let bx = block_xs.get(i).copied().unwrap_or(0);
+            let by = block_ys.get(i).copied().unwrap_or(0);
+            let bz = block_zs.get(i).copied().unwrap_or(0);
+
+            let (col, uv, has_cg, has_cf, has_cdf) = if smooth {
+                let sm = mtk_voxel::biome::get_smoothed_column_biome(
+                    |x, y, z| storage.inner.get_biome(x, y, z),
+                    bx,
+                    by,
+                    bz,
+                );
+                (
+                    sm,
+                    [sm.colormap_uv[0], sm.colormap_uv[1], 0.0],
+                    sm.has_custom_grass,
+                    sm.has_custom_foliage,
+                    sm.has_custom_dry_foliage,
+                )
+            } else {
+                let b_name = storage.inner.get_biome(bx, by, bz);
+                let sm = mtk_voxel::biome::get_point_column_biome(b_name, bx, bz);
+                (
+                    sm,
+                    [sm.colormap_uv[0], sm.colormap_uv[1], 0.0],
+                    sm.has_custom_grass,
+                    sm.has_custom_foliage,
+                    sm.has_custom_dry_foliage,
+                )
+            };
+
+            let tint_info = res_ref.get_tint_info(key, None, None);
+            let tt = tint_info.tint_type;
+            let (c, has_custom) = match tt {
+                mtk_material::TINT_TYPE_GRASS => (col.grass_color, has_cg),
+                mtk_material::TINT_TYPE_FOLIAGE => (col.foliage_color, has_cf),
+                mtk_material::TINT_TYPE_DRY_FOLIAGE => (col.dry_foliage_color, has_cdf),
+                mtk_material::TINT_TYPE_WATER => (col.water_color, false),
+                mtk_material::TINT_TYPE_HARDCODED => (
+                    tint_info.hardcoded_color.unwrap_or([1.0, 1.0, 1.0, 1.0]),
+                    true,
+                ),
+                _ => (
+                    if tint_info.is_hardcoded {
+                        tint_info.hardcoded_color.unwrap_or([1.0, 1.0, 1.0, 1.0])
+                    } else {
+                        [1.0, 1.0, 1.0, 1.0]
+                    },
+                    false,
+                ),
+            };
+
+            let tint_type_val = if tint_info.is_hardcoded || has_custom {
+                mtk_material::TINT_TYPE_HARDCODED as f32
+            } else {
+                tt as f32
+            };
+
+            packed.push([
+                tint_info.base_tint_weight,
+                tint_info.overlay_tint_weight,
+                tint_info.tint_weight,
+                tint_type_val,
+            ]);
+            cols.push(c);
+            uvs.push(uv);
+        }
+
+        (packed, cols, uvs)
+    });
+
+    let dict = PyDict::new(py);
+    dict.set_item("packed_tint_data", packed_tint_data)?;
+    dict.set_item("tint_colors", tint_colors)?;
+    dict.set_item("colormap_uvs", colormap_uvs)?;
     Ok(dict.into())
 }
 
