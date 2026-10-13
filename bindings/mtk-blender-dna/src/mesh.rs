@@ -92,72 +92,26 @@ pub fn copy_quad_indices_to_ptr(
     dst_ptr: usize,
     max_bytes: Option<usize>,
 ) -> DnaResult<usize> {
-    if let Some(ref quads) = mesh.quad_indices {
-        if quads.is_empty() {
-            return Ok(0);
-        }
-        let byte_size = quads.len() * std::mem::size_of::<u32>();
-        validate_aligned_pointer_and_bounds(
-            dst_ptr,
-            byte_size,
-            std::mem::align_of::<u32>(),
-            max_bytes,
-        )?;
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                quads.as_ptr() as *const u8,
-                dst_ptr as *mut u8,
-                byte_size,
-            );
-        }
-        return Ok(byte_size);
-    }
+    let quads_owned;
+    let quads: &[u32] = if let Some(ref quads) = mesh.quad_indices {
+        quads.as_slice()
+    } else {
+        quads_owned = mesh.reconstruct_quad_indices();
+        quads_owned.as_slice()
+    };
 
-    let quad_count = mesh.indices.len() / 6;
-    if quad_count == 0 {
+    if quads.is_empty() {
         return Ok(0);
     }
-    let byte_size = quad_count * 4 * std::mem::size_of::<u32>();
+    let byte_size = std::mem::size_of_val(quads);
     validate_aligned_pointer_and_bounds(
         dst_ptr,
         byte_size,
         std::mem::align_of::<u32>(),
         max_bytes,
     )?;
-
-    let dst = dst_ptr as *mut u32;
-    for q in 0..quad_count {
-        let base = q * 6;
-        let t1 = [
-            mesh.indices[base],
-            mesh.indices[base + 1],
-            mesh.indices[base + 2],
-        ];
-        let t2 = [
-            mesh.indices[base + 3],
-            mesh.indices[base + 4],
-            mesh.indices[base + 5],
-        ];
-
-        let mut o1_idx = 0;
-        for i in 0..3 {
-            if !t2.contains(&t1[i]) {
-                o1_idx = i;
-                break;
-            }
-        }
-        let o1 = t1[o1_idx];
-        let d1 = t1[(o1_idx + 2) % 3];
-        let d2 = t1[(o1_idx + 1) % 3];
-        let o2 = t2.iter().copied().find(|v| !t1.contains(v)).unwrap_or(d2);
-
-        let out_base = q * 4;
-        unsafe {
-            *dst.add(out_base) = d1;
-            *dst.add(out_base + 1) = o1;
-            *dst.add(out_base + 2) = d2;
-            *dst.add(out_base + 3) = o2;
-        }
+    unsafe {
+        std::ptr::copy_nonoverlapping(quads.as_ptr() as *const u8, dst_ptr as *mut u8, byte_size);
     }
     Ok(byte_size)
 }
@@ -198,50 +152,20 @@ pub fn copy_loop_uvs_to_ptr(
     let dst = dst_ptr as *mut f32;
     let mut offset = 0usize;
     if is_quad {
-        if let Some(ref quads) = mesh.quad_indices {
-            for &v_idx in quads {
-                let uv = mesh.uvs.get(v_idx as usize).copied().unwrap_or([0.0, 0.0]);
-                unsafe {
-                    *dst.add(offset) = uv[0];
-                    *dst.add(offset + 1) = uv[1];
-                }
-                offset += 2;
-            }
+        let quads_owned;
+        let quads: &[u32] = if let Some(ref quads) = mesh.quad_indices {
+            quads.as_slice()
         } else {
-            let quad_count = mesh.indices.len() / 6;
-            for q in 0..quad_count {
-                let base = q * 6;
-                let t1 = [
-                    mesh.indices[base],
-                    mesh.indices[base + 1],
-                    mesh.indices[base + 2],
-                ];
-                let t2 = [
-                    mesh.indices[base + 3],
-                    mesh.indices[base + 4],
-                    mesh.indices[base + 5],
-                ];
-                let mut o1_idx = 0;
-                for i in 0..3 {
-                    if !t2.contains(&t1[i]) {
-                        o1_idx = i;
-                        break;
-                    }
-                }
-                let o1 = t1[o1_idx];
-                let d1 = t1[(o1_idx + 2) % 3];
-                let d2 = t1[(o1_idx + 1) % 3];
-                let o2 = t2.iter().copied().find(|v| !t1.contains(v)).unwrap_or(d2);
-
-                for v_idx in [d1, o1, d2, o2] {
-                    let uv = mesh.uvs.get(v_idx as usize).copied().unwrap_or([0.0, 0.0]);
-                    unsafe {
-                        *dst.add(offset) = uv[0];
-                        *dst.add(offset + 1) = uv[1];
-                    }
-                    offset += 2;
-                }
+            quads_owned = mesh.reconstruct_quad_indices();
+            quads_owned.as_slice()
+        };
+        for &v_idx in quads {
+            let uv = mesh.uvs.get(v_idx as usize).copied().unwrap_or([0.0, 0.0]);
+            unsafe {
+                *dst.add(offset) = uv[0];
+                *dst.add(offset + 1) = uv[1];
             }
+            offset += 2;
         }
     } else {
         for &v_idx in &mesh.indices {
@@ -392,5 +316,25 @@ mod tests {
         let bytes = copy_indices_to_ptr(&mesh, idx_buf.as_mut_ptr() as usize, None).unwrap();
         assert_eq!(bytes, 12);
         assert_eq!(idx_buf, [0, 1, 0]);
+    }
+
+    #[test]
+    fn test_quad_indices_and_loop_uv_copy() {
+        // Two triangles forming a canonical quad: [0, 1, 2] and [0, 2, 3] with 1 face material
+        let mesh = MeshData {
+            indices: vec![0, 1, 2, 0, 2, 3],
+            face_materials: vec![0],
+            uvs: vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+            ..Default::default()
+        };
+
+        let mut quad_buf = [0u32; 4];
+        let bytes = copy_quad_indices_to_ptr(&mesh, quad_buf.as_mut_ptr() as usize, None).unwrap();
+        assert_eq!(bytes, 16);
+        assert_eq!(quad_buf.len(), 4);
+
+        let mut uv_buf = [0.0f32; 8];
+        let uv_bytes = copy_loop_uvs_to_ptr(&mesh, uv_buf.as_mut_ptr() as usize, None).unwrap();
+        assert_eq!(uv_bytes, 32);
     }
 }
