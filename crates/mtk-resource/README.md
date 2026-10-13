@@ -186,10 +186,13 @@ pub struct CtmSolver {
 | `open_asset_raw(asset_path: &str) -> Option<Vec<u8>>` | 按优先级自顶向下读取原始资产字节。 |
 | `open_texture_raw(loc: &ResourceLocation) -> Option<Vec<u8>>` | 读取指定纹理的原始 PNG 字节。 |
 | `list_all_texture_locations() -> Vec<ResourceLocation>` | 扫描所有活跃包中的非伴随主纹理标识符。 |
+| `list_all_texture_locations_including_ctm() -> Vec<ResourceLocation>` | 扫描包含所有 CTM 展开子贴图在内的全部纹理标识符。 |
 | `load_atlas_category(cat: &AtlasCategory) -> AtlasDefinition` | 加载或自动回退至默认类别图集定义。 |
 | `resolve_pbr_companions(loc: &ResourceLocation) -> PbrCompanions` | 跨包细粒度聚合 Albedo/Normal/Specular/Overlay/MCMETA。 |
 | `collect_sprites_for_atlas(def: &AtlasDefinition) -> Result<Vec<DiscoveredSprite>, ResourceError>` | 展开图集定义并提取所有待缝合精灵数据。 |
+| `collect_sprites_including_ctm(def: &AtlasDefinition) -> Result<Vec<DiscoveredSprite>, ResourceError>` | 展开图集定义并自动注入所有关联 CTM 子贴图精灵数据。 |
 | `load_ctm_rules() -> Vec<CtmRule>` | 扫描并解析活跃包中的所有 OptiFine/Continuity CTM 规则。 |
+| `build_ctm_solver() -> CtmSolver` | 自动从活跃包解析规则构建 CTM 解算器。 |
 | `compute_stack_fingerprint() -> String` | 计算当前资源包栈拓扑与顺序的唯一哈希指纹。 |
 
 ### 3.2 CTM 解算方法
@@ -197,7 +200,7 @@ pub struct CtmSolver {
 | :--- | :--- |
 | `CtmRule::parse_properties(path, ns, content) -> Option<CtmRule>` | 解析 `.properties` 配置文件。 |
 | `CtmSolver::new(rules: Vec<CtmRule>) -> Self` | 构建带优先级倒序索引的高速 CTM 解算器。 |
-| `solver.resolve_face(state, face, pos, base_tile, biome, get_block) -> Option<ResourceLocation>` | 根据邻域方块状态解算目标面替换贴图。 |
+| `solver.resolve_face(state, face, pos, base_tile, biome, get_block) -> Option<ResourceLocation>` | 根据邻域方块状态与基础贴图解算目标面替换贴图。 |
 
 ---
 

@@ -54,8 +54,17 @@ impl AtlasBuilder {
         let mut texture_id_counter = 0u32;
 
         for (category_name, definition) in definitions {
-            // 1. Discover raw sprites
-            let discovered = stack.collect_sprites_for_atlas(definition)?;
+            // 1. Discover raw sprites (including CTM tiles for blocks)
+            let discovered = if category_name == "blocks" {
+                let ctm_rules = stack.load_ctm_rules();
+                if !ctm_rules.is_empty() {
+                    stack.collect_sprites_including_ctm(definition, &ctm_rules)?
+                } else {
+                    stack.collect_sprites_for_atlas(definition)?
+                }
+            } else {
+                stack.collect_sprites_for_atlas(definition)?
+            };
             if discovered.is_empty() && definition.sources.is_empty() {
                 continue;
             }

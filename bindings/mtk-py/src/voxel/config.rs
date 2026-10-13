@@ -18,7 +18,7 @@ pub struct PyMesherConfig {
 #[pymethods]
 impl PyMesherConfig {
     #[new]
-    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, origin_centered=true, weld_vertices=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None, enable_alternate_blocks=true, enable_random_offsets=true))]
+    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, origin_centered=true, weld_vertices=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None, enable_alternate_blocks=true, enable_random_offsets=true, ctm_solver=None))]
     pub fn new(
         enable_ao: bool,
         mesh_fluids: bool,
@@ -31,6 +31,7 @@ impl PyMesherConfig {
         custom_aliases: Option<HashMap<String, Vec<String>>>,
         enable_alternate_blocks: bool,
         enable_random_offsets: bool,
+        ctm_solver: Option<&crate::ctm::PyCtmSolver>,
     ) -> Self {
         let config = MesherConfig {
             enable_ao,
@@ -47,6 +48,7 @@ impl PyMesherConfig {
             custom_aliases: custom_aliases.map(Arc::new),
             enable_alternate_blocks,
             enable_random_offsets,
+            ctm_solver: ctm_solver.map(|s| s.inner.clone()),
             ..Default::default()
         };
         Self {
@@ -78,6 +80,16 @@ impl PyMesherConfig {
     /// Sets or clears custom texture alias mapping.
     pub fn set_custom_aliases(&mut self, aliases: Option<HashMap<String, Vec<String>>>) {
         self.inner.custom_aliases = aliases.map(Arc::new);
+    }
+
+    /// Sets or clears the CTM solver for connected textures.
+    pub fn set_ctm_solver(&mut self, solver: Option<&crate::ctm::PyCtmSolver>) {
+        self.inner.ctm_solver = solver.map(|s| s.inner.clone());
+    }
+
+    /// Checks if a CTM solver is configured.
+    pub fn has_ctm_solver(&self) -> bool {
+        self.inner.ctm_solver.is_some()
     }
 
     #[getter]
@@ -187,11 +199,12 @@ impl PyMesherConfig {
 
     fn __repr__(&self) -> String {
         format!(
-            "<MesherConfig ao={} fluids={} centered={} weld={} coord={:?} threads={:?}>",
+            "<MesherConfig ao={} fluids={} centered={} weld={} ctm={} coord={:?} threads={:?}>",
             self.inner.enable_ao,
             self.inner.mesh_fluids,
             self.inner.origin_centered,
             self.inner.weld_vertices,
+            self.inner.ctm_solver.is_some(),
             self.inner.coordinate_system,
             self.num_threads
         )

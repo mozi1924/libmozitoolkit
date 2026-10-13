@@ -124,6 +124,24 @@ impl ResourcePackStack {
         results
     }
 
+    /// List all unique texture locations discovered across all active packs in the stack,
+    /// including any CTM sub-tiles referenced by active CTM rules.
+    pub fn list_all_texture_locations_including_ctm(&self) -> Vec<ResourceLocation> {
+        let mut results = self.list_all_texture_locations();
+        let mut seen: HashSet<ResourceLocation> = results.iter().cloned().collect();
+
+        let ctm_rules = self.load_ctm_rules();
+        for rule in &ctm_rules {
+            for tile_loc in rule.tiles.iter().flatten() {
+                if seen.insert(tile_loc.clone()) {
+                    results.push(tile_loc.clone());
+                }
+            }
+        }
+
+        results
+    }
+
     /// List all unique blockstate resource locations discovered across all active packs in the stack.
     pub fn list_all_blockstate_locations(&self) -> Vec<ResourceLocation> {
         let mut seen = HashSet::new();
@@ -340,6 +358,11 @@ impl ResourcePackStack {
 
         rules.sort_by_key(|r| std::cmp::Reverse(r.priority));
         rules
+    }
+
+    /// Constructs an indexed `CtmSolver` containing all active CTM rules loaded from this stack.
+    pub fn build_ctm_solver(&self) -> crate::ctm::CtmSolver {
+        crate::ctm::CtmSolver::new(self.load_ctm_rules())
     }
 
     /// Collect and expand all Sprite references declared in an AtlasDefinition into discrete `DiscoveredSprite`s.

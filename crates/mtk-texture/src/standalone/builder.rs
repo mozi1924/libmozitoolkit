@@ -161,8 +161,8 @@ impl StandaloneBuilder {
             is_fallback: Some(true),
         };
 
-        // 2. Discover all unique texture locations across the stack
-        let mut loc_vec = stack.list_all_texture_locations();
+        // 2. Discover all unique texture locations across the stack (including CTM tiles)
+        let mut loc_vec = stack.list_all_texture_locations_including_ctm();
         if let Some(prefix) = self.config.filter_prefix.as_deref() {
             loc_vec.retain(|loc| loc.path.starts_with(prefix));
         }
@@ -238,20 +238,32 @@ impl StandaloneBuilder {
                 let mut file_paths = StandaloneFilePaths::default();
                 let mut out_files = Vec::new();
 
+                let (base_dir, clean_path) =
+                    if let Some(stripped) = loc.path.strip_prefix("optifine/") {
+                        ("optifine", stripped)
+                    } else if let Some(stripped) = loc.path.strip_prefix("textures/") {
+                        ("textures", stripped)
+                    } else {
+                        ("textures", loc.path.as_str())
+                    };
+
                 for ch in align_res.channels {
                     let static_buf = ch.static_frame_0();
                     let static_rel = match ch.channel_type {
                         ChannelType::Albedo => {
-                            format!("assets/{}/textures/{}.png", loc.namespace, loc.path)
+                            format!("assets/{}/{}/{}.png", loc.namespace, base_dir, clean_path)
                         }
                         ChannelType::Normal => {
-                            format!("assets/{}/textures/{}_n.png", loc.namespace, loc.path)
+                            format!("assets/{}/{}/{}_n.png", loc.namespace, base_dir, clean_path)
                         }
                         ChannelType::Specular => {
-                            format!("assets/{}/textures/{}_s.png", loc.namespace, loc.path)
+                            format!("assets/{}/{}/{}_s.png", loc.namespace, base_dir, clean_path)
                         }
                         ChannelType::Overlay => {
-                            format!("assets/{}/textures/{}_overlay.png", loc.namespace, loc.path)
+                            format!(
+                                "assets/{}/{}/{}_overlay.png",
+                                loc.namespace, base_dir, clean_path
+                            )
                         }
                     };
 
@@ -280,17 +292,26 @@ impl StandaloneBuilder {
                     if align_res.is_animated {
                         let anim_rel = match ch.channel_type {
                             ChannelType::Albedo => {
-                                format!("assets/{}/textures/{}_anim.png", loc.namespace, loc.path)
+                                format!(
+                                    "assets/{}/{}/{}_anim.png",
+                                    loc.namespace, base_dir, clean_path
+                                )
                             }
                             ChannelType::Normal => {
-                                format!("assets/{}/textures/{}_n_anim.png", loc.namespace, loc.path)
+                                format!(
+                                    "assets/{}/{}/{}_n_anim.png",
+                                    loc.namespace, base_dir, clean_path
+                                )
                             }
                             ChannelType::Specular => {
-                                format!("assets/{}/textures/{}_s_anim.png", loc.namespace, loc.path)
+                                format!(
+                                    "assets/{}/{}/{}_s_anim.png",
+                                    loc.namespace, base_dir, clean_path
+                                )
                             }
                             ChannelType::Overlay => format!(
-                                "assets/{}/textures/{}_overlay_anim.png",
-                                loc.namespace, loc.path
+                                "assets/{}/{}/{}_overlay_anim.png",
+                                loc.namespace, base_dir, clean_path
                             ),
                         };
 

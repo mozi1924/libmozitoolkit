@@ -118,3 +118,56 @@ tiles=0-46
     let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
     assert!(!mesh.positions.is_empty());
 }
+
+#[test]
+fn test_ctm_standalone_meshing() {
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+    // Place 3 bookshelves in a line along X: (1, 1, 1), (2, 1, 1), (3, 1, 1)
+    world.set_block(1, 1, 1, "minecraft:bookshelf", None);
+    world.set_block(2, 1, 1, "minecraft:bookshelf", None);
+    world.set_block(3, 1, 1, "minecraft:bookshelf", None);
+
+    let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
+    let culler = FaceCuller::default();
+
+    let ctm_props = r#"
+matchBlocks=minecraft:bookshelf
+method=horizontal
+tiles=0-3
+"#;
+    let rule =
+        CtmRule::parse_properties("optifine/ctm/bookshelf.properties", "minecraft", ctm_props)
+            .unwrap();
+    let solver = Arc::new(CtmSolver::new(vec![rule]));
+
+    // Standalone mode: atlas_address_map is None!
+    let config = MesherConfig {
+        ctm_solver: Some(solver),
+        atlas_address_map: None,
+        ..Default::default()
+    };
+
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+    assert!(!mesh.positions.is_empty());
+
+    // Verify mtk_source_texture_key attribute contains resolved optifine/ctm textures
+    let tex_attr = mesh.get_custom_attribute("mtk_source_texture_key");
+    assert!(
+        tex_attr.is_some(),
+        "mtk_source_texture_key attribute must be present"
+    );
+    if let Some(attr) = tex_attr {
+        if let mtk_core::AttributeData::String(ref keys) = attr.data {
+            assert!(!keys.is_empty());
+            let has_ctm = keys.iter().any(|k| k.contains("optifine/ctm/"));
+            assert!(
+                has_ctm,
+                "At least some faces must resolve to CTM sub-tiles, found: {:?}",
+                keys
+            );
+        } else {
+            panic!("AttributeData must be String");
+        }
+    }
+}

@@ -550,6 +550,27 @@ where
                         material_props,
                     };
                 }
+            } else {
+                let ctm_key = resolved_loc.as_string();
+                let (td, tc, c_uv) = compute_face_tint(
+                    &ctm_key,
+                    state_str,
+                    face.tint_index,
+                    config.biome_resolver.as_deref(),
+                );
+                let material_props = mtk_material::get_material_props("", Some(&ctm_key));
+                return ResolvedFaceShading {
+                    texture_key: ctm_key,
+                    override_uvs: None,
+                    mat_slot: pre_face.mat_slot,
+                    chunk_id: 0,
+                    tex_id: 0,
+                    tint_data: td,
+                    tint_color: tc,
+                    colormap_uv: c_uv,
+                    emission: pre_face.emission,
+                    material_props,
+                };
             }
         }
     }
@@ -627,6 +648,23 @@ where
                         material_props,
                     };
                 }
+            } else {
+                let ctm_key = resolved_loc.as_string();
+                let (td, tc, c_uv) =
+                    compute_face_tint(&ctm_key, state_str, -1, config.biome_resolver.as_deref());
+                let material_props = mtk_material::get_material_props("", Some(&ctm_key));
+                return ResolvedFaceShading {
+                    texture_key: ctm_key,
+                    override_uvs: None,
+                    mat_slot: pre_face.mat_slot,
+                    chunk_id: 0,
+                    tex_id: 0,
+                    tint_data: td,
+                    tint_color: tc,
+                    colormap_uv: c_uv,
+                    emission: pre_face.emission,
+                    material_props,
+                };
             }
         }
     }

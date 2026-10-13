@@ -166,6 +166,7 @@ impl CtmRule {
         state: &str,
         face: Direction,
         world_pos: IVec3,
+        base_tile: Option<&ResourceLocation>,
         biome: Option<&str>,
     ) -> bool {
         if !self.faces.contains_dir(face) {
@@ -191,6 +192,13 @@ impl CtmRule {
         }
         if !self.match_blocks.is_empty() && !self.match_blocks.iter().any(|m| m.matches(state)) {
             return false;
+        }
+        if !self.match_tiles.is_empty() {
+            if let Some(bt) = base_tile {
+                if !self.match_tiles.contains(bt) {
+                    return false;
+                }
+            }
         }
         true
     }

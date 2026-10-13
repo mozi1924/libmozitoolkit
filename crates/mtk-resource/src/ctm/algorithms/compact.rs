@@ -16,8 +16,23 @@ where
     let left_c = check_connect(left.offset());
     let right_c = check_connect(right.offset());
 
-    match (up_c || down_c, left_c || right_c) {
-        (true, true) => 4,
+    let v = up_c && down_c;
+    let h = left_c && right_c;
+    let any_v = up_c || down_c;
+    let any_h = left_c || right_c;
+
+    match (any_v, any_h) {
+        (true, true) => {
+            let ul = check_connect(up.offset() + left.offset());
+            let ur = check_connect(up.offset() + right.offset());
+            let dl = check_connect(down.offset() + left.offset());
+            let dr = check_connect(down.offset() + right.offset());
+            if v && h && ul && ur && dl && dr {
+                1
+            } else {
+                4
+            }
+        }
         (true, false) => 2,
         (false, true) => 3,
         (false, false) => 0,

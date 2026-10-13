@@ -184,7 +184,7 @@ impl CtmSolver {
         if let Some(rule_indices) = self.rules_by_block.get(&canonical_name) {
             for &idx in rule_indices {
                 let rule = &self.rules[idx];
-                if rule.matches_block(state, face, world_pos, biome) {
+                if rule.matches_block(state, face, world_pos, base_tile, biome) {
                     if let Some(tile) = rule.solve_tile(state, face, world_pos, &get_block) {
                         return Some(tile);
                     }
@@ -197,7 +197,7 @@ impl CtmSolver {
             if let Some(rule_indices) = self.rules_by_tile.get(tile_loc) {
                 for &idx in rule_indices {
                     let rule = &self.rules[idx];
-                    if rule.matches_block(state, face, world_pos, biome) {
+                    if rule.matches_block(state, face, world_pos, base_tile, biome) {
                         if let Some(tile) = rule.solve_tile(state, face, world_pos, &get_block) {
                             return Some(tile);
                         }

@@ -3,6 +3,7 @@
 //! Exposes `libmtk` data structures and high-performance algorithms to Python via PyO3.
 
 pub mod attributes;
+pub mod ctm;
 pub mod cull;
 pub mod extrude;
 pub mod material;
@@ -26,6 +27,7 @@ pub mod unstable;
 
 use pyo3::prelude::*;
 
+pub use ctm::PyCtmSolver;
 pub use cull::PyFaceCuller;
 pub use material::{
     blend_biome_colors, classify_tint_category, compute_biome_tint_attributes,
@@ -146,6 +148,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // 6. Resource Pack & Textures
     m.add_class::<PyResourcePackStack>()?;
+    m.add_class::<PyCtmSolver>()?;
     m.add_class::<PyAtlasBuilder>()?;
     m.add_class::<PyBakedAtlas>()?;
     m.add_class::<PyStandaloneBuilder>()?;
@@ -328,6 +331,22 @@ mod tests {
             .unwrap();
             assert_eq!(rebuilt.len(), 1);
             assert_eq!(storage.dirty_section_count(), 0);
+        });
+    }
+
+    #[test]
+    fn test_python_ctm_bindings() {
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|_py| {
+            let stack = PyResourcePackStack::new();
+            assert_eq!(stack.get_ctm_rule_count(), 0);
+            let solver = stack.build_ctm_solver();
+            assert_eq!(solver.rule_count(), 0);
+
+            let mut config = PyMesherConfig::default();
+            assert!(!config.has_ctm_solver());
+            config.set_ctm_solver(Some(&solver));
+            assert!(config.has_ctm_solver());
         });
     }
 
