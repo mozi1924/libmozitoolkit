@@ -145,17 +145,17 @@
 
 ---
 
-## 阶段九：CTM 预编译、图集装箱与端到端集成测试 (`mtk-resource`, `libmtk::prebake`, `mtk-voxel`)
-- [ ] **资源包预编译接入 CTM 规则 (`libmtk::prebake`)**
-  - [ ] 扫描活跃资源包中的 `assets/*/optifine/ctm/` 及 Continuity `.properties` 规则；
-  - [ ] 将 CTM 的 0~46 等衍生子切片纳入 `mtk-texture` 图集装箱流程；
-  - [ ] 将编译后的 `CtmSolver` 序列化并打包存入 `.mtkcache` 单文件容器。
-- [ ] **`SectionMesher` 与 Python 绑定贯通 CTM**
-  - [ ] `MesherConfig` 开放 `enable_ctm` 并接收 `Arc<CtmSolver>`；
-  - [ ] 在 `bindings/mtk-py` 暴露 CTM 求解配置与测试接口。
-- [ ] **测试夹具与端到端集成测试 (`mtk-testkit`)**
-  - [ ] 引入无缝玻璃（Connected Glass）与连续书架（Bookshelf）测试夹具；
-  - [ ] 编写跨 Section 边界的连续性与连通性回归测试用例。
+## 阶段九：CTM 预编译、图集装箱与端到端集成测试 (`mtk-resource`, `libmtk::prebake`, `mtk-voxel` - 核心已完成 ✅ / 缓存容器序列化待扩展 🚧)
+- [x] **资源包预编译接入 CTM 规则 (`libmtk::prebake`, `mtk-resource::ctm`)**
+  - [x] 扫描活跃资源包中的 `assets/*/optifine/ctm/` 及 Continuity `.properties` 规则；
+  - [x] 将 CTM 的 0~46 等衍生子切片纳入 `mtk-texture` 图集装箱与独立 Standalone 导出流程；
+  - [ ] 将编译后的 `CtmSolver` 序列化并打包存入 `.mtkcache` 单文件容器（待容器 Chunk 协议扩展）。
+- [x] **`SectionMesher` 与 Python 绑定贯通 CTM**
+  - [x] `MesherConfig` 开放 `enable_ctm` 并接收 `Arc<CtmSolver>`；
+  - [x] 在 `bindings/mtk-py` 暴露 CTM 求解配置与测试接口（`PyCtmSolver`, `PyMesherConfig.enable_ctm` 等）。
+- [x] **测试夹具与端到端集成测试 (`mtk-testkit`)**
+  - [x] 引入无缝玻璃（Connected Glass）与连续书架（Bookshelf）测试夹具；
+  - [x] 编写跨 Section 边界的连续性与连通性回归测试用例（`test_ctm_meshing.rs` 覆盖 47-tile、水平连通与跨区块求解）。
 
 ---
 
