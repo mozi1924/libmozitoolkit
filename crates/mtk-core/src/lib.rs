@@ -30,7 +30,7 @@ pub use extrude::{
     RandomExtrudeMeshOutput,
 };
 pub use geometry::{mc_local_to_centered_z_up, mc_world_to_z_up, Aabb2d, Aabb3d, Quad};
-pub use mesh::MeshData;
+pub use mesh::{analyze_hard_edges, MeshData};
 pub use polygon::FlatPolygonMesh;
 pub use progress::{ProgressCallback, ProgressReport, ProgressThrottler};
 pub use random::{

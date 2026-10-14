@@ -51,6 +51,7 @@ Python 模块名：`libmtk_py`
   - 顶点与面自定义属性：`add_string_attribute(name, domain, values)`, `add_attribute_from_buffer(name, domain, data_type, buffer)`, `get_attribute_data(name)`, `has_attribute(name)`, `list_attributes()`
 - **`AttributeDomain`**：属性域枚举，支持 `"point"` (顶点) 与 `"face"` (面)。
 - **`process_mesh(mesh, material_names, atlas=None, aliases=None, generate_secondary_uv=True, grid_atlas_spec=None)`**：统一高阶网格处理流水线，多线程并行执行材质状态求解、图集 UV 重映射、次级 [0, 1] PBR UV 生成与自定义属性标记。
+- **`analyze_mesh_hard_edges(positions, edge_verts, face_loop_starts, face_loop_totals, loop_verts, sharp_angle_rad, explicit_sharp_edges=None) -> PyBytes`**：基于二面角与边界的高性能硬边/锐边拓扑分析算子，支持零拷贝 Buffer Protocol。
 
 ### 2.2 遮挡剔除与叠面消重 (`cull`)
 - **`FaceCuller` (`PyFaceCuller`)**：原版方块与复杂连接体遮挡状态机。
@@ -71,6 +72,7 @@ Python 模块名：`libmtk_py`
   - `process_flat_mesh_extrude_repair(positions, uvs, indices, face_mat, ...)`：扁平数组极速挤出修复。
   - `process_random_extrude_mesh(mesh_data, noise_config)`：基于 3D 噪声的随机高度起伏挤出。
 - **UV 几何数学算法**：
+  - `repair_mesh_fluid_uv_inplace(positions, loop_verts, face_loop_starts, face_loop_totals, uvs, ...)`：基于网格索引拓扑的高性能原地流体 UV 斜坡批量修复。
   - `calculate_uv_area(quad_uvs)`、`get_uv_bounds(quad_uvs)`、`get_uv_center(quad_uvs)`
   - `is_uv_collapsed(quad_uvs)`、`detect_uv_rotation(quad_uvs)`、`straighten_uv(quad_uvs)`
   - `scale_uv(quad_uvs, factor)`、`normalize_uv_for_atlas_tiling(quad_uvs)`、`restore_atlas_tiling_uv(...)`

@@ -124,6 +124,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     m.add_function(wrap_pyfunction!(subdivide::slice_face_by_pixel_grid, m)?)?;
     m.add_function(wrap_pyfunction!(subdivide::adaptive_pixel_split_mesh, m)?)?;
+    m.add_function(wrap_pyfunction!(mesh::analyze_mesh_hard_edges, m)?)?;
 
     // 2. Culling
     m.add_class::<PyFaceCuller>()?;
@@ -226,6 +227,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(uv::restore_atlas_tiling_uv, m)?)?;
     m.add_function(wrap_pyfunction!(uv::repair_quad_fluid_uv, m)?)?;
     m.add_function(wrap_pyfunction!(uv::batch_repair_fluid_uv, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::repair_mesh_fluid_uv_inplace, m)?)?;
     m.add_function(wrap_pyfunction!(uv::get_fluid_top_uvs, m)?)?;
     m.add_function(wrap_pyfunction!(uv::get_fluid_side_uvs, m)?)?;
     m.add_function(wrap_pyfunction!(uv::repair_extruded_side_uv, m)?)?;
@@ -594,6 +596,93 @@ mod tests {
             assert!(info.data_version() >= 2844);
             assert!(!info.dimensions().is_empty());
             println!("Python save inspect: {:?}", info);
+        });
+    }
+
+    #[test]
+    fn test_python_analyze_mesh_hard_edges() {
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let positions = vec![
+                0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0,
+                0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0,
+            ];
+            let edge_verts = vec![
+                0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7,
+            ];
+            let face_loop_starts = vec![0, 4, 8, 12, 16, 20];
+            let face_loop_totals = vec![4, 4, 4, 4, 4, 4];
+            let loop_verts = vec![
+                0, 3, 2, 1, 4, 5, 6, 7, 0, 1, 5, 4, 2, 3, 7, 6, 0, 4, 7, 3, 1, 2, 6, 5,
+            ];
+
+            let py_pos = pyo3::types::PyList::new(py, &positions).unwrap();
+            let py_edges = pyo3::types::PyList::new(py, &edge_verts).unwrap();
+            let py_starts = pyo3::types::PyList::new(py, &face_loop_starts).unwrap();
+            let py_totals = pyo3::types::PyList::new(py, &face_loop_totals).unwrap();
+            let py_loops = pyo3::types::PyList::new(py, &loop_verts).unwrap();
+
+            let bytes = mesh::analyze_mesh_hard_edges(
+                py,
+                &py_pos.into_any(),
+                &py_edges.into_any(),
+                &py_starts.into_any(),
+                &py_totals.into_any(),
+                &py_loops.into_any(),
+                0.5,
+                None,
+            )
+            .unwrap();
+
+            assert_eq!(bytes.as_bytes().len(), 12);
+            assert!(bytes.as_bytes().iter().all(|&b| b == 1));
+        });
+    }
+
+    #[test]
+    fn test_python_repair_mesh_fluid_uv_inplace() {
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let positions = vec![
+                0.0, 0.0, 1.0, // 0: Bottom right
+                0.0, 0.0, 0.0, // 1: Bottom left
+                0.0, 0.2, 0.0, // 2: Top left (low: 0.2)
+                0.0, 0.8, 1.0, // 3: Top right (high: 0.8)
+            ];
+            let loop_verts = vec![0, 1, 2, 3];
+            let face_loop_starts = vec![0];
+            let face_loop_totals = vec![4];
+            let uvs = vec![
+                1.0, 0.0, // loop 0
+                0.0, 0.0, // loop 1
+                0.0, 0.8, // loop 2: Inverted
+                1.0, 0.2, // loop 3: Inverted
+            ];
+
+            let py_pos = pyo3::types::PyList::new(py, &positions).unwrap();
+            let py_loops = pyo3::types::PyList::new(py, &loop_verts).unwrap();
+            let py_starts = pyo3::types::PyList::new(py, &face_loop_starts).unwrap();
+            let py_totals = pyo3::types::PyList::new(py, &face_loop_totals).unwrap();
+            let mut uvs_bytes = Vec::with_capacity(uvs.len() * 4);
+            for &val in &uvs {
+                uvs_bytes.extend_from_slice(&f32::to_le_bytes(val));
+            }
+            let py_uvs = pyo3::types::PyByteArray::new(py, &uvs_bytes);
+
+            let count = uv::repair_mesh_fluid_uv_inplace(
+                py,
+                &py_pos.into_any(),
+                &py_loops.into_any(),
+                &py_starts.into_any(),
+                &py_totals.into_any(),
+                &py_uvs.into_any(),
+                None,
+                false,
+                0.005,
+            )
+            .unwrap();
+
+            assert_eq!(count, 1);
         });
     }
 }

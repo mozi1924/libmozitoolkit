@@ -7,6 +7,9 @@ pub mod attributes;
 #[cfg(feature = "blender")]
 pub mod blender_direct;
 pub mod memoryview;
+pub mod topology;
+
+pub use topology::analyze_mesh_hard_edges;
 
 use std::collections::HashMap;
 

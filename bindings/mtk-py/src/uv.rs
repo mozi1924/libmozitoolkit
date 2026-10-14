@@ -410,3 +410,85 @@ pub fn generate_random_extrude_heights(
         discrete_steps,
     )
 }
+
+/// In-place batch repair for inverted fluid UVs directly on indexed mesh geometry.
+///
+/// Modifies the `uvs` buffer directly in-place if it is a writable numpy ndarray / buffer.
+/// Returns the number of quad faces whose UVs were repaired.
+#[pyfunction]
+#[pyo3(signature = (positions, loop_verts, face_loop_starts, face_loop_totals, uvs, face_indices=None, force=false, min_slope_threshold=0.005))]
+pub fn repair_mesh_fluid_uv_inplace<'py>(
+    py: Python<'py>,
+    positions: &Bound<'py, PyAny>,
+    loop_verts: &Bound<'py, PyAny>,
+    face_loop_starts: &Bound<'py, PyAny>,
+    face_loop_totals: &Bound<'py, PyAny>,
+    uvs: &Bound<'py, PyAny>,
+    face_indices: Option<&Bound<'py, PyAny>>,
+    force: bool,
+    min_slope_threshold: f32,
+) -> PyResult<usize> {
+    use crate::mesh::topology::{get_cow_slice_f32, get_cow_slice_u32};
+    use pyo3::buffer::PyBuffer;
+
+    let pos_slice = get_cow_slice_f32(positions)?;
+    let loop_slice = get_cow_slice_u32(loop_verts)?;
+    let starts_slice = get_cow_slice_u32(face_loop_starts)?;
+    let totals_slice = get_cow_slice_u32(face_loop_totals)?;
+
+    let faces_slice = if let Some(faces) = face_indices {
+        Some(get_cow_slice_u32(faces)?)
+    } else {
+        None
+    };
+
+    // Obtain mutable slice to uvs buffer
+    if let Ok(buf) = PyBuffer::<f32>::get(uvs) {
+        if !buf.readonly() && buf.is_c_contiguous() {
+            let uvs_mut: &mut [f32] = unsafe {
+                std::slice::from_raw_parts_mut(buf.buf_ptr() as *mut f32, buf.item_count())
+            };
+            let count = py.allow_threads(|| {
+                mtk_voxel::fluid_uv::repair_mesh_fluid_uv_inplace(
+                    &pos_slice,
+                    &loop_slice,
+                    &starts_slice,
+                    &totals_slice,
+                    uvs_mut,
+                    faces_slice.as_deref(),
+                    force,
+                    min_slope_threshold,
+                )
+            });
+            return Ok(count);
+        }
+    }
+
+    if let Ok(buf) = PyBuffer::<u8>::get(uvs) {
+        let ptr = buf.buf_ptr();
+        let len_bytes = buf.len_bytes();
+        let is_aligned = (ptr as usize) % std::mem::align_of::<f32>() == 0;
+        let is_len_valid = len_bytes % std::mem::size_of::<f32>() == 0;
+        if !buf.readonly() && is_aligned && is_len_valid && buf.is_c_contiguous() {
+            let uvs_mut: &mut [f32] =
+                unsafe { std::slice::from_raw_parts_mut(ptr as *mut f32, len_bytes / 4) };
+            let count = py.allow_threads(|| {
+                mtk_voxel::fluid_uv::repair_mesh_fluid_uv_inplace(
+                    &pos_slice,
+                    &loop_slice,
+                    &starts_slice,
+                    &totals_slice,
+                    uvs_mut,
+                    faces_slice.as_deref(),
+                    force,
+                    min_slope_threshold,
+                )
+            });
+            return Ok(count);
+        }
+    }
+
+    Err(pyo3::exceptions::PyBufferError::new_err(
+        "uvs parameter must be a writable C-contiguous f32 buffer (e.g. numpy.ndarray[float32])",
+    ))
+}

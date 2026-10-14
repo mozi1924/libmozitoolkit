@@ -48,6 +48,7 @@
 | [`Aabb2d`](src/geometry.rs) / [`Aabb3d`](src/geometry.rs) | 2D / 3D 轴对齐包围盒，提供相交、包含判定与矩形布尔运算。 |
 | [`FaceAttributes`](src/attributes.rs) | 面属性包，包含 `material_slot: MaterialSlotId` 与 `tint_index: TintIndex`。 |
 | [`MeshAttribute`](src/attributes.rs) | 通用动态属性层，支持 `Point`, `Corner`, `Face`, `Mesh` 作用域及多种数值类型（`AttributeData`）。 |
+| `analyze_hard_edges` | `(positions, edge_verts, face_loop_starts, face_loop_totals, loop_verts, sharp_angle_rad, explicit_sharp_edges) -> Vec<u8>`：基于网格二面角与边界的高性能拓扑硬边分析算子。 |
 
 ### 2.2 6 向拓扑与坐标系 (`direction`, `geometry`)
 

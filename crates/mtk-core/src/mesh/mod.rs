@@ -13,7 +13,10 @@ use crate::geometry::Quad;
 
 pub mod attributes;
 pub mod merge;
+pub mod topology;
 pub mod weld;
+
+pub use topology::analyze_hard_edges;
 
 /// Flat, contiguous mesh data buffer designed for zero-copy or direct buffer transfers
 /// into graphics APIs (OpenGL/WebGPU/Vulkan) or 3D host engines (Blender, Bevy, Three.js).

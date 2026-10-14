@@ -246,6 +246,128 @@ pub fn batch_repair_fluid_uv(
     repaired_count
 }
 
+/// In-place batch repair for inverted fluid UVs directly on indexed mesh geometry.
+///
+/// Modifies the `uvs` slice in-place wherever inverted slope fluid UVs are detected.
+///
+/// # Arguments
+/// - `positions`: Flat contiguous 3D vertex positions `[x0, y0, z0, x1, y1, z1, ...]`.
+/// - `loop_verts`: Vertex index for each polygon loop.
+/// - `face_loop_starts`: Starting loop offset for each face.
+/// - `face_loop_totals`: Vertex/loop count for each face.
+/// - `uvs`: Flat contiguous 2D UV coordinates per loop `[u0, v0, u1, v1, ...]`, modified in-place.
+/// - `face_indices`: Optional slice of face indices to process. If `None`, all 4-vertex quads in the mesh are evaluated.
+/// - `force`: If true, force repair sloped faces even if not strictly detected as inverted.
+/// - `min_slope_threshold`: Minimum height difference between top two vertices to consider face as slanted.
+///
+/// # Returns
+/// Number of quad faces whose UVs were repaired.
+pub fn repair_mesh_fluid_uv_inplace(
+    positions: &[f32],
+    loop_verts: &[u32],
+    face_loop_starts: &[u32],
+    face_loop_totals: &[u32],
+    uvs: &mut [f32],
+    face_indices: Option<&[u32]>,
+    force: bool,
+    min_slope_threshold: f32,
+) -> usize {
+    let num_faces = face_loop_starts.len().min(face_loop_totals.len());
+    let mut repaired_count = 0;
+
+    let mut process_face = |f_idx: usize| {
+        if f_idx >= num_faces {
+            return false;
+        }
+        if face_loop_totals[f_idx] != 4 {
+            return false;
+        }
+
+        let start = face_loop_starts[f_idx] as usize;
+        if start + 4 > loop_verts.len() || (start + 4) * 2 > uvs.len() {
+            return false;
+        }
+
+        let l0 = start;
+        let l1 = start + 1;
+        let l2 = start + 2;
+        let l3 = start + 3;
+
+        let v0 = loop_verts[l0] as usize;
+        let v1 = loop_verts[l1] as usize;
+        let v2 = loop_verts[l2] as usize;
+        let v3 = loop_verts[l3] as usize;
+
+        if v0 * 3 + 2 >= positions.len()
+            || v1 * 3 + 2 >= positions.len()
+            || v2 * 3 + 2 >= positions.len()
+            || v3 * 3 + 2 >= positions.len()
+        {
+            return false;
+        }
+
+        let verts = [
+            Vec3::new(
+                positions[v0 * 3],
+                positions[v0 * 3 + 1],
+                positions[v0 * 3 + 2],
+            ),
+            Vec3::new(
+                positions[v1 * 3],
+                positions[v1 * 3 + 1],
+                positions[v1 * 3 + 2],
+            ),
+            Vec3::new(
+                positions[v2 * 3],
+                positions[v2 * 3 + 1],
+                positions[v2 * 3 + 2],
+            ),
+            Vec3::new(
+                positions[v3 * 3],
+                positions[v3 * 3 + 1],
+                positions[v3 * 3 + 2],
+            ),
+        ];
+
+        let mut quad_uvs = [
+            Vec2::new(uvs[l0 * 2], uvs[l0 * 2 + 1]),
+            Vec2::new(uvs[l1 * 2], uvs[l1 * 2 + 1]),
+            Vec2::new(uvs[l2 * 2], uvs[l2 * 2 + 1]),
+            Vec2::new(uvs[l3 * 2], uvs[l3 * 2 + 1]),
+        ];
+
+        if repair_quad_fluid_uv(&verts, &mut quad_uvs, None, force, min_slope_threshold) {
+            uvs[l0 * 2] = quad_uvs[0].x;
+            uvs[l0 * 2 + 1] = quad_uvs[0].y;
+            uvs[l1 * 2] = quad_uvs[1].x;
+            uvs[l1 * 2 + 1] = quad_uvs[1].y;
+            uvs[l2 * 2] = quad_uvs[2].x;
+            uvs[l2 * 2 + 1] = quad_uvs[2].y;
+            uvs[l3 * 2] = quad_uvs[3].x;
+            uvs[l3 * 2 + 1] = quad_uvs[3].y;
+            true
+        } else {
+            false
+        }
+    };
+
+    if let Some(target_faces) = face_indices {
+        for &f in target_faces {
+            if process_face(f as usize) {
+                repaired_count += 1;
+            }
+        }
+    } else {
+        for f in 0..num_faces {
+            if process_face(f) {
+                repaired_count += 1;
+            }
+        }
+    }
+
+    repaired_count
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -321,5 +443,39 @@ mod tests {
         assert!(!repaired_again);
         assert!((valid_uvs[2].y - 0.2).abs() < 1e-5);
         assert!((valid_uvs[3].y - 0.8).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_repair_mesh_fluid_uv_inplace() {
+        let positions = vec![
+            0.0, 0.0, 1.0, // 0: Bottom right
+            0.0, 0.0, 0.0, // 1: Bottom left
+            0.0, 0.2, 0.0, // 2: Top left (low: 0.2)
+            0.0, 0.8, 1.0, // 3: Top right (high: 0.8)
+        ];
+        let loop_verts = vec![0, 1, 2, 3];
+        let face_loop_starts = vec![0];
+        let face_loop_totals = vec![4];
+        let mut uvs = vec![
+            1.0, 0.0, // loop 0
+            0.0, 0.0, // loop 1
+            0.0, 0.8, // loop 2: Inverted
+            1.0, 0.2, // loop 3: Inverted
+        ];
+
+        let count = repair_mesh_fluid_uv_inplace(
+            &positions,
+            &loop_verts,
+            &face_loop_starts,
+            &face_loop_totals,
+            &mut uvs,
+            None,
+            false,
+            0.005,
+        );
+
+        assert_eq!(count, 1);
+        assert!((uvs[5] - 0.2).abs() < 1e-5); // loop 2 V repaired to 0.2
+        assert!((uvs[7] - 0.8).abs() < 1e-5); // loop 3 V repaired to 0.8
     }
 }

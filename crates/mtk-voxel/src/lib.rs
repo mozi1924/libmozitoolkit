@@ -19,8 +19,9 @@ pub use biome::{
 pub use fluid::{
     batch_repair_fluid_uv, calculate_corner_average, calculate_fluid_corner_heights,
     calculate_fluid_flow_vector, emit_fluid_geometry, get_fluid_base_height, get_fluid_side_uvs,
-    get_fluid_side_uvs_vec2, get_fluid_top_uvs, get_fluid_top_uvs_vec2, repair_quad_fluid_uv,
-    sample_fluid_height, FluidType, MAX_FLUID_HEIGHT,
+    get_fluid_side_uvs_vec2, get_fluid_top_uvs, get_fluid_top_uvs_vec2,
+    repair_mesh_fluid_uv_inplace, repair_quad_fluid_uv, sample_fluid_height, FluidType,
+    MAX_FLUID_HEIGHT,
 };
 pub use mesher::{
     ao_level_to_brightness, calculate_face_ao, should_flip_quad_diagonal, vertex_ao, DeltaMesher,
