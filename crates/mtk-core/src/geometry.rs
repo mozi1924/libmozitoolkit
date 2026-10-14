@@ -292,6 +292,63 @@ pub fn mc_local_to_centered_z_up(lx: f32, ly: f32, lz: f32) -> Vec3 {
 pub fn mc_world_to_z_up(wx: f32, wy: f32, wz: f32) -> Vec3 {
     Vec3::new(wx, -wz, wy)
 }
+
+/// Derives the discrete 3D cardinal tangent directions `(up, left)` from a quad's 3D positions and 2D UVs.
+/// Supports both standard 3D UVs (V=0 at bottom, V=1 at top) and Minecraft FaceBakery UVs (V=0 at top, V=1 at bottom) via `is_minecraft_uv`.
+pub fn derive_quad_face_tangents(
+    positions: &[Vec3; 4],
+    uvs: &[Vec2; 4],
+    fallback_dir: Direction,
+    is_minecraft_uv: bool,
+) -> (Direction, Direction) {
+    let e1 = positions[1] - positions[0];
+    let e2 = positions[2] - positions[0];
+
+    let du1 = uvs[1].x - uvs[0].x;
+    let dv1 = uvs[1].y - uvs[0].y;
+    let du2 = uvs[2].x - uvs[0].x;
+    let dv2 = uvs[2].y - uvs[0].y;
+
+    let det = du1 * dv2 - du2 * dv1;
+    if det.abs() < 1e-6 {
+        return fallback_dir.canonical_face_tangents();
+    }
+
+    let inv_det = 1.0 / det;
+    // Tangent vector T aligns with +U (texture right)
+    let t = (e1 * dv2 - e2 * dv1) * inv_det;
+    // Bitangent vector B aligns with +V
+    let b = (-e1 * du2 + e2 * du1) * inv_det;
+
+    // Vector pointing towards texture 'up' (top of texture image)
+    let up_vec = if is_minecraft_uv { -b } else { b };
+    // Vector pointing towards texture 'left' (opposite of right)
+    let left_vec = -t;
+
+    let project_to_direction = |v: Vec3, default_dir: Direction| -> Direction {
+        let v_norm = v.normalize_or_zero();
+        if v_norm.length_squared() < 1e-4 {
+            return default_dir;
+        }
+        let mut best_dir = default_dir;
+        let mut max_dot = -f32::INFINITY;
+        for d in Direction::ALL {
+            let dot = d.normal().dot(v_norm);
+            if dot > max_dot {
+                max_dot = dot;
+                best_dir = d;
+            }
+        }
+        best_dir
+    };
+
+    let (canon_up, canon_left) = fallback_dir.canonical_face_tangents();
+    let up_dir = project_to_direction(up_vec, canon_up);
+    let left_dir = project_to_direction(left_vec, canon_left);
+
+    (up_dir, left_dir)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -324,5 +381,19 @@ mod tests {
         assert_eq!(b, Vec3::ZERO);
         let w = mc_world_to_z_up(10.0, 64.0, -20.0);
         assert_eq!(w, Vec3::new(10.0, 20.0, 64.0));
+    }
+
+    #[test]
+    fn test_derive_quad_face_tangents() {
+        for dir in Direction::ALL {
+            let quad = Quad::unit_cube_face(dir);
+            let (up, left) = derive_quad_face_tangents(&quad.vertices, &quad.uvs, dir, false);
+            assert_eq!(
+                (up, left),
+                dir.canonical_face_tangents(),
+                "Derived face tangents mismatch for {:?}",
+                dir
+            );
+        }
     }
 }

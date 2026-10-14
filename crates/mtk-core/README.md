@@ -58,6 +58,9 @@
 | [`DirMask`](src/direction.rs) | 6 方向位掩码（基于 `bitflags`），支持高效的相邻面快速位运算。 |
 | `mc_local_to_centered_z_up` | `(lx: f32, ly: f32, lz: f32) -> Vec3`：将 Minecraft 局部体素坐标转换为以方块中心为原点的右手 Z-Up 坐标。 |
 | `mc_world_to_z_up` | `(wx: f32, wy: f32, wz: f32) -> Vec3`：将 Minecraft 世界坐标 (+X East, +Y Up, +Z South) 转换为标准右手 Z-Up 坐标 (+X East, +Y North, +Z Up)。 |
+| `Direction::canonical_face_tangents` | `(self) -> (Direction, Direction)`：返回未旋转规范立方面在 Minecraft 空间中的 2D 贴图切线基底 `(up, left)` 作为 SSOT。 |
+| `derive_quad_face_tangents` | `(positions: &[Vec3; 4], uvs: &[Vec2; 4], fallback_dir: Direction, is_minecraft_uv: bool) -> (Direction, Direction)`：根据四边形 3D 几何向量与 2D UV 偏导数动态推导物理切线基底，自适应感知旋转方块与 UV 旋转。 |
+
 
 ### 2.3 自适应像素切分 (`subdivide`)
 

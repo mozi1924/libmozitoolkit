@@ -4,23 +4,44 @@ use glam::IVec3;
 use mtk_core::direction::Direction;
 
 pub fn solve_repeat(face: Direction, world_pos: IVec3, width: u32, height: u32) -> Option<usize> {
+    solve_repeat_with_tangents(face, get_face_tangents(face), world_pos, width, height)
+}
+
+pub fn solve_repeat_with_tangents(
+    _face: Direction,
+    tangents: (Direction, Direction),
+    world_pos: IVec3,
+    width: u32,
+    height: u32,
+) -> Option<usize> {
     if width == 0 || height == 0 {
         return None;
     }
-    let (up, left) = get_face_tangents(face);
-    let u = match left {
-        Direction::East | Direction::West => world_pos.x,
-        Direction::Up | Direction::Down => world_pos.y,
-        Direction::North | Direction::South => world_pos.z,
-    }
-    .rem_euclid(width as i32) as u32;
+    let (up, left) = tangents;
+    let right = left.opposite();
+    let down = up.opposite();
 
-    let v = match up {
-        Direction::East | Direction::West => world_pos.x,
-        Direction::Up | Direction::Down => world_pos.y,
-        Direction::North | Direction::South => world_pos.z,
-    }
-    .rem_euclid(height as i32) as u32;
+    // Column u increases from left to right along the 'right' tangent vector
+    let u_coord = match right {
+        Direction::East => world_pos.x,
+        Direction::West => -world_pos.x,
+        Direction::South => world_pos.z,
+        Direction::North => -world_pos.z,
+        Direction::Up => world_pos.y,
+        Direction::Down => -world_pos.y,
+    };
+    let u = u_coord.rem_euclid(width as i32) as u32;
+
+    // Row v increases from top to bottom along the 'down' tangent vector
+    let v_coord = match down {
+        Direction::Down => -world_pos.y,
+        Direction::Up => world_pos.y,
+        Direction::South => world_pos.z,
+        Direction::North => -world_pos.z,
+        Direction::East => world_pos.x,
+        Direction::West => -world_pos.x,
+    };
+    let v = v_coord.rem_euclid(height as i32) as u32;
 
     Some((v * width + u) as usize)
 }
@@ -93,7 +114,18 @@ pub fn solve_overlay<F>(face: Direction, check_connect: &F) -> Option<usize>
 where
     F: Fn(IVec3) -> bool,
 {
-    let (up, left) = get_face_tangents(face);
+    solve_overlay_with_tangents(face, get_face_tangents(face), check_connect)
+}
+
+pub fn solve_overlay_with_tangents<F>(
+    _face: Direction,
+    tangents: (Direction, Direction),
+    check_connect: &F,
+) -> Option<usize>
+where
+    F: Fn(IVec3) -> bool,
+{
+    let (up, left) = tangents;
     let down = up.opposite();
     let right = left.opposite();
 

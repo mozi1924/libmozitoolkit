@@ -3,12 +3,25 @@ use crate::ctm::types::get_face_tangents;
 use glam::IVec3;
 use mtk_core::direction::Direction;
 
-/// Solves full 47-tile CTM pattern.
+/// Solves full 47-tile CTM pattern using canonical face tangents.
 pub fn solve_full_ctm<F>(face: Direction, inner_seams: bool, check_connect: &F) -> usize
 where
     F: Fn(IVec3) -> bool,
 {
-    let (up, left) = get_face_tangents(face);
+    solve_full_ctm_with_tangents(face, get_face_tangents(face), inner_seams, check_connect)
+}
+
+/// Solves full 47-tile CTM pattern using explicit 2D face tangents `(up, left)`.
+pub fn solve_full_ctm_with_tangents<F>(
+    face: Direction,
+    tangents: (Direction, Direction),
+    inner_seams: bool,
+    check_connect: &F,
+) -> usize
+where
+    F: Fn(IVec3) -> bool,
+{
+    let (up, left) = tangents;
     let down = up.opposite();
     let right = left.opposite();
     let forward = face;

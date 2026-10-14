@@ -10,10 +10,10 @@
 
 | 层次 (Layer) | Crate / Binding | 核心定位与职责 | API 与技术手册 |
 | :--- | :--- | :--- | :--- |
-| **Layer 0: 基础几何** | **[`mtk-core`](../crates/mtk-core/README.md)** | 标准连续几何缓冲 (`MeshData`)、6向拓扑与标准化右手坐标转换、硬边分析 (`analyze_hard_edges`)、自适应像素网格切分 (`subdivide`)、智能挤出与 UV 修复 (`extrude`) | [查看 API 手册 ↗](../crates/mtk-core/README.md) |
+| **Layer 0: 基础几何** | **[`mtk-core`](../crates/mtk-core/README.md)** | 标准连续几何缓冲 (`MeshData`)、6向拓扑与标准化右手坐标转换、面切线基底推导 (`derive_quad_face_tangents`)、硬边分析 (`analyze_hard_edges`)、自适应像素网格切分 (`subdivide`)、智能挤出与 UV 修复 (`extrude`) | [查看 API 手册 ↗](../crates/mtk-core/README.md) |
 | **Layer 1: 遮挡与清洗** | **[`mtk-cull`](../crates/mtk-cull/README.md)** | 1.21+ 邻域遮挡状态机 (`FaceCuller`)、2D 矩形差集切分 (Subtract Rect)、外部网格叠面消重 (`MeshSanitizer`) | [查看 API 手册 ↗](../crates/mtk-cull/README.md) |
 | **Layer 1: 模型与状态** | **[`mtk-model`](../crates/mtk-model/README.md)** | BlockState 状态机解析 (multipart/variants)、1.21+ Block Model JSON 递归继承展开与几何烘焙、`BakedModelDatabase` 多级回退、OBJ 加载 | [查看 API 手册 ↗](../crates/mtk-model/README.md) |
-| **Layer 1: 资源包 VFS** | **[`mtk-resource`](../crates/mtk-resource/README.md)** | 虚拟文件系统 (Zip/Jar/Dir)、PBR 多层资源栈合并、`.png.mcmeta` 动图元数据、`atlases/*.json` 规范与 CTM 47/17 连接纹理求解器 | [查看 API 手册 ↗](../crates/mtk-resource/README.md) |
+| **Layer 1: 资源包 VFS** | **[`mtk-resource`](../crates/mtk-resource/README.md)** | 虚拟文件系统 (Zip/Jar/Dir)、PBR 多层资源栈合并、`.png.mcmeta` 动图元数据、`atlases/*.json` 规范与自适应切线 CTM 47/17 连接纹理求解器 (`resolve_face_with_tangents`) | [查看 API 手册 ↗](../crates/mtk-resource/README.md) |
 | **Layer 1: 贴图与图集** | **[`mtk-texture`](../crates/mtk-texture/README.md)** | 2D 矩形二叉装箱 Stitcher、多通道 PBR 图集烘焙、盔甲调色板置换、抗渗色填充与 Standalone PBR 资产库生成器 | [查看 API 手册 ↗](../crates/mtk-texture/README.md) |
 | **Layer 1: 材质与生物群系** | **[`mtk-material`](../crates/mtk-material/README.md)** | 66 种原版生物群系调色板与色彩数学权威唯一事实源 (SSOT)、`BiomeResolver` 染色模型扫描器、Rayon 并行多 UV 重映射与别名解析 | [查看 API 手册 ↗](../crates/mtk-material/README.md) |
 | **Layer 1: 体素世界与网格化** | **[`mtk-voxel`](../crates/mtk-voxel/README.md)** | 16×16×16 区块体素存储 (`SectionStorage` / `VoxelStorage`)、全量无剔除体素点云 (`VoxelPointCloud`)、平滑 AO 算法、物理流体曲面与原地拓扑批量修复 (`repair_mesh_fluid_uv_inplace`)、贪婪网格化、增量局部重构 (`DeltaMesher`)、统一 3D 场景引擎 (`VoxelWorld`) 与统一体素源抽象 (`VoxelSource`) | [查看 API 手册 ↗](../crates/mtk-voxel/README.md) |
@@ -40,7 +40,11 @@
   - `mc_local_to_centered_z_up(lx, ly, lz) -> Vec3`：将局部方块坐标转换为以方块几何中心为原点 $[-0.5, 0.5]$ 的右手 Z-Up 浮点坐标。
   - `mc_world_to_z_up(wx, wy, wz) -> Vec3`：将 Minecraft 世界坐标转换为标准右手 Z-Up 坐标。
 - **标准化右手 Y-Up 坐标系 (Standard Right-Handed Y-Up)**：
-  - 适用于 WebGPU / Three.js / OpenGL 默认管线，通过 `MesherCoordinateSystem::YUpRightHanded` 选项目标输出。
+  - 适用于 WebGPU / Three.js / OpenGL 默认管线（视线前向朝向 $-Z$），通过 `CoordinateSystem::YUpRightHanded` 将 Minecraft 世界空间 $(X, Y, Z)$ 映射为 $(X, Y, -Z)$。
+- **2D 贴图物理切线基底规范 (Texture Tangent Basis)**：
+  - 统一由 `Direction::canonical_face_tangents(self) -> (Direction, Direction)` 作为权威事实源（SSOT）。
+  - 支持利用 `derive_quad_face_tangents` 从四边形 3D 顶点与 2D UV 偏导数中动态解析物理切线，自动感知旋转模型与 UV 旋转。
+
 
 ---
 

@@ -6,7 +6,18 @@ pub fn solve_horizontal<F>(face: Direction, check_connect: &F) -> usize
 where
     F: Fn(IVec3) -> bool,
 {
-    let (_up, left) = get_face_tangents(face);
+    solve_horizontal_with_tangents(face, get_face_tangents(face), check_connect)
+}
+
+pub fn solve_horizontal_with_tangents<F>(
+    _face: Direction,
+    tangents: (Direction, Direction),
+    check_connect: &F,
+) -> usize
+where
+    F: Fn(IVec3) -> bool,
+{
+    let (_up, left) = tangents;
     let right = left.opposite();
     let left_c = check_connect(left.offset());
     let right_c = check_connect(right.offset());
@@ -23,7 +34,18 @@ pub fn solve_vertical<F>(face: Direction, check_connect: &F) -> usize
 where
     F: Fn(IVec3) -> bool,
 {
-    let (up, _left) = get_face_tangents(face);
+    solve_vertical_with_tangents(face, get_face_tangents(face), check_connect)
+}
+
+pub fn solve_vertical_with_tangents<F>(
+    _face: Direction,
+    tangents: (Direction, Direction),
+    check_connect: &F,
+) -> usize
+where
+    F: Fn(IVec3) -> bool,
+{
+    let (up, _left) = tangents;
     let down = up.opposite();
     let up_c = check_connect(up.offset());
     let down_c = check_connect(down.offset());
@@ -40,7 +62,18 @@ pub fn solve_horizontal_vertical<F>(face: Direction, check_connect: &F) -> usize
 where
     F: Fn(IVec3) -> bool,
 {
-    let (up, left) = get_face_tangents(face);
+    solve_horizontal_vertical_with_tangents(face, get_face_tangents(face), check_connect)
+}
+
+pub fn solve_horizontal_vertical_with_tangents<F>(
+    _face: Direction,
+    tangents: (Direction, Direction),
+    check_connect: &F,
+) -> usize
+where
+    F: Fn(IVec3) -> bool,
+{
+    let (up, left) = tangents;
     let down = up.opposite();
     let right = left.opposite();
 
@@ -69,7 +102,18 @@ pub fn solve_vertical_horizontal<F>(face: Direction, check_connect: &F) -> usize
 where
     F: Fn(IVec3) -> bool,
 {
-    let (up, left) = get_face_tangents(face);
+    solve_vertical_horizontal_with_tangents(face, get_face_tangents(face), check_connect)
+}
+
+pub fn solve_vertical_horizontal_with_tangents<F>(
+    _face: Direction,
+    tangents: (Direction, Direction),
+    check_connect: &F,
+) -> usize
+where
+    F: Fn(IVec3) -> bool,
+{
+    let (up, left) = tangents;
     let down = up.opposite();
     let right = left.opposite();
 
@@ -98,6 +142,17 @@ pub fn solve_top<F>(face: Direction, check_connect: &F) -> bool
 where
     F: Fn(IVec3) -> bool,
 {
-    let (up, _left) = get_face_tangents(face);
+    solve_top_with_tangents(face, get_face_tangents(face), check_connect)
+}
+
+pub fn solve_top_with_tangents<F>(
+    _face: Direction,
+    tangents: (Direction, Direction),
+    check_connect: &F,
+) -> bool
+where
+    F: Fn(IVec3) -> bool,
+{
+    let (up, _left) = tangents;
     check_connect(up.offset())
 }

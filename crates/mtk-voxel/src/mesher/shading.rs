@@ -506,9 +506,12 @@ where
         } else {
             None
         };
-        if let Some(resolved_loc) = solver.resolve_face(
+        let tangents =
+            mtk_core::derive_quad_face_tangents(&face.vertices, &face.uvs, face_dir, true);
+        if let Some(resolved_loc) = solver.resolve_face_with_tangents(
             state_str,
             face_dir,
+            tangents,
             block_pos,
             base_loc.as_ref(),
             None,

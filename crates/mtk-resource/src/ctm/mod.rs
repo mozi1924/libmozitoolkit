@@ -113,17 +113,59 @@ tiles=0 1 2 3
 
         use glam::IVec3;
         use mtk_core::direction::Direction;
-        let pos = IVec3::new(1, 0, 0);
         let dummy = |_: IVec3| None::<&str>;
-        let tile = solver.resolve_face(
-            "minecraft:sandstone",
-            Direction::North,
-            pos,
-            None,
-            None,
-            dummy,
-        );
-        assert!(tile.is_some());
+
+        // (0, 0, 0) -> u=0, v=0 -> tile 0
+        let t0 = solver
+            .resolve_face(
+                "minecraft:sandstone",
+                Direction::North,
+                IVec3::new(0, 0, 0),
+                None,
+                None,
+                dummy,
+            )
+            .unwrap();
+        assert_eq!(t0.path, "optifine/ctm/0");
+
+        // (-1, 0, 0) -> Right (West) -> u=1, v=0 -> tile 1
+        let t1 = solver
+            .resolve_face(
+                "minecraft:sandstone",
+                Direction::North,
+                IVec3::new(-1, 0, 0),
+                None,
+                None,
+                dummy,
+            )
+            .unwrap();
+        assert_eq!(t1.path, "optifine/ctm/1");
+
+        // (0, -1, 0) -> Down -> u=0, v=1 -> tile 2
+        let t2 = solver
+            .resolve_face(
+                "minecraft:sandstone",
+                Direction::North,
+                IVec3::new(0, -1, 0),
+                None,
+                None,
+                dummy,
+            )
+            .unwrap();
+        assert_eq!(t2.path, "optifine/ctm/2");
+
+        // (-1, -1, 0) -> Right + Down -> u=1, v=1 -> tile 3
+        let t3 = solver
+            .resolve_face(
+                "minecraft:sandstone",
+                Direction::North,
+                IVec3::new(-1, -1, 0),
+                None,
+                None,
+                dummy,
+            )
+            .unwrap();
+        assert_eq!(t3.path, "optifine/ctm/3");
     }
 
     #[test]

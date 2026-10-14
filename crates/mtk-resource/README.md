@@ -200,7 +200,9 @@ pub struct CtmSolver {
 | :--- | :--- |
 | `CtmRule::parse_properties(path, ns, content) -> Option<CtmRule>` | 解析 `.properties` 配置文件。 |
 | `CtmSolver::new(rules: Vec<CtmRule>) -> Self` | 构建带优先级倒序索引的高速 CTM 解算器。 |
-| `solver.resolve_face(state, face, pos, base_tile, biome, get_block) -> Option<ResourceLocation>` | 根据邻域方块状态与基础贴图解算目标面替换贴图。 |
+| `solver.resolve_face(state, face, pos, base_tile, biome, get_block) -> Option<ResourceLocation>` | 根据邻域方块状态与基础贴图解算目标面替换贴图（使用标准静态切线）。 |
+| `solver.resolve_face_with_tangents(state, face, tangents, pos, base_tile, biome, get_block) -> Option<ResourceLocation>` | 支持显式传入动态 2D 切线基底 `(up, left)` 的解算接口，自适应感知旋转方块与 UV 旋转。 |
+
 
 ---
 

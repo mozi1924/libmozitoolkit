@@ -105,8 +105,10 @@ impl MesherConfig {
 
         match self.coordinate_system {
             CoordinateSystem::Minecraft => centered,
-            CoordinateSystem::ZUpRightHanded => Vec3::new(centered.x, -centered.z, centered.y),
-            CoordinateSystem::YUpRightHanded => centered,
+            CoordinateSystem::ZUpRightHanded => {
+                mtk_core::mc_world_to_z_up(centered.x, centered.y, centered.z)
+            }
+            CoordinateSystem::YUpRightHanded => Vec3::new(centered.x, centered.y, -centered.z),
         }
     }
 
@@ -116,8 +118,8 @@ impl MesherConfig {
     pub fn transform_direction(&self, dir: Vec3) -> Vec3 {
         match self.coordinate_system {
             CoordinateSystem::Minecraft => dir,
-            CoordinateSystem::ZUpRightHanded => Vec3::new(dir.x, -dir.z, dir.y),
-            CoordinateSystem::YUpRightHanded => dir,
+            CoordinateSystem::ZUpRightHanded => mtk_core::mc_world_to_z_up(dir.x, dir.y, dir.z),
+            CoordinateSystem::YUpRightHanded => Vec3::new(dir.x, dir.y, -dir.z),
         }
     }
 

@@ -141,6 +141,26 @@ impl Direction {
             Direction::North => "north",
         }
     }
+
+    /// Returns the canonical 2D texture tangent directions `(up, left)` for an unrotated cardinal face.
+    /// Aligns strictly with standard Minecraft FaceInfo / Continuity / OptiFine specifications:
+    /// - North: (Up, East)
+    /// - South: (Up, West)
+    /// - East:  (Up, South)
+    /// - West:  (Up, North)
+    /// - Up:    (North, West)
+    /// - Down:  (South, West)
+    #[inline]
+    pub const fn canonical_face_tangents(self) -> (Direction, Direction) {
+        match self {
+            Direction::North => (Direction::Up, Direction::East),
+            Direction::South => (Direction::Up, Direction::West),
+            Direction::East => (Direction::Up, Direction::South),
+            Direction::West => (Direction::Up, Direction::North),
+            Direction::Up => (Direction::North, Direction::West),
+            Direction::Down => (Direction::South, Direction::West),
+        }
+    }
 }
 
 bitflags! {

@@ -1,11 +1,12 @@
 use crate::ctm::algorithms::{
-    compact::solve_compact_ctm,
+    compact::solve_compact_ctm_with_tangents,
     directional::{
-        solve_horizontal, solve_horizontal_vertical, solve_top, solve_vertical,
-        solve_vertical_horizontal,
+        solve_horizontal_vertical_with_tangents, solve_horizontal_with_tangents,
+        solve_top_with_tangents, solve_vertical_horizontal_with_tangents,
+        solve_vertical_with_tangents,
     },
-    full::solve_full_ctm,
-    patterns::{solve_overlay, solve_random, solve_repeat},
+    full::solve_full_ctm_with_tangents,
+    patterns::{solve_overlay_with_tangents, solve_random, solve_repeat_with_tangents},
 };
 use crate::ctm::types::{extract_block_name, ConnectLogic, CtmMethod, CtmRule};
 use crate::identifier::{ResourceLocation, DEFAULT_NAMESPACE};
@@ -14,11 +15,33 @@ use mtk_core::direction::Direction;
 use std::collections::HashMap;
 
 impl CtmRule {
-    /// Solves the final CTM sub-tile ResourceLocation for this face.
+    /// Solves the final CTM sub-tile ResourceLocation for this face using canonical face tangents.
     pub fn solve_tile<F, S>(
         &self,
         state: &str,
         face: Direction,
+        world_pos: IVec3,
+        get_block: &F,
+    ) -> Option<ResourceLocation>
+    where
+        F: Fn(IVec3) -> Option<S>,
+        S: AsRef<str>,
+    {
+        self.solve_tile_with_tangents(
+            state,
+            face,
+            face.canonical_face_tangents(),
+            world_pos,
+            get_block,
+        )
+    }
+
+    /// Solves the final CTM sub-tile ResourceLocation for this face with explicit 2D face tangents `(up, left)`.
+    pub fn solve_tile_with_tangents<F, S>(
+        &self,
+        state: &str,
+        face: Direction,
+        tangents: (Direction, Direction),
         world_pos: IVec3,
         get_block: &F,
     ) -> Option<ResourceLocation>
@@ -55,38 +78,42 @@ impl CtmRule {
 
         match &self.method {
             CtmMethod::Full { inner_seams } => {
-                let tile_idx = solve_full_ctm(face, *inner_seams, &check_connect);
+                let tile_idx =
+                    solve_full_ctm_with_tangents(face, tangents, *inner_seams, &check_connect);
                 self.tiles.get(tile_idx).and_then(|t| t.clone())
             }
             CtmMethod::Compact { .. } => {
-                let tile_idx = solve_compact_ctm(face, &check_connect);
+                let tile_idx = solve_compact_ctm_with_tangents(face, tangents, &check_connect);
                 self.tiles.get(tile_idx).and_then(|t| t.clone())
             }
             CtmMethod::Horizontal => {
-                let tile_idx = solve_horizontal(face, &check_connect);
+                let tile_idx = solve_horizontal_with_tangents(face, tangents, &check_connect);
                 self.tiles.get(tile_idx).and_then(|t| t.clone())
             }
             CtmMethod::Vertical => {
-                let tile_idx = solve_vertical(face, &check_connect);
+                let tile_idx = solve_vertical_with_tangents(face, tangents, &check_connect);
                 self.tiles.get(tile_idx).and_then(|t| t.clone())
             }
             CtmMethod::HorizontalVertical => {
-                let tile_idx = solve_horizontal_vertical(face, &check_connect);
+                let tile_idx =
+                    solve_horizontal_vertical_with_tangents(face, tangents, &check_connect);
                 self.tiles.get(tile_idx).and_then(|t| t.clone())
             }
             CtmMethod::VerticalHorizontal => {
-                let tile_idx = solve_vertical_horizontal(face, &check_connect);
+                let tile_idx =
+                    solve_vertical_horizontal_with_tangents(face, tangents, &check_connect);
                 self.tiles.get(tile_idx).and_then(|t| t.clone())
             }
             CtmMethod::Top => {
-                if solve_top(face, &check_connect) {
+                if solve_top_with_tangents(face, tangents, &check_connect) {
                     self.tiles.first().and_then(|t| t.clone())
                 } else {
                     None
                 }
             }
             CtmMethod::Repeat { width, height } => {
-                let tile_idx = solve_repeat(face, world_pos, *width, *height)?;
+                let tile_idx =
+                    solve_repeat_with_tangents(face, tangents, world_pos, *width, *height)?;
                 self.tiles.get(tile_idx).and_then(|t| t.clone())
             }
             CtmMethod::Random {
@@ -113,7 +140,7 @@ impl CtmRule {
             }
             CtmMethod::Fixed => self.tiles.first().and_then(|t| t.clone()),
             CtmMethod::Overlay => {
-                let tile_idx = solve_overlay(face, &check_connect)?;
+                let tile_idx = solve_overlay_with_tangents(face, tangents, &check_connect)?;
                 self.tiles.get(tile_idx).and_then(|t| t.clone())
             }
         }
@@ -156,10 +183,37 @@ impl CtmSolver {
     }
 
     /// Resolves the final CTM tile for a block face given its state, orientation, position, and neighbor query closure.
+    /// Uses canonical face tangents.
     pub fn resolve_face<F, S>(
         &self,
         state: &str,
         face: Direction,
+        world_pos: IVec3,
+        base_tile: Option<&ResourceLocation>,
+        biome: Option<&str>,
+        get_block: F,
+    ) -> Option<ResourceLocation>
+    where
+        F: Fn(IVec3) -> Option<S>,
+        S: AsRef<str>,
+    {
+        self.resolve_face_with_tangents(
+            state,
+            face,
+            face.canonical_face_tangents(),
+            world_pos,
+            base_tile,
+            biome,
+            get_block,
+        )
+    }
+
+    /// Resolves the final CTM tile for a block face with explicit 2D face tangents `(up, left)`.
+    pub fn resolve_face_with_tangents<F, S>(
+        &self,
+        state: &str,
+        face: Direction,
+        tangents: (Direction, Direction),
         world_pos: IVec3,
         base_tile: Option<&ResourceLocation>,
         biome: Option<&str>,
@@ -185,7 +239,9 @@ impl CtmSolver {
             for &idx in rule_indices {
                 let rule = &self.rules[idx];
                 if rule.matches_block(state, face, world_pos, base_tile, biome) {
-                    if let Some(tile) = rule.solve_tile(state, face, world_pos, &get_block) {
+                    if let Some(tile) =
+                        rule.solve_tile_with_tangents(state, face, tangents, world_pos, &get_block)
+                    {
                         return Some(tile);
                     }
                 }
@@ -198,7 +254,9 @@ impl CtmSolver {
                 for &idx in rule_indices {
                     let rule = &self.rules[idx];
                     if rule.matches_block(state, face, world_pos, base_tile, biome) {
-                        if let Some(tile) = rule.solve_tile(state, face, world_pos, &get_block) {
+                        if let Some(tile) = rule
+                            .solve_tile_with_tangents(state, face, tangents, world_pos, &get_block)
+                        {
                             return Some(tile);
                         }
                     }

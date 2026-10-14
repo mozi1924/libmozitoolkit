@@ -217,17 +217,11 @@ pub fn extract_block_name(state: &str) -> &str {
     }
 }
 
-/// Computes the tangent `(up, left)` directions for a standard cardinal cube face.
+/// Computes the canonical tangent `(up, left)` directions for a standard cardinal cube face.
+/// Re-exports and delegates to `mtk_core::Direction::canonical_face_tangents` as SSOT.
 #[inline]
 pub const fn get_face_tangents(face: Direction) -> (Direction, Direction) {
-    match face {
-        Direction::North => (Direction::Up, Direction::East),
-        Direction::South => (Direction::Up, Direction::West),
-        Direction::East => (Direction::Up, Direction::South),
-        Direction::West => (Direction::Up, Direction::North),
-        Direction::Up => (Direction::North, Direction::West),
-        Direction::Down => (Direction::South, Direction::West),
-    }
+    face.canonical_face_tangents()
 }
 
 /// Deterministic 3D spatial pseudorandom number generator matching standard Minecraft / OptiFine.
