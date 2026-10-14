@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 //! # mtk-voxel
 //!
 //! **mtk-voxel** provides Minecraft chunk section and world-level voxel storage,
@@ -37,17 +38,3 @@ pub use types::{CoordinateSystem, MesherConfig, VoxelError, WorldMeshBuildResult
 pub use world::VoxelWorld;
 
 pub mod world;
-
-// Backward-compatibility module aliases
-pub mod ao {
-    pub use crate::mesher::ao::*;
-}
-pub mod crc {
-    pub use crate::storage::crc::*;
-}
-pub mod delta_mesher {
-    pub use crate::mesher::delta_mesher::*;
-}
-pub mod fluid_uv {
-    pub use crate::fluid::uv::*;
-}

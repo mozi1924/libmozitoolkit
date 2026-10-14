@@ -1,3 +1,5 @@
+#![deny(unsafe_code)]
+
 //! # mtk-package
 //!
 //! Unified binary package container codec for MoziToolKit (`.mtkcache`, `.mtkscene`).

@@ -6,7 +6,7 @@ use mtk_core::mesh::MeshData;
 use mtk_cull::engine::parse_block_name_and_props;
 use mtk_cull::FaceCuller;
 
-use crate::fluid_uv::{get_fluid_side_uvs, get_fluid_top_uvs};
+use crate::fluid::uv::{get_fluid_side_uvs, get_fluid_top_uvs};
 use crate::types::MesherConfig;
 
 pub use super::height::*;

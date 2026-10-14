@@ -4,7 +4,7 @@ use std::sync::Arc;
 use glam::IVec3;
 use mtk_core::mesh::MeshData;
 use mtk_cull::FaceCuller;
-use mtk_model::baked::BakedModel;
+use mtk_model::baker::baked_model::BakedModel;
 
 use crate::mesher::shading::ModelSource;
 use crate::mesher::SectionMesher;

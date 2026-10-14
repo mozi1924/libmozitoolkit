@@ -9,13 +9,13 @@ use mtk_core::random::{
 };
 use mtk_cull::types::BlockCullMeta;
 use mtk_cull::FaceCuller;
-use mtk_model::baked::BakedModel;
+use mtk_model::baker::baked_model::BakedModel;
 use mtk_model::baker::is_block_emissive;
-use mtk_model::blockstate::BlockState;
+use mtk_model::parser::blockstate::BlockState;
 use std::sync::Arc;
 
-use crate::ao::calculate_face_ao;
 use crate::fluid::emit_fluid_geometry;
+use crate::mesher::ao::calculate_face_ao;
 use crate::storage::{padded_index, PaddedVoxelArray, SECTION_SIZE};
 use crate::types::{MesherConfig, VoxelError};
 

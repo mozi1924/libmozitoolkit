@@ -141,3 +141,47 @@ fn test_protocol_version_compatibility() {
         other => panic!("Expected UnsupportedVersion(0), got {:?}", other),
     }
 }
+
+/// Builds a minimal `FullSnapshot` header with the given dimensions and no palette.
+fn full_snapshot_header(size_x: i32, size_y: i32, size_z: i32, index_bytes: u8) -> Vec<u8> {
+    let mut data = vec![0x4D, 0x43, 0x02, 0x02];
+    for _ in 0..3 {
+        data.extend_from_slice(&0i32.to_le_bytes()); // min_pos
+    }
+    data.extend_from_slice(&size_x.to_le_bytes());
+    data.extend_from_slice(&size_y.to_le_bytes());
+    data.extend_from_slice(&size_z.to_le_bytes());
+    data.extend_from_slice(&0u16.to_le_bytes()); // empty palette
+    data.push(index_bytes);
+    data
+}
+
+#[test]
+fn test_full_snapshot_overflowing_dimensions_rejected() {
+    // i32::MAX^3 overflows i64 and must be rejected instead of panicking.
+    let data = full_snapshot_header(i32::MAX, i32::MAX, i32::MAX, 1);
+    match decode_packet(&data) {
+        Err(ProtocolError::InvalidDimensions(..)) => {}
+        other => panic!("Expected InvalidDimensions, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_full_snapshot_negative_dimensions_rejected() {
+    let data = full_snapshot_header(-1, 16, 16, 1);
+    match decode_packet(&data) {
+        Err(ProtocolError::InvalidDimensions(-1, 16, 16)) => {}
+        other => panic!("Expected InvalidDimensions, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_full_snapshot_huge_grid_rejected_before_allocation() {
+    // Volume fits in i64 but far exceeds the payload: must fail as truncated,
+    // without attempting a multi-gigabyte `Vec` allocation.
+    let data = full_snapshot_header(1_000_000, 1_000_000, 1, 1);
+    match decode_packet(&data) {
+        Err(ProtocolError::TruncatedPayload { field }) => assert_eq!(field, "grid_indices_u8"),
+        other => panic!("Expected TruncatedPayload, got {:?}", other),
+    }
+}

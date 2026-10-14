@@ -15,7 +15,7 @@ use glam::IVec3;
 use mtk_core::mesh::MeshData;
 use mtk_core::progress::{ProgressCallback, ProgressReport};
 use mtk_cull::FaceCuller;
-use mtk_model::baked::BakedModelDatabase;
+use mtk_model::baker::baked_model::BakedModelDatabase;
 
 use crate::mesher::{DeltaMesher, SectionMesher};
 use crate::source::VoxelSource;

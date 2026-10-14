@@ -4,7 +4,7 @@ use glam::IVec3;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::crc::{crc32_update, extract_canonical_state_str, EMPTY_SECTION_CRC};
+use crate::storage::crc::{crc32_update, extract_canonical_state_str, EMPTY_SECTION_CRC};
 
 pub use mtk_core::constants::voxel::{
     block_index, padded_index, PADDED_SIZE, PADDED_VOLUME, SECTION_AREA, SECTION_MASK,

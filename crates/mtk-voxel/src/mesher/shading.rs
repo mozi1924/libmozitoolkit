@@ -7,7 +7,7 @@
 use glam::{IVec3, Vec2};
 use mtk_core::direction::Direction;
 use mtk_material::MaterialResolver;
-use mtk_model::baked::{BakedFace, BakedModel, BakedVariantGroup};
+use mtk_model::baker::baked_model::{BakedFace, BakedModel, BakedVariantGroup};
 use std::sync::Arc;
 
 use crate::biome::SmoothedBiomeColumn;
@@ -328,7 +328,8 @@ pub fn build_palette_meshing_data<'a>(
                 baked.emissive_level
             } else {
                 mtk_model::baker::get_block_emissive_level(
-                    &mtk_model::blockstate::BlockState::parse(state_str).unwrap_or_default(),
+                    &mtk_model::parser::blockstate::BlockState::parse(state_str)
+                        .unwrap_or_default(),
                 )
             };
 

@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 //! # mtk-save
 //!
 //! **mtk-save** provides high-performance Minecraft Java Edition save (Anvil MCA)

@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 //! # mtk-sync
 //!
 //! **mtk-sync** provides native WebSocket Live Sync client implementations,

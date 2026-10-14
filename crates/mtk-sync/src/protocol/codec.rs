@@ -8,6 +8,57 @@ use super::constants::*;
 use super::error::ProtocolError;
 use super::packet::*;
 
+/// Computes `size_x * size_y * size_z` with checked arithmetic.
+///
+/// Network-supplied dimensions are untrusted: a malicious or corrupt packet can
+/// trigger an `i32` overflow (which panics in debug builds) or request an
+/// astronomically large allocation. Negative or overflowing volumes are rejected.
+fn checked_block_volume(size_x: i32, size_y: i32, size_z: i32) -> Result<usize, ProtocolError> {
+    (size_x as i64)
+        .checked_mul(size_y as i64)
+        .and_then(|v| v.checked_mul(size_z as i64))
+        .filter(|&v| v >= 0 && (v as u64) <= usize::MAX as u64)
+        .map(|v| v as usize)
+        .ok_or(ProtocolError::InvalidDimensions(size_x, size_y, size_z))
+}
+
+/// Decodes a flat grid of `count` palette indices of `bytes_per_index` bytes each.
+///
+/// Validates the payload length *before* allocating so a forged `size` header cannot
+/// force a multi-gigabyte allocation. Returns the decoded indices and the next offset.
+fn decode_block_grid(
+    data: &[u8],
+    offset: usize,
+    count: usize,
+    bytes_per_index: u8,
+    field: &'static str,
+) -> Result<(Vec<u16>, usize), ProtocolError> {
+    let bp = bytes_per_index as usize;
+    // `count` can be at most `i64::MAX`, so `count * bp` may exceed `usize::MAX`.
+    let needed = count
+        .checked_mul(bp)
+        .ok_or(ProtocolError::TruncatedPayload { field })?;
+    let end = offset
+        .checked_add(needed)
+        .filter(|&end| end <= data.len())
+        .ok_or(ProtocolError::TruncatedPayload { field })?;
+
+    let mut out = Vec::with_capacity(count);
+    if bp == 1 {
+        for &b in &data[offset..end] {
+            out.push(b as u16);
+        }
+    } else {
+        for i in 0..count {
+            let start = offset + i * 2;
+            out.push(u16::from_le_bytes(
+                data[start..start + 2].try_into().unwrap(),
+            ));
+        }
+    }
+    Ok((out, end))
+}
+
 /// Decodes a raw binary WebSocket frame into a strongly-typed `Packet`.
 pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
     if data.len() < HEADER_SIZE {
@@ -106,35 +157,15 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
             let index_bytes_per_block = data[offset];
             offset += 1;
 
-            let total_blocks = (size_x * size_y * size_z).max(0) as usize;
-            let mut grid_indices = Vec::with_capacity(total_blocks);
-
-            if index_bytes_per_block == 1 {
-                if data.len() < offset + total_blocks {
-                    return Err(ProtocolError::TruncatedPayload {
-                        field: "grid_indices_u8",
-                    });
-                }
-                for &b in &data[offset..offset + total_blocks] {
-                    grid_indices.push(b as u16);
-                }
-                offset += total_blocks;
+            let total_blocks = checked_block_volume(size_x, size_y, size_z)?;
+            let (grid_indices, next_offset) = if index_bytes_per_block == 1 {
+                decode_block_grid(data, offset, total_blocks, 1, "grid_indices_u8")?
             } else if index_bytes_per_block == 2 {
-                if data.len() < offset + total_blocks * 2 {
-                    return Err(ProtocolError::TruncatedPayload {
-                        field: "grid_indices_u16",
-                    });
-                }
-                for i in 0..total_blocks {
-                    let val = u16::from_le_bytes(
-                        data[offset + i * 2..offset + i * 2 + 2].try_into().unwrap(),
-                    );
-                    grid_indices.push(val);
-                }
-                offset += total_blocks * 2;
+                decode_block_grid(data, offset, total_blocks, 2, "grid_indices_u16")?
             } else {
                 return Err(ProtocolError::InvalidIndexFormat(index_bytes_per_block));
-            }
+            };
+            offset = next_offset;
 
             let mut biome_palette = None;
             let mut biome_indices = None;
@@ -354,35 +385,15 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
             let index_bytes = data[offset];
             offset += 1;
 
-            let total_blocks = (size_x * size_y * size_z).max(0) as usize;
-            let mut grid_indices = Vec::with_capacity(total_blocks);
-
-            if index_bytes == 1 {
-                if data.len() < offset + total_blocks {
-                    return Err(ProtocolError::TruncatedPayload {
-                        field: "section_indices_u8",
-                    });
-                }
-                for &b in &data[offset..offset + total_blocks] {
-                    grid_indices.push(b as u16);
-                }
-                offset += total_blocks;
+            let total_blocks = checked_block_volume(size_x, size_y, size_z)?;
+            let (grid_indices, next_offset) = if index_bytes == 1 {
+                decode_block_grid(data, offset, total_blocks, 1, "section_indices_u8")?
             } else if index_bytes == 2 {
-                if data.len() < offset + total_blocks * 2 {
-                    return Err(ProtocolError::TruncatedPayload {
-                        field: "section_indices_u16",
-                    });
-                }
-                for i in 0..total_blocks {
-                    let val = u16::from_le_bytes(
-                        data[offset + i * 2..offset + i * 2 + 2].try_into().unwrap(),
-                    );
-                    grid_indices.push(val);
-                }
-                offset += total_blocks * 2;
+                decode_block_grid(data, offset, total_blocks, 2, "section_indices_u16")?
             } else {
                 return Err(ProtocolError::InvalidIndexFormat(index_bytes));
-            }
+            };
+            offset = next_offset;
 
             let mut biome_palette = None;
             let mut biome_indices = None;

@@ -1,5 +1,6 @@
 use mtk_package::{
-    ChunkWriteOptions, MtkPackageReader, MtkPackageWriter, PackageProfile, HEADER_SIZE,
+    ChunkWriteOptions, MtkPackageReader, MtkPackageWriter, PackageError, PackageHeader,
+    PackageProfile, TableOfContents, HEADER_SIZE,
 };
 use std::io::Cursor;
 
@@ -130,4 +131,31 @@ fn test_package_file_and_header_only() {
     assert!(buffered_reader.has_chunk("biome/mapping"));
     let str_val_buf = buffered_reader.read_chunk_str("biome/mapping").unwrap();
     assert_eq!(str_val_buf, r#"{"biomes":["plains","forest"]}"#);
+}
+
+#[test]
+fn test_toc_forged_count_rejected() {
+    // A forged chunk count must not trigger a huge pre-allocation; it is rejected
+    // because the payload cannot possibly hold that many entries.
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&u32::MAX.to_le_bytes());
+    bytes.extend_from_slice(&[0u8; 8]);
+
+    match TableOfContents::decode_bytes(&bytes) {
+        Err(PackageError::InvalidToc(_)) => {}
+        other => panic!("Expected InvalidToc, got {:?}", other.is_ok()),
+    }
+}
+
+#[test]
+fn test_forged_toc_offsets_rejected() {
+    let mut header = PackageHeader::new_asset_cache([0x11; 16], 0);
+    header.toc_offset = u64::MAX;
+    header.toc_length = 2;
+
+    let bytes = header.to_bytes().to_vec();
+    match MtkPackageReader::from_bytes(bytes) {
+        Err(PackageError::OutOfBounds { .. }) => {}
+        other => panic!("Expected OutOfBounds, got {:?}", other.is_ok()),
+    }
 }

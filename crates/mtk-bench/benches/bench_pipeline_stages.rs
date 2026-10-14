@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use std::time::Instant;
 
 use libmtk::{FaceCuller, MesherConfig, PaddedVoxelArray, SectionMesher, VoxelStorage, VoxelWorld};

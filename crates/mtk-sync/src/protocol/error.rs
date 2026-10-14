@@ -26,4 +26,7 @@ pub enum ProtocolError {
 
     #[error("Payload truncated while parsing {field}")]
     TruncatedPayload { field: &'static str },
+
+    #[error("Invalid block dimensions: {0}x{1}x{2} (negative or overflowing volume)")]
+    InvalidDimensions(i32, i32, i32),
 }

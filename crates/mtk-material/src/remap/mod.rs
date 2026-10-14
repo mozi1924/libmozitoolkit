@@ -40,65 +40,14 @@ pub fn remap_sprite_to_sprite(
     remap_local_to_atlas(local[0], local[1], target_sprite)
 }
 
-/// Check if an angle is approximately orthogonal (multiple of 90 degrees / pi/2).
-#[inline]
-pub fn is_orthogonal_angle(theta: f32, tolerance: f32) -> bool {
-    let half_pi = std::f32::consts::FRAC_PI_2;
-    for k in -2..=2 {
-        let target = k as f32 * half_pi;
-        if (theta - target).abs() < tolerance {
-            return true;
-        }
-    }
-    false
-}
-
 /// Calculate the Euler Z rotation angle (in radians) of a face's loop UVs.
 /// Returns 0.0 for unrotated or standard axis-aligned faces.
 /// Returns non-zero angle theta in radians only when ALL valid edges of the face are non-orthogonal.
+///
+/// Delegates to [`mtk_core::uv::detect_uv_rotation`] so the UV angle math has a single source of truth.
 pub fn detect_face_uv_rotation(uvs: &[[f32; 2]], tolerance: f32) -> f32 {
-    let num_uvs = uvs.len();
-    if num_uvs < 3 {
-        return 0.0;
-    }
-
-    let mut valid_edges = Vec::new();
-    for i in 0..num_uvs {
-        let p_curr = uvs[i];
-        let p_next = uvs[(i + 1) % num_uvs];
-        let dx = p_next[0] - p_curr[0];
-        let dy = p_next[1] - p_curr[1];
-        let len_sq = dx * dx + dy * dy;
-        if len_sq >= 1e-12 {
-            let mut theta = dy.atan2(dx);
-            while theta <= -std::f32::consts::PI {
-                theta += 2.0 * std::f32::consts::PI;
-            }
-            while theta > std::f32::consts::PI {
-                theta -= 2.0 * std::f32::consts::PI;
-            }
-            valid_edges.push(theta);
-        }
-    }
-
-    if valid_edges.is_empty() {
-        return 0.0;
-    }
-
-    // If ANY edge is orthogonal, the face is built in an axis-aligned grid
-    for &theta in &valid_edges {
-        if is_orthogonal_angle(theta, tolerance) {
-            return 0.0;
-        }
-    }
-
-    // If ALL valid edges are non-orthogonal, the entire face is tilted
-    let primary_theta = valid_edges[0];
-    if is_orthogonal_angle(primary_theta, tolerance) {
-        0.0
-    } else {
-        primary_theta
-    }
+    let vecs: Vec<glam::Vec2> = uvs.iter().map(|p| glam::Vec2::new(p[0], p[1])).collect();
+    mtk_core::uv::detect_uv_rotation(&vecs, tolerance)
 }
 
 /// Straighten a rotated polygon's loop UVs back to standard axis-aligned coordinates.

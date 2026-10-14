@@ -90,7 +90,7 @@ impl BakedModelDatabase {
             block_state: String,
             elements: Vec<BakedElement>,
             #[serde(default)]
-            obj_faces: Vec<crate::obj::BakedObjFace>,
+            obj_faces: Vec<crate::parser::obj::BakedObjFace>,
             faces: [BakedFace; 6],
             is_cube: bool,
             is_opaque: bool,
@@ -165,7 +165,7 @@ impl BakedModelDatabase {
             block_state: String,
             elements: Vec<LegacyElementV0>,
             #[serde(default)]
-            obj_faces: Vec<crate::obj::BakedObjFace>,
+            obj_faces: Vec<crate::parser::obj::BakedObjFace>,
             faces: [LegacyFaceV0; 6],
             is_cube: bool,
             is_opaque: bool,
@@ -178,7 +178,7 @@ impl BakedModelDatabase {
             block_state: String,
             elements: Vec<LegacyElementV0>,
             #[serde(default)]
-            obj_faces: Vec<crate::obj::BakedObjFace>,
+            obj_faces: Vec<crate::parser::obj::BakedObjFace>,
             faces: [LegacyFaceV0; 6],
             is_cube: bool,
             is_opaque: bool,

@@ -1,7 +1,7 @@
 use glam::IVec3;
 
 use super::container::VoxelStorage;
-use crate::crc::extract_canonical_state_str;
+use crate::storage::crc::extract_canonical_state_str;
 use crate::storage::SectionStorage;
 
 impl VoxelStorage {

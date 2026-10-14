@@ -16,7 +16,7 @@ use super::catalog::{
     LEAVES_NAMES,
 };
 use super::parametric::derive_parametric_face_shapes;
-use crate::rect_ops::extract_quad_face_occlusion_rect;
+use crate::geometry::rect_ops::extract_quad_face_occlusion_rect;
 use crate::types::{is_full_rect, BlockCullMeta, CullCategory, FULL_FACE_RECT};
 
 /// Canonical vanilla Minecraft blocks that canonically only exist submerged in water and

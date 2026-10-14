@@ -353,7 +353,8 @@ fn test_baked_model_cull_meta_serialization() {
 
     // Test bincode roundtrip
     let bin = bincode::serialize(&baked).unwrap();
-    let deserialized: mtk_model::baked::BakedModel = bincode::deserialize(&bin).unwrap();
+    let deserialized: mtk_model::baker::baked_model::BakedModel =
+        bincode::deserialize(&bin).unwrap();
     assert!(deserialized.cull_meta.is_some());
     let des_meta = deserialized.cull_meta.unwrap();
     assert_eq!(des_meta.category, mtk_cull::CullCategory::SolidOpaque);
@@ -411,7 +412,8 @@ fn test_baked_model_atlas_uv_remapping() {
 
     // Test bincode roundtrip serialization
     let bin = bincode::serialize(&baked).unwrap();
-    let deserialized: mtk_model::baked::BakedModel = bincode::deserialize(&bin).unwrap();
+    let deserialized: mtk_model::baker::baked_model::BakedModel =
+        bincode::deserialize(&bin).unwrap();
     let des_face = deserialized.elements[0]
         .faces
         .get(&mtk_core::direction::Direction::Up)
@@ -487,7 +489,8 @@ fn test_baked_model_six_direction_bucketing() {
 
     // Test bincode roundtrip serialization preserving face buckets
     let bin = bincode::serialize(&baked).unwrap();
-    let deserialized: mtk_model::baked::BakedModel = bincode::deserialize(&bin).unwrap();
+    let deserialized: mtk_model::baker::baked_model::BakedModel =
+        bincode::deserialize(&bin).unwrap();
     assert_eq!(deserialized.culled_faces[Direction::Up.to_index()].len(), 2);
     assert_eq!(
         deserialized.culled_faces[Direction::Down.to_index()].len(),

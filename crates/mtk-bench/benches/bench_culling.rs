@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use glam::IVec3;
 use mtk_core::direction::Direction;
 use mtk_cull::FaceCuller;

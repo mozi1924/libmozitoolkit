@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use mtk_core::direction::Direction;
 
-use crate::model_json::ResolvedFace;
+use crate::parser::model_json::ResolvedFace;
 
 /// Check if a face should be skipped due to planar zero-thickness deduplication.
 #[inline]

@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 //! # mtk-resource
 //!
 //! Minecraft resource pack virtual file system, asset identifier specification,

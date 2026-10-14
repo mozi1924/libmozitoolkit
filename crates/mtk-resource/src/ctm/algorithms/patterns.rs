@@ -1,12 +1,14 @@
 use crate::ctm::tables::OVERLAY_17_LOOKUP;
-use crate::ctm::types::{coordinate_random, extract_block_name, get_face_tangents, CtmSymmetry};
+use crate::ctm::types::{coordinate_random, extract_block_name, CtmSymmetry};
 use glam::IVec3;
 use mtk_core::direction::Direction;
 
-pub fn solve_repeat(face: Direction, world_pos: IVec3, width: u32, height: u32) -> Option<usize> {
-    solve_repeat_with_tangents(face, get_face_tangents(face), world_pos, width, height)
-}
-
+/// Solves an NxM `repeat` CTM pattern using explicit 2D face tangents `(up, left)`.
+///
+/// The tile grid is anchored to the face's visual orientation: the column index `u`
+/// increases along the tangent pointing *right* (opposite of `left`), and the row index
+/// `v` increases *downward* (opposite of `up`), matching standard top-left image origin
+/// and OptiFine/Continuity repeat semantics. Returns `v * width + u`.
 pub fn solve_repeat_with_tangents(
     _face: Direction,
     tangents: (Direction, Direction),
@@ -108,13 +110,6 @@ where
         }
     }
     chosen_idx
-}
-
-pub fn solve_overlay<F>(face: Direction, check_connect: &F) -> Option<usize>
-where
-    F: Fn(IVec3) -> bool,
-{
-    solve_overlay_with_tangents(face, get_face_tangents(face), check_connect)
 }
 
 pub fn solve_overlay_with_tangents<F>(

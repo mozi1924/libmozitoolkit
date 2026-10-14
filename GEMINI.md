@@ -56,7 +56,7 @@
 - **严禁无界追加巨石代码**：当向现有模块新增功能时，若预估或实际导致文件接近 600 行，**必须主动创建子模块**（如 `mod.rs` + 子领域文件，参考 `mtk-voxel::storage::world`、`mtk-sync::session`、`mtk-cull::rules` 的模块化实践）进行职责解耦，严禁在一个文件中无休止地堆砌长篇代码。
 - **严格禁止领域越界污染**：
   - 数据模型层（如 `mtk-model`）严禁内联编写复杂的 2D/3D 几何投影、多边形裁剪或叠面碰撞检测算法；
-  - 所有通用几何清理、共面去重与微观遮挡算法**必须且只能归属 `mtk-core` 或 `mtk-cull`（如 `mtk-cull::FaceSanitizer`）**。
+  - 所有通用几何清理、共面去重与微观遮挡算法**必须且只能归属 `mtk-core` 或 `mtk-cull`（如 `mtk-cull::MeshSanitizer`）**。
 
 ### 规则 9：Crate 级 README 与文档单一事实源 (Crate README & Doc Integrity)
 - **Crate 专属说明不可缺失**：`crates/` 与 `bindings/` 下的所有子 Crate **必须包含专属 `README.md`**，包含其架构定位、输入输出契约、核心公共结构体与方法、以及一个极简使用示例。
@@ -102,7 +102,7 @@
 libmozitoolkit/
 ├── crates/
 │   ├── mtk-core/       -> 基础几何基元、Quad、MeshData、自适应像素切分与挤出算子
-│   ├── mtk-cull/       -> 6 向邻域遮挡状态机、FaceSanitizer 叠面消重清洗器、2D 矩形差集切分
+│   ├── mtk-cull/       -> 6 向邻域遮挡状态机、MeshSanitizer 叠面消重清洗器、2D 矩形差集切分
 │   ├── mtk-model/      -> BlockState 状态解析、1.21+ Block Model JSON 烘焙、OBJ 解析
 │   ├── mtk-voxel/      -> 16x16x16 Chunk Section 体素存储、流体曲面、平滑 AO 与体素源抽象
 │   ├── mtk-sync/       -> 原生 WebSocket 实时同步客户端、小端序二进制协议与会话管理

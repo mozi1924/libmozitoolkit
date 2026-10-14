@@ -1,7 +1,7 @@
 use glam::{Mat3, Vec2, Vec3};
 use mtk_core::direction::Direction;
 
-use crate::model_json::{BuiltinTransform, RotationJson};
+use crate::parser::model_json::{BuiltinTransform, RotationJson};
 
 /// Canonical vertex extents for standard cube faces according to Minecraft FaceInfo.
 pub fn get_face_canonical_vertex(

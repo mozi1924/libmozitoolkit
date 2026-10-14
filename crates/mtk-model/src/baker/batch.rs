@@ -1,10 +1,10 @@
 //! Parallel and batch baking of Minecraft BlockStates.
 
-use crate::baked::BakedModel;
+use crate::baker::baked_model::BakedModel;
 use crate::baker::model_baker::ModelBaker;
-use crate::blockstate::{BlockState, BlockStateDefinition};
 use crate::error::ModelError;
-use crate::model_json::BlockModelJson;
+use crate::parser::blockstate::{BlockState, BlockStateDefinition};
+use crate::parser::model_json::BlockModelJson;
 
 /// Calculates a conservative default thread count for parallel operations.
 ///

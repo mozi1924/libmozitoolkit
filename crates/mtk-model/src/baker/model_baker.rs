@@ -6,12 +6,14 @@ use mtk_core::direction::Direction;
 use super::emissive::{get_block_emissive_level, is_block_emissive};
 use super::planar::should_skip_zero_thickness_face;
 use super::rules::{is_known_non_cube, is_opaque_block};
-use crate::baked::{BakedElement, BakedFace, BakedModel, BakedVariantGroup};
-use crate::blockstate::{BlockState, BlockStateDefinition, BlockStateResolver, VariantMatch};
+use crate::baker::baked_model::{BakedElement, BakedFace, BakedModel, BakedVariantGroup};
+use crate::baker::math::{bake_face_exact, rotate_direction};
 use crate::builtin::BuiltinModelRegistry;
 use crate::error::ModelError;
-use crate::math::{bake_face_exact, rotate_direction};
-use crate::model_json::{BlockModelJson, ResolvedBlockModel};
+use crate::parser::blockstate::{
+    BlockState, BlockStateDefinition, BlockStateResolver, VariantMatch,
+};
+use crate::parser::model_json::{BlockModelJson, ResolvedBlockModel};
 
 /// Universal, headless Minecraft Model Baker.
 ///

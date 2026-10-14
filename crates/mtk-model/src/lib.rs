@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 pub mod baker;
 pub mod builtin;
 pub mod culling;
@@ -20,23 +21,3 @@ pub use parser::{
     MultipartRule, ObjRawFace, ResolvedBlockModel, ResolvedElement, ResolvedFace, RotationJson,
     TextureValue, VariantEntry, VariantMatch, VariantModel, WavefrontObjParser,
 };
-
-// Backward-compatibility module aliases
-pub mod baked {
-    pub use crate::baker::baked_model::*;
-}
-pub mod blockstate {
-    pub use crate::parser::blockstate::*;
-}
-pub mod cull_volume {
-    pub use crate::culling::cull_volume::*;
-}
-pub mod math {
-    pub use crate::baker::math::*;
-}
-pub mod model_json {
-    pub use crate::parser::model_json::*;
-}
-pub mod obj {
-    pub use crate::parser::obj::*;
-}

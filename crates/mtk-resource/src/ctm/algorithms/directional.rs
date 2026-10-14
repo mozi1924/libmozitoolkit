@@ -1,13 +1,5 @@
-use crate::ctm::types::get_face_tangents;
 use glam::IVec3;
 use mtk_core::direction::Direction;
-
-pub fn solve_horizontal<F>(face: Direction, check_connect: &F) -> usize
-where
-    F: Fn(IVec3) -> bool,
-{
-    solve_horizontal_with_tangents(face, get_face_tangents(face), check_connect)
-}
 
 pub fn solve_horizontal_with_tangents<F>(
     _face: Direction,
@@ -30,13 +22,6 @@ where
     }
 }
 
-pub fn solve_vertical<F>(face: Direction, check_connect: &F) -> usize
-where
-    F: Fn(IVec3) -> bool,
-{
-    solve_vertical_with_tangents(face, get_face_tangents(face), check_connect)
-}
-
 pub fn solve_vertical_with_tangents<F>(
     _face: Direction,
     tangents: (Direction, Direction),
@@ -56,13 +41,6 @@ where
         (false, true) => 2,
         (false, false) => 3,
     }
-}
-
-pub fn solve_horizontal_vertical<F>(face: Direction, check_connect: &F) -> usize
-where
-    F: Fn(IVec3) -> bool,
-{
-    solve_horizontal_vertical_with_tangents(face, get_face_tangents(face), check_connect)
 }
 
 pub fn solve_horizontal_vertical_with_tangents<F>(
@@ -98,13 +76,6 @@ where
     tile_idx
 }
 
-pub fn solve_vertical_horizontal<F>(face: Direction, check_connect: &F) -> usize
-where
-    F: Fn(IVec3) -> bool,
-{
-    solve_vertical_horizontal_with_tangents(face, get_face_tangents(face), check_connect)
-}
-
 pub fn solve_vertical_horizontal_with_tangents<F>(
     _face: Direction,
     tangents: (Direction, Direction),
@@ -136,13 +107,6 @@ where
         };
     }
     tile_idx
-}
-
-pub fn solve_top<F>(face: Direction, check_connect: &F) -> bool
-where
-    F: Fn(IVec3) -> bool,
-{
-    solve_top_with_tangents(face, get_face_tangents(face), check_connect)
 }
 
 pub fn solve_top_with_tangents<F>(

@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 //! # mtk-testkit
 //!
 //! Dev-only asset resolver shared by the `libmozitoolkit` integration tests.

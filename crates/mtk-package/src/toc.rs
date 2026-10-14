@@ -170,6 +170,17 @@ impl TableOfContents {
             .map_err(|e| PackageError::InvalidToc(format!("Failed to read chunk count: {}", e)))?;
         let count = u32::from_le_bytes(buf4) as usize;
 
+        // Each entry is at least MIN_ENTRY_SIZE bytes. Reject forged counts up front so a
+        // corrupt/malicious header cannot force a multi-gigabyte pre-allocation.
+        const MIN_ENTRY_SIZE: usize = 4 + 8 + 8 + 8 + 1 + 7 + 8 + 2;
+        let max_possible = slice.len().saturating_sub(4) / MIN_ENTRY_SIZE;
+        if count > max_possible {
+            return Err(PackageError::InvalidToc(format!(
+                "Declared chunk count {} exceeds payload capacity {}",
+                count, max_possible
+            )));
+        }
+
         let mut toc = Self::with_capacity(count);
         for _ in 0..count {
             let entry = ChunkEntry::read_from(&mut cursor)?;

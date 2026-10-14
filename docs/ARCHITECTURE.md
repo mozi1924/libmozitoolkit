@@ -23,6 +23,7 @@ graph TD
         FFI["mtk-ffi (C-ABI / cdylib / staticlib / .h)"]
         CLI["mtk-cli (独立命令行工具)"]
         BENCH["mtk-bench (性能基准测试)"]
+        DNA["mtk-blender-dna (DNA 裸指针零拷贝直写)"]
     end
 
     subgraph Layer2_Facade["Layer 2: 领域聚合门面 (Unified Engine)"]
@@ -38,6 +39,7 @@ graph TD
         CULL["mtk-cull (Occlusion / Rect Difference / Mesh Cull / MeshSanitizer)"]
         MAT["mtk-material (66 Biomes SSOT / BiomeResolver / UV Remap)"]
         SAVE["mtk-save (Anvil MCA / Builtin NBT / Spatial Slicer / LevelData)"]
+        PACKAGE["mtk-package (64B Header / Zstd TOC / mmap Reader)"]
     end
 
     subgraph Layer0_Core["Layer 0: 核心数据与几何基础设施 (Foundation)"]
@@ -46,6 +48,7 @@ graph TD
 
     WASM --> LIBMTK
     PY --> LIBMTK
+    PY --> DNA
     FFI --> LIBMTK
     CLI --> LIBMTK
     BENCH --> LIBMTK
@@ -58,6 +61,11 @@ graph TD
     LIBMTK --> CULL
     LIBMTK --> MAT
     LIBMTK --> SAVE
+    LIBMTK --> PACKAGE
+
+    DNA --> CORE
+    DNA --> VOXEL
+    PACKAGE --> CORE
 
     SAVE --> VOXEL
     SAVE --> CORE
@@ -90,6 +98,7 @@ graph TD
 | **`crates/mtk-sync`**   | 实时网络协同：原生多线程 WebSocket 客户端、小端序二进制协议编解码、增量修复包生成、复合模型库注入与单一世界大网格 (`WorldMeshReady`) 会话管理 | `mtk-voxel`, `mtk-cull`, `mtk-model`, `mtk-core` | `LiveSyncSession`, `SyncClient`, `SyncEvent`, `decode_packet`, `encode_full_sync_request` |
 | **`crates/mtk-material`** | 66 种原版生物群系调色板与线性色彩数学引擎 (SSOT)、`BiomeResolver` 模型扫描与预编译映射、多线程 Rayon 并行 UV 重映射与外部别名解算 | `mtk-core`, `mtk-texture`, `mtk-resource` | `BiomePalette`, `BiomeResolver`, `compute_mesh_biome_attributes`, `MaterialResolver`, `MeshMultiUvRemapResult` |
 | **`crates/mtk-save`** | 现代 Minecraft 存档加载核心：基于内置零拷贝 NBT、Anvil `.mca` 区域文件寻址、384 高度世界 3D 生物群系与方块状态解包、按需空间切片流式数据源 (`VoxelSource`) | `mtk-core`, `mtk-voxel` | `LevelData`, `RegionFile`, `ChunkParser`, `AnvilWorldSource`, `SaveLoader` |
+| **`crates/mtk-package`** | 统一二进制包与场景交换容器编解码器：64 字节头部校验与 CRC、分块 Zstd 压缩 TOC、`memmap2` 零拷贝解析与逐块惰性解压 | `mtk-core` | `MtkPackageWriter`, `MtkPackageReader`, `TableOfContents`, `PackageHeader`, `PackageProfile` |
 | **`crates/libmtk`** | 顶层统一 Facade 库，提供开箱即用的高阶预编译管线 (`precompile_all_assets`) 与一站式统一错误处理 `MtkError` | 全部 Layer 1 Crates | 高阶 API、统一 Error 与 Pipeline、`CacheManifest` |
 | **`crates/mtk-bench`** | 性能基准测试套件，覆盖 4000 区块大规模网格化与复杂面剔除场景 | 全部核心 Crates | 基准测试报告与性能指标 |
 | **`crates/mtk-cli`** | 独立命令行终端工具，为无头环境与 CI/CD 提供资产预编译与检查能力 | `libmtk` | 命令行二进制 `mtk` |
@@ -97,6 +106,7 @@ graph TD
 | **`bindings/mtk-py`** | Python 动态扩展模块 (PyO3 + maturin)，提供 `PyMeshData`、零拷贝内存视图与极速批处理算子 | `libmtk`, `mtk-core` | `libmtk_py` CPython 轮子 (.whl) |
 | **`bindings/mtk-ffi`** | 纯 C-ABI 动态/静态库与 C 头文件 (cbindgen)，跨语言无缝调用 | `mtk-core`, `mtk-voxel` | `libmtk_ffi.so` / `.dll` / `.dylib`, `mtk.h` |
 | **`bindings/mtk-wasm`** | WebAssembly 绑定 (wasm-bindgen)，暴露 TypedArray 视图 | `mtk-core`, `mtk-voxel`, `mtk-resource`, `mtk-cull`, `mtk-model`, `mtk-material` | `mtk_wasm.wasm` + `mtk_wasm.js` npm 包 |
+| **`bindings/mtk-blender-dna`** | Blender DNA 裸内存指针零拷贝直写适配层（严格隔离 `unsafe`，带边界防护） | `mtk-core`, `mtk-voxel` | `copy_positions_to_ptr`, `copy_indices_to_ptr`, `copy_point_cloud_positions_to_ptr` |
 
 ---
 
@@ -143,7 +153,7 @@ Rust 处理内核 (libmtk)
   - `grid.rs`: 目标细分分辨率推算与整数像素网格切割因子吸附计算
   - `mesh_split.rs`: 单面多边形切割与全网格自适应细分装配
   - `mod.rs`: 门面导出与统一测试套件
-- **`mtk-core::extrude_mesh`**:
+- **`mtk-core::extrude`**（别名 `extrude_mesh`）:
   - `types.rs`: 扁平拓扑网格与挤出修复配置
   - `repair.rs`: 侧面 UV 修复核心计算与法线重构
   - `random.rs`: 伪随机/梯度噪声挤出算子
@@ -157,6 +167,7 @@ Rust 处理内核 (libmtk)
   - `model.rs`: 烘焙方块模型核心基元与变换矩阵
   - `database.rs`: 烘焙模型数据库与状态键索引
   - `to_mesh.rs`: 烘焙模型向通用 `MeshData` 的快速灌入与拓扑转换
+  - `variant_group.rs`: 预烘焙交替/随机旋转模型组 (`BakedVariantGroup`)
   - `legacy.rs`: 旧版原版模型兼容格式解析
   - `mod.rs`: 门面重导出与集成测试
 - **`mtk-model::parser::blockstate`**:

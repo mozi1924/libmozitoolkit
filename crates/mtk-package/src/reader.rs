@@ -46,6 +46,7 @@ impl MtkPackageReader {
     /// This uses `memmap2::MmapOptions::map` internally. Memory-mapped files assume
     /// the underlying file is not truncated or concurrently modified by an external process.
     #[cfg(feature = "mmap")]
+    #[allow(unsafe_code)] // `MmapOptions::map` is inherently unsafe; see SAFETY note below.
     pub fn open_file(path: impl AsRef<Path>) -> PackageResult<Self> {
         let file = File::open(path)?;
         // SAFETY: We map the file in read-only mode and do not modify the file descriptor.
@@ -85,14 +86,16 @@ impl MtkPackageReader {
         let header = PackageHeader::from_bytes(&slice[0..HEADER_SIZE])?;
 
         // 2. Locate and parse TOC
-        let toc_start = header.toc_offset as usize;
-        let toc_end = toc_start + header.toc_length as usize;
+        let oob = || PackageError::OutOfBounds {
+            offset: header.toc_offset,
+            length: header.toc_length,
+            file_size: slice.len() as u64,
+        };
+        let toc_start = usize::try_from(header.toc_offset).map_err(|_| oob())?;
+        let toc_len = usize::try_from(header.toc_length).map_err(|_| oob())?;
+        let toc_end = toc_start.checked_add(toc_len).ok_or_else(oob)?;
         if toc_end > slice.len() {
-            return Err(PackageError::OutOfBounds {
-                offset: header.toc_offset,
-                length: header.toc_length,
-                file_size: slice.len() as u64,
-            });
+            return Err(oob());
         }
 
         let toc_slice = &slice[toc_start..toc_end];
@@ -147,16 +150,25 @@ impl MtkPackageReader {
             .ok_or_else(|| PackageError::ChunkNotFound(identifier.to_string()))?;
 
         let slice = self.storage.as_slice();
-        let start = entry.offset as usize;
-        let end = start + entry.compressed_size as usize;
-
-        if end > slice.len() {
-            return Err(PackageError::OutOfBounds {
+        let start = usize::try_from(entry.offset).map_err(|_| PackageError::OutOfBounds {
+            offset: entry.offset,
+            length: entry.compressed_size,
+            file_size: slice.len() as u64,
+        })?;
+        let size =
+            usize::try_from(entry.compressed_size).map_err(|_| PackageError::OutOfBounds {
                 offset: entry.offset,
                 length: entry.compressed_size,
                 file_size: slice.len() as u64,
-            });
-        }
+            })?;
+        let end = start
+            .checked_add(size)
+            .filter(|&end| end <= slice.len())
+            .ok_or(PackageError::OutOfBounds {
+                offset: entry.offset,
+                length: entry.compressed_size,
+                file_size: slice.len() as u64,
+            })?;
 
         Ok(&slice[start..end])
     }

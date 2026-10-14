@@ -2,6 +2,13 @@
 //!
 //! Exposes zero-copy hard/sharp edge analysis and dihedral angle computations
 //! to Python and Blender via NumPy buffer protocol.
+//!
+//! ## Unsafe invariant
+//! The `get_cow_slice_*` helpers may borrow memory directly from a Python buffer.
+//! That is only sound because `is_c_contiguous()` guarantees a single densely packed
+//! block, and the returned `CowSlice<'py, _>` is always consumed while the originating
+//! `Bound<'py, PyAny>` (and therefore the exporter object) is kept alive for the
+//! GIL-bound `'py` lifetime. Callers must not let the slice outlive `obj`.
 
 use pyo3::buffer::PyBuffer;
 use pyo3::prelude::*;
@@ -25,6 +32,7 @@ impl<'a, T> std::ops::Deref for CowSlice<'a, T> {
 pub fn get_cow_slice_f32<'py>(obj: &Bound<'py, PyAny>) -> PyResult<CowSlice<'py, f32>> {
     if let Ok(buf) = PyBuffer::<f32>::get(obj) {
         if buf.is_c_contiguous() {
+            // SAFETY: C-contiguous buffer = one densely packed block; `obj` outlives `'py`.
             let slice = unsafe {
                 std::slice::from_raw_parts(buf.buf_ptr() as *const f32, buf.item_count())
             };
@@ -38,6 +46,7 @@ pub fn get_cow_slice_f32<'py>(obj: &Bound<'py, PyAny>) -> PyResult<CowSlice<'py,
 pub fn get_cow_slice_u32<'py>(obj: &Bound<'py, PyAny>) -> PyResult<CowSlice<'py, u32>> {
     if let Ok(buf) = PyBuffer::<u32>::get(obj) {
         if buf.is_c_contiguous() {
+            // SAFETY: C-contiguous buffer = one densely packed block; `obj` outlives `'py`.
             let slice = unsafe {
                 std::slice::from_raw_parts(buf.buf_ptr() as *const u32, buf.item_count())
             };
@@ -46,6 +55,8 @@ pub fn get_cow_slice_u32<'py>(obj: &Bound<'py, PyAny>) -> PyResult<CowSlice<'py,
     }
     if let Ok(buf) = PyBuffer::<i32>::get(obj) {
         if buf.is_c_contiguous() {
+            // SAFETY: as above; `i32` and `u32` share size/alignment and every bit pattern
+            // is a valid `u32`, so the reinterpretation is well-defined.
             let slice = unsafe {
                 std::slice::from_raw_parts(buf.buf_ptr() as *const u32, buf.item_count())
             };
@@ -59,6 +70,7 @@ pub fn get_cow_slice_u32<'py>(obj: &Bound<'py, PyAny>) -> PyResult<CowSlice<'py,
 pub fn get_cow_slice_u8<'py>(obj: &Bound<'py, PyAny>) -> PyResult<CowSlice<'py, u8>> {
     if let Ok(buf) = PyBuffer::<u8>::get(obj) {
         if buf.is_c_contiguous() {
+            // SAFETY: C-contiguous buffer = one densely packed block; `obj` outlives `'py`.
             let slice =
                 unsafe { std::slice::from_raw_parts(buf.buf_ptr() as *const u8, buf.item_count()) };
             return Ok(CowSlice::Borrowed(slice));
@@ -66,6 +78,7 @@ pub fn get_cow_slice_u8<'py>(obj: &Bound<'py, PyAny>) -> PyResult<CowSlice<'py, 
     }
     if let Ok(buf) = PyBuffer::<i8>::get(obj) {
         if buf.is_c_contiguous() {
+            // SAFETY: as above; every `i8` bit pattern is a valid `u8`.
             let slice =
                 unsafe { std::slice::from_raw_parts(buf.buf_ptr() as *const u8, buf.item_count()) };
             return Ok(CowSlice::Borrowed(slice));

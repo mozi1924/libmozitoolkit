@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
@@ -27,8 +28,3 @@ pub use types::{
     is_empty_rect, is_full_rect, BlockCullMeta, CullCategory, GlassCullMode, LeavesCullMode,
     EMPTY_FACE_RECT, FULL_FACE_RECT,
 };
-
-// Backward-compatibility module alias
-pub mod rect_ops {
-    pub use crate::geometry::rect_ops::*;
-}

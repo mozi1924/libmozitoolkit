@@ -17,7 +17,11 @@ pub enum CoordinateSystem {
     /// Used by Unreal Engine, Blender, 3ds Max, etc.
     ZUpRightHanded,
     /// Standard Y-up right-handed coordinate system: +X East, +Y Up (+Y_mc), +Z South (+Z_mc).
-    /// Used by Unity, Godot, Three.js, WebGPU, etc.
+    /// Matches the glTF / Godot / Three.js / WebGPU convention (+Z forward, camera looking down -Z).
+    ///
+    /// Note: Minecraft's native world space already satisfies this convention, so this variant is
+    /// numerically identical to [`CoordinateSystem::Minecraft`]. It exists to make the target
+    /// convention explicit at call sites. (Unity uses a left-handed Y-up space and needs an extra mirror.)
     YUpRightHanded,
 }
 
@@ -108,7 +112,7 @@ impl MesherConfig {
             CoordinateSystem::ZUpRightHanded => {
                 mtk_core::mc_world_to_z_up(centered.x, centered.y, centered.z)
             }
-            CoordinateSystem::YUpRightHanded => Vec3::new(centered.x, centered.y, -centered.z),
+            CoordinateSystem::YUpRightHanded => centered,
         }
     }
 
@@ -119,7 +123,7 @@ impl MesherConfig {
         match self.coordinate_system {
             CoordinateSystem::Minecraft => dir,
             CoordinateSystem::ZUpRightHanded => mtk_core::mc_world_to_z_up(dir.x, dir.y, dir.z),
-            CoordinateSystem::YUpRightHanded => Vec3::new(dir.x, dir.y, -dir.z),
+            CoordinateSystem::YUpRightHanded => dir,
         }
     }
 
@@ -158,4 +162,73 @@ pub enum VoxelError {
     MalformedSnapshot(String),
     #[error("Invalid point cloud data: {0}")]
     InvalidPointCloud(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cfg(system: CoordinateSystem) -> MesherConfig {
+        MesherConfig {
+            coordinate_system: system,
+            origin_centered: false,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_y_up_is_identity() {
+        let c = cfg(CoordinateSystem::YUpRightHanded);
+        let p = c.transform_position(Vec3::new(2.0, 3.0, 4.0));
+        assert_eq!(p, Vec3::new(2.0, 3.0, 4.0));
+        let d = c.transform_direction(Vec3::new(0.0, 0.0, 1.0));
+        assert_eq!(d, Vec3::new(0.0, 0.0, 1.0));
+    }
+
+    #[test]
+    fn test_z_up_maps_mc_to_east_north_up() {
+        let c = cfg(CoordinateSystem::ZUpRightHanded);
+        // MC +Z (South) becomes -Y (North); MC +Y (Up) becomes +Z (Up).
+        assert_eq!(
+            c.transform_position(Vec3::new(1.0, 2.0, 3.0)),
+            Vec3::new(1.0, -3.0, 2.0)
+        );
+    }
+
+    /// Every supported output basis must remain right-handed (determinant +1) so that
+    /// face winding and normals are never mirrored.
+    #[test]
+    fn test_all_coordinate_systems_preserve_handedness() {
+        for system in [
+            CoordinateSystem::Minecraft,
+            CoordinateSystem::ZUpRightHanded,
+            CoordinateSystem::YUpRightHanded,
+        ] {
+            let c = cfg(system);
+            let ex = c.transform_direction(Vec3::X);
+            let ey = c.transform_direction(Vec3::Y);
+            let ez = c.transform_direction(Vec3::Z);
+            // In a right-handed basis, X × Y == Z.
+            let cross = ex.cross(ey);
+            assert!(
+                cross.abs_diff_eq(ez, 1e-6),
+                "Coordinate system {:?} is not right-handed: X×Y={:?}, Z={:?}",
+                system,
+                cross,
+                ez
+            );
+        }
+    }
+
+    #[test]
+    fn test_origin_centered_uses_selection_bounds() {
+        let mut c = cfg(CoordinateSystem::Minecraft);
+        c.origin_centered = true;
+        c.selection_bounds = Some(([0, 64, 0], [16, 16, 16]));
+        // Block center offset: (x - 8, y - 64, z - 8).
+        assert_eq!(
+            c.transform_position(Vec3::new(8.0, 70.0, 8.0)),
+            Vec3::new(0.0, 6.0, 0.0)
+        );
+    }
 }

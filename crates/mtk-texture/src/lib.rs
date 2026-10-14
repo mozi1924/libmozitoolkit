@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 //! # mtk-texture
 //!
 //! Vanilla-style binary partitioning Stitcher, parallel image decoding,

@@ -19,7 +19,7 @@ impl VoxelStorage {
 
         let crc = if let Some(s) = sec {
             if s.is_empty() {
-                crate::crc::get_empty_section_crc(total_blocks)
+                crate::storage::crc::get_empty_section_crc(total_blocks)
             } else if is_full_section {
                 s.compute_crc()
             } else {
@@ -34,14 +34,14 @@ impl VoxelStorage {
                         for z in start_z..=end_z {
                             let lz = (z & 15) as usize;
                             let st = s.get_local_state(lx, ly, lz);
-                            crc_val = crate::crc::crc32_update(crc_val, st.as_bytes());
+                            crc_val = crate::storage::crc::crc32_update(crc_val, st.as_bytes());
                         }
                     }
                 }
                 crc_val
             }
         } else {
-            crate::crc::get_empty_section_crc(total_blocks)
+            crate::storage::crc::get_empty_section_crc(total_blocks)
         };
 
         self.section_crc_map.insert(coord, crc);
@@ -88,7 +88,7 @@ impl VoxelStorage {
     /// Checks if a CRC32 matches the canonical empty air CRC for this section's clamped volume.
     pub fn is_empty_section_crc(&self, coord: IVec3, crc_val: u32) -> bool {
         let count = self.get_section_block_count(coord);
-        crc_val == crate::crc::get_empty_section_crc(count)
+        crc_val == crate::storage::crc::get_empty_section_crc(count)
     }
 
     /// Compares server section CRC32 hashes with local ones and identifies out-of-sync sections.

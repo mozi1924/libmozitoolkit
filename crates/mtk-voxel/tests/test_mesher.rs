@@ -526,7 +526,7 @@ fn test_waterlogged_isolated_block_with_baked_model() {
 
 #[test]
 fn test_alternate_blocks_variant_sampling() {
-    use mtk_model::baked::{BakedElement, BakedFace, BakedModel, BakedVariantGroup};
+    use mtk_model::baker::baked_model::{BakedElement, BakedFace, BakedModel, BakedVariantGroup};
     use mtk_voxel::mesher::ModelSource;
     use std::sync::Arc;
 

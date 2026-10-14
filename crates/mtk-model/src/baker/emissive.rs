@@ -1,6 +1,6 @@
 //! Emissive light-emission detection and intensity calculation for Minecraft BlockStates.
 
-use crate::blockstate::BlockState;
+use crate::parser::blockstate::BlockState;
 
 /// White-list of natively light-emitting blocks in Minecraft.
 pub const EMISSIVE_BLOCKS: &[&str] = &[

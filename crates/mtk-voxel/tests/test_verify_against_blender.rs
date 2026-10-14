@@ -5,10 +5,10 @@ use std::path::Path;
 use glam::IVec3;
 use mtk_cull::FaceCuller;
 use mtk_voxel::biome::{get_biome_meta, get_colormap_uv};
+use mtk_voxel::fluid::uv::{get_fluid_side_uvs, get_fluid_top_uvs};
 use mtk_voxel::fluid::{
     calculate_fluid_corner_heights, calculate_fluid_flow_vector, get_fluid_base_height, FluidType,
 };
-use mtk_voxel::fluid_uv::{get_fluid_side_uvs, get_fluid_top_uvs};
 use mtk_voxel::mesher::SectionMesher;
 use mtk_voxel::storage::SectionStorage;
 use mtk_voxel::types::MesherConfig;

@@ -9,7 +9,7 @@ use mtk_core::direction::Direction;
 use mtk_core::geometry::Aabb2d;
 use mtk_core::{IVec3, Vec3};
 
-use crate::rect_ops::is_face_completely_occluded;
+use crate::geometry::rect_ops::is_face_completely_occluded;
 use crate::rules::should_skip_rendering;
 use crate::types::{BlockCullMeta, CullCategory, GlassCullMode, LeavesCullMode, FULL_FACE_RECT};
 

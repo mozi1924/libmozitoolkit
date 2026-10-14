@@ -4,7 +4,7 @@ use glam::{Vec2, Vec3};
 use mtk_core::direction::Direction;
 use serde::{Deserialize, Serialize};
 
-use crate::obj::BakedObjFace;
+use crate::parser::obj::BakedObjFace;
 
 /// Represents a baked quad face with calculated geometry, UVs, and texture bindings.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

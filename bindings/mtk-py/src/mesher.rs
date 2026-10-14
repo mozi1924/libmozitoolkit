@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use mtk_cull::FaceCuller;
-use mtk_voxel::delta_mesher::DeltaMesher;
+use mtk_voxel::mesher::delta_mesher::DeltaMesher;
 use mtk_voxel::mesher::SectionMesher;
 use mtk_voxel::types::MesherConfig;
 

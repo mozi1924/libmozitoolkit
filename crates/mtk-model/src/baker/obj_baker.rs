@@ -5,10 +5,10 @@ use std::collections::HashMap;
 use glam::{Vec2, Vec3};
 use mtk_core::direction::Direction;
 
-use crate::baked::{BakedFace, BakedModel};
-use crate::blockstate::BlockState;
+use crate::baker::baked_model::{BakedFace, BakedModel};
 use crate::error::ModelError;
-use crate::obj::{ModObjLoader, WavefrontObjParser};
+use crate::parser::blockstate::BlockState;
+use crate::parser::obj::{ModObjLoader, WavefrontObjParser};
 
 use super::emissive::{get_block_emissive_level, is_block_emissive};
 

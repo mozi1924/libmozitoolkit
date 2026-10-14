@@ -24,8 +24,15 @@ pub struct SectionBiomes {
 
 impl SectionBiomes {
     /// Creates a new `SectionBiomes` instance.
+    ///
+    /// Only the quarts actually covered by `indices` are marked as explicitly assigned;
+    /// truncated inputs therefore do not falsely lock untouched quarts.
     pub fn new(palette: Vec<String>, indices: Vec<u8>) -> Self {
-        let explicit_mask = if indices.is_empty() { 0 } else { u64::MAX };
+        let explicit_mask = match indices.len() {
+            0 => 0,
+            n if n >= 64 => u64::MAX,
+            n => (1u64 << n) - 1,
+        };
         Self {
             palette,
             indices,

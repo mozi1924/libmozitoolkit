@@ -2,7 +2,7 @@ use glam::{Vec2, Vec3};
 use mtk_core::direction::Direction;
 use mtk_core::mesh::MeshData;
 
-use crate::math::rotate_point;
+use crate::baker::math::rotate_point;
 
 /// A raw polygon face parsed from a Wavefront OBJ.
 #[derive(Debug, Clone, PartialEq)]
