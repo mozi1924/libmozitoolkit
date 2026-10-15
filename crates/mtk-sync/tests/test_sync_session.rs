@@ -165,6 +165,9 @@ fn test_auto_sync_request_on_manifest_mismatch() {
         Some(&cmd_sender),
         &sync_requested,
         false,
+        None,
+        None,
+        None,
     );
 
     // Should have sent ReqFullSync (0x80)
@@ -343,4 +346,99 @@ fn test_sync_session_clear_cache_and_hot_reload() {
     // Remesh
     let re_mesh = session.get_world_mesh();
     assert!(!re_mesh.is_empty());
+}
+
+#[test]
+fn test_section_manifest_repair_cooldown() {
+    use glam::IVec3;
+    use mtk_sync::events::SyncEvent;
+    use mtk_sync::protocol::*;
+    use mtk_sync::session::dispatcher;
+    use mtk_voxel::types::MesherConfig;
+    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+    use std::sync::Arc;
+
+    let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None, true);
+    let (event_sender, event_receiver) = crossbeam_channel::unbounded();
+    let (cmd_sender, cmd_receiver) = crossbeam_channel::unbounded();
+    let stream_id = Arc::new(AtomicU32::new(0));
+    let sync_requested = Arc::new(AtomicBool::new(false));
+    let mut total_sec = 0;
+    let mut rec_sec = 0;
+    let mut repair_history = std::collections::HashMap::new();
+
+    // Populate world so it's not empty
+    {
+        let mut w = session.world.write().unwrap();
+        w.set_bounds(0, 0, 0, 16, 16, 16);
+        let palette = vec!["minecraft:air".to_string(), "minecraft:stone".to_string()];
+        let mut grid = vec![0u16; 4096];
+        grid[0] = 1;
+        w.set_section_snapshot(0, 0, 0, 0, 0, 0, 16, 16, 16, &palette, &grid, None, None);
+    }
+
+    let manifest_packet = Packet::SectionManifest {
+        seq_id: 1,
+        sections: vec![ManifestSectionEntry {
+            coord: IVec3::new(0, 0, 0),
+            crc32: 0xDEADBEEF, // Mismatch
+        }],
+    };
+
+    // First attempt: should request repair
+    dispatcher::handle_packet(
+        manifest_packet.clone(),
+        0,
+        &session.world,
+        &event_sender,
+        &stream_id,
+        &mut total_sec,
+        &mut rec_sec,
+        &mut 0,
+        Some(&cmd_sender),
+        &sync_requested,
+        false,
+        Some(&mut repair_history),
+        None,
+        None,
+    );
+
+    assert!(cmd_receiver.try_recv().is_ok());
+    sync_requested.store(false, Ordering::SeqCst);
+
+    // Second immediate attempt: should be suppressed by cooldown
+    dispatcher::handle_packet(
+        manifest_packet,
+        0,
+        &session.world,
+        &event_sender,
+        &stream_id,
+        &mut total_sec,
+        &mut rec_sec,
+        &mut 0,
+        Some(&cmd_sender),
+        &sync_requested,
+        false,
+        Some(&mut repair_history),
+        None,
+        None,
+    );
+
+    // Should NOT have sent another repair request because of cooldown
+    assert!(cmd_receiver.try_recv().is_err());
+
+    // Verify event message mentions cooling down
+    let mut saw_cooldown_event = false;
+    while let Ok(evt) = event_receiver.try_recv() {
+        if let SyncEvent::Verified {
+            is_verified,
+            message,
+        } = evt
+        {
+            if !is_verified && message.contains("cooling down") {
+                saw_cooldown_event = true;
+            }
+        }
+    }
+    assert!(saw_cooldown_event);
 }

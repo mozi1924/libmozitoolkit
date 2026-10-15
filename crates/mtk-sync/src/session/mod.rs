@@ -267,6 +267,9 @@ impl LiveSyncSession {
             None,
             &self.sync_requested,
             false,
+            None,
+            None,
+            None,
         );
     }
 }

@@ -27,9 +27,11 @@ pub fn event_worker_loop(
     let mut pending_non_streaming_updates = false;
     let mut pending_stream_mesh_rebuild = false;
     let mut last_sync_request_time: Option<std::time::Instant> = None;
+    let mut repair_history = std::collections::HashMap::<IVec3, (std::time::Instant, u32)>::new();
+    let mut last_mesh_dispatch_time: Option<std::time::Instant> = None;
 
     while running.load(Ordering::Relaxed) {
-        match msg_receiver.recv_timeout(std::time::Duration::from_millis(50)) {
+        match msg_receiver.recv_timeout(std::time::Duration::from_millis(25)) {
             Ok(ClientMessage::Status(status)) => {
                 let conn = status == "CONNECTED";
                 is_connected.store(conn, Ordering::SeqCst);
@@ -64,6 +66,9 @@ pub fn event_worker_loop(
                     Some(&cmd_sender),
                     &sync_requested,
                     more_pending,
+                    Some(&mut repair_history),
+                    Some(&mut pending_non_streaming_updates),
+                    Some(&mut last_mesh_dispatch_time),
                 );
                 if (is_sec_snapshot && stream_id_atomic.load(Ordering::SeqCst) == 0)
                     || (is_delta_update && more_pending)
@@ -75,8 +80,12 @@ pub fn event_worker_loop(
                 }
             }
             Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
-                if pending_non_streaming_updates {
+                let can_dispatch_mesh = last_mesh_dispatch_time
+                    .is_none_or(|t| t.elapsed() >= std::time::Duration::from_millis(60));
+
+                if pending_non_streaming_updates && can_dispatch_mesh {
                     pending_non_streaming_updates = false;
+                    last_mesh_dispatch_time = Some(std::time::Instant::now());
                     sync_requested.store(false, Ordering::SeqCst);
                     last_sync_request_time = None;
                     let (unified, world_mesh) = {
@@ -97,6 +106,7 @@ pub fn event_worker_loop(
                 }
                 if pending_stream_mesh_rebuild {
                     pending_stream_mesh_rebuild = false;
+                    last_mesh_dispatch_time = Some(std::time::Instant::now());
                     let (unified, world_mesh) = {
                         let mut w = world.write().unwrap();
                         let m = w.rebuild_all().cloned().unwrap_or_default();
@@ -126,9 +136,13 @@ pub fn event_worker_loop(
             Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
         }
 
-        // If a batch of non-streaming section snapshots finished and channel is now quiet, remesh once
-        if pending_non_streaming_updates && msg_receiver.is_empty() {
+        let can_dispatch_mesh = last_mesh_dispatch_time
+            .is_none_or(|t| t.elapsed() >= std::time::Duration::from_millis(60));
+
+        // If a batch of non-streaming section snapshots or throttled deltas finished and channel is now quiet, remesh once
+        if pending_non_streaming_updates && msg_receiver.is_empty() && can_dispatch_mesh {
             pending_non_streaming_updates = false;
+            last_mesh_dispatch_time = Some(std::time::Instant::now());
             sync_requested.store(false, Ordering::SeqCst);
             last_sync_request_time = None;
             let (unified, world_mesh) = {
@@ -151,6 +165,7 @@ pub fn event_worker_loop(
         // If consecutive stream batches finished and channel is now quiet, remesh all once
         if pending_stream_mesh_rebuild && msg_receiver.is_empty() {
             pending_stream_mesh_rebuild = false;
+            last_mesh_dispatch_time = Some(std::time::Instant::now());
             let (unified, world_mesh) = {
                 let mut w = world.write().unwrap();
                 let m = w.rebuild_all().cloned().unwrap_or_default();
@@ -182,6 +197,9 @@ pub fn handle_packet(
     cmd_sender: Option<&Sender<ClientCommand>>,
     sync_requested: &Arc<AtomicBool>,
     more_pending: bool,
+    mut repair_history: Option<&mut std::collections::HashMap<IVec3, (std::time::Instant, u32)>>,
+    mut pending_non_streaming_updates: Option<&mut bool>,
+    mut last_mesh_dispatch_time: Option<&mut Option<std::time::Instant>>,
 ) {
     match packet {
         Packet::SelectionInfo { min_pos, size } => {
@@ -284,6 +302,9 @@ pub fn handle_packet(
             };
 
             if unified {
+                if let Some(ref mut last_time_opt) = last_mesh_dispatch_time {
+                    **last_time_opt = Some(std::time::Instant::now());
+                }
                 let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
             } else {
                 let w = world.read().unwrap();
@@ -375,6 +396,9 @@ pub fn handle_packet(
 
                 if unified {
                     if let Some(mesh) = world_mesh {
+                        if let Some(ref mut last_time_opt) = last_mesh_dispatch_time {
+                            **last_time_opt = Some(std::time::Instant::now());
+                        }
                         let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
                     }
                 } else {
@@ -401,9 +425,15 @@ pub fn handle_packet(
                 })
                 .collect();
 
-            if more_pending {
-                // Batching fast-path: Ingest delta into voxel memory immediately (<0.1ms),
-                // defer remeshing until incoming queue clears to coalesce rapid redstone bursts.
+            let is_throttled = if let Some(Some(last_time)) = last_mesh_dispatch_time.as_deref() {
+                last_time.elapsed() < std::time::Duration::from_millis(60)
+            } else {
+                false
+            };
+
+            if more_pending || is_throttled {
+                // Batching / rate-limit fast-path: Ingest delta into voxel memory immediately (<0.1ms),
+                // defer remeshing until incoming queue clears or throttle interval elapses to coalesce rapid redstone bursts.
                 {
                     let mut w = world.write().unwrap();
                     w.apply_delta_update(min_pos.x, min_pos.y, min_pos.z, &borrowed_changes);
@@ -412,6 +442,9 @@ pub fn handle_packet(
                     change_count: changes.len(),
                     affected_sections: Vec::new(),
                 });
+                if let Some(ref mut pending) = pending_non_streaming_updates {
+                    **pending = true;
+                }
                 return;
             }
 
@@ -426,6 +459,10 @@ pub fn handle_packet(
                 };
                 (r, w.unified_mesh, wm)
             };
+
+            if let Some(ref mut last_time_opt) = last_mesh_dispatch_time {
+                **last_time_opt = Some(std::time::Instant::now());
+            }
 
             let affected: Vec<IVec3> = rebuilt.iter().map(|(c, _)| *c).collect();
             if unified {
@@ -463,6 +500,9 @@ pub fn handle_packet(
             let is_streaming = stream_id_atomic.load(Ordering::SeqCst) != 0;
 
             if mismatched.is_empty() {
+                if let Some(ref mut history) = repair_history {
+                    history.clear();
+                }
                 let (rebuilt_mesh, is_unified) = {
                     let mut w = world.write().unwrap();
                     let needs_remesh =
@@ -477,6 +517,9 @@ pub fn handle_packet(
                 if is_unified {
                     if let Some(m) = rebuilt_mesh {
                         if !m.is_empty() {
+                            if let Some(ref mut last_time_opt) = last_mesh_dispatch_time {
+                                **last_time_opt = Some(std::time::Instant::now());
+                            }
                             let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: m });
                         }
                     }
@@ -486,21 +529,67 @@ pub fn handle_packet(
                     message: "100% in sync with scene".to_string(),
                 });
             } else if !is_streaming {
-                let _ = event_sender.send(SyncEvent::Verified {
-                    is_verified: false,
-                    message: format!("Detected {} out-of-sync sections", mismatched.len()),
-                });
+                let now = std::time::Instant::now();
+                let mut eligible_repairs: Vec<IVec3> = Vec::new();
 
-                if let Some(sender) = cmd_sender {
-                    if !sync_requested.load(Ordering::SeqCst) {
-                        if is_storage_empty || mismatched.len() == raw_entries.len() {
-                            let _ = sender.send(ClientCommand::Send(encode_full_sync_request()));
-                            sync_requested.store(true, Ordering::SeqCst);
-                        } else {
-                            for packet in encode_repair_requests(&mismatched, 512) {
-                                let _ = sender.send(ClientCommand::Send(packet));
+                if let Some(ref mut history) = repair_history {
+                    history.retain(|coord, _| mismatched.contains(coord));
+                    for &coord in &mismatched {
+                        if let Some((last_attempt, attempts)) = history.get_mut(&coord) {
+                            let cooldown = if *attempts >= 3 {
+                                std::time::Duration::from_secs(10)
+                            } else {
+                                std::time::Duration::from_millis(2500)
+                            };
+
+                            if last_attempt.elapsed() >= cooldown {
+                                if last_attempt.elapsed() >= std::time::Duration::from_secs(10) {
+                                    *attempts = 1;
+                                } else {
+                                    *attempts += 1;
+                                }
+                                *last_attempt = now;
+                                eligible_repairs.push(coord);
                             }
-                            sync_requested.store(true, Ordering::SeqCst);
+                        } else {
+                            history.insert(coord, (now, 1));
+                            eligible_repairs.push(coord);
+                        }
+                    }
+                } else {
+                    eligible_repairs = mismatched.clone();
+                }
+
+                if eligible_repairs.is_empty() {
+                    let _ = event_sender.send(SyncEvent::Verified {
+                        is_verified: false,
+                        message: format!(
+                            "Detected {} out-of-sync sections (repair cooling down)",
+                            mismatched.len()
+                        ),
+                    });
+                } else {
+                    let _ = event_sender.send(SyncEvent::Verified {
+                        is_verified: false,
+                        message: format!(
+                            "Detected {} out-of-sync sections (requesting repair for {})",
+                            mismatched.len(),
+                            eligible_repairs.len()
+                        ),
+                    });
+
+                    if let Some(sender) = cmd_sender {
+                        if !sync_requested.load(Ordering::SeqCst) {
+                            if is_storage_empty || eligible_repairs.len() == raw_entries.len() {
+                                let _ =
+                                    sender.send(ClientCommand::Send(encode_full_sync_request()));
+                                sync_requested.store(true, Ordering::SeqCst);
+                            } else {
+                                for packet in encode_repair_requests(&eligible_repairs, 512) {
+                                    let _ = sender.send(ClientCommand::Send(packet));
+                                }
+                                sync_requested.store(true, Ordering::SeqCst);
+                            }
                         }
                     }
                 }
@@ -562,6 +651,9 @@ pub fn handle_packet(
             };
 
             if unified {
+                if let Some(ref mut last_time_opt) = last_mesh_dispatch_time {
+                    **last_time_opt = Some(std::time::Instant::now());
+                }
                 let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
             } else {
                 let w = world.read().unwrap();
