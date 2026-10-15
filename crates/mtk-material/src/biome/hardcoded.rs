@@ -402,7 +402,8 @@ pub fn classify_tint_category(
     }
 
     // 2. Block-level registry lookup
-    if let Some(ref b) = b_norm {
+    let target_b = b_norm.as_deref().or(Some(s_stem));
+    if let Some(b) = target_b {
         for &(reg_block, layers) in BLOCK_TINT_REGISTRY {
             if b == reg_block {
                 if let Some(ti) = tint_index {
