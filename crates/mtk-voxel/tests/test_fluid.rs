@@ -179,3 +179,119 @@ fn test_fluid_side_and_top_texture_keys_with_atlas() {
         }
     }
 }
+
+#[test]
+fn test_animated_texture_routing_dual_channel() {
+    use glam::IVec3;
+    use mtk_cull::FaceCuller;
+    use mtk_resource::ResourceLocation;
+    use mtk_texture::{AtlasAddressMap, AtlasSpriteLocation};
+    use mtk_voxel::storage::VoxelStorage;
+    use mtk_voxel::types::MesherConfig;
+    use mtk_voxel::SectionMesher;
+
+    let mut address_map = AtlasAddressMap::new();
+    // Static chunk (chunk 0): Frame 0 fallback baseline
+    address_map.sprites.insert(
+        ResourceLocation::new("minecraft", "block/water_still"),
+        AtlasSpriteLocation {
+            chunk_id: 0,
+            category: "blocks".to_string(),
+            is_animated: false,
+            texture_id: 101,
+            uv_bounds: [0.0, 0.0, 0.25, 0.25],
+            frame_0_uv_bounds: [0.0, 0.0, 0.25, 0.25],
+            ..Default::default()
+        },
+    );
+    address_map.sprites.insert(
+        ResourceLocation::new("minecraft", "block/water_flow"),
+        AtlasSpriteLocation {
+            chunk_id: 0,
+            category: "blocks".to_string(),
+            is_animated: false,
+            texture_id: 102,
+            uv_bounds: [0.25, 0.0, 0.5, 0.25],
+            frame_0_uv_bounds: [0.25, 0.0, 0.5, 0.25],
+            ..Default::default()
+        },
+    );
+
+    // Dedicated animated chunk (chunk 1): Animated strip
+    address_map.anim_sprites.insert(
+        ResourceLocation::new("minecraft", "block/water_still"),
+        AtlasSpriteLocation {
+            chunk_id: 1,
+            category: "blocks".to_string(),
+            is_animated: true,
+            texture_id: 201,
+            uv_bounds: [0.0, 0.0, 0.1, 1.0],
+            frame_0_uv_bounds: [0.0, 0.9, 0.1, 1.0],
+            ..Default::default()
+        },
+    );
+    address_map.anim_sprites.insert(
+        ResourceLocation::new("minecraft", "block/water_flow"),
+        AtlasSpriteLocation {
+            chunk_id: 1,
+            category: "blocks".to_string(),
+            is_animated: true,
+            texture_id: 202,
+            uv_bounds: [0.1, 0.0, 0.2, 1.0],
+            frame_0_uv_bounds: [0.1, 0.9, 0.2, 1.0],
+            ..Default::default()
+        },
+    );
+
+    let atlas_arc = std::sync::Arc::new(address_map);
+    let culler = FaceCuller::default();
+
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+    world.set_block(4, 4, 4, "minecraft:water[level=0]", None);
+    let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
+
+    // 1. With enable_animated_textures = true -> should route to anim chunk (chunk 1)
+    let config_anim = MesherConfig {
+        atlas_address_map: Some(atlas_arc.clone()),
+        enable_ao: false,
+        enable_animated_textures: true,
+        ..Default::default()
+    };
+    let mesh_anim = SectionMesher::mesh_section(&padded, &culler, |_| None, &config_anim);
+    let chunk_attr_anim = mesh_anim
+        .get_custom_attribute("mtk_atlas_chunk_id")
+        .expect("Must have atlas chunk IDs");
+    let cids_anim = match &chunk_attr_anim.data {
+        mtk_core::attributes::AttributeData::Int32(c) => c,
+        _ => panic!("Expected Int32 attribute"),
+    };
+    for &cid in cids_anim {
+        assert_eq!(
+            cid, 1,
+            "Animated texture must route to anim chunk 1 when enabled"
+        );
+    }
+
+    // 2. With enable_animated_textures = false -> should route to static chunk (chunk 0)
+    let config_static = MesherConfig {
+        atlas_address_map: Some(atlas_arc),
+        enable_ao: false,
+        enable_animated_textures: false,
+        ..Default::default()
+    };
+    let mesh_static = SectionMesher::mesh_section(&padded, &culler, |_| None, &config_static);
+    let chunk_attr_static = mesh_static
+        .get_custom_attribute("mtk_atlas_chunk_id")
+        .expect("Must have atlas chunk IDs");
+    let cids_static = match &chunk_attr_static.data {
+        mtk_core::attributes::AttributeData::Int32(c) => c,
+        _ => panic!("Expected Int32 attribute"),
+    };
+    for &cid in cids_static {
+        assert_eq!(
+            cid, 0,
+            "Animated texture must route to static chunk 0 when disabled"
+        );
+    }
+}

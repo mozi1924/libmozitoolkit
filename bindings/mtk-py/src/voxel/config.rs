@@ -18,7 +18,7 @@ pub struct PyMesherConfig {
 #[pymethods]
 impl PyMesherConfig {
     #[new]
-    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, origin_centered=true, weld_vertices=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None, enable_alternate_blocks=true, enable_random_offsets=true, ctm_solver=None))]
+    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, origin_centered=true, weld_vertices=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None, enable_alternate_blocks=true, enable_random_offsets=true, ctm_solver=None, enable_animated_textures=true))]
     pub fn new(
         enable_ao: bool,
         mesh_fluids: bool,
@@ -32,6 +32,7 @@ impl PyMesherConfig {
         enable_alternate_blocks: bool,
         enable_random_offsets: bool,
         ctm_solver: Option<&crate::ctm::PyCtmSolver>,
+        enable_animated_textures: bool,
     ) -> Self {
         let config = MesherConfig {
             enable_ao,
@@ -49,6 +50,7 @@ impl PyMesherConfig {
             enable_alternate_blocks,
             enable_random_offsets,
             ctm_solver: ctm_solver.map(|s| s.inner.clone()),
+            enable_animated_textures,
             ..Default::default()
         };
         Self {
@@ -150,6 +152,16 @@ impl PyMesherConfig {
     #[setter]
     pub fn set_enable_random_offsets(&mut self, val: bool) {
         self.inner.enable_random_offsets = val;
+    }
+
+    #[getter]
+    pub fn enable_animated_textures(&self) -> bool {
+        self.inner.enable_animated_textures
+    }
+
+    #[setter]
+    pub fn set_enable_animated_textures(&mut self, val: bool) {
+        self.inner.enable_animated_textures = val;
     }
 
     /// Sets explicit bounding box `(min_x, min_y, min_z, size_x, size_y, size_z)` for origin centering.

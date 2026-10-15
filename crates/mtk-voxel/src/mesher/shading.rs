@@ -209,7 +209,22 @@ fn resolve_model_face(
                 MaterialResolver::resolve(&face.texture, config.custom_aliases.as_deref(), atlas)
             });
 
-            if let Some((res_loc, atlas_loc)) = resolved {
+            if let Some((res_loc, mut atlas_loc)) = resolved {
+                if config.enable_animated_textures {
+                    if let Some(anim_loc) = atlas
+                        .lookup_animated(&res_loc)
+                        .or_else(|| atlas.lookup_animated_str(&face.texture))
+                    {
+                        atlas_loc = anim_loc;
+                    }
+                } else if atlas_loc.is_animated {
+                    if let Some(static_loc) = atlas
+                        .lookup_static(&res_loc)
+                        .or_else(|| atlas.lookup_static_str(&face.texture))
+                    {
+                        atlas_loc = static_loc;
+                    }
+                }
                 let u_min = atlas_loc.frame_0_uv_bounds[0];
                 let v_min = atlas_loc.frame_0_uv_bounds[1];
                 let u_span = atlas_loc.frame_0_uv_bounds[2] - u_min;
@@ -455,7 +470,16 @@ pub fn build_palette_meshing_data<'a>(
                                         break;
                                     }
                                 }
-                                if let Some((res_loc, atlas_loc)) = resolved {
+                                if let Some((res_loc, mut atlas_loc)) = resolved {
+                                    if config.enable_animated_textures {
+                                        if let Some(anim_loc) = atlas.lookup_animated(&res_loc) {
+                                            atlas_loc = anim_loc;
+                                        }
+                                    } else if atlas_loc.is_animated {
+                                        if let Some(static_loc) = atlas.lookup_static(&res_loc) {
+                                            atlas_loc = static_loc;
+                                        }
+                                    }
                                     let u_min = atlas_loc.frame_0_uv_bounds[0];
                                     let v_min = atlas_loc.frame_0_uv_bounds[1];
                                     let u_max = atlas_loc.frame_0_uv_bounds[2];
@@ -581,7 +605,16 @@ where
             get_neighbor_state,
         ) {
             if let Some(atlas) = &config.atlas_address_map {
-                if let Some(atlas_loc) = atlas.lookup(&resolved_loc) {
+                if let Some(mut atlas_loc) = atlas.lookup(&resolved_loc) {
+                    if config.enable_animated_textures {
+                        if let Some(anim_loc) = atlas.lookup_animated(&resolved_loc) {
+                            atlas_loc = anim_loc;
+                        }
+                    } else if atlas_loc.is_animated {
+                        if let Some(static_loc) = atlas.lookup_static(&resolved_loc) {
+                            atlas_loc = static_loc;
+                        }
+                    }
                     let u_min = atlas_loc.frame_0_uv_bounds[0];
                     let v_min = atlas_loc.frame_0_uv_bounds[1];
                     let u_span = atlas_loc.frame_0_uv_bounds[2] - u_min;
@@ -691,7 +724,16 @@ where
             get_neighbor_state,
         ) {
             if let Some(atlas) = &config.atlas_address_map {
-                if let Some(atlas_loc) = atlas.lookup(&resolved_loc) {
+                if let Some(mut atlas_loc) = atlas.lookup(&resolved_loc) {
+                    if config.enable_animated_textures {
+                        if let Some(anim_loc) = atlas.lookup_animated(&resolved_loc) {
+                            atlas_loc = anim_loc;
+                        }
+                    } else if atlas_loc.is_animated {
+                        if let Some(static_loc) = atlas.lookup_static(&resolved_loc) {
+                            atlas_loc = static_loc;
+                        }
+                    }
                     let u_min = atlas_loc.frame_0_uv_bounds[0];
                     let v_min = atlas_loc.frame_0_uv_bounds[1];
                     let u_max = atlas_loc.frame_0_uv_bounds[2];

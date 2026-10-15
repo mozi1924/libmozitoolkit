@@ -59,6 +59,8 @@ pub struct MesherConfig {
     pub enable_alternate_blocks: bool,
     /// Whether to enable deterministic position offsets for plants (flowers, tall grass, roots, etc.).
     pub enable_random_offsets: bool,
+    /// Whether to route animated textures (water, lava, fire, etc.) to dedicated animated atlas chunks.
+    pub enable_animated_textures: bool,
 }
 
 impl Default for MesherConfig {
@@ -77,6 +79,7 @@ impl Default for MesherConfig {
             custom_aliases: None,
             enable_alternate_blocks: true,
             enable_random_offsets: true,
+            enable_animated_textures: true,
         }
     }
 }

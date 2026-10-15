@@ -8,14 +8,14 @@
 
 | 版本 | 阶段定位 | 核心主题与边界 | 状态 |
 | :--- | :--- | :--- | :--- |
-| **v2.0 正式版** | **核心计算内核** | **通用 3D/体素世界几何、双图集烘焙与材质渲染基石 (Production Core)**<br>完成 Anvil 存档解析、BlockState 烘焙、真实 3D 生物群系平滑采样、CTM 求解、**静态+动态双图集 (Dual-Atlas)** 以及直接指针零拷贝直写。 | 🚀 **收官冲刺中 (RC)** |
+| **v2.0 正式版** | **核心计算内核** | **通用 3D/体素世界几何、双图集烘焙与材质渲染基石 (Production Core)**<br>完成 Anvil 存档解析、BlockState 烘焙、真实 3D 生物群系平滑采样、CTM 求解、**静态+动态双图集 (Dual-Atlas)** 以及直接指针零拷贝直写。 | ✅ **正式发版 (Released / Code Frozen)** |
 | **v2.1** | **次级大版本** | **高级实体、特殊渲染器、动作重定向与场景交换 (Advanced Entities & Interchange)**<br>支持 1.21.4+ 铜像 Special Renderers 模型、骨骼动画坐标系重定向数学库、实体 MCA 文件解析、填充地图解码、方块实体 NBT 与 `.mtkscene` 自包含场景包。 | 📋 **规划排期中** |
 | **v2.2** | **通用面部与格式** | **面部捕捉网络流、平滑滤波与蓝图全覆盖 (Facial Stream & Blueprint Expansion)**<br>Rust 原生高性能 LiveLinkFace UDP (11111) 与 WebSocket 异步接收、OneEuroFilter 平滑滤波、ARKit 52 向量化解算；`.litematic` 蓝图解析；2D 俯视小地图切片渲染。 | 📋 **规划排期中** |
 | **v2.3+** | **万能生态扩展** | **全格式与全场景覆盖 (Multi-format & Ecosystem Expansion)**<br>基岩版 LevelDB 存储与模组世界扩展、体素反向逆向推算器 (Voxel Guesser)。 | 🔮 **远景规划** |
 
 ---
 
-## 🎯 v2.0 正式版：核心世界计算与材质渲染基石 (收官冲刺 🚧)
+## 🎯 v2.0 正式版：核心世界计算与材质渲染基石 (✅ 已完成)
 
 ### 1. 双图集 (Dual-Atlas: Static & Animated) 烘焙与寻址映射 (✅ 已完成)
 - [x] **全覆盖静态图集 (Static Chunk)**
@@ -75,11 +75,11 @@
 - [x] 小端序增量同步协议、原生 WebSocket 客户端、CRC32 清单比对自愈；
 - [x] `SyncClient::stop()` 针对底层 TCP Stream 注入 `shutdown(Shutdown::Both)`，确保连接瞬间切断与端口释放。
 
-### 8. v2.0 正式发版质量门禁与接口冻结 (P0 🚧)
+### 8. v2.0 正式发版质量门禁与接口冻结 (P0 - ✅ 已完成)
 - [x] `cargo test --workspace` 全绿（全工作区数十个 Crate 测试 100% 通过）；
-- [ ] `cargo clippy --workspace --all-targets -- -D warnings` 零告警通过；
-- [ ] `cargo fmt --all -- --check` 代码格式化一致性校验；
-- [ ] 导出稳定的 CPython 3.11+ 标准 ABI (`abi3`) 动态链接扩展。
+- [x] `cargo clippy --workspace --all-targets -- -D warnings` 零告警通过；
+- [x] `cargo fmt --all -- --check` 代码格式化一致性校验；
+- [x] 导出稳定的 CPython 3.11+ 标准 ABI (`abi3`) 动态链接扩展（`libmtk_py` 通过 `tools/build_wheels.py` 构建验证通过）。
 
 ---
 

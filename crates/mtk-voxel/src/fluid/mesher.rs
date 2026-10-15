@@ -73,7 +73,16 @@ where
             config.custom_aliases.as_deref(),
             atlas,
         )
-        .map(|(res, sp)| {
+        .map(|(res, mut sp)| {
+            if config.enable_animated_textures {
+                if let Some(anim_sp) = atlas.lookup_animated(&res) {
+                    sp = anim_sp;
+                }
+            } else if sp.is_animated {
+                if let Some(static_sp) = atlas.lookup_static(&res) {
+                    sp = static_sp;
+                }
+            }
             (
                 res.as_string(),
                 sp.chunk_id,
@@ -86,7 +95,16 @@ where
             config.custom_aliases.as_deref(),
             atlas,
         )
-        .map(|(res, sp)| {
+        .map(|(res, mut sp)| {
+            if config.enable_animated_textures {
+                if let Some(anim_sp) = atlas.lookup_animated(&res) {
+                    sp = anim_sp;
+                }
+            } else if sp.is_animated {
+                if let Some(static_sp) = atlas.lookup_static(&res) {
+                    sp = static_sp;
+                }
+            }
             (
                 res.as_string(),
                 sp.chunk_id,
