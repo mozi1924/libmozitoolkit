@@ -1,171 +1,135 @@
-# 📋 libmozitoolkit (`libmtk`) 开发路线与 TODO 清单
+# 📋 libmozitoolkit (`libmtk`) 开发计划与版本路线图 (Roadmap)
 
-本文档为 `libmtk` 底层核心库的功能演进规划，严格遵循**宿主无关（Host-Agnostic）**与**纯数据输入输出（Data-in, Data-out）**设计原则。
+本文档为 `libmtk` 底层核心库的功能演进规划，严格遵循**宿主无关（Host-Agnostic）**与**纯数据输入输出（Data-in, Data-out）**设计原则。前端 Blender 插件规划见 [`MoziToolKit/TODO.md`](../MoziToolKit/TODO.md)。
 
 ---
 
-## 阶段一：核心几何与 UV 算子库（✅ 已完成）
+## 📌 版本演进总览 (Milestones Overview)
+
+| 版本 | 阶段定位 | 核心主题与边界 | 状态 |
+| :--- | :--- | :--- | :--- |
+| **v2.0 正式版** | **核心计算内核** | **通用 3D/体素世界几何、双图集烘焙与材质渲染基石 (Production Core)**<br>完成 Anvil 存档解析、BlockState 烘焙、真实 3D 生物群系平滑采样、CTM 求解、**静态+动态双图集 (Dual-Atlas)** 以及直接指针零拷贝直写。 | 🚀 **收官冲刺中 (RC)** |
+| **v2.1** | **次级大版本** | **高级实体、特殊渲染器与场景交换 (Advanced Entities & Scene Interchange)**<br>支持 1.21.4+ 铜像 Special Renderers 模型、实体 MCA 文件解析、填充地图解码、方块实体 NBT 图元（告示牌/旗帜）与 `.mtkscene` 自包含场景包。 | 📋 **规划排期中** |
+| **v2.2+** | **万能格式扩展** | **全格式与全场景覆盖 (Multi-format & Ecosystem Expansion)**<br>建筑蓝图 (`.litematic` / `.schematic`) 解析、俯视 2D 小地图切片渲染、基岩版 LevelDB 存储与模组世界扩展。 | 🔮 **远景规划** |
+
+---
+
+## 🎯 v2.0 正式版：核心世界计算与材质渲染基石 (收官冲刺 🚧)
+
+### 1. 双图集 (Dual-Atlas: Static & Animated) 烘焙与寻址映射 (✅ 已完成)
+- [x] **全覆盖静态图集 (Static Chunk)**
+  - [x] 全量材质保底机制：将所有方块贴图（包括动态序列帧贴图的 Frame 0 静态表示）烘焙入静态图集；
+  - [x] 为未开启动画材质的用户提供零额外 Shader 开销的极致性能基础；
+- [x] **动态图集与长条切片 (Animated Chunk)**
+  - [x] 将 `.png.mcmeta` 动画贴图按垂直长条打包至专用 `anim_chunk`；
+  - [x] `AtlasAddressMap` 提供 `lookup_static(loc)` 与 `lookup_animated(loc)` 双通道寻址。
+
+### 2. 核心几何与 UV 算子库 (`mtk-core` - ✅ 已完成)
 - [x] **自适应像素网格切分系统 (`mtk-core::subdivide`)**
-  - [x] 四边形自适应细分推算（基于纹理分辨率与 UV 物理边长向量）。
-  - [x] 非均匀吸附在纹理整数像素边界上的切分参数计算。
-  - [x] 属性双线性插值（UV、法线、顶点色、蒙皮权重、自定义属性图层）。
-  - [x] 动画长条贴图单帧正方形安全截断机制（防面数爆炸）。
-  - [x] 拓扑微距焊接与流形缝合清理 (`weld_spatial_vertices`)。
+  - [x] 四边形自适应细分推算与非均匀像素吸附；
+  - [x] 属性双线性插值（UV、法线、顶点色、Deform 蒙皮权重、自定义属性）；
+  - [x] 动画长条贴图单帧安全截断机制；
+  - [x] 空间哈希拓扑微距焊接 (`weld_spatial_vertices`)。
 - [x] **智能挤出与 UV 修复系统 (`mtk-core::extrude`)**
-  - [x] 侧面 UV 塌陷判定与 SMART / INWARD / OUTWARD 模式几何重构。
-  - [x] Atlas 图集安全边界裁剪（Safe Padding Clamp）。
-  - [x] 3D Perlin 连续梯度噪声、Voronoi 细胞阶梯噪声与 Uniform Random 随机高度生成器。
-  - [x] 扁平连续内存网格 (`FlatPolygonMesh`) 批量批处理与 Crease 锐边标记。
+  - [x] 侧面 UV 塌陷判定与 SMART / INWARD / OUTWARD 模式几何重构；
+  - [x] 3D Perlin 连续梯度噪声、Voronoi 细胞阶梯噪声与随机高度生成；
+  - [x] 扁平连续网格批处理与 Crease 锐边标记。
 - [x] **空间邻域遮挡剔除系统 (`mtk-cull`)**
-  - [x] 基于 6 向邻域状态机与 2D 矩形投影差集的微观遮挡剔除。
+  - [x] 6 向邻域状态机与 2D 矩形投影差集微观剔除；
   - [x] `FaceSanitizer` 叠面消重与共面微距几何清洗。
-- [x] **Python 极速胶水绑定 (`bindings/mtk-py`)**
-  - [x] `libmtk_py` 导出切分、挤出与剔除批量接口，NumPy/Buffer Protocol 零拷贝对接。
 
----
-
-## 阶段二：Minecraft 存档与体素源抽象（核心已完成 ✅ / 模组与基岩版待扩展 🚧）
-- [x] **Java 原版存档格式解析 (`mtk-save`)**
-  - [x] 高性能 Anvil / MCA 文件格式读取器（4KiB 扇区直接寻址）。
-  - [x] 快速内置零拷贝 NBT 二进制反序列化器（Chunk、BlockStates、Biomes、`LevelData`）。
-  - [x] 线性压缩与非压缩调色板（Palette）数据解包。
-  - [x] 3D 轴对齐空间切片按需加载器（`SaveLoader`，支持多维度与物理进度汇报）。
-- [ ] **Java 模组（Modded）世界支持**
-  - [ ] 动态扩展方块命名空间与自定义 BlockState 属性解析（兼容 Forge/Fabric/NeoForge）。
-- [ ] **基岩版（Bedrock Edition）存档读取 (`mtk-voxel::storage::leveldb`)**
-  - [ ] 嵌入式纯 Rust LevelDB 存储格式解析。
-  - [ ] 基岩版独特的 SubChunk 格式、方块状态定义与运行时 ID 映射。
+### 3. Minecraft 存档与体素源抽象 (`mtk-save`, `mtk-voxel` - ✅ 已完成)
+- [x] **高性能 Java 原版存档格式解析**
+  - [x] 4KiB 扇区直接寻址 Anvil / MCA 文件读取；
+  - [x] 零拷贝 NBT 二进制反序列化（Chunk、BlockStates、Biomes、`LevelData`）；
+  - [x] 线性压缩与非压缩调色板解包，3D 空间切片按需加载器 (`SaveLoader`)。
 - [x] **统一体素源抽象层 (`mtk-voxel::source`)**
-  - [x] 统一抽象 `VoxelSource`、`VoxelReader` 与 `VoxelWriter` 特征（Trait）。
-  - [x] 实现跨 Java 原版存档 (`AnvilWorldSource`)、全量体素点云 (`PointCloudVoxelSource`)、纯代码调试世界的无缝切换与流式切片迭代。
+  - [x] 抽象 `VoxelSource`、`VoxelReader` 与 `VoxelWriter` 特征；
+  - [x] 跨 Java 原版存档 (`AnvilWorldSource`)、全量体素点云 (`PointCloudVoxelSource`) 统一切片抽象。
+
+### 4. BlockState 烘焙与世界重构 (`mtk-model`, `mtk-voxel` - ✅ 已完成)
+- [x] **无头 Block Model JSON 烘焙引擎**
+  - [x] 对齐 1.21+ 规范的 BlockState 条件规则（multipart、variants）求值；
+  - [x] 元素旋转、UV Lock、TintIndex、透明度与自发光烘焙；
+  - [x] 混合式实体模型架构（BER 参数化回退箱子/床/头颅/钟/陶罐/传送门，外部材质包优先）；
+  - [x] 空间确定性交替模型随机旋转 (`BakedVariantGroup`) 与植物空间抖动偏移。
+- [x] **真实 3D Quart Biome 染色采样与 5×5 平滑过渡核**
+  - [x] 从 4×4×4 Quart 调色板查询真实 3D Biome（沼泽双色草、热带雨林、黑森林、恶地等）；
+  - [x] 5×5 (R=2) 原版均匀盒式滤波（Uniform Box Filter）平滑混合，消除硬切接缝。
+- [x] **CTM 连接纹理规则求解器 (`mtk-resource::ctm`)**
+  - [x] OptiFine / Continuity CTM 规则解析与 47-tile 拓扑求解；
+  - [x] `SectionMesher` 跨区块连通性求解与端到端回归验证。
+
+### 5. 现代 Blender 5.0+ 零拷贝内存直写管道 (`bindings/mtk-py` - ✅ 已完成)
+- [x] **C++ 连续内存指针直接写入 (`mesh/direct_ptr.rs`)**
+  - [x] `direct_copy_positions_to_ptr`、`direct_copy_normals_to_ptr`、`direct_copy_indices_to_ptr`、`direct_copy_loop_uvs_to_ptr`、`direct_copy_face_materials_to_ptr` 等直接指针拷贝；
+  - [x] 硬件带宽级内存直接写入，彻底消除 Python 对象封装开销。
+
+### 6. 单文件预编译资产缓存 (`crates/mtk-package` - ✅ 已完成)
+- [x] **通用二进制容器编解码器**
+  - [x] 64 字节 Header + 块级 Zstd 压缩 TOC + 64 字节内存对齐；
+  - [x] `precompile_all_assets` 输出单一 `<fingerprint>.mtkcache`，包含图集、Standalone PBR、模型库与 Biome 映射表。
+
+### 7. 实时网络同步协议与连接健壮性 (`mtk-sync` - ✅ 已完成)
+- [x] 小端序增量同步协议、原生 WebSocket 客户端、CRC32 清单比对自愈；
+- [x] `SyncClient::stop()` 针对底层 TCP Stream 注入 `shutdown(Shutdown::Both)`，确保连接瞬间切断与端口释放。
+
+### 8. v2.0 正式发版质量门禁与接口冻结 (P0 🚧)
+- [x] `cargo test --workspace` 全绿（全工作区数十个 Crate 测试 100% 通过）；
+- [ ] `cargo clippy --workspace --all-targets -- -D warnings` 零告警通过；
+- [ ] `cargo fmt --all -- --check` 代码格式化一致性校验；
+- [ ] 导出稳定的 CPython 3.11+ 标准 ABI (`abi3`) 动态链接扩展。
 
 ---
 
-## 阶段三：BlockState 烘焙、逆向推算与世界重构（核心已完成 ✅ / 逆向推算待开发 🚧）
-- [x] **无头 Block Model JSON 烘焙引擎 (`mtk-model`)**
-  - [x] 对齐 1.21+ 规范的 BlockState 条件规则（multipart、variants）求值。
-  - [x] Block Model 元素旋转、UV Lock、TintIndex、透明度与自发光烘焙。
-  - [x] 混合式实体模型架构（BER 参数化回退箱子/床/头颅/钟/陶罐/传送门，外部材质包优先）。
-  - [x] 预烘焙交替方块模型随机旋转（`BakedVariantGroup`，1:1 对齐 Java 版 `Mth.getSeed` + `JavaRandom` 空间确定性采样）。
-  - [x] 植物三维空间确定性抖动（Plant Offsets，双层植物 Y=0 对齐位移）。
-  - [x] 紧凑模型数据库序列化与透明 zstd 压缩缓存。
-- [ ] **体素反向逆向推算器 (Voxel Guesser / Mesh Inferrer)**
-  - [ ] 从已有导入来源的网格（如 Mineways/MiEx 导出的 OBJ/USD）中反向提取空间占位、材质与 UV。
-  - [ ] 结合启发式几何特征与生物群系色彩逆向推导方块 ID 与 BlockState。
-- [ ] **基于体素的世界重构网格化器 (`mtk-voxel::mesher`)**
-  - [ ] 贪婪网格化（Greedy Meshing）与多材质四边形合并。
-  - [x] 平滑环境光遮蔽 (Smooth AO) 与流体（水/岩浆）曲面重构。
-  - [x] 直接套用外部高精度材质包（Resourcepack）模型进行几何世界重构。
-  - [x] 5×5 (R=2) 生物群系平滑过渡与边界防渗色。
-- [x] **动态资产热重载与区块网格缓存清空 (`mtk-voxel::world`)**
-  - [x] 完善 `VoxelWorld::clear_cache()` 与动态热重载支持，避免材质包重新预编译后因脏区块网格缓存导致 UV/模型错位。
+## 🚀 v2.1 版本：高级实体、特殊渲染器与场景交换 (规划排期中 📋)
 
----
+> **2.1 版本主题**：拓展特殊渲染模型、实体数据流与自包含场景交换包。
 
-## 阶段四：实时网络同步与体素元数据流（核心已完成 ✅ / 连接健壮性待深化 🚧）
-- [x] **小端序二进制增量同步协议 (`mtk-sync::protocol`)**
-  - [x] 完善 Block Update、Chunk Section Delta、选区变动、握手与两阶段流传输事件编解码。
-  - [x] 原生 WebSocket 客户端与非阻塞事件队列（`LiveSyncSession`）。
-  - [x] CRC32 清单比对与分批差量自愈修复机制。
-- [x] **跨平台连接健壮性与强制断开 (`mtk-sync::client`)**
-  - [x] `SyncClient::stop()` 针对底层 TCP Stream 注入 `shutdown(Shutdown::Both)`，确保宿主工程切换或重连时套接字瞬间切断，消除服务端连接占位与挂起。
-- [x] **体素元数据与属性映射**
-  - [x] 设计紧凑的高保真体素元数据表示（方块ID、状态、绝对世界坐标、光照等级、生物群系）。
-  - [x] 构建体素数据 $\leftrightarrow$ 点云（`VoxelPointCloud`）/ 网格属性（Mesh Attributes）的双向元数据映射机制。
-  - [x] 支持用户交互删点雕刻并无损重构网格（`PointCloudVoxelSource`）。
-- [x] **增量式实时世界状态持久化**
-  - [x] 内存世界差量更新与快速快照导出。
+### 1. 1.21.4+ 客户端特殊模型攻坚 (Special Renderers & Copper Golem Statue) (P1)
+- [ ] **解析客户端模型新语法 (`mtk-model::special`)**
+  - [ ] 扩展模型反序列化器，识别 `"type": "minecraft:special"` 与 `"type": "minecraft:select"`；
+- [ ] **铜像 / 铜傀儡像 (Copper Golem Statue) 几何模型生成**
+  - [ ] 当缺少传统 `"elements"` 字段时，路由至特殊渲染器模型构建器；
+  - [ ] 内置铜傀儡像 4 种氧化态（未氧化、斑驳、锈蚀、完全氧化）与各姿态（standing, sitting, running, star）的盒模型拓扑与贴图解算。
 
----
-
-## 阶段五：跨平台绑定与生态扩展（基础已落地 ✅ / 持续演进 🚧）
-- [x] **Python 扩展完善（P0 核心）**
-  - [x] 为阶段二、三、四的新能力导出 Pythonic 零拷贝 API（`mtk-save` 存档检测与切片网格化、`VoxelPointCloud`、`VoxelWorld`、`LiveSyncSession`、Buffer Protocol 流体修复）。
-  - [x] 与 Blender 前端 `MoziToolKit` 保持 100% 同步演进与 ABI 隔离。
-- [x] **无头独立 CLI 工具链 (`mtk-cli` - P1)**
-  - [x] `mtk atlas`（端到端图集烘焙与预编译）。
-  - [x] `mtk model` / `mtk export` / `mtk verify`（模型几何排查、OBJ 导出与规则校验）。
-  - [x] `mtk bench`（网格化、模型烘焙与性能压测）。
-- [x] **跨语言 C-ABI FFI 与 WebAssembly 绑定 (`mtk-ffi` / `mtk-wasm` - P2)**
-  - [x] 导出标准 C 头文件 (`mtk.h`)，为 Maya、Houdini、C# (Unity)、Godot 扩展预备。
-  - [x] 导出 WebGPU / WebAssembly 零拷贝 TypedArray 视图，为 Web 端预览工具预备。
-
----
-
-## 阶段六：通用二进制中间包与场景交换容器 (`mtk-package` / 核心已完成 ✅ / 场景交换待开发 🚧)
-- [x] **规范与容器架构设计（✅ 已落地）**
-  - [x] 确立统一 Header (64B) + 块级 Zstd 压缩 TOC + 64 字节内存对齐规范（详见 [`docs/PACKAGE_SPEC.md`](docs/PACKAGE_SPEC.md)）。
-  - [x] 确立两大业务 Profile：`AssetCache` (`.mtkcache`) 与 `SceneInterchange` (`.mtkscene`)。
-- [x] **通用二进制容器编解码器 (`crates/mtk-package` - ✅ 已完成)**
-  - [x] 实现 `MtkPackageWriter`：流式 Chunk 写入、自动 64 字节边界 Padding、Zstd 块压缩与 CRC32 校验码计算。
-  - [x] 实现 `MtkPackageReader`：基于 `memmap2` 零内存拷贝打开、Header 校验、TOC 解析与单 Chunk 懒加载。
-- [x] **全量资产预编译缓存打包迁移 (`libmtk::prebake` - ✅ 已完成)**
-  - [x] `precompile_all_assets`：将图集切片、Standalone PBR 贴图、模型数据库（`MODL`）、Biome 调色板映射表统一打包为单一 `<fingerprint>.mtkcache` 容器。
-  - [x] 分块压缩策略：原始几何数据与模型使用 Zstd 压缩，贴图保持原始 PNG 流杜绝二次压缩损耗。
-  - [x] 提供 `AssetCacheReader` / `PyAssetCache` 零拷贝内存解析与微秒级 Header 验证，完全替代文件系统散文件展开。
-- [ ] **自包含轻量场景交换包管线 (`mtk-voxel::package`)**
-  - [ ] **导出端按需剪枝 (`export_scene_package`)**：
-    - [ ] 扫描所选体素世界的 BlockState，提取最小依赖模型与独立贴图闭包（Tree-shaking）。
-    - [ ] 稀疏 16×16×16 Section 游程编码 (RLE) 与位打包写入 `VOXL` Chunk。
-    - [ ] 独立贴图去重写入 `TXTR` Chunk（严禁存固化图集，保留原始高画质/PBR伴生图）。
-  - [ ] **导入端现场重构 (`import_scene_package`)**：
-    - [ ] 读取 `VOXL` 填充 `VoxelStorage`。
-    - [ ] 内存现场构建场景专属微型图集（On-the-fly Atlas）或独立材质槽。
-    - [ ] 执行 `SectionMesher` 动态重构世界几何并零拷贝灌入宿主网格。
-
----
-
-## 阶段七：原版静态悬挂实体与地图数据解码 (`mtk-save::entity`, `mtk-save::map`)
-- [ ] **`entities/r.X.Z.mca` 独立实体区域文件解析器**
-  - [ ] 扩展 MCA 读取器，支持 Minecraft 1.17+ 独立实体区域文件以及旧版 Chunk 内嵌 `Entities` 标签；
-  - [ ] 基于选区 AABB 过滤空间相交的实体化合物。
-- [ ] **艺术画 (`PaintingEntity`) 解析与三维画框生成**
-  - [ ] 提取 `Pos`, `Rotation`, `Facing`, `variant`；
-  - [ ] 内置原版 40+ 种画作尺寸规格查找表（1x1, 2x1, 2x2, 4x4, 4x2, 4x3 等）；
-  - [ ] 生成规整带外框与背板的三维画框网格，并设置对应贴图坐标。
+### 2. 原版静态与悬挂实体解析 (`mtk-save::entity`) (P1)
+- [ ] **`entities/r.X.Z.mca` 独立实体区域文件解析**
+  - [ ] 扩展 MCA 读取器，支持 Minecraft 1.17+ 独立实体区域文件；
+  - [ ] 基于选区 AABB 过滤空间相交实体。
+- [ ] **艺术画 (`PaintingEntity`) 解析**
+  - [ ] 提取 `variant`, `facing`, `pos`，内置原版 40+ 种画作尺寸表，生成带木质背板的三维画框网格。
 - [ ] **物品展示框 (`ItemFrameEntity`) 解析**
-  - [ ] 提取 `TileX/Y/Z`（或 `Pos`）、`Facing`、`ItemRotation`、`Invisible`、`Item` 复合标签；
-  - [ ] 支持发光物品展示框 (`glow_item_frame`)；
-  - [ ] 导出展示框底座网格及内容物类型指示（方块/平面物品/地图）。
+  - [ ] 提取展示框旋转角度、发光属性与内容物信息。
 - [ ] **原版填充地图数据解码器 (`mtk-save::map`)**
   - [ ] 解析 `data/map_<id>.dat` Gzip NBT 文件；
-  - [ ] 内置原版 60+ 种 `MapColor` 基础色彩表与 4 级明暗倍率算法；
-  - [ ] 快速将 128×128 调色板字节流解码为连续 RGBA8 像素内存，供上层直接生成贴图。
+  - [ ] 内置 60+ 种 `MapColor` 基础色彩表与 4 级明暗倍率，快速解码 128×128 RGBA8 连续像素流。
 
----
-
-## 阶段八：真实 3D Quart Biome 染色采样与 5x5 平滑过渡核 (`mtk-voxel::biome`, `mtk-voxel::mesher` - ✅ 已完成)
-- [x] **打通 `SectionMesher` 真实 3D 群系采样通道**
-  - [x] 废弃全局 fallback 平原（`plains`）的逻辑，将 `SectionBiomes` 4×4×4 Quart 调色板下沉至 `mtk-voxel::storage`；
-  - [x] 从 `VoxelSource` / `ParsedChunk` 的 `SectionBiomes` 中按方块局部与世界坐标查询真实 3D Biome（自适应 256 柱表 vs 1024 3D Quart 表）；
-  - [x] 输出精准的草方块、树叶、水体、沼泽水（深灰绿）、沼泽 2D Perlin 噪声双色草、黑森林（`#507A32`）、恶地/沙漠（枯黄）染色色彩、Colormap UV 与特异群系 `TINT_TYPE_HARDCODED` 标记。
-- [x] **5×5 (R=2) 原版生物群系平滑混合（Biome Blend）**
-  - [x] 针对草方块、树叶和水面实现水平 5×5 均匀盒式滤波（Uniform Box Filter, weight=1.0）邻域平均卷积核；
-  - [x] 消除群系硬切接缝，保持与原版渲染完全一致的自然渐变与选区边界防溢色。
-
----
-
-## 阶段九：CTM 预编译、图集装箱与端到端集成测试 (`mtk-resource`, `libmtk::prebake`, `mtk-voxel` - 核心已完成 ✅ / 缓存容器序列化待扩展 🚧)
-- [x] **资源包预编译接入 CTM 规则 (`libmtk::prebake`, `mtk-resource::ctm`)**
-  - [x] 扫描活跃资源包中的 `assets/*/optifine/ctm/` 及 Continuity `.properties` 规则；
-  - [x] 将 CTM 的 0~46 等衍生子切片纳入 `mtk-texture` 图集装箱与独立 Standalone 导出流程；
-  - [ ] 将编译后的 `CtmSolver` 序列化并打包存入 `.mtkcache` 单文件容器（待容器 Chunk 协议扩展）。
-- [x] **`SectionMesher` 与 Python 绑定贯通 CTM**
-  - [x] `MesherConfig` 开放 `enable_ctm` 并接收 `Arc<CtmSolver>`；
-  - [x] 在 `bindings/mtk-py` 暴露 CTM 求解配置与测试接口（`PyCtmSolver`, `PyMesherConfig.enable_ctm` 等）。
-- [x] **测试夹具与端到端集成测试 (`mtk-testkit`)**
-  - [x] 引入无缝玻璃（Connected Glass）与连续书架（Bookshelf）测试夹具；
-  - [x] 编写跨 Section 边界的连续性与连通性回归测试用例（`test_ctm_meshing.rs` 覆盖 47-tile、水平连通与跨区块求解）。
-
----
-
-## 阶段十：高级方块实体 NBT 图元生成器 (`mtk-model::ber_nbt`)
-- [ ] **告示牌与悬挂告示牌文字生成器 (Sign Text)**
-  - [ ] 解析 `front_text` / `back_text`，按原版点阵或矢量排版生成面文字图元；
-  - [ ] 支持 16 色染料与发光墨囊辉光材质标记。
+### 3. 高级方块实体 NBT 图元生成器 (`mtk-model::ber_nbt`) (P2)
+- [ ] **告示牌文字生成器 (Sign Text)**
+  - [ ] 解析 `front_text` / `back_text`，按原版点阵排版生成面文字图元与发光材质标记。
 - [ ] **旗帜多层花纹合成 (Banner Patterns)**
   - [ ] 解析 `Patterns` 列表，依照原版公式按顺序进行 16 种颜色的多层 Alpha 混合合成。
-- [ ] **双箱 (Double Chest) 空间相交检测与大箱子几何生成**
+- [ ] **双箱 (Double Chest) 几何缝合与铰链预留**
   - [ ] 依据 BlockState 的 `type=left / type=right` 自动缝合为宽箱子网格，并为箱盖预留铰链轴心。
 
+### 4. 自包含轻量场景交换包 (`mtk-package::scene`) (P2)
+- [ ] **导出端按需剪枝 (`export_scene_package`)**
+  - [ ] 扫描选区体素世界，提取最小依赖模型与独立贴图闭包（Tree-shaking）；
+  - [ ] 稀疏 16×16×16 Section 游程编码写入 `VOXL` Chunk，贴图写入 `TXTR` Chunk。
+- [ ] **导入端现场重构 (`import_scene_package`)**
+  - [ ] 读取 `VOXL` 与 `TXTR`，现场构建微型图集或材质槽，重构世界几何。
 
+---
+
+## 🔮 v2.2+ 远景：万能格式与生态扩展 (Future Vision)
+
+- [ ] **建筑蓝图文件直接解析器 (`mtk-schematic`)**
+  - 纯 Rust 高性能解析 `.litematic` (Litematica) 与旧版 `.schematic` 文件；
+  - 无需世界存档直接转换为 `VoxelSource` 流，供网格化器直接重构网格。
+- [ ] **2D 俯视微型小地图切片渲染器 (`mtk-voxel::minimap`)**
+  - 基于体素数据快速光线投射或表面高度推导，输出 2D 俯视 RGBA 贴图，为前端小地图选区器提供视口预览。
+- [ ] **基岩版（Bedrock Edition）存储读取 (`mtk-voxel::storage::leveldb`)**
+  - 嵌入式纯 Rust LevelDB 存储格式解析与 SubChunk 运行时 ID 映射。
+- [ ] **体素反向逆向推算器 (Voxel Guesser / Mesh Inferrer)**
+  - 从第三方网格（Mineways / MiEx 导出的 OBJ/USD）中反向提取空间占位、材质与 UV，推导方块 ID 与 BlockState。
