@@ -9,8 +9,9 @@
 | 版本 | 阶段定位 | 核心主题与边界 | 状态 |
 | :--- | :--- | :--- | :--- |
 | **v2.0 正式版** | **核心计算内核** | **通用 3D/体素世界几何、双图集烘焙与材质渲染基石 (Production Core)**<br>完成 Anvil 存档解析、BlockState 烘焙、真实 3D 生物群系平滑采样、CTM 求解、**静态+动态双图集 (Dual-Atlas)** 以及直接指针零拷贝直写。 | 🚀 **收官冲刺中 (RC)** |
-| **v2.1** | **次级大版本** | **高级实体、特殊渲染器与场景交换 (Advanced Entities & Scene Interchange)**<br>支持 1.21.4+ 铜像 Special Renderers 模型、实体 MCA 文件解析、填充地图解码、方块实体 NBT 图元（告示牌/旗帜）与 `.mtkscene` 自包含场景包。 | 📋 **规划排期中** |
-| **v2.2+** | **万能格式扩展** | **全格式与全场景覆盖 (Multi-format & Ecosystem Expansion)**<br>建筑蓝图 (`.litematic` / `.schematic`) 解析、俯视 2D 小地图切片渲染、基岩版 LevelDB 存储与模组世界扩展。 | 🔮 **远景规划** |
+| **v2.1** | **次级大版本** | **高级实体、特殊渲染器、动作重定向与场景交换 (Advanced Entities & Interchange)**<br>支持 1.21.4+ 铜像 Special Renderers 模型、骨骼动画坐标系重定向数学库、实体 MCA 文件解析、填充地图解码、方块实体 NBT 与 `.mtkscene` 自包含场景包。 | 📋 **规划排期中** |
+| **v2.2** | **通用面部与格式** | **面部捕捉网络流、平滑滤波与蓝图全覆盖 (Facial Stream & Blueprint Expansion)**<br>Rust 原生高性能 LiveLinkFace UDP (11111) 与 WebSocket 异步接收、OneEuroFilter 平滑滤波、ARKit 52 向量化解算；`.litematic` 蓝图解析；2D 俯视小地图切片渲染。 | 📋 **规划排期中** |
+| **v2.3+** | **万能生态扩展** | **全格式与全场景覆盖 (Multi-format & Ecosystem Expansion)**<br>基岩版 LevelDB 存储与模组世界扩展、体素反向逆向推算器 (Voxel Guesser)。 | 🔮 **远景规划** |
 
 ---
 
@@ -82,9 +83,9 @@
 
 ---
 
-## 🚀 v2.1 版本：高级实体、特殊渲染器与场景交换 (规划排期中 📋)
+## 🚀 v2.1 版本：高级实体、特殊渲染器、动作重定向与场景交换 (规划排期中 📋)
 
-> **2.1 版本主题**：拓展特殊渲染模型、实体数据流与自包含场景交换包。
+> **2.1 版本主题**：拓展特殊渲染模型、实体数据流、动作重定向数学库与自包含场景交换包。
 
 ### 1. 1.21.4+ 客户端特殊模型攻坚 (Special Renderers & Copper Golem Statue) (P1)
 - [ ] **解析客户端模型新语法 (`mtk-model::special`)**
@@ -93,7 +94,14 @@
   - [ ] 当缺少传统 `"elements"` 字段时，路由至特殊渲染器模型构建器；
   - [ ] 内置铜傀儡像 4 种氧化态（未氧化、斑驳、锈蚀、完全氧化）与各姿态（standing, sitting, running, star）的盒模型拓扑与贴图解算。
 
-### 2. 原版静态与悬挂实体解析 (`mtk-save::entity`) (P1)
+### 2. 动画曲线与骨骼重定向数学库 (`mtk-anim::retarget` - P1)
+- [ ] **Mine-imator 关键帧与曲线解算**
+  - [ ] 实现 Linear、Instant 与 Bézier 贝塞尔缓动曲线的离散数值解算器；
+- [ ] **骨骼变换与坐标轴重定向矩阵流 (Bone Retargeting Math)**
+  - [ ] 实现针对 Y/Z 轴向翻转、四元数局部与世界旋转重定向的高性能批量批处理计算；
+  - [ ] 为前端提供从 MI 临时参考骨骼快速重定向至 Rig2 / Ice Cube / BPS / Thomas 的向量化通道。
+
+### 3. 原版静态与悬挂实体解析 (`mtk-save::entity`) (P1)
 - [ ] **`entities/r.X.Z.mca` 独立实体区域文件解析**
   - [ ] 扩展 MCA 读取器，支持 Minecraft 1.17+ 独立实体区域文件；
   - [ ] 基于选区 AABB 过滤空间相交实体。
@@ -105,7 +113,7 @@
   - [ ] 解析 `data/map_<id>.dat` Gzip NBT 文件；
   - [ ] 内置 60+ 种 `MapColor` 基础色彩表与 4 级明暗倍率，快速解码 128×128 RGBA8 连续像素流。
 
-### 3. 高级方块实体 NBT 图元生成器 (`mtk-model::ber_nbt`) (P2)
+### 4. 高级方块实体 NBT 图元生成器 (`mtk-model::ber_nbt`) (P2)
 - [ ] **告示牌文字生成器 (Sign Text)**
   - [ ] 解析 `front_text` / `back_text`，按原版点阵排版生成面文字图元与发光材质标记。
 - [ ] **旗帜多层花纹合成 (Banner Patterns)**
@@ -113,7 +121,7 @@
 - [ ] **双箱 (Double Chest) 几何缝合与铰链预留**
   - [ ] 依据 BlockState 的 `type=left / type=right` 自动缝合为宽箱子网格，并为箱盖预留铰链轴心。
 
-### 4. 自包含轻量场景交换包 (`mtk-package::scene`) (P2)
+### 5. 自包含轻量场景交换包 (`mtk-package::scene`) (P2)
 - [ ] **导出端按需剪枝 (`export_scene_package`)**
   - [ ] 扫描选区体素世界，提取最小依赖模型与独立贴图闭包（Tree-shaking）；
   - [ ] 稀疏 16×16×16 Section 游程编码写入 `VOXL` Chunk，贴图写入 `TXTR` Chunk。
@@ -122,13 +130,32 @@
 
 ---
 
-## 🔮 v2.2+ 远景：万能格式与生态扩展 (Future Vision)
+## 🛠️ v2.2 版本：通用面部网络流、平滑滤波与蓝图全覆盖 (规划排期中 📋)
 
-- [ ] **建筑蓝图文件直接解析器 (`mtk-schematic`)**
-  - 纯 Rust 高性能解析 `.litematic` (Litematica) 与旧版 `.schematic` 文件；
-  - 无需世界存档直接转换为 `VoxelSource` 流，供网格化器直接重构网格。
-- [ ] **2D 俯视微型小地图切片渲染器 (`mtk-voxel::minimap`)**
-  - 基于体素数据快速光线投射或表面高度推导，输出 2D 俯视 RGBA 贴图，为前端小地图选区器提供视口预览。
+### 1. 原生高性能面部捕捉网络流与平滑滤波 (`mtk-face` / `mtk-net` - P1 核心 🌟)
+- [ ] **高并发无阻塞网络监听器**
+  - [ ] 原生 Rust 实现 LiveLinkFace (UDP 11111) 与 WebSocket 异步数据包监听；
+  - [ ] 零拷贝快速解析 ARKit 52 种 Blendshape 浮点数组与头部姿态四元数；
+- [ ] **自适应抗抖动平滑滤波器 (One Euro Filter & Kalman)**
+  - [ ] 实现针对高频面捕噪声的 One Euro Filter 自适应低通滤波，消除面部微颤；
+  - [ ] 处理网络丢包抖动与插值补偿；
+- [ ] **通用骨骼偏移向量计算**
+  - [ ] 接收前端传入的通用映射规则表，Rust 端多线程执行矩阵乘加，直接将 Blendshape 流折算为骨骼位移/旋转流，零延迟注入 Blender。
+
+### 2. 建筑蓝图文件直接解析器 (`mtk-schematic` - P1)
+- [ ] **`.litematic` / `.schematic` 纯 Rust 解析**
+  - [ ] 无需世界存档，高性能解包 Litematica 区域、BlockState 调色板与方块实体；
+  - [ ] 直接对接 `VoxelSource`，一键生成完整建筑几何。
+
+### 3. 2D 俯视微型小地图切片渲染器 (`mtk-voxel::minimap` - P1)
+- [ ] **快速光线表面高度与群系色彩投影**
+  - [ ] 基于体素流快速推算地表高度、水深与方块群系颜色；
+  - [ ] 极速输出连续 RGBA8 贴图内存，供前端 2D 小地图选区器实时缩放平移预览。
+
+---
+
+## 🔮 v2.3+ 远景：万能格式与生态扩展 (Future Vision)
+
 - [ ] **基岩版（Bedrock Edition）存储读取 (`mtk-voxel::storage::leveldb`)**
   - 嵌入式纯 Rust LevelDB 存储格式解析与 SubChunk 运行时 ID 映射。
 - [ ] **体素反向逆向推算器 (Voxel Guesser / Mesh Inferrer)**
