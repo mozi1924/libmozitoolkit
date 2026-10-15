@@ -30,6 +30,15 @@ fn test_classify_tint_category_authoritative() {
         classify_tint_category("pale_oak_leaves", Some("pale_oak_leaves"), None),
         "none"
     );
+    assert_eq!(
+        classify_tint_category("yellow_poplar_leaves", Some("yellow_poplar_leaves"), None),
+        "none"
+    );
+    assert_eq!(
+        classify_tint_category("red_poplar_leaves", None, None),
+        "none"
+    );
+    assert_eq!(classify_tint_category("leaves_notint", None, None), "none");
 
     // 2. Dry Foliage
     assert_eq!(

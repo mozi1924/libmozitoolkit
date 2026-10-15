@@ -123,6 +123,11 @@ pub static EXPLICIT_NONE_BLOCKS: &[&str] = &[
     "potted_azalea_bush_top",
     "cherry_leaves",
     "pale_oak_leaves",
+    "yellow_poplar_leaves",
+    "red_poplar_leaves",
+    "orange_poplar_leaves",
+    "poplar_leaves",
+    "leaves_notint",
     "seagrass",
     "tall_seagrass",
     "kelp",
@@ -390,8 +395,14 @@ pub fn classify_tint_category(
         if s_stem.contains("cherry")
             || s_stem.contains("azalea")
             || s_stem.contains("pale_oak")
+            || s_stem.contains("poplar")
+            || s_stem.contains("notint")
             || b_norm.as_deref().is_some_and(|b| {
-                b.contains("cherry") || b.contains("azalea") || b.contains("pale_oak")
+                b.contains("cherry")
+                    || b.contains("azalea")
+                    || b.contains("pale_oak")
+                    || b.contains("poplar")
+                    || b.contains("notint")
             })
         {
             return "none";
