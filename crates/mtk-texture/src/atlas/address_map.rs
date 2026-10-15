@@ -235,4 +235,28 @@ impl AtlasAddressMap {
             .map(|c| c.chunk_id)
             .unwrap_or(0)
     }
+
+    /// Lookup fallback sprite location when a specific texture is missing from the atlas.
+    pub fn lookup_fallback(&self) -> Option<&AtlasSpriteLocation> {
+        for cand in &[
+            "missing",
+            "missingno",
+            "minecraft:missingno",
+            "minecraft:block/stone",
+            "block/stone",
+            "minecraft:block/dirt",
+            "block/dirt",
+            "minecraft:block/oak_leaves",
+            "block/oak_leaves",
+        ] {
+            if let Some(loc) = self.lookup_str(cand) {
+                return Some(loc);
+            }
+        }
+        let def_chunk = self.default_chunk_id();
+        self.sprites
+            .values()
+            .find(|s| s.chunk_id == def_chunk)
+            .or_else(|| self.sprites.values().next())
+    }
 }

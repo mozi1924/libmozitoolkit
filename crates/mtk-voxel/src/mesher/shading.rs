@@ -239,11 +239,55 @@ fn resolve_model_face(
                     atlas_loc.chunk_id as i32,
                     atlas_loc.texture_id,
                 )
-            } else {
-                let default_chunk = atlas.default_chunk_id();
+            } else if let Some(fallback_loc) = atlas.lookup_fallback() {
+                let u_min = fallback_loc.frame_0_uv_bounds[0];
+                let v_min = fallback_loc.frame_0_uv_bounds[1];
+                let u_max = fallback_loc.frame_0_uv_bounds[2];
+                let v_max = fallback_loc.frame_0_uv_bounds[3];
+                let u_span = u_max - u_min;
+                let v_span = v_max - v_min;
+                let remapped = [
+                    Vec2::new(
+                        u_min + face.uvs[0].x * u_span,
+                        v_min + (1.0 - face.uvs[0].y) * v_span,
+                    ),
+                    Vec2::new(
+                        u_min + face.uvs[1].x * u_span,
+                        v_min + (1.0 - face.uvs[1].y) * v_span,
+                    ),
+                    Vec2::new(
+                        u_min + face.uvs[2].x * u_span,
+                        v_min + (1.0 - face.uvs[2].y) * v_span,
+                    ),
+                    Vec2::new(
+                        u_min + face.uvs[3].x * u_span,
+                        v_min + (1.0 - face.uvs[3].y) * v_span,
+                    ),
+                ];
                 (
                     face.texture.clone(),
-                    None,
+                    Some(remapped),
+                    fallback_loc.chunk_id,
+                    fallback_loc.chunk_id as i32,
+                    fallback_loc.texture_id,
+                )
+            } else {
+                let default_chunk = atlas.default_chunk_id();
+                let (chunk_w, chunk_h) = atlas
+                    .get_chunk_meta(default_chunk)
+                    .map(|c| (c.width as f32, c.height as f32))
+                    .unwrap_or((4096.0, 4096.0));
+                let u_span = 16.0 / chunk_w.max(16.0);
+                let v_span = 16.0 / chunk_h.max(16.0);
+                let remapped = [
+                    Vec2::new(face.uvs[0].x * u_span, (1.0 - face.uvs[0].y) * v_span),
+                    Vec2::new(face.uvs[1].x * u_span, (1.0 - face.uvs[1].y) * v_span),
+                    Vec2::new(face.uvs[2].x * u_span, (1.0 - face.uvs[2].y) * v_span),
+                    Vec2::new(face.uvs[3].x * u_span, (1.0 - face.uvs[3].y) * v_span),
+                ];
+                (
+                    face.texture.clone(),
+                    Some(remapped),
                     default_chunk,
                     default_chunk as i32,
                     0u32,
@@ -428,6 +472,24 @@ pub fn build_palette_meshing_data<'a>(
                                         atlas_loc.chunk_id,
                                         atlas_loc.chunk_id as i32,
                                         atlas_loc.texture_id,
+                                    )
+                                } else if let Some(fb) = atlas.lookup_fallback() {
+                                    let u_min = fb.frame_0_uv_bounds[0];
+                                    let v_min = fb.frame_0_uv_bounds[1];
+                                    let u_max = fb.frame_0_uv_bounds[2];
+                                    let v_max = fb.frame_0_uv_bounds[3];
+                                    let remapped = [
+                                        Vec2::new(u_min, v_max),
+                                        Vec2::new(u_min, v_min),
+                                        Vec2::new(u_max, v_min),
+                                        Vec2::new(u_max, v_max),
+                                    ];
+                                    (
+                                        format!("minecraft:block/{}", clean_sub),
+                                        Some(remapped),
+                                        fb.chunk_id,
+                                        fb.chunk_id as i32,
+                                        fb.texture_id,
                                     )
                                 } else {
                                     (format!("minecraft:block/{}", clean_sub), None, 0, 0, 0)

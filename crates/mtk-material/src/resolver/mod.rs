@@ -399,6 +399,35 @@ impl MaterialResolver {
             }
         }
 
+        // 3.7 Foliage / Leaves and Log fallbacks for modded blocks with missing textures
+        if raw_material_name.contains("leaves")
+            || cleaned.contains("leaves")
+            || raw_material_name.contains("leaf")
+            || cleaned.contains("leaf")
+        {
+            for &cand in &[
+                "block/oak_leaves",
+                "minecraft:block/oak_leaves",
+                "block/leaves",
+            ] {
+                if let Some(sprite_loc) = address_map.lookup_str(cand) {
+                    let res_loc = ResourceLocation::parse(cand)
+                        .unwrap_or_else(|_| ResourceLocation::new("minecraft", cand));
+                    return Some((res_loc, sprite_loc));
+                }
+            }
+        }
+
+        if raw_material_name.contains("log") || cleaned.contains("log") {
+            for &cand in &["block/oak_log", "minecraft:block/oak_log"] {
+                if let Some(sprite_loc) = address_map.lookup_str(cand) {
+                    let res_loc = ResourceLocation::parse(cand)
+                        .unwrap_or_else(|_| ResourceLocation::new("minecraft", cand));
+                    return Some((res_loc, sprite_loc));
+                }
+            }
+        }
+
         // 4. Default standard Minecraft category fallbacks
         let fallbacks = [
             format!("block/{}", cleaned),

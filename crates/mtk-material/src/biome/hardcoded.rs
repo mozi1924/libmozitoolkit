@@ -207,6 +207,66 @@ pub fn is_explicit_none_tint(stem: &str) -> bool {
     s.contains("dead_bush") || s.contains("firefly_bush")
 }
 
+/// Returns true if the leaf or block represents non-tinted foliage:
+/// - Explicitly non-tinted vanilla trees: azalea, cherry, pale oak
+/// - Poplar and un-tinted variants
+/// - Snow-covered / frosty leaves: snow, frost, winter, ice, icy
+/// - Pre-colored autumn / seasonal leaves: red, orange, yellow, golden, dead, autumn, purple, blue, pink, white, brown, amber, maple, zelkova
+/// - Flowering / blossom leaves: flower, blossom
+/// - Fruit-bearing leaves: apple, berry, cherries, fruit
+/// - Fantasy / crystal dimension leaves: crystal, dusk, lunar, starlit, bluebright, comet, shimmering, glacia, etc.
+/// - Nether / End leaves: nether, warped, crimson, dragon_tree, shadow_berry, tenanea, lacugrove
+pub fn is_explicit_non_tinted_leaf(s_stem: &str, b_norm: Option<&str>) -> bool {
+    let check = |s: &str| {
+        s.contains("cherry")
+            || s.contains("azalea")
+            || s.contains("pale_oak")
+            || s.contains("poplar")
+            || s.contains("notint")
+            || s.contains("snow")
+            || s.contains("frost")
+            || s.contains("winter")
+            || s.contains("ice")
+            || s.contains("icy")
+            || s.contains("red_")
+            || s.contains("orange_")
+            || s.contains("yellow_")
+            || s.contains("golden_")
+            || s.contains("dead_")
+            || s.contains("autumn")
+            || s.contains("purple_")
+            || s.contains("blue_")
+            || s.contains("pink_")
+            || s.contains("white_")
+            || s.contains("brown_")
+            || s.contains("amber_")
+            || s.contains("flower")
+            || s.contains("blossom")
+            || s.contains("apple_")
+            || s.contains("berry")
+            || s.contains("cherries")
+            || s.contains("fruit")
+            || s.contains("crystal")
+            || s.contains("dusk")
+            || s.contains("lunar")
+            || s.contains("starlit")
+            || s.contains("bluebright")
+            || s.contains("comet")
+            || s.contains("shimmering")
+            || s.contains("dragon_tree")
+            || s.contains("shadow_berry")
+            || s.contains("tenanea")
+            || s.contains("lacugrove")
+            || s.contains("glacia")
+            || s.contains("maple")
+            || s.contains("zelkova")
+            || s.contains("nether")
+            || s.contains("warped")
+            || s.contains("crimson")
+    };
+    check(s_stem) || b_norm.is_some_and(check)
+}
+
 /// Returns true if the stem represents dry foliage (leaf litter, dry grass, etc.).
 pub fn is_dry_foliage(stem: &str) -> bool {
     let clean = stem.trim().to_ascii_lowercase();
@@ -392,19 +452,7 @@ pub fn classify_tint_category(
         if s_stem.contains("birch") || b_norm.as_deref().is_some_and(|b| b.contains("birch")) {
             return "hardcoded";
         }
-        if s_stem.contains("cherry")
-            || s_stem.contains("azalea")
-            || s_stem.contains("pale_oak")
-            || s_stem.contains("poplar")
-            || s_stem.contains("notint")
-            || b_norm.as_deref().is_some_and(|b| {
-                b.contains("cherry")
-                    || b.contains("azalea")
-                    || b.contains("pale_oak")
-                    || b.contains("poplar")
-                    || b.contains("notint")
-            })
-        {
+        if is_explicit_non_tinted_leaf(s_stem, b_norm.as_deref()) {
             return "none";
         }
         return "foliage";

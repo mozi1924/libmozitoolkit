@@ -33,7 +33,8 @@ impl BiomeResolver {
         // UNLESS the face has an overlay companion (such as grass_block_side) where
         // the base quad has tint_index -1 but the companion overlay quad has tint_index 0.
         if let Some(ti) = tint_index {
-            if ti < 0 && !has_overlay {
+            let is_grass_side = stem.ends_with("grass_block_side") || stem.ends_with("grass_side");
+            if ti < 0 && !(has_overlay && is_grass_side) {
                 return TintInfo::default();
             }
         }
@@ -77,7 +78,7 @@ impl BiomeResolver {
                 tint_category: "hardcoded".to_string(),
                 tint_weight: 1.0,
                 base_tint_weight: 1.0,
-                overlay_tint_weight: 1.0,
+                overlay_tint_weight: 0.0,
                 has_overlay: false,
                 overlay_texture: None,
                 is_hardcoded: true,
@@ -96,7 +97,7 @@ impl BiomeResolver {
                 tint_category: "hardcoded".to_string(),
                 tint_weight: 1.0,
                 base_tint_weight: 1.0,
-                overlay_tint_weight: 1.0,
+                overlay_tint_weight: 0.0,
                 has_overlay: false,
                 overlay_texture: None,
                 is_hardcoded: true,
@@ -110,7 +111,7 @@ impl BiomeResolver {
                 tint_category: "hardcoded".to_string(),
                 tint_weight: 1.0,
                 base_tint_weight: 1.0,
-                overlay_tint_weight: 1.0,
+                overlay_tint_weight: 0.0,
                 has_overlay: false,
                 overlay_texture: None,
                 is_hardcoded: true,
@@ -156,7 +157,7 @@ impl BiomeResolver {
                 tint_category: "foliage".to_string(),
                 tint_weight: 1.0,
                 base_tint_weight: 1.0,
-                overlay_tint_weight: 1.0,
+                overlay_tint_weight: 0.0,
                 has_overlay,
                 overlay_texture: overlay_stem,
                 is_hardcoded: false,
@@ -168,7 +169,7 @@ impl BiomeResolver {
                 tint_category: "dry_foliage".to_string(),
                 tint_weight: 1.0,
                 base_tint_weight: 1.0,
-                overlay_tint_weight: 1.0,
+                overlay_tint_weight: 0.0,
                 has_overlay,
                 overlay_texture: overlay_stem,
                 is_hardcoded: false,
@@ -180,7 +181,7 @@ impl BiomeResolver {
                 tint_category: "water".to_string(),
                 tint_weight: 1.0,
                 base_tint_weight: 1.0,
-                overlay_tint_weight: 1.0,
+                overlay_tint_weight: 0.0,
                 has_overlay,
                 overlay_texture: overlay_stem,
                 is_hardcoded: false,
@@ -201,7 +202,7 @@ impl BiomeResolver {
                     tint_category: "hardcoded".to_string(),
                     tint_weight: 1.0,
                     base_tint_weight: 1.0,
-                    overlay_tint_weight: 1.0,
+                    overlay_tint_weight: 0.0,
                     has_overlay: false,
                     overlay_texture: None,
                     is_hardcoded: true,

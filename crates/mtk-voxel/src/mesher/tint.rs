@@ -21,9 +21,11 @@ pub fn compute_face_tint(
     };
 
     // In Minecraft rendering, any face with negative tint index is strictly untinted,
-    // UNLESS it has an overlay companion whose overlay part must be tinted.
-    if tint_index < 0 && !has_overlay {
-        let packed_data = [1.0, 1.0, 0.0, 0.0];
+    // UNLESS it has an overlay companion whose overlay part must be tinted (such as grass_block_side).
+    let is_grass_side =
+        texture_key.ends_with("grass_block_side") || texture_key.ends_with("grass_side");
+    if tint_index < 0 && !(has_overlay && is_grass_side) {
+        let packed_data = [1.0, 0.0, 0.0, 0.0];
         return (packed_data, [1.0, 1.0, 1.0, 1.0], colormap_uv_3);
     }
 
@@ -57,13 +59,19 @@ pub fn compute_face_tint(
         (packed_data, final_col, colormap_uv_3)
     } else {
         // Fallback when no biome_resolver is supplied:
-        let cat = if has_overlay {
+        let is_grass_side =
+            texture_key.ends_with("grass_block_side") || texture_key.ends_with("grass_side");
+        let cat = if has_overlay && is_grass_side {
             "grass"
         } else {
             mtk_material::classify_tint_category(texture_key, Some(block_name), t_idx)
         };
         if cat != "none" {
-            let bw = if has_overlay { 0.0 } else { 1.0 };
+            let bw = if has_overlay && cat == "grass" {
+                0.0
+            } else {
+                1.0
+            };
             let (tt, tw, col) = match cat {
                 "grass" => (
                     mtk_material::TINT_TYPE_GRASS,
@@ -93,10 +101,11 @@ pub fn compute_face_tint(
                 }
                 _ => (mtk_material::TINT_TYPE_NONE, 0.0, [1.0, 1.0, 1.0, 1.0]),
             };
-            let packed_data = [bw, 1.0, tw, tt as f32];
+            let ow = if cat == "grass" { 1.0 } else { 0.0 };
+            let packed_data = [bw, ow, tw, tt as f32];
             (packed_data, col, colormap_uv_3)
         } else {
-            let packed_data = [1.0, 1.0, 0.0, 0.0]; // no tint
+            let packed_data = [1.0, 0.0, 0.0, 0.0]; // no tint
             (packed_data, [1.0, 1.0, 1.0, 1.0], colormap_uv_3)
         }
     }
