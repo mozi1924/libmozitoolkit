@@ -120,12 +120,8 @@ where
         return 0.0;
     }
 
-    let is_solid_cube = match clean {
-        "stone" | "dirt" | "grass_block" | "cobblestone" | "sand" | "gravel" | "oak_planks"
-        | "spruce_planks" | "birch_planks" | "deepslate" | "bedrock" | "obsidian"
-        | "netherrack" | "end_stone" => true,
-        _ => !clean.contains("air") && !clean.contains("sapling") && !clean.contains("flower"),
-    };
+    let is_solid_cube = mtk_model::baker::rules::is_opaque_block(clean)
+        && !mtk_model::baker::rules::is_known_non_cube(clean, false);
 
     if is_solid_cube {
         return -1.0;

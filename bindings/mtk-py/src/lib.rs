@@ -188,6 +188,8 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(material::get_colormap_uv, m)?)?;
     m.add_function(wrap_pyfunction!(material::srgb_to_linear, m)?)?;
     m.add_function(wrap_pyfunction!(material::linear_to_srgb, m)?)?;
+    m.add_function(wrap_pyfunction!(material::get_hardcoded_tint, m)?)?;
+    m.add_function(wrap_pyfunction!(material::get_hardcoded_tint_hex, m)?)?;
     m.add_function(wrap_pyfunction!(material::compute_mesh_material_props, m)?)?;
     m.add_function(wrap_pyfunction!(material::compute_flat_material_props, m)?)?;
     m.add_function(wrap_pyfunction!(material::get_material_props, m)?)?;

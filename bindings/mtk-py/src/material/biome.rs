@@ -116,6 +116,20 @@ pub fn linear_to_srgb(color: [f32; 4]) -> [f32; 4] {
     ]
 }
 
+/// Retrieve the hardcoded linear color for a block or texture stem, if any.
+#[pyfunction]
+#[pyo3(signature = (name))]
+pub fn get_hardcoded_tint(name: &str) -> Option<[f32; 4]> {
+    mtk_material::get_hardcoded_tint(name)
+}
+
+/// Retrieve the hardcoded hex string for a block or texture stem, if any.
+#[pyfunction]
+#[pyo3(signature = (name))]
+pub fn get_hardcoded_tint_hex(name: &str) -> Option<&'static str> {
+    mtk_material::get_hardcoded_tint_hex(name)
+}
+
 /// Standalone batch function to compute mesh biome attributes in Rust parallel Rayon.
 #[pyfunction]
 #[pyo3(signature = (
