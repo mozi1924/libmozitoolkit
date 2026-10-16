@@ -378,34 +378,40 @@ pub fn handle_packet(
                     ),
                 });
             } else if !more_pending {
-                let (unified, section_mesh, world_mesh) = {
-                    let mut w = world.write().unwrap();
-                    let _ = w.rebuild_dirty();
-                    let s_mesh = w
-                        .get_section_cache()
-                        .get(&sec_coord)
-                        .cloned()
-                        .unwrap_or_default();
-                    let w_mesh = if w.unified_mesh {
-                        w.get_world_mesh().cloned()
-                    } else {
-                        None
-                    };
-                    (w.unified_mesh, s_mesh, w_mesh)
+                let is_empty = {
+                    let w = world.read().unwrap();
+                    w.storage.get_all_non_empty_sections().is_empty()
                 };
+                if !is_empty {
+                    let (unified, section_mesh, world_mesh) = {
+                        let mut w = world.write().unwrap();
+                        let _ = w.rebuild_dirty();
+                        let s_mesh = w
+                            .get_section_cache()
+                            .get(&sec_coord)
+                            .cloned()
+                            .unwrap_or_default();
+                        let w_mesh = if w.unified_mesh {
+                            w.get_world_mesh().cloned()
+                        } else {
+                            None
+                        };
+                        (w.unified_mesh, s_mesh, w_mesh)
+                    };
 
-                if unified {
-                    if let Some(mesh) = world_mesh {
-                        if let Some(ref mut last_time_opt) = last_mesh_dispatch_time {
-                            **last_time_opt = Some(std::time::Instant::now());
+                    if unified {
+                        if let Some(mesh) = world_mesh {
+                            if let Some(ref mut last_time_opt) = last_mesh_dispatch_time {
+                                **last_time_opt = Some(std::time::Instant::now());
+                            }
+                            let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
                         }
-                        let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
+                    } else {
+                        let _ = event_sender.send(SyncEvent::SectionMeshReady {
+                            coord: sec_coord,
+                            mesh: section_mesh,
+                        });
                     }
-                } else {
-                    let _ = event_sender.send(SyncEvent::SectionMeshReady {
-                        coord: sec_coord,
-                        mesh: section_mesh,
-                    });
                 }
             }
         }
@@ -622,12 +628,6 @@ pub fn handle_packet(
             stream_id_atomic.store(0, Ordering::SeqCst);
             sync_requested.store(false, Ordering::SeqCst);
 
-            let built = *stream_received_sections;
-            let _ = event_sender.send(SyncEvent::StreamFinished {
-                stream_id,
-                built_sections: built,
-            });
-
             if more_pending {
                 return;
             }
@@ -670,6 +670,12 @@ pub fn handle_packet(
                     });
                 }
             }
+
+            let built = *stream_received_sections;
+            let _ = event_sender.send(SyncEvent::StreamFinished {
+                stream_id,
+                built_sections: built,
+            });
         }
 
         _ => {}

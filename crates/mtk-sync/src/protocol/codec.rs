@@ -420,18 +420,25 @@ pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
                 }
 
                 if b_count == 1 {
-                    biome_indices = Some(vec![0u16; total_blocks]);
+                    biome_indices = Some(vec![0u16; 64]);
                     biome_palette = Some(bp);
                 } else if b_count > 1 && data.len() > offset {
                     let b_idx_bytes = data[offset];
                     offset += 1;
-                    let mut bi = Vec::with_capacity(total_blocks);
-                    if b_idx_bytes == 1 && data.len() >= offset + total_blocks {
-                        for &b in &data[offset..offset + total_blocks] {
+                    let remaining = data.len() - offset;
+                    let count =
+                        if remaining >= 64 && (remaining < total_blocks || total_blocks == 64) {
+                            64
+                        } else {
+                            total_blocks
+                        };
+                    let mut bi = Vec::with_capacity(count);
+                    if b_idx_bytes == 1 && data.len() >= offset + count {
+                        for &b in &data[offset..offset + count] {
                             bi.push(b as u16);
                         }
-                    } else if b_idx_bytes == 2 && data.len() >= offset + total_blocks * 2 {
-                        for i in 0..total_blocks {
+                    } else if b_idx_bytes == 2 && data.len() >= offset + count * 2 {
+                        for i in 0..count {
                             let val = u16::from_le_bytes(
                                 data[offset + i * 2..offset + i * 2 + 2].try_into().unwrap(),
                             );
