@@ -499,3 +499,10 @@ pub fn load_material_properties_replace(
 pub fn reset_material_properties_to_default() {
     mtk_material::reset_material_properties_to_default();
 }
+
+/// Returns the swamp grass linear RGBA color at world coordinates `(x, z)` based on Perlin noise.
+#[pyfunction]
+#[pyo3(signature = (x, z))]
+pub fn get_swamp_grass_color(x: f32, z: f32) -> [f32; 4] {
+    mtk_material::get_swamp_grass_color(x, z)
+}

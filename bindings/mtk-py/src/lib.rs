@@ -208,6 +208,13 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
         material::reset_material_properties_to_default,
         m
     )?)?;
+    m.add_function(wrap_pyfunction!(material::get_swamp_grass_color, m)?)?;
+    m.add("TINT_TYPE_NONE", mtk_material::TINT_TYPE_NONE)?;
+    m.add("TINT_TYPE_GRASS", mtk_material::TINT_TYPE_GRASS)?;
+    m.add("TINT_TYPE_FOLIAGE", mtk_material::TINT_TYPE_FOLIAGE)?;
+    m.add("TINT_TYPE_WATER", mtk_material::TINT_TYPE_WATER)?;
+    m.add("TINT_TYPE_HARDCODED", mtk_material::TINT_TYPE_HARDCODED)?;
+    m.add("TINT_TYPE_DRY_FOLIAGE", mtk_material::TINT_TYPE_DRY_FOLIAGE)?;
 
     // 8. Model Baker
     m.add_class::<PyModelBaker>()?;

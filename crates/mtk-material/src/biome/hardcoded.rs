@@ -60,6 +60,23 @@ pub fn get_redstone_wire_hex(power: u8) -> &'static str {
     REDSTONE_WIRE_TINT_HEX[power.min(15) as usize]
 }
 
+/// Canonical swamp dual grass colors in linear RGBA.
+pub static SWAMP_GRASS_LOW_HEX: &str = "#4C763C";
+pub static SWAMP_GRASS_HIGH_HEX: &str = "#6A7039";
+
+/// Computes the vanilla swamp grass color using Perlin noise at world coordinates `(x, z)`.
+///
+/// Follows Minecraft vanilla swamp variation: Perlin noise sampled at frequency 0.0225.
+/// When noise < -0.1, uses `#4C763C`, otherwise uses `#6A7039`.
+pub fn get_swamp_grass_color(x: f32, z: f32) -> [f32; 4] {
+    let n = mtk_core::extrude::perlin_noise_3d(x * 0.0225, 0.0, z * 0.0225, 2345);
+    if n < -0.1 {
+        hex_to_linear_rgba(SWAMP_GRASS_LOW_HEX)
+    } else {
+        hex_to_linear_rgba(SWAMP_GRASS_HIGH_HEX)
+    }
+}
+
 /// Canonical Minecraft Block Colors Registry.
 /// Maps block stem to layer definitions: (category, default_weight).
 pub static BLOCK_TINT_REGISTRY: &[(&str, &[(&str, f32)])] = &[

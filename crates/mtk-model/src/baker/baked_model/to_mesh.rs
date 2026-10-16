@@ -4,7 +4,7 @@ use glam::Vec3;
 use mtk_core::mesh::MeshData;
 
 use super::model::{BakedModel, ModelMeshOptions};
-use crate::culling::cull_volume::clip_face_excluding_hidden_volume;
+use crate::culling::clip_face_excluding_hidden_volume;
 
 impl BakedModel {
     /// Converts the baked model geometry into a platform-agnostic, contiguous `MeshData` buffer.
@@ -93,7 +93,7 @@ impl BakedModel {
                         &other_bounds,
                     )
                 } else {
-                    vec![crate::culling::cull_volume::ClippedQuadPiece {
+                    vec![crate::culling::ClippedQuadPiece {
                         vertices: face.vertices,
                         uvs: face.uvs,
                     }]

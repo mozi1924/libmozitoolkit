@@ -97,12 +97,7 @@ pub fn get_point_column_biome(biome: &str, x: i32, z: i32) -> SmoothedBiomeColum
     let pal = mtk_material::get_biome_palette(biome);
     let is_swamp = pal.id == "swamp" || pal.id == "mangrove_swamp";
     let grass_color = if is_swamp {
-        let n = mtk_core::extrude::perlin_noise_3d(x as f32 * 0.0225, 0.0, z as f32 * 0.0225, 2345);
-        if n < -0.1 {
-            mtk_material::hex_to_linear_rgba("#4C763C")
-        } else {
-            mtk_material::hex_to_linear_rgba("#6A7039")
-        }
+        mtk_material::get_swamp_grass_color(x as f32, z as f32)
     } else {
         pal.grass_linear()
     };
@@ -173,17 +168,7 @@ where
 
         let is_swamp = pal.id == "swamp" || pal.id == "mangrove_swamp";
         let gc = if is_swamp {
-            let n = mtk_core::extrude::perlin_noise_3d(
-                bx as f32 * 0.0225,
-                0.0,
-                bz as f32 * 0.0225,
-                2345,
-            );
-            if n < -0.1 {
-                mtk_material::hex_to_linear_rgba("#4C763C")
-            } else {
-                mtk_material::hex_to_linear_rgba("#6A7039")
-            }
+            mtk_material::get_swamp_grass_color(bx as f32, bz as f32)
         } else {
             pal.grass_linear()
         };

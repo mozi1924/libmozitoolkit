@@ -79,6 +79,9 @@ pub struct BiomePalette {
 - `TINT_TYPE_HARDCODED = 4`: 硬编码固定颜色（云杉树叶、睡莲、红石线等）
 - `TINT_TYPE_DRY_FOLIAGE = 5`: 苍白/干枯植被染色
 
+**沼泽草双色 Perlin 噪声计算**：
+- `mtk_material::get_swamp_grass_color(x, z) -> [f32; 4]`: 严格按照原版算法（频率 0.0225、阈值 -0.1）在双色（`#4C763C` / `#6A7039`）间进行权威采样。
+
 ---
 
 ### 2.2 生物群系解析器与网格面属性生成 (`biome/resolver/` & `batch.rs`)
@@ -174,6 +177,7 @@ pub fn compute_mesh_material_props(
 | `get_colormap_uv(temp: f32, hum: f32) -> [f32; 2]` | 计算原版三角形 Colormap 采样 UV。 |
 | `get_biome_palette(name: &str) -> &'static BiomePalette` | 获取权威生物群系调色板（默认回退 `plains`）。 |
 | `classify_tint_category(clean_stem, block_name, tint_index) -> &'static str` | 权威判定方块/贴图染色语义类别。 |
+| `get_swamp_grass_color(x: f64, z: f64) -> [f32; 4]` | 获取沼泽草基于原版 0.0225 频率 Perlin 噪声的权威双色插值色彩 (Linear RGBA)。 |
 | `get_redstone_wire_color(power: u8) -> [f32; 4]` | 获取红石引线对应信号强度（0..15）的权威 Linear RGBA 线性颜色。 |
 | `get_redstone_wire_srgb(power: u8) -> [f32; 4]` | 获取红石引线对应信号强度（0..15）的标准 sRGB 浮点色彩。 |
 | `get_redstone_wire_hex(power: u8) -> &'static str` | 获取红石引线对应信号强度（0..15）的十六进制颜色代码。 |
