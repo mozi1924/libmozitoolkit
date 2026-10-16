@@ -47,7 +47,7 @@ pub use resource::{
 };
 pub use save::PyLevelData;
 pub use sync::PyLiveSyncSession;
-pub use texture::{PyAtlasBuilder, PyBakedAtlas, PyStandaloneBuilder, PyStandaloneResult};
+pub use texture::{PyAtlasBuilder, PyBakedAtlas};
 pub use voxel::{create_debug_world_storage, PyMesherConfig, PyVoxelStorage, PyVoxelWorld};
 
 /// Unified high-performance mesh processing pipeline entrypoint.
@@ -152,8 +152,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyCtmSolver>()?;
     m.add_class::<PyAtlasBuilder>()?;
     m.add_class::<PyBakedAtlas>()?;
-    m.add_class::<PyStandaloneBuilder>()?;
-    m.add_class::<PyStandaloneResult>()?;
     m.add_class::<PyPrecompileResult>()?;
     m.add_class::<PyAssetCache>()?;
     m.add_function(wrap_pyfunction!(precompile_all_assets, m)?)?;

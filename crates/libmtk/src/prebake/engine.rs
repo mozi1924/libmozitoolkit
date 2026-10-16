@@ -9,7 +9,7 @@ use mtk_core::progress::{ProgressCallback, ProgressReport, ProgressThrottler};
 use mtk_material::BiomeResolver;
 use mtk_package::{ChunkWriteOptions, MtkPackageWriter, PackageProfile};
 use mtk_resource::{AtlasCategory, ResourcePackStack};
-use mtk_texture::{AtlasBuilder, AtlasBuilderConfig, StandaloneBuilder, StandaloneConfig};
+use mtk_texture::{AtlasBuilder, AtlasBuilderConfig};
 
 use crate::prebake::models::prebake_all_models_with_progress;
 use crate::prebake::reader::{
@@ -24,7 +24,6 @@ pub struct PrecompileConfig {
     pub max_atlas_height: u32,
     pub atlas_category: String,
     pub compile_atlas: bool,
-    pub compile_standalone: bool,
     pub compile_models: bool,
     pub num_threads: Option<usize>,
 }
@@ -36,7 +35,6 @@ impl Default for PrecompileConfig {
             max_atlas_height: 4096,
             atlas_category: "all".to_string(),
             compile_atlas: true,
-            compile_standalone: true,
             compile_models: true,
             num_threads: None,
         }
@@ -49,7 +47,6 @@ pub struct PrecompileResult {
     pub success: bool,
     pub pack_count: usize,
     pub atlas_chunks: usize,
-    pub standalone_textures: usize,
     pub baked_models: usize,
     pub fingerprint: String,
     pub package_path: String,
@@ -143,7 +140,6 @@ fn precompile_all_assets_inner(
     }
 
     let mut chunk_count = 0;
-    let mut sa_count = 0;
     let mut baked_count = 0;
     let mut baked_atlas_opt = None;
 
@@ -254,50 +250,7 @@ fn precompile_all_assets_inner(
         baked_atlas_opt = Some(baked_atlas);
     }
 
-    // 2. Standalone Baking (Raw PNG streams, Zstd for mapping table)
-    if config.compile_standalone {
-        if let Some(cb) = progress_callback {
-            cb(ProgressReport::new(
-                "prebake_standalone",
-                0,
-                1,
-                "Aligning standalone PBR textures...",
-            ));
-        }
-
-        let sa_cfg = StandaloneConfig::default();
-        let sa_builder = StandaloneBuilder::new(sa_cfg);
-        let (sa_mapping, sa_files) = sa_builder.build_records(stack)?;
-        sa_count = sa_mapping.texture_count;
-
-        let sa_mapping_json = serde_json::to_string(&sa_mapping)?;
-        writer.add_str_chunk(
-            *b"TXTR",
-            "standalone/mapping",
-            &sa_mapping_json,
-            &ChunkWriteOptions::zstd_fast(),
-        )?;
-
-        for (rel_path, bytes) in &sa_files {
-            writer.add_chunk(
-                *b"TXTR",
-                format!("standalone/{}", rel_path),
-                bytes,
-                &ChunkWriteOptions::raw(),
-            )?;
-        }
-
-        if let Some(cb) = progress_callback {
-            cb(ProgressReport::new(
-                "prebake_standalone",
-                sa_count,
-                sa_count.max(1),
-                format!("Packaged {} standalone textures into container", sa_count),
-            ));
-        }
-    }
-
-    // 3. Full-Scale Model Baking & Bincode Packaging (Zstd compressed)
+    // 2. Full-Scale Model Baking & Bincode Packaging (Zstd compressed)
     if config.compile_models {
         let atlas_map = baked_atlas_opt.as_ref().map(|a| &a.address_map);
         let model_db = prebake_all_models_with_progress(stack, atlas_map, progress_callback)?;
@@ -311,7 +264,7 @@ fn precompile_all_assets_inner(
         )?;
     }
 
-    // 4. Save Cache Manifest inside package
+    // 3. Save Cache Manifest inside package
     let epoch_now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -322,7 +275,7 @@ fn precompile_all_assets_inner(
         fingerprint: fingerprint.clone(),
         pack_count: stack.len(),
         atlas_chunks: chunk_count,
-        standalone_textures: sa_count,
+        standalone_textures: 0,
         baked_models: baked_count,
         created_at_epoch_secs: epoch_now,
     };
@@ -333,7 +286,7 @@ fn precompile_all_assets_inner(
         &ChunkWriteOptions::zstd_fast(),
     )?;
 
-    // 5. Finalize container
+    // 4. Finalize container
     writer.finish()?;
 
     if let Some(cb) = progress_callback {
@@ -358,7 +311,6 @@ fn precompile_all_assets_inner(
         success: true,
         pack_count: stack.len(),
         atlas_chunks: chunk_count,
-        standalone_textures: sa_count,
         baked_models: baked_count,
         fingerprint,
         package_path: package_path.to_string_lossy().to_string(),

@@ -152,7 +152,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         max_atlas_height: 4096,
         atlas_category: "all".to_string(),
         compile_atlas: true,
-        compile_standalone: true,
         compile_models: true,
         num_threads: None, // 使用全部可用 CPU 核心
     };

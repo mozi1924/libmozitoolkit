@@ -1,7 +1,7 @@
-//! Atlas, Sprite Stitching, and Standalone Material Python bindings.
+//! Atlas and Sprite Stitching Python bindings.
 
 pub mod atlas;
-pub mod standalone;
+pub mod sampling;
 
 pub use atlas::*;
-pub use standalone::*;
+pub use sampling::*;

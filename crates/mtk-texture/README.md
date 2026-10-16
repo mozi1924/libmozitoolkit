@@ -16,14 +16,12 @@
   - [2.1 像素图像缓冲与处理 (`image/`)](#21-像素图像缓冲与处理-image)
   - [2.2 图集地址映射表与元数据 (`atlas/address_map.rs`)](#22-图集地址映射表与元数据-atlasaddress_maprs)
   - [2.3 图集构建器与装箱器 (`atlas/builder/` & `stitcher/`)](#23-图集构建器与装箱器-atlasbuilder--stitcher)
-  - [2.4 Standalone 独立材质库导出 (`standalone/`)](#24-standalone-独立材质库导出-standalone)
 - [3. 核心公共 API 清单 (Public APIs)](#3-核心公共-api-清单-public-apis)
   - [3.1 `AtlasBuilder` 与 `AtlasAddressMap`](#31-atlasbuilder-与-atlasaddressmap)
   - [3.2 图像与调色板工具](#32-图像与调色板工具)
 - [4. 快速上手示例 (Quick Start)](#4-快速上手示例-quick-start)
   - [示例 1：烘焙带 PBR 伴随层的多图集并查询 UV](#示例-1烘焙带-pbr-伴随层的多图集并查询-uv)
   - [示例 2：实时烘焙盔甲纹饰调色板 (Armor Trim Permutation)](#示例-2实时烘焙盔甲纹饰调色板-armor-trim-permutation)
-  - [示例 3：多线程预编译 Standalone PBR 材质库](#示例-3多线程预编译-standalone-pbr-材质库)
 - [5. Feature 开关与依赖](#5-feature-开关与依赖)
 - [6. 开源协议 (License)](#6-开源协议-license)
 
@@ -39,7 +37,6 @@
   - **动态图集 (Animated Atlas)**：包含长条竖直动画帧（Full Strip），自动将静态或短帧 Normal/Specular 通道按需循环垂向平铺 (`tile_vertical`)，实现 PBR 通道 1:1 帧对齐。
 - **抗渗色边缘边缘填充 (Edge Clamping Padding)**：针对图集中相邻小图块进行边界外推复制填充，杜绝 Mipmap 降采样与双线性插值 (Bilinear Filtering) 导致黑边或相邻图块色彩渗漏。
 - **调色板排列实时烘焙 (Paletted Permutations)**：支持盔甲纹饰 (Armor Trims) 与动态换色方块的调色板像素级实时无损替换。
-- **独立 PBR 资产库预构建 (Standalone Asset Library)**：将资源包贴图对齐并输出为标准单体 PBR 资产，产出 `standalone_mapping.json` 清单。
 
 ---
 
@@ -148,24 +145,6 @@ pub struct Stitcher<T> { /* ... */ }
 
 ---
 
-### 2.4 Standalone 独立材质库导出 (`standalone/`)
-```rust
-pub const STANDALONE_FORMAT_VERSION: u32 = 3;
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct StandaloneMapping {
-    pub format_version: u32,
-    pub stack_hash: String,
-    pub texture_count: usize,
-    pub textures: HashMap<String, StandaloneTextureRecord>,
-    pub aliases: HashMap<String, String>,
-}
-
-pub struct StandaloneBuilder { /* ... */ }
-```
-
----
-
 ## 3. 核心公共 API 清单 (Public APIs)
 
 ### 3.1 `AtlasBuilder` 与 `AtlasAddressMap`
@@ -256,30 +235,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 保存为 PNG
     std::fs::write("sentry_amethyst.png", baked_trim.to_png_bytes()?)?;
-    Ok(())
-}
-```
-
-### 示例 3：多线程预编译 Standalone PBR 材质库
-```rust
-use mtk_resource::ResourcePackStack;
-use mtk_texture::{StandaloneBuilder, StandaloneConfig};
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let stack = ResourcePackStack::new();
-    let builder = StandaloneBuilder::new(
-        &stack,
-        std::path::Path::new("./standalone_cache"),
-        StandaloneConfig::default(),
-    );
-
-    let result = builder.build()?;
-    println!(
-        "Successfully precompiled {} standalone PBR textures to {:?}",
-        result.texture_count,
-        result.output_dir,
-    );
-
     Ok(())
 }
 ```

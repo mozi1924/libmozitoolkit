@@ -119,8 +119,6 @@ pub struct PyPrecompileResult {
     #[pyo3(get)]
     pub atlas_chunks: usize,
     #[pyo3(get)]
-    pub standalone_textures: usize,
-    #[pyo3(get)]
     pub baked_models: usize,
     #[pyo3(get)]
     pub fingerprint: String,
@@ -134,12 +132,8 @@ pub struct PyPrecompileResult {
 impl PyPrecompileResult {
     fn __repr__(&self) -> String {
         format!(
-            "<PrecompileResult packs={} atlas_chunks={} standalone={} models={} package='{}'>",
-            self.pack_count,
-            self.atlas_chunks,
-            self.standalone_textures,
-            self.baked_models,
-            self.package_path
+            "<PrecompileResult packs={} atlas_chunks={} models={} package='{}'>",
+            self.pack_count, self.atlas_chunks, self.baked_models, self.package_path
         )
     }
 }
@@ -250,18 +244,6 @@ impl PyAssetCache {
             .collect())
     }
 
-    /// Extracts all standalone textures (`standalone/*`) into the target directory.
-    pub fn extract_standalone_textures(&self, output_dir: &str) -> PyResult<Vec<String>> {
-        let paths = self
-            .inner
-            .extract_all_standalone_textures(output_dir)
-            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-        Ok(paths
-            .into_iter()
-            .map(|p| p.to_string_lossy().to_string())
-            .collect())
-    }
-
     /// Extracts all colormap textures into the target directory.
     pub fn extract_colormaps(&self, output_dir: &str) -> PyResult<Vec<String>> {
         let paths = self
@@ -279,20 +261,6 @@ impl PyAssetCache {
         self.inner
             .extract_atlas_texture(filename, output_path)
             .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))
-    }
-
-    /// Extracts a single standalone texture to the specified destination path.
-    pub fn extract_standalone_texture(&self, rel_path: &str, output_path: &str) -> PyResult<()> {
-        self.inner
-            .extract_standalone_texture(rel_path, output_path)
-            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))
-    }
-
-    /// Loads standalone mapping table JSON string directly from package.
-    pub fn load_standalone_mapping(&self) -> PyResult<String> {
-        self.inner
-            .load_standalone_mapping_json()
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 
     /// Loads raw atlas mapping JSON string directly from package.
@@ -392,7 +360,7 @@ pub fn get_cache_manifest<'py>(
 ///
 /// Releases Python GIL during multi-threaded baking, re-acquiring for progress callbacks.
 #[pyfunction]
-#[pyo3(signature = (stack, cache_dir, atlas_category="blocks", max_atlas_width=4096, max_atlas_height=4096, compile_atlas=true, compile_standalone=true, compile_models=true, num_threads=None, callback=None))]
+#[pyo3(signature = (stack, cache_dir, atlas_category="blocks", max_atlas_width=4096, max_atlas_height=4096, compile_atlas=true, compile_models=true, num_threads=None, callback=None))]
 pub fn precompile_all_assets<'py>(
     py: Python<'py>,
     stack: &PyResourcePackStack,
@@ -401,7 +369,6 @@ pub fn precompile_all_assets<'py>(
     max_atlas_width: u32,
     max_atlas_height: u32,
     compile_atlas: bool,
-    compile_standalone: bool,
     compile_models: bool,
     num_threads: Option<usize>,
     callback: Option<PyObject>,
@@ -411,7 +378,6 @@ pub fn precompile_all_assets<'py>(
         max_atlas_height,
         atlas_category: atlas_category.to_string(),
         compile_atlas,
-        compile_standalone,
         compile_models,
         num_threads,
     };
@@ -444,7 +410,6 @@ pub fn precompile_all_assets<'py>(
         success: res.success,
         pack_count: res.pack_count,
         atlas_chunks: res.atlas_chunks,
-        standalone_textures: res.standalone_textures,
         baked_models: res.baked_models,
         fingerprint: res.fingerprint,
         package_path: res.package_path,
@@ -471,7 +436,7 @@ pub fn create_test_cache_package(
         fingerprint: fingerprint.to_string(),
         pack_count: 1,
         atlas_chunks: 1,
-        standalone_textures: 10,
+        standalone_textures: 0,
         baked_models: 50,
         created_at_epoch_secs: created_at,
     };

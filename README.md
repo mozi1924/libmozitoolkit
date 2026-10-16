@@ -21,7 +21,7 @@
 | **[`mtk-voxel`](crates/mtk-voxel)** | 核心 | 纯体素核心：16x16x16 Chunk Section 体素存储、流体曲面计算、平滑环境光遮蔽 (AO)、网格化器 (Mesher)、差量网格构建与统一体素源抽象接口 (`VoxelSource`) | [📖 `crates/mtk-voxel/README.md`](crates/mtk-voxel/README.md) |
 | **[`mtk-sync`](crates/mtk-sync)** | 核心 | 实时网络协同：原生 WebSocket 客户端、小端序二进制协议编解码、增量同步与 Live Sync 会话生命周期管理 | [📖 `crates/mtk-sync/README.md`](crates/mtk-sync/README.md) |
 | **[`mtk-resource`](crates/mtk-resource)** | 核心 | 无头资源包虚拟文件系统 (VFS)、.mcmeta 动图元数据、原版 atlases/*.json 规范解析与 CTM 47/17 连接纹理求解 | [📖 `crates/mtk-resource/README.md`](crates/mtk-resource/README.md) |
-| **[`mtk-texture`](crates/mtk-texture)** | 核心 | 矩形空间装箱 Stitcher、多类别 PBR 图集与 Companion Overlay 贴图烘焙、Standalone 资源层级规范对齐 | [📖 `crates/mtk-texture/README.md`](crates/mtk-texture/README.md) |
+| **[`mtk-texture`](crates/mtk-texture)** | 核心 | 矩形空间装箱 Stitcher、多类别 PBR 图集与 Companion Overlay 贴图烘焙、透明度采样与边缘外推填充 | [📖 `crates/mtk-texture/README.md`](crates/mtk-texture/README.md) |
 | **[`mtk-material`](crates/mtk-material)** | 核心 | 66 种原版生物群系调色板与线性色彩数学引擎 (SSOT)、`BiomeResolver` 模型扫描与预编译映射、多线程并行 UV 重映射与外部别名解算 | [📖 `crates/mtk-material/README.md`](crates/mtk-material/README.md) |
 | **[`mtk-save`](crates/mtk-save)** | 核心 | 现代 Minecraft 存档加载核心：基于内置零拷贝 NBT 解码、Anvil `.mca` 区域文件直接寻址、384 高度世界 3D 生物群系与方块状态解包、按需空间切片流式数据源 (`VoxelSource`) | [📖 `crates/mtk-save/README.md`](crates/mtk-save/README.md) |
 | **[`mtk-package`](crates/mtk-package)** | 核心 | 统一二进制包与场景交换容器编解码器：64 字节头部校验、分块 TOC 索引、`memmap2` 零拷贝解析与分块 Zstd 压缩 | [📖 `crates/mtk-package/README.md`](crates/mtk-package/README.md) |

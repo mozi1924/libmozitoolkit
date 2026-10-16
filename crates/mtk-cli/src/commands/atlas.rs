@@ -4,9 +4,7 @@ use std::time::Instant;
 
 use clap::{Args, Subcommand};
 use mtk_resource::{AtlasCategory, DirectoryPack, ResourceLocation, ResourcePackStack, ZipPack};
-use mtk_texture::{
-    AtlasAddressMap, AtlasBuilder, AtlasBuilderConfig, StandaloneBuilder, StandaloneConfig,
-};
+use mtk_texture::{AtlasAddressMap, AtlasBuilder, AtlasBuilderConfig};
 
 #[derive(Subcommand, Debug)]
 pub enum AtlasSubcommand {
@@ -15,9 +13,6 @@ pub enum AtlasSubcommand {
 
     /// Bake dual-atlases (static & animated) for all 14 Minecraft categories
     BakeAll(AtlasBakeAllArgs),
-
-    /// Bake both Atlas (static + anim chunks) and Standalone asset library
-    BakeDual(AtlasBakeDualArgs),
 }
 
 #[derive(Args, Debug)]
@@ -50,26 +45,10 @@ pub struct AtlasBakeAllArgs {
     pub max_size: u32,
 }
 
-#[derive(Args, Debug)]
-pub struct AtlasBakeDualArgs {
-    /// Path to base vanilla JAR file
-    #[arg(short, long, default_value = "26.2-Fabric.jar")]
-    pub jar: PathBuf,
-
-    /// Optional top resource pack ZIP file
-    #[arg(short, long, default_value = "SPBR-21.zip")]
-    pub pack: Option<PathBuf>,
-
-    /// Root output directory
-    #[arg(short, long, default_value = "manual_test")]
-    pub output: PathBuf,
-}
-
 pub fn run_atlas(cmd: AtlasSubcommand) -> Result<(), Box<dyn std::error::Error>> {
     match cmd {
         AtlasSubcommand::BakeVanilla(args) => run_bake_vanilla(args),
         AtlasSubcommand::BakeAll(args) => run_bake_all(args),
-        AtlasSubcommand::BakeDual(args) => run_bake_dual(args),
     }
 }
 
@@ -336,109 +315,6 @@ fn run_bake_all(args: AtlasBakeAllArgs) -> Result<(), Box<dyn std::error::Error>
     println!(" - Output Artifacts Saved To:  {}", args.output.display());
     println!(" - Total Execution Time:       {:?}", t_start.elapsed());
     println!("============================================================\n");
-
-    Ok(())
-}
-
-fn run_bake_dual(args: AtlasBakeDualArgs) -> Result<(), Box<dyn std::error::Error>> {
-    let atlas_output_dir = args.output.join("atlas");
-    let standalone_output_dir = args.output.join("standalone");
-
-    println!("============================================================");
-    println!(" MoziToolKit - Atlas & Standalone Dual-Bake Pipeline");
-    println!("============================================================");
-    println!("Vanilla JAR:       {}", args.jar.display());
-    if let Some(ref p) = args.pack {
-        println!("Top Pack ZIP:      {}", p.display());
-    }
-    println!("Atlas Output:      {}", atlas_output_dir.display());
-    println!("Standalone Output: {}", standalone_output_dir.display());
-    println!("------------------------------------------------------------");
-
-    fs::create_dir_all(&atlas_output_dir)?;
-    fs::create_dir_all(&standalone_output_dir)?;
-
-    let t_start = Instant::now();
-
-    let mut stack = ResourcePackStack::new();
-    if args.jar.exists() {
-        let vanilla_pack = ZipPack::from_file("vanilla_26.2", &args.jar)?;
-        stack.append_pack(Box::new(vanilla_pack));
-    }
-    if let Some(ref pack_path) = args.pack {
-        if pack_path.exists() {
-            let spbr_pack = ZipPack::from_file("top_pack", pack_path)?;
-            stack.push_pack(Box::new(spbr_pack));
-        }
-    }
-    println!(
-        "ResourcePackStack ready ({} packs in stack, loading time: {:?})",
-        stack.len(),
-        t_start.elapsed()
-    );
-
-    // Bake Atlas
-    println!("\nBaking Atlas (Static 100% + Animated Strips)...");
-    let blocks_loc = ResourceLocation::parse("minecraft:blocks")?;
-    let definition = stack.load_atlas_definition(&blocks_loc)?;
-
-    let atlas_builder = AtlasBuilder::new(AtlasBuilderConfig {
-        max_width: 4096,
-        max_height: 4096,
-        mip_level: 0,
-        padding: 0,
-    });
-
-    let t_bake = Instant::now();
-    let baked = atlas_builder.build(&stack, &definition)?;
-    println!(" - Atlas Baking Succeeded in {:?}", t_bake.elapsed());
-    println!(" - Total Chunks: {}", baked.chunks.len());
-    println!(
-        " - Total Static Sprites: {}",
-        baked.address_map.sprites.len()
-    );
-    println!(
-        " - Total Animated Sprites: {}",
-        baked.address_map.anim_sprites.len()
-    );
-
-    for chunk in &baked.chunks {
-        let albedo_path = atlas_output_dir.join(format!("{}_albedo.png", chunk.file_stem()));
-        let albedo_png = chunk.albedo.to_png_bytes()?;
-        fs::write(&albedo_path, albedo_png)?;
-
-        if let Some(ref norm_buf) = chunk.normal {
-            let norm_path = atlas_output_dir.join(format!("{}_normal.png", chunk.file_stem()));
-            let norm_png = norm_buf.to_png_bytes()?;
-            fs::write(&norm_path, norm_png)?;
-        }
-
-        if let Some(ref spec_buf) = chunk.specular {
-            let spec_path = atlas_output_dir.join(format!("{}_specular.png", chunk.file_stem()));
-            let spec_png = spec_buf.to_png_bytes()?;
-            fs::write(&spec_path, spec_png)?;
-        }
-    }
-
-    let json_path = atlas_output_dir.join("atlas_mapping.json");
-    let json_data = baked.address_map.to_json()?;
-    fs::write(&json_path, json_data)?;
-
-    // Standalone
-    println!("\nBaking Standalone Material Library (Dual-Mode Static/Anim)...");
-    let standalone_builder = StandaloneBuilder::new(StandaloneConfig {
-        stack_hash: Some("cli_dual_bake_hash".to_string()),
-        filter_prefix: Some("block".to_string()),
-    });
-
-    let t_stand = Instant::now();
-    let stand_res = standalone_builder.build_to_dir(&stack, &standalone_output_dir)?;
-    println!(" - Standalone Baking Succeeded in {:?}", t_stand.elapsed());
-    println!(" - Total Standalone Textures: {}", stand_res.texture_count);
-
-    println!("============================================================");
-    println!(" Total Pipeline Execution Time: {:?}", t_start.elapsed());
-    println!("============================================================");
 
     Ok(())
 }

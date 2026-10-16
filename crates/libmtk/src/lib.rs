@@ -91,11 +91,8 @@ pub use mtk_resource::{
     ResourcePack, ResourcePackStack, TextureMetadata, CTM_47_LOOKUP, OVERLAY_17_LOOKUP,
 };
 pub use mtk_texture::{
-    align_standalone_channels, AtlasAddressMap, AtlasBuilder, AtlasBuilderConfig, AtlasChunkMeta,
-    AtlasSpriteLocation, BakedAtlas, BakedAtlasChunk, ChannelData, ChannelType, DecodedSprite,
-    RgbaBuffer, SpriteKind, StandaloneAlignResult, StandaloneAnimationMeta, StandaloneBuilder,
-    StandaloneConfig, StandaloneFilePaths, StandaloneMapping, StandaloneResult,
-    StandaloneTextureRecord, Stitcher, STANDALONE_FORMAT_VERSION,
+    AtlasAddressMap, AtlasBuilder, AtlasBuilderConfig, AtlasChunkMeta, AtlasSpriteLocation,
+    BakedAtlas, BakedAtlasChunk, DecodedSprite, RgbaBuffer, SpriteKind, Stitcher,
 };
 pub mod pipeline;
 pub use pipeline::{

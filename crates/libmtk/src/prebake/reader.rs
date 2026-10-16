@@ -9,7 +9,6 @@ use mtk_material::BiomeResolver;
 use mtk_model::BakedModelDatabase;
 use mtk_package::{MtkPackageReader, CURRENT_VERSION_MAJOR};
 use mtk_texture::atlas::AtlasAddressMap;
-use mtk_texture::StandaloneMapping;
 
 use crate::MtkError;
 
@@ -38,6 +37,7 @@ pub struct CacheManifest {
     pub fingerprint: String,
     pub pack_count: usize,
     pub atlas_chunks: usize,
+    #[serde(default)]
     pub standalone_textures: usize,
     pub baked_models: usize,
     pub created_at_epoch_secs: u64,
@@ -181,19 +181,6 @@ impl AssetCacheReader {
         Ok(resolver)
     }
 
-    /// Loads standalone mapping table directly from package.
-    pub fn load_standalone_mapping(&self) -> Result<StandaloneMapping, MtkError> {
-        let json_str = self.load_standalone_mapping_json()?;
-        let mapping = serde_json::from_str(&json_str)?;
-        Ok(mapping)
-    }
-
-    /// Loads raw standalone mapping JSON string directly from package.
-    pub fn load_standalone_mapping_json(&self) -> Result<String, MtkError> {
-        let json_str = self.reader.read_chunk_str("standalone/mapping")?;
-        Ok(json_str)
-    }
-
     /// Extracts a specific atlas texture chunk to disk.
     pub fn extract_atlas_texture(
         &self,
@@ -224,52 +211,6 @@ impl AssetCacheReader {
         }
         if let Ok(mapping_str) = self.reader.read_chunk_str("atlas/mapping") {
             let target = out_dir.join("atlas_mapping.json");
-            fs::write(&target, mapping_str)?;
-            extracted.push(target);
-        }
-        Ok(extracted)
-    }
-
-    /// Extracts a specific standalone texture to disk.
-    pub fn extract_standalone_texture(
-        &self,
-        rel_path: &str,
-        output_path: impl AsRef<Path>,
-    ) -> Result<(), MtkError> {
-        let chunk_id = format!("standalone/{}", rel_path);
-        let out_p = output_path.as_ref();
-        if let Some(parent) = out_p.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        self.reader.extract_chunk_to_file(&chunk_id, out_p)?;
-        Ok(())
-    }
-
-    /// Extracts all standalone textures (`standalone/*`) and `standalone_mapping.json` into the target directory.
-    pub fn extract_all_standalone_textures(
-        &self,
-        output_dir: impl AsRef<Path>,
-    ) -> Result<Vec<PathBuf>, MtkError> {
-        let out_dir = output_dir.as_ref();
-        fs::create_dir_all(out_dir)?;
-        let mut extracted = Vec::new();
-
-        for entry in self.reader.toc().iter_by_type(*b"TXTR") {
-            if let Some(rel_path) = entry.identifier.strip_prefix("standalone/") {
-                if rel_path == "mapping" {
-                    continue;
-                }
-                let target = out_dir.join(rel_path);
-                if let Some(parent) = target.parent() {
-                    fs::create_dir_all(parent)?;
-                }
-                self.reader
-                    .extract_chunk_to_file(&entry.identifier, &target)?;
-                extracted.push(target);
-            }
-        }
-        if let Ok(mapping_str) = self.load_standalone_mapping_json() {
-            let target = out_dir.join("standalone_mapping.json");
             fs::write(&target, mapping_str)?;
             extracted.push(target);
         }

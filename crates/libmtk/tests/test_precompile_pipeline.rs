@@ -62,7 +62,6 @@ fn test_precompile_all_assets_end_to_end() {
         max_atlas_height: 1024,
         atlas_category: "blocks".to_string(),
         compile_atlas: true,
-        compile_standalone: true,
         compile_models: true,
         num_threads: None,
     };
@@ -71,7 +70,6 @@ fn test_precompile_all_assets_end_to_end() {
     assert!(result.success);
     assert_eq!(result.pack_count, 1);
     assert!(result.atlas_chunks >= 1);
-    assert_eq!(result.standalone_textures, 1);
     assert!(result.baked_models >= 1);
 
     // Verify .mtkcache file existence
@@ -96,9 +94,6 @@ fn test_precompile_all_assets_end_to_end() {
 
     let atlas_map = reader.load_atlas_mapping().unwrap();
     assert!(!atlas_map.chunks.is_empty());
-
-    let sa_mapping = reader.load_standalone_mapping().unwrap();
-    assert!(sa_mapping.texture_count >= 1);
 
     // Verify extracting atlas textures on-demand
     let extract_dir = temp_cache_dir.join("extracted");
