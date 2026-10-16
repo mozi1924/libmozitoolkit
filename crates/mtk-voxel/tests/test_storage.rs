@@ -124,3 +124,71 @@ fn test_section_snapshot_dynamic_bounds_expansion() {
     assert!(world.contains(0, 0, 0));
     assert!(world.contains(20, 5, 5));
 }
+
+#[test]
+fn test_section_snapshot_3d_biome_ingestion_and_meshing() {
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+
+    let palette = vec!["minecraft:air".to_string(), "minecraft:stone".to_string()];
+    let mut grid = vec![0u16; 4096];
+    grid[0] = 1;
+
+    let biome_palette = vec![
+        "minecraft:taiga".to_string(),
+        "minecraft:lush_caves".to_string(),
+    ];
+    let mut biome_indices = vec![0u16; 4096];
+    for idx in 0..4096 {
+        let rem = idx % (16 * 16);
+        let ly = rem / 16;
+        if ly < 8 {
+            biome_indices[idx] = 1; // lush_caves for lower half
+        } else {
+            biome_indices[idx] = 0; // taiga for upper half
+        }
+    }
+
+    world.set_section_snapshot(
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        16,
+        16,
+        16,
+        &palette,
+        &grid,
+        Some(&biome_palette),
+        Some(&biome_indices),
+    );
+
+    let sec = world
+        .sections
+        .get(&IVec3::new(0, 0, 0))
+        .expect("section must exist");
+    assert!(
+        sec.biomes.is_some(),
+        "sec.biomes must be populated from snapshot"
+    );
+    let sb = sec.biomes.as_ref().unwrap();
+    assert!(
+        sb.varies_vertically(),
+        "3D biomes must vary vertically across layers"
+    );
+
+    assert_eq!(world.get_biome(0, 2, 0), "minecraft:lush_caves");
+    assert_eq!(world.get_biome(0, 14, 0), "minecraft:taiga");
+
+    let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
+    assert!(padded.biome_data.is_some());
+    let cols = padded.biome_data.as_ref().unwrap();
+    // 3D Quart mode must produce 1024 smoothed columns (4 vertical layers x 256)
+    assert_eq!(
+        cols.len(),
+        1024,
+        "PaddedArray with 3D biomes must have 1024 smoothed column entries"
+    );
+}

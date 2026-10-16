@@ -1,8 +1,10 @@
+use std::collections::HashMap;
+
 use glam::IVec3;
 
 use super::container::VoxelStorage;
 use crate::storage::crc::extract_canonical_state_str;
-use crate::storage::SectionStorage;
+use crate::storage::{SectionBiomes, SectionStorage};
 
 impl VoxelStorage {
     /// Applies a batch of block delta modifications. Returns a vector of effective changes `(x, y, z, old_state, new_state)`.
@@ -60,13 +62,15 @@ impl VoxelStorage {
 
         let total = (size_x * size_y * size_z) as usize;
         let p_len = palette.len();
-        let has_biomes = biome_palette.is_some() && biome_indices.is_some();
+        let has_biomes = biome_palette.is_some();
 
         if let Some(bp) = biome_palette {
             if let Some(first) = bp.first() {
                 self.primary_biome = Some(first.clone());
             }
         }
+
+        let mut section_biomes_map: HashMap<IVec3, SectionBiomes> = HashMap::new();
 
         for idx in 0..total.min(grid_indices.len()) {
             let p_idx = grid_indices[idx] as usize;
@@ -98,13 +102,49 @@ impl VoxelStorage {
 
             if has_biomes {
                 if let (Some(bp), Some(bi)) = (biome_palette, biome_indices) {
-                    if bp.len() > 1 && ly == 0 && idx < bi.len() {
+                    if idx < bi.len() {
                         let b_idx = bi[idx] as usize;
                         if b_idx < bp.len() {
-                            self.biome_column_map.insert([wx, wz], bp[b_idx].clone());
+                            let b_str = &bp[b_idx];
+                            self.biome_map.insert(IVec3::new(wx, wy, wz), b_str.clone());
+                            if ly == 0 || !self.biome_column_map.contains_key(&[wx, wz]) {
+                                self.biome_column_map.insert([wx, wz], b_str.clone());
+                            }
+                            let sb = section_biomes_map.entry(sec_coord).or_insert_with(|| {
+                                if bp.len() == 1 {
+                                    SectionBiomes::uniform(&bp[0])
+                                } else {
+                                    SectionBiomes::new(bp.to_vec(), vec![0u8; 64])
+                                }
+                            });
+                            let qx = (blx >> 2) & 3;
+                            let qy = (bly >> 2) & 3;
+                            let qz = (blz >> 2) & 3;
+                            sb.set_quart_biome(qx, qy, qz, b_str);
                         }
                     }
+                } else if let Some(bp) = biome_palette {
+                    if !bp.is_empty() {
+                        let b_str = &bp[0];
+                        self.biome_map.insert(IVec3::new(wx, wy, wz), b_str.clone());
+                        if ly == 0 || !self.biome_column_map.contains_key(&[wx, wz]) {
+                            self.biome_column_map.insert([wx, wz], b_str.clone());
+                        }
+                        let sb = section_biomes_map
+                            .entry(sec_coord)
+                            .or_insert_with(|| SectionBiomes::uniform(b_str));
+                        let qx = (blx >> 2) & 3;
+                        let qy = (bly >> 2) & 3;
+                        let qz = (blz >> 2) & 3;
+                        sb.set_quart_biome(qx, qy, qz, b_str);
+                    }
                 }
+            }
+        }
+
+        for (sec_coord, sb) in section_biomes_map {
+            if let Some(sec) = self.sections.get_mut(&sec_coord) {
+                sec.biomes = Some(sb);
             }
         }
 
@@ -168,7 +208,7 @@ impl VoxelStorage {
             return false;
         }
 
-        let has_biomes = biome_palette.is_some() && biome_indices.is_some();
+        let has_biomes = biome_palette.is_some();
         if let Some(bp) = biome_palette {
             if let Some(first) = bp.first() {
                 if self.primary_biome.is_none() {
@@ -210,21 +250,60 @@ impl VoxelStorage {
         }
 
         if has_biomes {
-            if let (Some(bp), Some(bi)) = (biome_palette, biome_indices) {
-                if bp.len() > 1 {
-                    for idx in 0..total_blocks.min(bi.len()) {
-                        let rem = idx % (size_y * size_z) as usize;
-                        let ly = rem / size_z as usize;
-                        if ly == 0 {
+            if let Some(bp) = biome_palette {
+                if !bp.is_empty() {
+                    let sec_biomes = if bp.len() == 1 {
+                        let b_str = &bp[0];
+                        for idx in 0..total_blocks {
+                            let rem = idx % (size_y * size_z) as usize;
                             let lx = idx / (size_y * size_z) as usize;
+                            let ly = rem / size_z as usize;
                             let lz = rem % size_z as usize;
                             let wx = start_x + lx as i32;
+                            let wy = start_y + ly as i32;
                             let wz = start_z + lz as i32;
-                            let b_idx = bi[idx] as usize;
-                            if b_idx < bp.len() {
-                                self.biome_column_map.insert([wx, wz], bp[b_idx].clone());
+                            self.biome_map.insert(IVec3::new(wx, wy, wz), b_str.clone());
+                            if ly == 0 || !self.biome_column_map.contains_key(&[wx, wz]) {
+                                self.biome_column_map.insert([wx, wz], b_str.clone());
                             }
                         }
+                        SectionBiomes::uniform(b_str)
+                    } else if let Some(bi) = biome_indices {
+                        let mut sb = SectionBiomes::new(bp.to_vec(), vec![0u8; 64]);
+                        for idx in 0..total_blocks.min(bi.len()) {
+                            let rem = idx % (size_y * size_z) as usize;
+                            let lx = idx / (size_y * size_z) as usize;
+                            let ly = rem / size_z as usize;
+                            let lz = rem % size_z as usize;
+
+                            let wx = start_x + lx as i32;
+                            let wy = start_y + ly as i32;
+                            let wz = start_z + lz as i32;
+
+                            let b_idx = bi[idx] as usize;
+                            if b_idx < bp.len() {
+                                let b_str = &bp[b_idx];
+                                self.biome_map.insert(IVec3::new(wx, wy, wz), b_str.clone());
+                                if ly == 0 || !self.biome_column_map.contains_key(&[wx, wz]) {
+                                    self.biome_column_map.insert([wx, wz], b_str.clone());
+                                }
+
+                                let blx = (wx & 15) as usize;
+                                let bly = (wy & 15) as usize;
+                                let blz = (wz & 15) as usize;
+                                let qx = (blx >> 2) & 3;
+                                let qy = (bly >> 2) & 3;
+                                let qz = (blz >> 2) & 3;
+                                sb.set_quart_biome(qx, qy, qz, b_str);
+                            }
+                        }
+                        sb
+                    } else {
+                        SectionBiomes::uniform(&bp[0])
+                    };
+
+                    if let Some(sec) = self.sections.get_mut(&sec_coord) {
+                        sec.biomes = Some(sec_biomes);
                     }
                 }
             }

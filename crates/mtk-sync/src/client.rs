@@ -128,9 +128,10 @@ impl SyncClient {
                     attempts = 0;
                     let _ = msg_sender.send(ClientMessage::Status("CONNECTED".to_string()));
 
-                    // Set underlying TCP stream read timeout and store cloned handle for instant shutdown
+                    // Set underlying TCP stream read timeout, enable nodelay, and store cloned handle for instant shutdown
                     if let tungstenite::stream::MaybeTlsStream::Plain(ref s) = socket.get_ref() {
                         let _ = s.set_read_timeout(Some(Duration::from_millis(100)));
+                        let _ = s.set_nodelay(true);
                         if let Ok(cloned) = s.try_clone() {
                             if let Ok(mut guard) = active_tcp.lock() {
                                 *guard = Some(cloned);
