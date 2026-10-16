@@ -804,3 +804,277 @@ fn test_3d_caves_and_cliffs_biome_tinting() {
     let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
     assert!(mesh.face_count() > 0);
 }
+
+#[test]
+fn test_cache_driven_animated_texture_routing_block_models() {
+    use mtk_core::direction::Direction;
+    use mtk_model::baker::baked_model::{BakedFace, BakedModel};
+    use mtk_texture::atlas::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation};
+    use std::sync::Arc;
+
+    // 1. Construct AtlasAddressMap with static chunk (0) and animated chunk (1)
+    let mut address_map = AtlasAddressMap::new();
+    address_map.chunks.push(AtlasChunkMeta {
+        chunk_id: 0,
+        category: "blocks".to_string(),
+        is_animated: false,
+        category_chunk_index: 1,
+        width: 1024,
+        height: 1024,
+        has_normal: false,
+        has_specular: false,
+        has_overlay: false,
+    });
+    address_map.chunks.push(AtlasChunkMeta {
+        chunk_id: 1,
+        category: "blocks".to_string(),
+        is_animated: true,
+        category_chunk_index: 1,
+        width: 1024,
+        height: 4096,
+        has_normal: false,
+        has_specular: false,
+        has_overlay: false,
+    });
+
+    let anim_textures = [
+        "minecraft:block/water_still",
+        "minecraft:block/water_flow",
+        "minecraft:block/kelp",
+        "minecraft:block/nether_portal",
+        "minecraft:block/magma",
+        "minecraft:block/command_block_front",
+        "minecraft:block/fire_0",
+    ];
+
+    for &tex in &anim_textures {
+        let loc = mtk_resource::ResourceLocation::parse(tex).unwrap();
+        // Insert static Frame 0 sprite into static map
+        address_map.sprites.insert(
+            loc.clone(),
+            AtlasSpriteLocation {
+                category: "blocks".to_string(),
+                sprite_kind: mtk_texture::atlas::SpriteKind::StaticAtlas,
+                chunk_id: 0,
+                texture_id: 10,
+                is_animated: false,
+                frame_0_uv_bounds: [0.0, 0.0, 0.1, 0.1],
+                local_uv_bounds: [0.0, 0.0, 1.0, 1.0],
+                uv_bounds: [0.0, 0.0, 0.1, 0.1],
+                frame_uv_step: [0.0, 0.0],
+                pixel_rect: [0, 0, 16, 16],
+                strip_pixel_rect: [0, 0, 16, 16],
+                frame_size: [16, 16],
+                frame_count: 1,
+                animation: None,
+                has_normal: false,
+                has_specular: false,
+                has_overlay: false,
+            },
+        );
+        // Insert vertical strip sprite into animated cache
+        address_map.anim_sprites.insert(
+            loc.clone(),
+            AtlasSpriteLocation {
+                category: "blocks".to_string(),
+                sprite_kind: mtk_texture::atlas::SpriteKind::AnimatedAtlas,
+                chunk_id: 1, // Animated Chunk ID
+                texture_id: 20,
+                is_animated: true,
+                frame_0_uv_bounds: [0.0, 0.0, 0.1, 0.025],
+                local_uv_bounds: [0.0, 0.0, 1.0, 1.0],
+                uv_bounds: [0.0, 0.0, 0.1, 0.1],
+                frame_uv_step: [0.0, 0.025],
+                pixel_rect: [0, 0, 16, 16],
+                strip_pixel_rect: [0, 0, 16, 64],
+                frame_size: [16, 16],
+                frame_count: 4,
+                animation: None,
+                has_normal: false,
+                has_specular: false,
+                has_overlay: false,
+            },
+        );
+    }
+
+    // Static only sprite: stone
+    let stone_loc = mtk_resource::ResourceLocation::parse("minecraft:block/stone").unwrap();
+    address_map.sprites.insert(
+        stone_loc.clone(),
+        AtlasSpriteLocation {
+            category: "blocks".to_string(),
+            sprite_kind: mtk_texture::atlas::SpriteKind::StaticAtlas,
+            chunk_id: 0,
+            texture_id: 30,
+            is_animated: false,
+            frame_0_uv_bounds: [0.2, 0.2, 0.3, 0.3],
+            local_uv_bounds: [0.0, 0.0, 1.0, 1.0],
+            uv_bounds: [0.2, 0.2, 0.3, 0.3],
+            frame_uv_step: [0.0, 0.0],
+            pixel_rect: [32, 32, 16, 16],
+            strip_pixel_rect: [32, 32, 16, 16],
+            frame_size: [16, 16],
+            frame_count: 1,
+            animation: None,
+            has_normal: false,
+            has_specular: false,
+            has_overlay: false,
+        },
+    );
+
+    let atlas_arc = Arc::new(address_map);
+
+    // 2. Build mock baked models with pre-baked static atlas_uvs
+    let create_mock_model = |block_name: &str, tex_name: &str| -> Arc<BakedModel> {
+        let mut model = BakedModel {
+            block_state: block_name.to_string(),
+            ..Default::default()
+        };
+        let face = BakedFace {
+            direction: Direction::Up,
+            texture: tex_name.to_string(),
+            uv_rot: 0.0,
+            uv_bounds: [0.0, 0.0, 1.0, 1.0],
+            tint_index: -1,
+            cullface: None,
+            vertices: [
+                glam::Vec3::new(0.0, 1.0, 0.0),
+                glam::Vec3::new(1.0, 1.0, 0.0),
+                glam::Vec3::new(1.0, 1.0, 1.0),
+                glam::Vec3::new(0.0, 1.0, 1.0),
+            ],
+            uvs: [
+                glam::Vec2::new(0.0, 0.0),
+                glam::Vec2::new(1.0, 0.0),
+                glam::Vec2::new(1.0, 1.0),
+                glam::Vec2::new(0.0, 1.0),
+            ],
+            normal: glam::Vec3::new(0.0, 1.0, 0.0),
+            // Pre-baked static UVs (pointing to chunk 0 in cache)
+            atlas_uvs: Some([
+                glam::Vec2::new(0.0, 0.0),
+                glam::Vec2::new(0.1, 0.0),
+                glam::Vec2::new(0.1, 0.1),
+                glam::Vec2::new(0.0, 0.1),
+            ]),
+            atlas_chunk_id: Some(0),
+            atlas_texture_id: Some(10),
+        };
+        let mut faces_map = std::collections::HashMap::new();
+        faces_map.insert(Direction::Up, face);
+        model.elements = vec![mtk_model::baker::BakedElement {
+            from_pos: [0.0, 0.0, 0.0],
+            to_pos: [16.0, 16.0, 16.0],
+            faces: faces_map,
+        }];
+        model.rebuild_face_buckets();
+        Arc::new(model)
+    };
+
+    let model_kelp = create_mock_model("minecraft:kelp", "minecraft:block/kelp");
+    let model_portal =
+        create_mock_model("minecraft:nether_portal", "minecraft:block/nether_portal");
+    let model_magma = create_mock_model("minecraft:magma_block", "block/magma");
+    let model_cmd = create_mock_model(
+        "minecraft:command_block",
+        "minecraft:block/command_block_front",
+    );
+    let model_fire = create_mock_model("minecraft:fire", "minecraft:block/fire_0");
+    let model_stone = create_mock_model("minecraft:stone", "minecraft:block/stone");
+
+    // 3. Populate VoxelStorage
+    let mut storage = VoxelStorage::new();
+    storage.set_bounds(0, 0, 0, 16, 16, 16);
+    storage.set_block(1, 1, 1, "minecraft:kelp", None);
+    storage.set_block(2, 1, 1, "minecraft:nether_portal", None);
+    storage.set_block(3, 1, 1, "minecraft:magma_block", None);
+    storage.set_block(4, 1, 1, "minecraft:command_block", None);
+    storage.set_block(5, 1, 1, "minecraft:fire", None);
+    storage.set_block(6, 1, 1, "minecraft:stone", None);
+
+    let padded = storage.get_section_padded_array(IVec3::new(0, 0, 0));
+    let culler = FaceCuller::default();
+
+    let model_resolver = |state: &str| -> Option<Arc<BakedModel>> {
+        if state.contains("kelp") {
+            Some(model_kelp.clone())
+        } else if state.contains("nether_portal") {
+            Some(model_portal.clone())
+        } else if state.contains("magma") {
+            Some(model_magma.clone())
+        } else if state.contains("command_block") {
+            Some(model_cmd.clone())
+        } else if state.contains("fire") {
+            Some(model_fire.clone())
+        } else if state.contains("stone") {
+            Some(model_stone.clone())
+        } else {
+            None
+        }
+    };
+
+    // --- TEST CASE A: enable_animated_textures = true ---
+    let config_anim = MesherConfig {
+        atlas_address_map: Some(atlas_arc.clone()),
+        enable_animated_textures: true,
+        ..Default::default()
+    };
+    let mesh_anim = SectionMesher::mesh_section(&padded, &culler, model_resolver, &config_anim);
+
+    // Extract chunk_id for each emitted face from mesh_anim.custom_attributes
+    let face_chunk_attr = mesh_anim
+        .custom_attributes
+        .get("mtk_atlas_chunk_id")
+        .expect("mtk_atlas_chunk_id attr must exist");
+    let chunk_ids = match &face_chunk_attr.data {
+        mtk_core::attributes::AttributeData::Int32(ids) => ids,
+        _ => panic!("Expected Int32 attribute data"),
+    };
+
+    let tex_attr = mesh_anim
+        .custom_attributes
+        .get("mtk_source_texture_key")
+        .expect("tex attr must exist");
+    let tex_keys = match &tex_attr.data {
+        mtk_core::attributes::AttributeData::String(keys) => keys,
+        _ => panic!("Expected String attribute data"),
+    };
+
+    assert_eq!(chunk_ids.len(), tex_keys.len());
+    assert!(!chunk_ids.is_empty(), "Faces should be emitted");
+
+    for (tex, &cid) in tex_keys.iter().zip(chunk_ids.iter()) {
+        if anim_textures
+            .iter()
+            .any(|&a| tex == a || tex.ends_with(a) || a.ends_with(tex.as_str()))
+        {
+            assert_eq!(cid, 1, "Texture {} must route to animated chunk 1", tex);
+        } else if tex.contains("stone") {
+            assert_eq!(cid, 0, "Stone texture {} must route to static chunk 0", tex);
+        }
+    }
+
+    // --- TEST CASE B: enable_animated_textures = false (Manual Gate) ---
+    let config_static = MesherConfig {
+        atlas_address_map: Some(atlas_arc.clone()),
+        enable_animated_textures: false,
+        ..Default::default()
+    };
+    let mesh_static = SectionMesher::mesh_section(&padded, &culler, model_resolver, &config_static);
+    let static_chunk_attr = mesh_static
+        .custom_attributes
+        .get("mtk_atlas_chunk_id")
+        .expect("mtk_atlas_chunk_id attr must exist");
+    let static_chunk_ids = match &static_chunk_attr.data {
+        mtk_core::attributes::AttributeData::Int32(ids) => ids,
+        _ => panic!("Expected Int32 attribute data"),
+    };
+
+    for (idx, &cid) in static_chunk_ids.iter().enumerate() {
+        assert_eq!(
+            cid, 0,
+            "Face index {} must fallback to static chunk 0 when enable_animated_textures is false",
+            idx
+        );
+    }
+}

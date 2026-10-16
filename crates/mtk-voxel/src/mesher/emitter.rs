@@ -99,6 +99,8 @@ pub fn emit_baked_face(
         mat_props,
         block_pos,
         dir.to_index() as u8,
+        shading.anim_timing,
+        shading.anim_frame_size,
     );
 }
 
@@ -278,5 +280,7 @@ pub fn emit_unit_cube_face(
         mat_props,
         block_pos,
         dir.to_index() as u8,
+        shading.anim_timing,
+        shading.anim_frame_size,
     );
 }

@@ -75,19 +75,36 @@ where
         )
         .map(|(res, mut sp)| {
             if config.enable_animated_textures {
-                if let Some(anim_sp) = atlas.lookup_animated(&res) {
+                if let Some(anim_sp) = crate::mesher::shading::lookup_animated_from_cache(
+                    &res.as_string(),
+                    config.custom_aliases.as_deref(),
+                    atlas,
+                )
+                .or_else(|| {
+                    crate::mesher::shading::lookup_animated_from_cache(
+                        still_name,
+                        config.custom_aliases.as_deref(),
+                        atlas,
+                    )
+                }) {
                     sp = anim_sp;
                 }
             } else if sp.is_animated {
-                if let Some(static_sp) = atlas.lookup_static(&res) {
+                if let Some(static_sp) = atlas
+                    .lookup_static(&res)
+                    .or_else(|| atlas.lookup_static_str(still_name))
+                {
                     sp = static_sp;
                 }
             }
+            let (timing, fsize) = crate::mesher::shading::extract_anim_metrics(Some(sp));
             (
                 res.as_string(),
                 sp.chunk_id,
                 sp.texture_id,
                 sp.frame_0_uv_bounds,
+                timing,
+                fsize,
             )
         });
         let flow = mtk_material::MaterialResolver::resolve(
@@ -97,19 +114,36 @@ where
         )
         .map(|(res, mut sp)| {
             if config.enable_animated_textures {
-                if let Some(anim_sp) = atlas.lookup_animated(&res) {
+                if let Some(anim_sp) = crate::mesher::shading::lookup_animated_from_cache(
+                    &res.as_string(),
+                    config.custom_aliases.as_deref(),
+                    atlas,
+                )
+                .or_else(|| {
+                    crate::mesher::shading::lookup_animated_from_cache(
+                        flow_name,
+                        config.custom_aliases.as_deref(),
+                        atlas,
+                    )
+                }) {
                     sp = anim_sp;
                 }
             } else if sp.is_animated {
-                if let Some(static_sp) = atlas.lookup_static(&res) {
+                if let Some(static_sp) = atlas
+                    .lookup_static(&res)
+                    .or_else(|| atlas.lookup_static_str(flow_name))
+                {
                     sp = static_sp;
                 }
             }
+            let (timing, fsize) = crate::mesher::shading::extract_anim_metrics(Some(sp));
             (
                 res.as_string(),
                 sp.chunk_id,
                 sp.texture_id,
                 sp.frame_0_uv_bounds,
+                timing,
+                fsize,
             )
         });
         (still, flow)
@@ -135,8 +169,8 @@ where
             still_sprite.as_ref().or(flow_sprite.as_ref())
         };
 
-        let (final_mat_slot, uvs, chunk_id, tex_id, source_key) =
-            if let Some((res_name, cid, tid, bounds)) = target_sprite {
+        let (final_mat_slot, uvs, chunk_id, tex_id, source_key, anim_timing, anim_frame_size) =
+            if let Some((res_name, cid, tid, bounds, timing, fsize)) = target_sprite {
                 let u_min = bounds[0];
                 let v_min = bounds[1];
                 let u_span = bounds[2] - u_min;
@@ -159,7 +193,15 @@ where
                         v_min + (1.0 - raw_uvs[3][1]) * v_span,
                     ],
                 ];
-                (*cid, mapped, *cid as i32, *tid, res_name.clone())
+                (
+                    *cid,
+                    mapped,
+                    *cid as i32,
+                    *tid,
+                    res_name.clone(),
+                    *timing,
+                    *fsize,
+                )
             } else {
                 let default_name = match fluid_type {
                     FluidType::Water => {
@@ -189,6 +231,8 @@ where
                     0,
                     0,
                     default_name.to_string(),
+                    [1.0, 1.0, 0.0],
+                    [16.0, 16.0, 0.0],
                 )
             };
 
@@ -253,6 +297,8 @@ where
                 mat_props,
                 glam::IVec3::new(x, y, z),
                 dir_code,
+                anim_timing,
+                anim_frame_size,
             );
         }
 

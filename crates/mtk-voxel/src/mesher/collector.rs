@@ -26,6 +26,8 @@ pub struct FaceAttributesCollector {
     pub block_ys: Vec<i32>,
     pub block_zs: Vec<i32>,
     pub face_dirs: Vec<u8>,
+    pub anim_timings: Vec<[f32; 3]>,
+    pub anim_frame_sizes: Vec<[f32; 3]>,
 }
 
 impl FaceAttributesCollector {
@@ -48,10 +50,13 @@ impl FaceAttributesCollector {
             block_ys: Vec::with_capacity(capacity),
             block_zs: Vec::with_capacity(capacity),
             face_dirs: Vec::with_capacity(capacity),
+            anim_timings: Vec::with_capacity(capacity),
+            anim_frame_sizes: Vec::with_capacity(capacity),
         }
     }
 
     #[inline]
+    #[allow(clippy::too_many_arguments)]
     pub fn push_face(
         &mut self,
         source_texture_key: String,
@@ -68,6 +73,8 @@ impl FaceAttributesCollector {
         material_props: [f32; 4],
         block_pos: IVec3,
         face_dir: u8,
+        anim_timing: [f32; 3],
+        anim_frame_size: [f32; 3],
     ) {
         self.source_texture_keys.push(source_texture_key);
         self.material_slots.push(material_slot);
@@ -86,6 +93,8 @@ impl FaceAttributesCollector {
         self.block_ys.push(block_pos.y);
         self.block_zs.push(block_pos.z);
         self.face_dirs.push(face_dir);
+        self.anim_timings.push(anim_timing);
+        self.anim_frame_sizes.push(anim_frame_size);
     }
 
     pub fn attach_to_mesh(self, mesh: &mut MeshData) {
@@ -173,6 +182,49 @@ impl FaceAttributesCollector {
             "mtk_material_props",
             AttributeDomain::Face,
             AttributeData::Float4(self.material_props),
+        ));
+
+        // Animation timing and metrics attributes
+        let anim_total_frames: Vec<f32> = self.anim_timings.iter().map(|t| t[0]).collect();
+        let anim_frametimes: Vec<f32> = self.anim_timings.iter().map(|t| t[1]).collect();
+        let anim_interpolates: Vec<f32> = self.anim_timings.iter().map(|t| t[2]).collect();
+        let anim_frame_widths: Vec<f32> = self.anim_frame_sizes.iter().map(|s| s[0]).collect();
+        let anim_frame_heights: Vec<f32> = self.anim_frame_sizes.iter().map(|s| s[1]).collect();
+
+        mesh.add_custom_attribute(MeshAttribute::new(
+            "mtk_anim_timing",
+            AttributeDomain::Face,
+            AttributeData::Float3(self.anim_timings),
+        ));
+        mesh.add_custom_attribute(MeshAttribute::new(
+            "mtk_anim_frame_size",
+            AttributeDomain::Face,
+            AttributeData::Float3(self.anim_frame_sizes),
+        ));
+        mesh.add_custom_attribute(MeshAttribute::new(
+            "mtk_anim_total_frames",
+            AttributeDomain::Face,
+            AttributeData::Float(anim_total_frames),
+        ));
+        mesh.add_custom_attribute(MeshAttribute::new(
+            "mtk_anim_frametime",
+            AttributeDomain::Face,
+            AttributeData::Float(anim_frametimes),
+        ));
+        mesh.add_custom_attribute(MeshAttribute::new(
+            "mtk_anim_interpolate",
+            AttributeDomain::Face,
+            AttributeData::Float(anim_interpolates),
+        ));
+        mesh.add_custom_attribute(MeshAttribute::new(
+            "mtk_anim_frame_width",
+            AttributeDomain::Face,
+            AttributeData::Float(anim_frame_widths),
+        ));
+        mesh.add_custom_attribute(MeshAttribute::new(
+            "mtk_anim_frame_height",
+            AttributeDomain::Face,
+            AttributeData::Float(anim_frame_heights),
         ));
     }
 }

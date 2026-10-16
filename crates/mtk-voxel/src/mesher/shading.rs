@@ -15,6 +15,7 @@ use crate::mesher::heuristic::get_unit_cube_texture_candidates;
 use crate::mesher::tint::compute_face_tint;
 use crate::storage::PaddedVoxelArray;
 use crate::types::MesherConfig;
+use mtk_texture::atlas::{AtlasAddressMap, AtlasSpriteLocation};
 
 /// Pre-resolved shading information for a static face.
 #[derive(Clone, Debug)]
@@ -31,6 +32,8 @@ pub struct PreResolvedFace {
     /// Packed material properties `[emission, thin_wall, transmission, sticker_threshold]`.
     /// Precomputed per palette face to avoid per-face registry lookups in the meshing hot loop.
     pub material_props: [f32; 4],
+    pub anim_timing: [f32; 3],
+    pub anim_frame_size: [f32; 3],
 }
 
 /// Pre-resolved model face bundling the original BakedFace geometry and pre-resolved shading.
@@ -174,6 +177,86 @@ pub struct ResolvedFaceShading {
     pub emission: f32,
     /// Packed material properties `[emission, thin_wall, transmission, sticker_threshold]`.
     pub material_props: [f32; 4],
+    pub anim_timing: [f32; 3],
+    pub anim_frame_size: [f32; 3],
+}
+
+/// Extracts animation metrics: `anim_timing = [total_frames, frametime, interpolate]`,
+/// and `anim_frame_size = [frame_width, frame_height, 0.0]`.
+#[inline]
+pub fn extract_anim_metrics(loc: Option<&AtlasSpriteLocation>) -> ([f32; 3], [f32; 3]) {
+    if let Some(loc) = loc {
+        if loc.is_animated {
+            let total_frames = loc.frame_count as f32;
+            let frametime = loc
+                .animation
+                .as_ref()
+                .map(|a| a.frametime as f32)
+                .unwrap_or(1.0)
+                .max(1.0);
+            let interpolate = if loc
+                .animation
+                .as_ref()
+                .map(|a| a.interpolate)
+                .unwrap_or(false)
+            {
+                1.0
+            } else {
+                0.0
+            };
+            return (
+                [total_frames, frametime, interpolate],
+                [loc.frame_size[0] as f32, loc.frame_size[1] as f32, 0.0],
+            );
+        }
+    }
+    ([1.0, 1.0, 0.0], [16.0, 16.0, 0.0])
+}
+
+/// Probes the AtlasAddressMap animated sprite cache for a given texture string.
+/// Returns the target `AtlasSpriteLocation` if and only if the sprite exists in `anim_sprites`.
+#[inline]
+pub fn lookup_animated_from_cache<'a>(
+    texture: &str,
+    custom_aliases: Option<&std::collections::HashMap<String, Vec<String>>>,
+    atlas: &'a AtlasAddressMap,
+) -> Option<&'a AtlasSpriteLocation> {
+    if texture.is_empty() {
+        return None;
+    }
+    // 1. Direct O(1) string lookup (handles exact path e.g. "minecraft:block/kelp" or "block/kelp")
+    if let Some(anim_sp) = atlas.lookup_animated_str(texture) {
+        return Some(anim_sp);
+    }
+    // 2. Parsed ResourceLocation
+    if let Ok(loc) = mtk_resource::ResourceLocation::parse(texture) {
+        if let Some(anim_sp) = atlas.lookup_animated(&loc) {
+            return Some(anim_sp);
+        }
+    }
+    // 3. Clean identifier lookup
+    let cleaned = mtk_material::clean_identifier(texture);
+    if cleaned != texture {
+        if let Some(anim_sp) = atlas.lookup_animated_str(&cleaned) {
+            return Some(anim_sp);
+        }
+        if let Ok(loc) = mtk_resource::ResourceLocation::parse(&cleaned) {
+            if let Some(anim_sp) = atlas.lookup_animated(&loc) {
+                return Some(anim_sp);
+            }
+        }
+    }
+    // 4. Custom alias table
+    if let Some(aliases) = custom_aliases {
+        if let Some(cands) = aliases.get(texture).or_else(|| aliases.get(&cleaned)) {
+            for cand in cands {
+                if let Some(anim_sp) = atlas.lookup_animated_str(cand) {
+                    return Some(anim_sp);
+                }
+            }
+        }
+    }
+    None
 }
 
 fn resolve_model_face(
@@ -182,85 +265,22 @@ fn resolve_model_face(
     emission: f32,
     config: &MesherConfig,
 ) -> PreResolvedModelFace {
-    let (final_tex_key, override_uvs, mat_slot, chunk_id, tex_id) = if let Some(atlas) =
-        &config.atlas_address_map
-    {
-        if let Some(ref atlas_uvs) = face.atlas_uvs {
-            (
-                face.texture.clone(),
-                Some(*atlas_uvs),
-                face.atlas_chunk_id.unwrap_or(0),
-                face.atlas_chunk_id.unwrap_or(0) as i32,
-                face.atlas_texture_id.unwrap_or(0),
-            )
-        } else {
-            let base_loc = if !face.texture.is_empty() {
-                mtk_resource::ResourceLocation::parse(&face.texture).ok()
+    let (final_tex_key, override_uvs, mat_slot, chunk_id, tex_id, anim_timing, anim_frame_size) =
+        if let Some(atlas) = &config.atlas_address_map {
+            // Cache-driven animated texture gate:
+            // When enabled, probe the prebaked animated sprite cache.
+            let anim_target = if config.enable_animated_textures {
+                lookup_animated_from_cache(&face.texture, config.custom_aliases.as_deref(), atlas)
             } else {
                 None
             };
-            let resolved = if let Some(ref loc) = base_loc {
-                MaterialResolver::resolve(&loc.as_string(), config.custom_aliases.as_deref(), atlas)
-                    .or_else(|| atlas.lookup(loc).map(|sp| ((*loc).clone(), sp)))
-            } else {
-                None
-            }
-            .or_else(|| {
-                MaterialResolver::resolve(&face.texture, config.custom_aliases.as_deref(), atlas)
-            });
 
-            if let Some((res_loc, mut atlas_loc)) = resolved {
-                if config.enable_animated_textures {
-                    if let Some(anim_loc) = atlas
-                        .lookup_animated(&res_loc)
-                        .or_else(|| atlas.lookup_animated_str(&face.texture))
-                    {
-                        atlas_loc = anim_loc;
-                    }
-                } else if atlas_loc.is_animated {
-                    if let Some(static_loc) = atlas
-                        .lookup_static(&res_loc)
-                        .or_else(|| atlas.lookup_static_str(&face.texture))
-                    {
-                        atlas_loc = static_loc;
-                    }
-                }
-                let u_min = atlas_loc.frame_0_uv_bounds[0];
-                let v_min = atlas_loc.frame_0_uv_bounds[1];
-                let u_span = atlas_loc.frame_0_uv_bounds[2] - u_min;
-                let v_span = atlas_loc.frame_0_uv_bounds[3] - v_min;
-                let remapped = [
-                    Vec2::new(
-                        u_min + face.uvs[0].x * u_span,
-                        v_min + (1.0 - face.uvs[0].y) * v_span,
-                    ),
-                    Vec2::new(
-                        u_min + face.uvs[1].x * u_span,
-                        v_min + (1.0 - face.uvs[1].y) * v_span,
-                    ),
-                    Vec2::new(
-                        u_min + face.uvs[2].x * u_span,
-                        v_min + (1.0 - face.uvs[2].y) * v_span,
-                    ),
-                    Vec2::new(
-                        u_min + face.uvs[3].x * u_span,
-                        v_min + (1.0 - face.uvs[3].y) * v_span,
-                    ),
-                ];
-                (
-                    res_loc.as_string(),
-                    Some(remapped),
-                    atlas_loc.chunk_id,
-                    atlas_loc.chunk_id as i32,
-                    atlas_loc.texture_id,
-                )
-            } else if let Some(fallback_loc) = atlas.lookup_fallback() {
-                let u_min = fallback_loc.frame_0_uv_bounds[0];
-                let v_min = fallback_loc.frame_0_uv_bounds[1];
-                let u_max = fallback_loc.frame_0_uv_bounds[2];
-                let v_max = fallback_loc.frame_0_uv_bounds[3];
-                let u_span = u_max - u_min;
-                let v_span = v_max - v_min;
+            if let Some(anim_loc) = anim_target {
+                let (timing, fsize) = extract_anim_metrics(Some(anim_loc));
+                let u_min = anim_loc.frame_0_uv_bounds[0];
+                let v_min = anim_loc.frame_0_uv_bounds[1];
+                let u_span = anim_loc.frame_0_uv_bounds[2] - u_min;
+                let v_span = anim_loc.frame_0_uv_bounds[3] - v_min;
                 let remapped = [
                     Vec2::new(
                         u_min + face.uvs[0].x * u_span,
@@ -282,42 +302,173 @@ fn resolve_model_face(
                 (
                     face.texture.clone(),
                     Some(remapped),
-                    fallback_loc.chunk_id,
-                    fallback_loc.chunk_id as i32,
-                    fallback_loc.texture_id,
+                    anim_loc.chunk_id,
+                    anim_loc.chunk_id as i32,
+                    anim_loc.texture_id,
+                    timing,
+                    fsize,
+                )
+            } else if let Some(ref atlas_uvs) = face.atlas_uvs {
+                (
+                    face.texture.clone(),
+                    Some(*atlas_uvs),
+                    face.atlas_chunk_id.unwrap_or(0),
+                    face.atlas_chunk_id.unwrap_or(0) as i32,
+                    face.atlas_texture_id.unwrap_or(0),
+                    [1.0, 1.0, 0.0],
+                    [16.0, 16.0, 0.0],
                 )
             } else {
-                let default_chunk = atlas.default_chunk_id();
-                let (chunk_w, chunk_h) = atlas
-                    .get_chunk_meta(default_chunk)
-                    .map(|c| (c.width as f32, c.height as f32))
-                    .unwrap_or((4096.0, 4096.0));
-                let u_span = 16.0 / chunk_w.max(16.0);
-                let v_span = 16.0 / chunk_h.max(16.0);
-                let remapped = [
-                    Vec2::new(face.uvs[0].x * u_span, (1.0 - face.uvs[0].y) * v_span),
-                    Vec2::new(face.uvs[1].x * u_span, (1.0 - face.uvs[1].y) * v_span),
-                    Vec2::new(face.uvs[2].x * u_span, (1.0 - face.uvs[2].y) * v_span),
-                    Vec2::new(face.uvs[3].x * u_span, (1.0 - face.uvs[3].y) * v_span),
-                ];
-                (
-                    face.texture.clone(),
-                    Some(remapped),
-                    default_chunk,
-                    default_chunk as i32,
-                    0u32,
-                )
+                let base_loc = if !face.texture.is_empty() {
+                    mtk_resource::ResourceLocation::parse(&face.texture).ok()
+                } else {
+                    None
+                };
+                let resolved = if let Some(ref loc) = base_loc {
+                    MaterialResolver::resolve(
+                        &loc.as_string(),
+                        config.custom_aliases.as_deref(),
+                        atlas,
+                    )
+                    .or_else(|| atlas.lookup(loc).map(|sp| ((*loc).clone(), sp)))
+                } else {
+                    None
+                }
+                .or_else(|| {
+                    MaterialResolver::resolve(
+                        &face.texture,
+                        config.custom_aliases.as_deref(),
+                        atlas,
+                    )
+                });
+
+                if let Some((res_loc, mut atlas_loc)) = resolved {
+                    if config.enable_animated_textures {
+                        if let Some(anim_loc) = lookup_animated_from_cache(
+                            &res_loc.as_string(),
+                            config.custom_aliases.as_deref(),
+                            atlas,
+                        )
+                        .or_else(|| {
+                            lookup_animated_from_cache(
+                                &face.texture,
+                                config.custom_aliases.as_deref(),
+                                atlas,
+                            )
+                        }) {
+                            atlas_loc = anim_loc;
+                        }
+                    } else if atlas_loc.is_animated {
+                        if let Some(static_loc) = atlas
+                            .lookup_static(&res_loc)
+                            .or_else(|| atlas.lookup_static_str(&face.texture))
+                        {
+                            atlas_loc = static_loc;
+                        }
+                    }
+                    let (timing, fsize) = extract_anim_metrics(Some(atlas_loc));
+                    let u_min = atlas_loc.frame_0_uv_bounds[0];
+                    let v_min = atlas_loc.frame_0_uv_bounds[1];
+                    let u_span = atlas_loc.frame_0_uv_bounds[2] - u_min;
+                    let v_span = atlas_loc.frame_0_uv_bounds[3] - v_min;
+                    let remapped = [
+                        Vec2::new(
+                            u_min + face.uvs[0].x * u_span,
+                            v_min + (1.0 - face.uvs[0].y) * v_span,
+                        ),
+                        Vec2::new(
+                            u_min + face.uvs[1].x * u_span,
+                            v_min + (1.0 - face.uvs[1].y) * v_span,
+                        ),
+                        Vec2::new(
+                            u_min + face.uvs[2].x * u_span,
+                            v_min + (1.0 - face.uvs[2].y) * v_span,
+                        ),
+                        Vec2::new(
+                            u_min + face.uvs[3].x * u_span,
+                            v_min + (1.0 - face.uvs[3].y) * v_span,
+                        ),
+                    ];
+                    (
+                        res_loc.as_string(),
+                        Some(remapped),
+                        atlas_loc.chunk_id,
+                        atlas_loc.chunk_id as i32,
+                        atlas_loc.texture_id,
+                        timing,
+                        fsize,
+                    )
+                } else if let Some(fallback_loc) = atlas.lookup_fallback() {
+                    let (timing, fsize) = extract_anim_metrics(Some(fallback_loc));
+                    let u_min = fallback_loc.frame_0_uv_bounds[0];
+                    let v_min = fallback_loc.frame_0_uv_bounds[1];
+                    let u_max = fallback_loc.frame_0_uv_bounds[2];
+                    let v_max = fallback_loc.frame_0_uv_bounds[3];
+                    let u_span = u_max - u_min;
+                    let v_span = v_max - v_min;
+                    let remapped = [
+                        Vec2::new(
+                            u_min + face.uvs[0].x * u_span,
+                            v_min + (1.0 - face.uvs[0].y) * v_span,
+                        ),
+                        Vec2::new(
+                            u_min + face.uvs[1].x * u_span,
+                            v_min + (1.0 - face.uvs[1].y) * v_span,
+                        ),
+                        Vec2::new(
+                            u_min + face.uvs[2].x * u_span,
+                            v_min + (1.0 - face.uvs[2].y) * v_span,
+                        ),
+                        Vec2::new(
+                            u_min + face.uvs[3].x * u_span,
+                            v_min + (1.0 - face.uvs[3].y) * v_span,
+                        ),
+                    ];
+                    (
+                        face.texture.clone(),
+                        Some(remapped),
+                        fallback_loc.chunk_id,
+                        fallback_loc.chunk_id as i32,
+                        fallback_loc.texture_id,
+                        timing,
+                        fsize,
+                    )
+                } else {
+                    let default_chunk = atlas.default_chunk_id();
+                    let (chunk_w, chunk_h) = atlas
+                        .get_chunk_meta(default_chunk)
+                        .map(|c| (c.width as f32, c.height as f32))
+                        .unwrap_or((4096.0, 4096.0));
+                    let u_span = 16.0 / chunk_w.max(16.0);
+                    let v_span = 16.0 / chunk_h.max(16.0);
+                    let remapped = [
+                        Vec2::new(face.uvs[0].x * u_span, (1.0 - face.uvs[0].y) * v_span),
+                        Vec2::new(face.uvs[1].x * u_span, (1.0 - face.uvs[1].y) * v_span),
+                        Vec2::new(face.uvs[2].x * u_span, (1.0 - face.uvs[2].y) * v_span),
+                        Vec2::new(face.uvs[3].x * u_span, (1.0 - face.uvs[3].y) * v_span),
+                    ];
+                    (
+                        face.texture.clone(),
+                        Some(remapped),
+                        default_chunk,
+                        default_chunk as i32,
+                        0u32,
+                        [1.0, 1.0, 0.0],
+                        [16.0, 16.0, 0.0],
+                    )
+                }
             }
-        }
-    } else {
-        (
-            face.texture.clone(),
-            None,
-            face.atlas_chunk_id.unwrap_or(0),
-            face.atlas_chunk_id.unwrap_or(0) as i32,
-            face.atlas_texture_id.unwrap_or(0),
-        )
-    };
+        } else {
+            (
+                face.texture.clone(),
+                None,
+                face.atlas_chunk_id.unwrap_or(0),
+                face.atlas_chunk_id.unwrap_or(0) as i32,
+                face.atlas_texture_id.unwrap_or(0),
+                [1.0, 1.0, 0.0],
+                [16.0, 16.0, 0.0],
+            )
+        };
 
     let (tint_data, tint_color, colormap_uv) = compute_face_tint(
         &final_tex_key,
@@ -331,7 +482,7 @@ fn resolve_model_face(
     PreResolvedModelFace {
         face: face.clone(),
         pre: PreResolvedFace {
-            source_texture_key: final_tex_key,
+            source_texture_key: final_tex_key.to_string(),
             override_uvs,
             mat_slot,
             chunk_id,
@@ -341,6 +492,8 @@ fn resolve_model_face(
             colormap_uv,
             emission,
             material_props,
+            anim_timing,
+            anim_frame_size,
         },
     }
 }
@@ -456,71 +609,104 @@ pub fn build_palette_meshing_data<'a>(
 
                     let mut faces: [Option<PreResolvedFace>; 6] = Default::default();
                     for dir in Direction::ALL {
-                        let (final_tex_key, override_uvs, mat_slot, chunk_id, tex_id) =
-                            if let Some(atlas) = &config.atlas_address_map {
-                                let candidates = get_unit_cube_texture_candidates(clean_sub, dir);
-                                let mut resolved = None;
-                                for cand in &candidates {
-                                    if let Some((res, sp)) = MaterialResolver::resolve(
-                                        cand,
+                        let (
+                            final_tex_key,
+                            override_uvs,
+                            mat_slot,
+                            chunk_id,
+                            tex_id,
+                            anim_timing,
+                            anim_frame_size,
+                        ) = if let Some(atlas) = &config.atlas_address_map {
+                            let candidates = get_unit_cube_texture_candidates(clean_sub, dir);
+                            let mut resolved = None;
+                            for cand in &candidates {
+                                if let Some((res, sp)) = MaterialResolver::resolve(
+                                    cand,
+                                    config.custom_aliases.as_deref(),
+                                    atlas,
+                                ) {
+                                    resolved = Some((res, sp));
+                                    break;
+                                }
+                            }
+                            if let Some((res_loc, mut atlas_loc)) = resolved {
+                                if config.enable_animated_textures {
+                                    if let Some(anim_loc) = lookup_animated_from_cache(
+                                        &res_loc.as_string(),
                                         config.custom_aliases.as_deref(),
                                         atlas,
                                     ) {
-                                        resolved = Some((res, sp));
-                                        break;
+                                        atlas_loc = anim_loc;
+                                    }
+                                } else if atlas_loc.is_animated {
+                                    if let Some(static_loc) = atlas.lookup_static(&res_loc) {
+                                        atlas_loc = static_loc;
                                     }
                                 }
-                                if let Some((res_loc, mut atlas_loc)) = resolved {
-                                    if config.enable_animated_textures {
-                                        if let Some(anim_loc) = atlas.lookup_animated(&res_loc) {
-                                            atlas_loc = anim_loc;
-                                        }
-                                    } else if atlas_loc.is_animated {
-                                        if let Some(static_loc) = atlas.lookup_static(&res_loc) {
-                                            atlas_loc = static_loc;
-                                        }
-                                    }
-                                    let u_min = atlas_loc.frame_0_uv_bounds[0];
-                                    let v_min = atlas_loc.frame_0_uv_bounds[1];
-                                    let u_max = atlas_loc.frame_0_uv_bounds[2];
-                                    let v_max = atlas_loc.frame_0_uv_bounds[3];
-                                    let remapped = [
-                                        Vec2::new(u_min, v_max),
-                                        Vec2::new(u_min, v_min),
-                                        Vec2::new(u_max, v_min),
-                                        Vec2::new(u_max, v_max),
-                                    ];
-                                    (
-                                        res_loc.as_string(),
-                                        Some(remapped),
-                                        atlas_loc.chunk_id,
-                                        atlas_loc.chunk_id as i32,
-                                        atlas_loc.texture_id,
-                                    )
-                                } else if let Some(fb) = atlas.lookup_fallback() {
-                                    let u_min = fb.frame_0_uv_bounds[0];
-                                    let v_min = fb.frame_0_uv_bounds[1];
-                                    let u_max = fb.frame_0_uv_bounds[2];
-                                    let v_max = fb.frame_0_uv_bounds[3];
-                                    let remapped = [
-                                        Vec2::new(u_min, v_max),
-                                        Vec2::new(u_min, v_min),
-                                        Vec2::new(u_max, v_min),
-                                        Vec2::new(u_max, v_max),
-                                    ];
-                                    (
-                                        format!("minecraft:block/{}", clean_sub),
-                                        Some(remapped),
-                                        fb.chunk_id,
-                                        fb.chunk_id as i32,
-                                        fb.texture_id,
-                                    )
-                                } else {
-                                    (format!("minecraft:block/{}", clean_sub), None, 0, 0, 0)
-                                }
+                                let (timing, fsize) = extract_anim_metrics(Some(atlas_loc));
+                                let u_min = atlas_loc.frame_0_uv_bounds[0];
+                                let v_min = atlas_loc.frame_0_uv_bounds[1];
+                                let u_max = atlas_loc.frame_0_uv_bounds[2];
+                                let v_max = atlas_loc.frame_0_uv_bounds[3];
+                                let remapped = [
+                                    Vec2::new(u_min, v_max),
+                                    Vec2::new(u_min, v_min),
+                                    Vec2::new(u_max, v_min),
+                                    Vec2::new(u_max, v_max),
+                                ];
+                                (
+                                    res_loc.as_string(),
+                                    Some(remapped),
+                                    atlas_loc.chunk_id,
+                                    atlas_loc.chunk_id as i32,
+                                    atlas_loc.texture_id,
+                                    timing,
+                                    fsize,
+                                )
+                            } else if let Some(fb) = atlas.lookup_fallback() {
+                                let (timing, fsize) = extract_anim_metrics(Some(fb));
+                                let u_min = fb.frame_0_uv_bounds[0];
+                                let v_min = fb.frame_0_uv_bounds[1];
+                                let u_max = fb.frame_0_uv_bounds[2];
+                                let v_max = fb.frame_0_uv_bounds[3];
+                                let remapped = [
+                                    Vec2::new(u_min, v_max),
+                                    Vec2::new(u_min, v_min),
+                                    Vec2::new(u_max, v_min),
+                                    Vec2::new(u_max, v_max),
+                                ];
+                                (
+                                    format!("minecraft:block/{}", clean_sub),
+                                    Some(remapped),
+                                    fb.chunk_id,
+                                    fb.chunk_id as i32,
+                                    fb.texture_id,
+                                    timing,
+                                    fsize,
+                                )
                             } else {
-                                (format!("minecraft:block/{}", clean_sub), None, 0, 0, 0)
-                            };
+                                (
+                                    format!("minecraft:block/{}", clean_sub),
+                                    None,
+                                    0,
+                                    0,
+                                    0,
+                                    [1.0, 1.0, 0.0],
+                                    [16.0, 16.0, 0.0],
+                                )
+                            }
+                        } else {
+                            (
+                                format!("minecraft:block/{}", clean_sub),
+                                None,
+                                0,
+                                0,
+                                0,
+                                [1.0, 1.0, 0.0],
+                                [16.0, 16.0, 0.0],
+                            )
+                        };
 
                         let tint_idx = mtk_material::get_unit_cube_tint_index(clean_sub, dir);
                         let (tint_data, tint_color, colormap_uv) = compute_face_tint(
@@ -543,6 +729,8 @@ pub fn build_palette_meshing_data<'a>(
                             colormap_uv,
                             emission,
                             material_props,
+                            anim_timing,
+                            anim_frame_size,
                         });
                     }
 
@@ -607,7 +795,11 @@ where
             if let Some(atlas) = &config.atlas_address_map {
                 if let Some(mut atlas_loc) = atlas.lookup(&resolved_loc) {
                     if config.enable_animated_textures {
-                        if let Some(anim_loc) = atlas.lookup_animated(&resolved_loc) {
+                        if let Some(anim_loc) = lookup_animated_from_cache(
+                            &resolved_loc.as_string(),
+                            config.custom_aliases.as_deref(),
+                            atlas,
+                        ) {
                             atlas_loc = anim_loc;
                         }
                     } else if atlas_loc.is_animated {
@@ -644,6 +836,7 @@ where
                         face.tint_index,
                         config.biome_resolver.as_deref(),
                     );
+                    let (timing, fsize) = extract_anim_metrics(Some(atlas_loc));
                     let material_props = mtk_material::get_material_props("", Some(&ctm_key));
                     return ResolvedFaceShading {
                         texture_key: ctm_key,
@@ -656,6 +849,8 @@ where
                         colormap_uv: c_uv,
                         emission: pre_face.emission,
                         material_props,
+                        anim_timing: timing,
+                        anim_frame_size: fsize,
                     };
                 }
             } else {
@@ -678,6 +873,8 @@ where
                     colormap_uv: c_uv,
                     emission: pre_face.emission,
                     material_props,
+                    anim_timing: pre_face.anim_timing,
+                    anim_frame_size: pre_face.anim_frame_size,
                 };
             }
         }
@@ -694,6 +891,8 @@ where
         colormap_uv: pre_face.colormap_uv,
         emission: pre_face.emission,
         material_props: pre_face.material_props,
+        anim_timing: pre_face.anim_timing,
+        anim_frame_size: pre_face.anim_frame_size,
     }
 }
 
@@ -726,7 +925,11 @@ where
             if let Some(atlas) = &config.atlas_address_map {
                 if let Some(mut atlas_loc) = atlas.lookup(&resolved_loc) {
                     if config.enable_animated_textures {
-                        if let Some(anim_loc) = atlas.lookup_animated(&resolved_loc) {
+                        if let Some(anim_loc) = lookup_animated_from_cache(
+                            &resolved_loc.as_string(),
+                            config.custom_aliases.as_deref(),
+                            atlas,
+                        ) {
                             atlas_loc = anim_loc;
                         }
                     } else if atlas_loc.is_animated {
@@ -751,6 +954,7 @@ where
                         -1,
                         config.biome_resolver.as_deref(),
                     );
+                    let (timing, fsize) = extract_anim_metrics(Some(atlas_loc));
                     let material_props = mtk_material::get_material_props("", Some(&ctm_key));
                     return ResolvedFaceShading {
                         texture_key: ctm_key,
@@ -763,6 +967,8 @@ where
                         colormap_uv: c_uv,
                         emission: pre_face.emission,
                         material_props,
+                        anim_timing: timing,
+                        anim_frame_size: fsize,
                     };
                 }
             } else {
@@ -781,6 +987,8 @@ where
                     colormap_uv: c_uv,
                     emission: pre_face.emission,
                     material_props,
+                    anim_timing: pre_face.anim_timing,
+                    anim_frame_size: pre_face.anim_frame_size,
                 };
             }
         }
@@ -797,6 +1005,8 @@ where
         colormap_uv: pre_face.colormap_uv,
         emission: pre_face.emission,
         material_props: pre_face.material_props,
+        anim_timing: pre_face.anim_timing,
+        anim_frame_size: pre_face.anim_frame_size,
     }
 }
 
