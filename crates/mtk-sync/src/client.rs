@@ -27,7 +27,15 @@ pub enum ClientCommand {
 #[derive(Debug, Clone)]
 pub enum ClientMessage {
     Status(String),
-    PacketReceived { packet: Packet, bytes: usize },
+    /// Non-fatal transport diagnostics (e.g. a single undecodable frame).
+    /// Must NOT be interpreted as a connection status change.
+    Warning(String),
+    /// The active socket was lost; the client thread is reconnecting.
+    ConnectionLost,
+    PacketReceived {
+        packet: Packet,
+        bytes: usize,
+    },
     Disconnected,
 }
 
@@ -140,6 +148,8 @@ impl SyncClient {
                     }
 
                     while running.load(Ordering::Relaxed) {
+                        let mut connection_lost = false;
+
                         // Check for outgoing commands
                         while let Ok(cmd) = cmd_receiver.try_recv() {
                             match cmd {
@@ -149,6 +159,7 @@ impl SyncClient {
                                             "Send error: {}",
                                             e
                                         )));
+                                        connection_lost = true;
                                         break;
                                     }
                                 }
@@ -165,6 +176,10 @@ impl SyncClient {
                             }
                         }
 
+                        if connection_lost {
+                            break;
+                        }
+
                         // Read incoming messages
                         match socket.read() {
                             Ok(Message::Binary(bin)) => {
@@ -175,7 +190,9 @@ impl SyncClient {
                                             .send(ClientMessage::PacketReceived { packet, bytes });
                                     }
                                     Err(e) => {
-                                        let _ = msg_sender.send(ClientMessage::Status(format!(
+                                        // A corrupt frame must never tear down the
+                                        // session or flip the UI to disconnected.
+                                        let _ = msg_sender.send(ClientMessage::Warning(format!(
                                             "Packet decode error: {}",
                                             e
                                         )));
@@ -187,14 +204,15 @@ impl SyncClient {
                             }
                             Ok(Message::Close(_)) => {
                                 let _ = msg_sender.send(ClientMessage::Status(
-                                    "WebSocket closed by server".to_string(),
+                                    "Server closed the connection".to_string(),
                                 ));
                                 break;
                             }
                             Ok(_) => {}
                             Err(tungstenite::Error::Io(ref e))
                                 if e.kind() == std::io::ErrorKind::WouldBlock
-                                    || e.kind() == std::io::ErrorKind::TimedOut =>
+                                    || e.kind() == std::io::ErrorKind::TimedOut
+                                    || e.kind() == std::io::ErrorKind::Interrupted =>
                             {
                                 // Normal timeout: continue poll loop
                                 continue;
@@ -215,6 +233,10 @@ impl SyncClient {
                     // Clear active TCP reference on disconnect/loop exit
                     if let Ok(mut guard) = active_tcp.lock() {
                         *guard = None;
+                    }
+
+                    if running.load(Ordering::Relaxed) && auto_reconnect {
+                        let _ = msg_sender.send(ClientMessage::ConnectionLost);
                     }
                 }
                 Err(e) => {

@@ -73,22 +73,34 @@ impl LiveSyncSession {
 
     /// Sets or replaces the baked model database.
     pub fn set_model_db(&mut self, model_db: Option<Arc<BakedModelDatabase>>) {
-        self.world.write().unwrap().set_model_db(model_db);
+        self.world
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .set_model_db(model_db);
     }
 
     /// Sets whether to output unified world mesh (enforced true in 2.0).
     pub fn set_unified_mesh(&mut self, _unified_mesh: bool) {
-        self.world.write().unwrap().set_unified_mesh(true);
+        self.world
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .set_unified_mesh(true);
     }
 
     /// Clears the cached section meshes and unified world mesh on the underlying VoxelWorld.
     pub fn clear_cache(&self) {
-        self.world.write().unwrap().clear_cache();
+        self.world
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear_cache();
     }
 
     /// Sets or updates the active mesher configuration on the underlying VoxelWorld.
     pub fn set_config(&self, config: MesherConfig) {
-        self.world.write().unwrap().set_config(config);
+        self.world
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .set_config(config);
     }
 
     /// Hot-reloads mesher configuration and model database on the underlying VoxelWorld.
@@ -97,7 +109,7 @@ impl LiveSyncSession {
         config: Option<MesherConfig>,
         model_db: Option<Arc<BakedModelDatabase>>,
     ) {
-        let mut w = self.world.write().unwrap();
+        let mut w = self.world.write().unwrap_or_else(|e| e.into_inner());
         if let Some(cfg) = config {
             w.set_config(cfg);
         }
@@ -119,7 +131,10 @@ impl LiveSyncSession {
 
     /// Returns the current connection status string ("CONNECTED", "CONNECTING...", "DISCONNECTED", etc.).
     pub fn status(&self) -> String {
-        self.status.read().unwrap().clone()
+        self.status
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Returns current client generation ID.
@@ -129,22 +144,46 @@ impl LiveSyncSession {
 
     /// Returns current session sequence number.
     pub fn current_sequence(&self) -> u64 {
-        self.state.lock().unwrap().sequence
+        self.state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .sequence
     }
 
     /// Returns current server epoch.
     pub fn current_epoch(&self) -> u64 {
-        self.state.lock().unwrap().epoch
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).epoch
+    }
+
+    /// Returns the last server-confirmed canonical world state hash.
+    pub fn current_state_hash(&self) -> u64 {
+        self.state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .current_state_hash
+    }
+
+    /// Returns the server instance UUID as a 32-character lowercase hex string.
+    pub fn server_uuid_hex(&self) -> String {
+        let uuid = self
+            .state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .server_uuid;
+        uuid.iter().map(|b| format!("{:02x}", b)).collect()
     }
 
     /// Returns current session lifecycle.
     pub fn lifecycle(&self) -> SyncLifecycle {
-        self.state.lock().unwrap().lifecycle
+        self.state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .lifecycle
     }
 
     /// Meshes the entire active VoxelStorage volume and returns a unified `MeshData`.
     pub fn get_world_mesh(&self) -> MeshData {
-        let mut w = self.world.write().unwrap();
+        let mut w = self.world.write().unwrap_or_else(|e| e.into_inner());
         let _ = w.rebuild_all();
         w.get_world_mesh().cloned().unwrap_or_default()
     }
@@ -152,7 +191,13 @@ impl LiveSyncSession {
     /// Sends a RESYNC_REQUEST packet to request recovery / re-sync.
     pub fn request_resync(&self) -> Result<(), String> {
         let (epoch, seq) = {
-            let s = self.state.lock().unwrap();
+            let mut s = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            // Drop any partially received baseline so the incoming snapshot can
+            // be assembled from scratch; otherwise stale chunks are silently
+            // rejected and the UI can stall mid-progress.
+            s.awaiting_baseline();
+            // Manual retry: give the selection a fresh retry budget.
+            s.validation_failures = 0;
             (s.epoch, s.sequence)
         };
         let packet = Packet::ResyncRequest {
@@ -173,7 +218,11 @@ impl LiveSyncSession {
 
     /// Returns a snapshot clone of the in-memory voxel storage.
     pub fn get_storage(&self) -> VoxelStorage {
-        self.world.read().unwrap().storage.clone()
+        self.world
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .storage
+            .clone()
     }
 
     /// Manually processes a packet directly into the state machine (useful for tests and mocks).
@@ -182,7 +231,7 @@ impl LiveSyncSession {
             .cmd_sender
             .clone()
             .unwrap_or_else(|| crossbeam_channel::unbounded().0);
-        let mut state_guard = self.state.lock().unwrap();
+        let mut state_guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
         handle_packet(
             packet,
             0,
@@ -205,7 +254,19 @@ impl LiveSyncSession {
     ) -> Result<(), String> {
         self.stop();
 
-        *self.status.write().unwrap() = "CONNECTING...".to_string();
+        // Drop any mesh/progress events left over from the previous connection so a
+        // reconnecting host cannot apply a stale world mesh to the new session.
+        while self.event_receiver.try_recv().is_ok() {}
+
+        // Reset the per-connection state machine. Reusing a session (hot reconnect
+        // from Blender) must never inherit a half-assembled baseline, a stale
+        // epoch/sequence or palette entries from the previous selection.
+        {
+            let mut st = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            st.reset_for_new_connection();
+        }
+
+        *self.status.write().unwrap_or_else(|e| e.into_inner()) = "CONNECTING...".to_string();
         self.is_connected.store(false, Ordering::SeqCst);
 
         let (msg_sender, msg_receiver) = crossbeam_channel::unbounded::<ClientMessage>();
@@ -262,7 +323,7 @@ impl LiveSyncSession {
     pub fn stop(&mut self) {
         self.worker_running.store(false, Ordering::SeqCst);
         self.is_connected.store(false, Ordering::SeqCst);
-        *self.status.write().unwrap() = "DISCONNECTED".to_string();
+        *self.status.write().unwrap_or_else(|e| e.into_inner()) = "DISCONNECTED".to_string();
 
         if let Some(mut client) = self.client.take() {
             client.stop();

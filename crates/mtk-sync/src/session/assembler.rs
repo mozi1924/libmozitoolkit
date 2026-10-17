@@ -441,9 +441,13 @@ impl BaselineAssembler {
                     }
                 });
 
-                let sec_qx = (qx & 3) as usize;
-                let sec_qy = (qy & 3) as usize;
-                let sec_qz = (qz & 3) as usize;
+                // Quart indices must be derived from the SECTION-LOCAL block coordinate.
+                // The selection quart grid is anchored at `min_pos`, which is not
+                // necessarily 16-aligned, so `qx & 3` would write into the wrong
+                // section-local quart cell and make the canonical state hash mismatch.
+                let sec_qx = ((wx >> 2) & 3) as usize;
+                let sec_qy = ((wy >> 2) & 3) as usize;
+                let sec_qz = ((wz >> 2) & 3) as usize;
                 sb.set_quart_biome(sec_qx, sec_qy, sec_qz, biome_str);
             }
 

@@ -6,6 +6,12 @@
 
 **`mtk-sync`** 是 `libmozitoolkit` (`libmtk`) 套件中的实时网络协同与二进制增量流客户端 Crate。遵循 **无宿主依赖 (Host-Agnostic)** 原则，专为建立 Minecraft（伴随模组/插件如 Yefira）与 3D DCC 宿主（如 Blender MoziToolKit 插件、WebGPU 视口或独立渲染器）之间的高性能双向二进制实时通信通道而设计。
 
+> **权威协议规范**：本文档描述 Crate 的 API 与历史设计。Live Sync 的帧格式、资源硬限、
+> `state_hash`、状态机、错误恢复与三端实现对齐矩阵，请以
+> **[RFC v3.1: MTK 2.0 Live Sync 协议与架构设计规范](../../../MoziToolKit/docs/live_sync/live_sync_protocol.md)** 为准。
+> 下文第 3 章中出现的旧版 `Packet` 枚举（`SelectionInfo` / `FullSnapshot` / `SectionSnapshot` 等）
+> 已被 `protocol::packet::Packet` 的 v3.1 定义取代，仅作演进记录保留。
+
 ---
 
 ## 目录 (Table of Contents)

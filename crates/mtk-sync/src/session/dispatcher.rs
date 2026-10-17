@@ -5,7 +5,7 @@
 //! and parallel Rayon world meshing.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
@@ -39,6 +39,8 @@ pub struct SessionState {
     pub epoch: u64,
     pub sequence: u64,
     pub server_uuid: [u8; 16],
+    /// Snapshot / world canonical state hash last confirmed by the server.
+    pub current_state_hash: u64,
     pub min_pos: IVec3,
     pub size: IVec3,
     pub dimension: String,
@@ -48,6 +50,14 @@ pub struct SessionState {
     pub assembler: Option<BaselineAssembler>,
     pub last_mesh_time: Option<Instant>,
     pub pending_dirty_rebuild: bool,
+    /// Last time any baseline/connection progress was observed (baseline watchdog).
+    pub last_progress_at: Instant,
+    /// Rate-limiter so a corrupt stream cannot trigger a RESYNC storm.
+    pub resync_last_sent: Option<Instant>,
+    /// Consecutive baseline validation failures for the current selection. After a
+    /// few retries we stop auto-resyncing and wait for an explicit refresh / new
+    /// selection instead of spinning forever.
+    pub validation_failures: u32,
 }
 
 impl SessionState {
@@ -57,6 +67,7 @@ impl SessionState {
             epoch: 0,
             sequence: 0,
             server_uuid: [0u8; 16],
+            current_state_hash: 0,
             min_pos: IVec3::ZERO,
             size: IVec3::ZERO,
             dimension: "minecraft:overworld".to_string(),
@@ -66,13 +77,67 @@ impl SessionState {
             assembler: None,
             last_mesh_time: None,
             pending_dirty_rebuild: false,
+            last_progress_at: Instant::now(),
+            resync_last_sent: None,
+            validation_failures: 0,
         }
+    }
+
+    /// Completely resets per-connection state (called for every new `start()`).
+    pub fn reset_for_new_connection(&mut self) {
+        *self = Self::new();
+    }
+
+    /// Drops any partially assembled baseline and waits for a fresh BASELINE_BEGIN.
+    pub(crate) fn awaiting_baseline(&mut self) {
+        self.assembler = None;
+        self.staging.clear();
+        self.lifecycle = SyncLifecycle::ReceivingBaseline;
+        self.last_progress_at = Instant::now();
     }
 }
 
 impl Default for SessionState {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Acquires the session state mutex, transparently recovering from a poisoned lock
+/// (a single malformed packet must never permanently wedge the session).
+fn lock_state(state: &Arc<Mutex<SessionState>>) -> std::sync::MutexGuard<'_, SessionState> {
+    state.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Acquires the voxel world write lock, recovering from poison instead of panicking.
+fn lock_world_write(
+    world: &Arc<RwLock<VoxelWorld>>,
+) -> std::sync::RwLockWriteGuard<'_, VoxelWorld> {
+    world.write().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Ensures the host always observes a terminal status even if the worker thread
+/// exits unexpectedly (panic / channel close), so the UI can never stay stuck on
+/// a stale "CONNECTED" state.
+struct WorkerExitGuard {
+    running: Arc<AtomicBool>,
+    is_connected: Arc<AtomicBool>,
+    status_lock: Arc<RwLock<String>>,
+    event_sender: Sender<SyncEvent>,
+}
+
+impl Drop for WorkerExitGuard {
+    fn drop(&mut self) {
+        if self.running.swap(false, Ordering::SeqCst) {
+            self.is_connected.store(false, Ordering::SeqCst);
+            {
+                let mut guard = self.status_lock.write().unwrap_or_else(|e| e.into_inner());
+                *guard = "DISCONNECTED".to_string();
+            }
+            let _ = self
+                .event_sender
+                .send(SyncEvent::StatusChange("DISCONNECTED".to_string()));
+        }
     }
 }
 
@@ -89,19 +154,29 @@ pub fn event_worker_loop(
     state_lock: Arc<Mutex<SessionState>>,
     initial_hello: Option<Packet>,
 ) {
+    let _exit_guard = WorkerExitGuard {
+        running: running.clone(),
+        is_connected: is_connected.clone(),
+        status_lock: status_lock.clone(),
+        event_sender: event_sender.clone(),
+    };
+
     while running.load(Ordering::Relaxed) {
         match msg_receiver.recv_timeout(Duration::from_millis(20)) {
             Ok(ClientMessage::Status(status)) => {
                 let conn = status == "CONNECTED";
                 is_connected.store(conn, Ordering::SeqCst);
-                if let Ok(mut guard) = status_lock.write() {
+                {
+                    let mut guard = status_lock.write().unwrap_or_else(|e| e.into_inner());
                     *guard = status.clone();
                 }
                 let _ = event_sender.send(SyncEvent::StatusChange(status));
 
                 if conn {
-                    if let Ok(mut state) = state_lock.lock() {
+                    {
+                        let mut state = lock_state(&state_lock);
                         state.lifecycle = SyncLifecycle::Negotiating;
+                        state.last_progress_at = Instant::now();
                     }
                     // Send initial HELLO packet
                     let hello_pkt = initial_hello.clone().unwrap_or(Packet::Hello {
@@ -122,20 +197,41 @@ pub fn event_worker_loop(
                     let _ = cmd_sender.send(ClientCommand::Send(bytes));
                 }
             }
+            Ok(ClientMessage::Warning(message)) => {
+                // Non-fatal transport diagnostics (e.g. a corrupt frame) must never
+                // downgrade the connection status: the socket is still alive.
+                let _ = event_sender.send(SyncEvent::Warning(message));
+            }
+            Ok(ClientMessage::ConnectionLost) => {
+                // The socket died but the client thread is retrying. Drop any
+                // partially received baseline so the next stream starts cleanly.
+                is_connected.store(false, Ordering::SeqCst);
+                {
+                    let mut state = lock_state(&state_lock);
+                    state.awaiting_baseline();
+                    state.lifecycle = SyncLifecycle::Connecting;
+                }
+            }
             Ok(ClientMessage::Disconnected) => {
                 is_connected.store(false, Ordering::SeqCst);
-                if let Ok(mut guard) = status_lock.write() {
+                {
+                    let mut guard = status_lock.write().unwrap_or_else(|e| e.into_inner());
                     *guard = "DISCONNECTED".to_string();
                 }
                 running.store(false, Ordering::SeqCst);
-                if let Ok(mut state) = state_lock.lock() {
+                {
+                    let mut state = lock_state(&state_lock);
+                    state.awaiting_baseline();
                     state.lifecycle = SyncLifecycle::Disconnected;
                 }
                 let _ = event_sender.send(SyncEvent::StatusChange("DISCONNECTED".to_string()));
                 break;
             }
             Ok(ClientMessage::PacketReceived { packet, bytes }) => {
-                if let Ok(mut state) = state_lock.lock() {
+                let mut state = lock_state(&state_lock);
+                // A panic in a single packet handler (or in the mesher) must not kill
+                // the worker thread and silently freeze synchronization forever.
+                let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     handle_packet(
                         packet,
                         bytes,
@@ -145,21 +241,127 @@ pub fn event_worker_loop(
                         &event_sender,
                         &generation_atomic,
                     );
+                }));
+                if outcome.is_err() {
+                    state.awaiting_baseline();
+                    let _ = event_sender.send(SyncEvent::Error(
+                        "Internal sync error while processing a packet".to_string(),
+                    ));
+                    send_resync_request(
+                        &mut state,
+                        &cmd_sender,
+                        &event_sender,
+                        ResyncReason::ChunkCorrupted,
+                        "Internal sync error; requesting a fresh snapshot...",
+                    );
                 }
             }
             Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
-                if let Ok(mut state) = state_lock.lock() {
+                let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let mut state = lock_state(&state_lock);
+                    check_baseline_watchdog(&mut state, &cmd_sender, &event_sender);
                     check_debounced_remesh(&mut state, &world, &event_sender, &generation_atomic);
+                }));
+                if outcome.is_err() {
+                    let mut state = lock_state(&state_lock);
+                    state.awaiting_baseline();
+                    let _ = event_sender.send(SyncEvent::Error(
+                        "Internal sync error during remeshing".to_string(),
+                    ));
                 }
                 continue;
             }
             Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
         }
 
-        if let Ok(mut state) = state_lock.lock() {
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut state = lock_state(&state_lock);
+            check_baseline_watchdog(&mut state, &cmd_sender, &event_sender);
             check_debounced_remesh(&mut state, &world, &event_sender, &generation_atomic);
+        }));
+        if outcome.is_err() {
+            let mut state = lock_state(&state_lock);
+            state.awaiting_baseline();
+            let _ = event_sender.send(SyncEvent::Error(
+                "Internal sync error during remeshing".to_string(),
+            ));
         }
     }
+}
+
+/// Sends a `RESYNC_REQUEST` at most once per second, preventing livelock storms
+/// when a corrupt or stale baseline keeps arriving.
+fn send_resync_request(
+    state: &mut SessionState,
+    cmd_sender: &Sender<ClientCommand>,
+    event_sender: &Sender<SyncEvent>,
+    reason: ResyncReason,
+    message: &str,
+) {
+    let now = Instant::now();
+    if let Some(last) = state.resync_last_sent {
+        if now.duration_since(last) < Duration::from_millis(900) {
+            return;
+        }
+    }
+    state.resync_last_sent = Some(now);
+    state.last_progress_at = now;
+
+    let resync_pkt = Packet::ResyncRequest {
+        epoch: state.epoch,
+        missing_from_seq: state.sequence,
+        missing_to_seq: state.sequence + 1,
+        reason,
+    };
+    let _ = cmd_sender.send(ClientCommand::Send(encode_packet(&resync_pkt)));
+    let _ = event_sender.send(SyncEvent::StreamProgress {
+        stage: "sync_request".to_string(),
+        current: 0,
+        total: 100,
+        message: message.to_string(),
+    });
+}
+
+/// Aborts the in-flight baseline and returns to the "waiting for BASELINE_BEGIN" state.
+fn abort_baseline(
+    state: &mut SessionState,
+    cmd_sender: &Sender<ClientCommand>,
+    event_sender: &Sender<SyncEvent>,
+    reason: ResyncReason,
+    message: &str,
+) {
+    state.awaiting_baseline();
+    let _ = event_sender.send(SyncEvent::Warning(message.to_string()));
+    send_resync_request(state, cmd_sender, event_sender, reason, message);
+}
+
+/// Detects stalled baselines (server crash, dropped chunk, superseded stream)
+/// and recovers automatically instead of leaving the UI frozen at a mid-progress value.
+fn check_baseline_watchdog(
+    state: &mut SessionState,
+    cmd_sender: &Sender<ClientCommand>,
+    event_sender: &Sender<SyncEvent>,
+) {
+    if state.validation_failures >= 3 {
+        // Repeated hash/sequence failures for the same selection: do not spin
+        // forever at mid-progress. A manual refresh or a new selection resets this.
+        return;
+    }
+    let timeout = match state.lifecycle {
+        SyncLifecycle::ReceivingBaseline => Duration::from_secs(20),
+        SyncLifecycle::ReplayingStaged | SyncLifecycle::ValidatingHash => Duration::from_secs(10),
+        _ => return,
+    };
+    if state.last_progress_at.elapsed() < timeout {
+        return;
+    }
+    abort_baseline(
+        state,
+        cmd_sender,
+        event_sender,
+        ResyncReason::SequenceGap,
+        "Baseline stream stalled; requesting a fresh snapshot...",
+    );
 }
 
 /// Checks and performs throttled incremental dirty remeshing.
@@ -181,7 +383,7 @@ pub fn check_debounced_remesh(
         state.pending_dirty_rebuild = false;
         state.last_mesh_time = Some(Instant::now());
 
-        let mut w = world.write().unwrap();
+        let mut w = lock_world_write(world);
         let _ = w.rebuild_dirty();
         if let Some(wm) = w.get_world_mesh().cloned() {
             let gen = generation_atomic.fetch_add(1, Ordering::SeqCst) + 1;
@@ -211,11 +413,12 @@ pub fn handle_packet(
             server_seq,
             current_min,
             current_size,
-            current_state_hash: _,
+            current_state_hash,
             decision,
             message_or_dimension,
         } => {
             state.server_uuid = server_uuid;
+            state.current_state_hash = current_state_hash;
             state.epoch = epoch;
             state.min_pos = current_min;
             state.size = current_size;
@@ -240,10 +443,17 @@ pub fn handle_packet(
                 dimension: message_or_dimension.clone(),
             });
 
+            // Every WELCOME starts a brand-new synchronization generation.
+            // Never inherit a partially assembled baseline or staged deltas from
+            // a previous connection / selection.
+            state.awaiting_baseline();
+            state.sequence = server_seq;
+
             match decision {
                 SyncDecision::VerifiedSkipRebuild => {
                     // Update sequence and enter LIVE immediately without rebuilding geometry
-                    state.sequence = server_seq;
+                    state.assembler = None;
+                    state.staging.clear();
                     state.lifecycle = SyncLifecycle::Live;
                     let _ = event_sender.send(SyncEvent::Verified {
                         is_verified: true,
@@ -251,8 +461,6 @@ pub fn handle_packet(
                     });
                 }
                 SyncDecision::FullBaselineRequired => {
-                    state.staging.clear();
-                    state.assembler = None;
                     state.lifecycle = SyncLifecycle::ReceivingBaseline;
                     let _ = event_sender.send(SyncEvent::StreamProgress {
                         stage: "sync_download".to_string(),
@@ -262,9 +470,20 @@ pub fn handle_packet(
                     });
                 }
                 SyncDecision::ReplayDeltas => {
+                    // Legacy decision: we cannot replay without a local manifest.
+                    // Ask the server for a fresh baseline instead of stalling.
                     state.lifecycle = SyncLifecycle::ReplayingStaged;
+                    send_resync_request(
+                        state,
+                        cmd_sender,
+                        event_sender,
+                        ResyncReason::StateHashMismatch,
+                        "Local manifest unavailable; requesting a fresh baseline...",
+                    );
                 }
                 SyncDecision::Rejected => {
+                    state.assembler = None;
+                    state.staging.clear();
                     state.lifecycle = SyncLifecycle::Disconnected;
                     let _ = event_sender.send(SyncEvent::Error(format!(
                         "Connection rejected by server: {}",
@@ -275,16 +494,36 @@ pub fn handle_packet(
         }
 
         Packet::BaselineBegin {
+            epoch,
+            snapshot_uuid,
+            snapshot_seq,
             min_pos,
             size,
+            state_hash,
             ref block_palette,
             total_chunks,
             ..
         } => {
+            // Ignore stale baselines from a previous server epoch.
+            if state.epoch != 0 && epoch != state.epoch {
+                return;
+            }
+            if state.min_pos != min_pos || state.size != size {
+                // A genuinely new selection gets a fresh retry budget.
+                state.validation_failures = 0;
+            }
+            state.epoch = epoch;
+            state.current_state_hash = state_hash;
             state.min_pos = min_pos;
             state.size = size;
+            state.sequence = snapshot_seq;
+            state.last_progress_at = Instant::now();
             let _ = event_sender.send(SyncEvent::SelectionUpdated { min_pos, size });
 
+            // Deliberately keep staged deltas: those with seq <= snapshot_seq are
+            // discarded by the replay barrier, while deltas that occurred after the
+            // server captured this snapshot must survive and be replayed on top.
+            // A partially received previous baseline is discarded though.
             state.palette_map.clear();
             for (idx, p) in block_palette.iter().enumerate() {
                 state.palette_map.insert(idx as u16, p.clone());
@@ -304,55 +543,95 @@ pub fn handle_packet(
                 Err(reason) => {
                     let cancel_pkt = Packet::Cancel {
                         epoch: state.epoch,
-                        snapshot_uuid: [0u8; 16],
+                        snapshot_uuid,
                         reason,
                     };
                     let _ = cmd_sender.send(ClientCommand::Send(encode_packet(&cancel_pkt)));
-                    let _ = event_sender.send(SyncEvent::Error(
-                        "Failed initializing baseline stream assembler".to_string(),
-                    ));
+                    state.assembler = None;
+                    state.lifecycle = SyncLifecycle::ReceivingBaseline;
+
+                    let volume = (size.x as i64) * (size.y as i64) * (size.z as i64);
+                    let detail = if volume > MAX_SELECTION_VOLUME as i64 {
+                        format!(
+                            "Selection volume {} exceeds the {} voxel protocol limit; shrink the selection and reconnect.",
+                            volume, MAX_SELECTION_VOLUME
+                        )
+                    } else {
+                        "Invalid baseline bounds received from server.".to_string()
+                    };
+                    let _ = event_sender.send(SyncEvent::Error(detail));
                 }
             }
         }
 
         Packet::BaselineChunk {
+            epoch,
+            snapshot_uuid,
             chunk_index,
             total_chunks,
             ..
         } => {
-            if let Some(ref mut assembler) = state.assembler {
-                match assembler.process_chunk(&packet) {
-                    Ok(()) => {
-                        let _ = event_sender.send(SyncEvent::StreamProgress {
-                            stage: "sync_download".to_string(),
-                            current: (chunk_index + 1) as usize,
-                            total: total_chunks as usize,
-                            message: format!(
-                                "Receiving chunk {}/{}",
-                                chunk_index + 1,
-                                total_chunks
-                            ),
-                        });
-                    }
-                    Err(reason) => {
-                        let resync_pkt = Packet::ResyncRequest {
-                            epoch: state.epoch,
-                            missing_from_seq: state.sequence,
-                            missing_to_seq: state.sequence + 1,
-                            reason,
-                        };
-                        let _ = cmd_sender.send(ClientCommand::Send(encode_packet(&resync_pkt)));
-                    }
+            let Some(ref mut assembler) = state.assembler else {
+                // A chunk without a matching BASELINE_BEGIN belongs to a superseded
+                // stream; ignore it instead of triggering a resync storm.
+                return;
+            };
+
+            // Silently drop chunks from a stale snapshot (e.g. the user moved the
+            // selection while the previous large baseline was still in flight).
+            if epoch != assembler.epoch
+                || snapshot_uuid != assembler.snapshot_uuid
+                || total_chunks != assembler.total_chunks
+            {
+                return;
+            }
+
+            match assembler.process_chunk(&packet) {
+                Ok(()) => {
+                    state.last_progress_at = Instant::now();
+                    let _ = event_sender.send(SyncEvent::StreamProgress {
+                        stage: "sync_download".to_string(),
+                        current: (chunk_index + 1) as usize,
+                        total: total_chunks as usize,
+                        message: format!("Receiving chunk {}/{}", chunk_index + 1, total_chunks),
+                    });
+                }
+                Err(reason) => {
+                    abort_baseline(
+                        state,
+                        cmd_sender,
+                        event_sender,
+                        reason,
+                        "Baseline chunk sequence corrupted; requesting a fresh snapshot...",
+                    );
                 }
             }
         }
 
         Packet::BaselineEnd {
+            epoch,
             snapshot_uuid,
             snapshot_seq,
+            total_chunks_sent,
             ..
         } => {
+            let Some(assembler) = state.assembler.as_ref() else {
+                // BASELINE_END without a matching BEGIN: either a duplicate from a
+                // superseded stream or the result of a cancelled/oversized baseline.
+                return;
+            };
+
+            // Ignore stale snapshot ends instead of resyncing forever.
+            if epoch != assembler.epoch
+                || snapshot_uuid != assembler.snapshot_uuid
+                || snapshot_seq != assembler.snapshot_seq
+                || total_chunks_sent != assembler.total_chunks
+            {
+                return;
+            }
+
             state.lifecycle = SyncLifecycle::ValidatingHash;
+            state.last_progress_at = Instant::now();
             let _ = event_sender.send(SyncEvent::StreamProgress {
                 stage: "sync_meshing".to_string(),
                 current: 50,
@@ -363,9 +642,10 @@ pub fn handle_packet(
             if let Some(assembler) = state.assembler.take() {
                 match assembler.finalize(&packet) {
                     Ok(assembled_storage) => {
+                        state.validation_failures = 0;
                         // 1. Sync assembled VoxelStorage to VoxelWorld
                         {
-                            let mut w = world.write().unwrap();
+                            let mut w = lock_world_write(world);
                             w.sync_from_storage(&assembled_storage);
                         }
 
@@ -380,6 +660,7 @@ pub fn handle_packet(
 
                         // 3. Replay in-flight staged deltas (S + 1 .. latest)
                         state.lifecycle = SyncLifecycle::ReplayingStaged;
+                        let mut replay_gap = false;
                         match state.staging.drain_replaying_after_snapshot(snapshot_seq) {
                             Ok(replayed_packets) => {
                                 let mut current_seq = snapshot_seq;
@@ -399,30 +680,44 @@ pub fn handle_packet(
                                 }
                                 state.sequence = current_seq;
                             }
-                            Err(resync_reason) => {
-                                let resync_pkt = Packet::ResyncRequest {
-                                    epoch: state.epoch,
-                                    missing_from_seq: snapshot_seq + 1,
-                                    missing_to_seq: snapshot_seq + 2,
-                                    reason: resync_reason,
-                                };
-                                let _ = cmd_sender
-                                    .send(ClientCommand::Send(encode_packet(&resync_pkt)));
+                            Err(_) => {
+                                replay_gap = true;
                             }
                         }
 
-                        // 4. Build unified MeshData using parallel Rayon mesher
+                        // 4. Build unified MeshData using parallel Rayon mesher,
+                        //    streaming real per-section progress to the host.
                         state.lifecycle = SyncLifecycle::BuildingMesh;
+                        state.last_progress_at = Instant::now();
                         let _ = event_sender.send(SyncEvent::StreamProgress {
                             stage: "sync_meshing".to_string(),
-                            current: 80,
+                            current: 50,
                             total: 100,
                             message: "Building unified world mesh...".to_string(),
                         });
 
+                        let last_pct = AtomicUsize::new(50);
+                        let progress_cb = |report: mtk_core::ProgressReport| {
+                            let pct = (report.current * 50)
+                                .checked_div(report.total)
+                                .map(|v| v + 50)
+                                .unwrap_or(100);
+                            // Rayon workers may report out of order; only emit
+                            // monotonically increasing progress.
+                            let prev = last_pct.fetch_max(pct, Ordering::SeqCst);
+                            if pct > prev {
+                                let _ = event_sender.send(SyncEvent::StreamProgress {
+                                    stage: "sync_meshing".to_string(),
+                                    current: pct.min(99),
+                                    total: 100,
+                                    message: report.message.clone(),
+                                });
+                            }
+                        };
+
                         let (world_mesh, built_sections) = {
-                            let mut w = world.write().unwrap();
-                            let _ = w.rebuild_all();
+                            let mut w = lock_world_write(world);
+                            let _ = w.rebuild_all_with_progress(Some(&progress_cb));
                             let mesh = w.get_world_mesh().cloned().unwrap_or_default();
                             let count = w.storage.sections.len();
                             (mesh, count)
@@ -435,7 +730,52 @@ pub fn handle_packet(
                         });
                         let _ = event_sender.send(SyncEvent::StreamFinished { built_sections });
 
-                        state.lifecycle = SyncLifecycle::Live;
+                        if replay_gap {
+                            state.awaiting_baseline();
+                            send_resync_request(
+                                state,
+                                cmd_sender,
+                                event_sender,
+                                ResyncReason::SequenceGap,
+                                "Deltas during baseline were not contiguous; verifying against a fresh snapshot...",
+                            );
+                        } else {
+                            state.lifecycle = SyncLifecycle::Live;
+                            state.last_progress_at = Instant::now();
+                            // Deltas may have arrived while the world mesh was built.
+                            // Apply them now and schedule a debounced dirty remesh.
+                            if !state.staging.is_empty() {
+                                if let Ok(replayed_packets) =
+                                    state.staging.drain_replaying_after_snapshot(state.sequence)
+                                {
+                                    for pkt in replayed_packets {
+                                        if let Packet::DeltaOp {
+                                            seq_id, changes, ..
+                                        } = pkt
+                                        {
+                                            state.sequence = seq_id;
+                                            apply_delta_entries_to_world(
+                                                &changes,
+                                                &state.palette_map,
+                                                world,
+                                                state.min_pos,
+                                            );
+                                            state.pending_dirty_rebuild = true;
+                                        }
+                                    }
+                                } else {
+                                    state.pending_dirty_rebuild = false;
+                                    state.awaiting_baseline();
+                                    send_resync_request(
+                                        state,
+                                        cmd_sender,
+                                        event_sender,
+                                        ResyncReason::SequenceGap,
+                                        "Live delta gap detected after snapshot; requesting resync...",
+                                    );
+                                }
+                            }
+                        }
                     }
                     Err(resync_reason) => {
                         let ack_pkt = Packet::BaselineAck {
@@ -446,13 +786,27 @@ pub fn handle_packet(
                         };
                         let _ = cmd_sender.send(ClientCommand::Send(encode_packet(&ack_pkt)));
 
-                        let resync_pkt = Packet::ResyncRequest {
-                            epoch: state.epoch,
-                            missing_from_seq: snapshot_seq,
-                            missing_to_seq: snapshot_seq + 1,
-                            reason: resync_reason,
-                        };
-                        let _ = cmd_sender.send(ClientCommand::Send(encode_packet(&resync_pkt)));
+                        state.validation_failures = state.validation_failures.saturating_add(1);
+                        if state.validation_failures >= 3 {
+                            state.awaiting_baseline();
+                            let _ = event_sender.send(SyncEvent::Error(format!(
+                                "Baseline validation failed {:?} times for this selection;                                  click Refresh or change the Minecraft selection to retry.",
+                                state.validation_failures
+                            )));
+                        } else {
+                            // Hash mismatch / truncated stream: drop the baseline and
+                            // re-request with a rate limit so the UI cannot freeze at 75%.
+                            abort_baseline(
+                                state,
+                                cmd_sender,
+                                event_sender,
+                                resync_reason,
+                                &format!(
+                                    "Baseline validation failed ({:?}); requesting a fresh snapshot...",
+                                    resync_reason
+                                ),
+                            );
+                        }
                     }
                 }
             }
@@ -469,36 +823,48 @@ pub fn handle_packet(
                 return;
             }
 
-            if state.lifecycle == SyncLifecycle::ReceivingBaseline {
-                let _ = state.staging.push(seq_id, packet, bytes_len);
+            // Deltas that arrive while a baseline is being assembled/validated or
+            // while the world mesh is being built must be staged, never dropped.
+            if state.lifecycle != SyncLifecycle::Live {
+                if state.staging.push(seq_id, packet, bytes_len).is_err() {
+                    abort_baseline(
+                        state,
+                        cmd_sender,
+                        event_sender,
+                        ResyncReason::StateHashMismatch,
+                        "Delta staging buffer overflow; requesting a fresh snapshot...",
+                    );
+                }
                 return;
             }
 
-            if state.lifecycle == SyncLifecycle::Live {
-                let expected = state.sequence + 1;
-                if seq_id == expected || state.sequence == 0 {
-                    state.sequence = seq_id;
-                    let affected = apply_delta_entries_to_world(
-                        changes,
-                        &state.palette_map,
-                        world,
-                        state.min_pos,
-                    );
-                    state.pending_dirty_rebuild = true;
-                    let _ = event_sender.send(SyncEvent::DeltaApplied {
-                        change_count: changes.len(),
-                        affected_sections: affected,
-                    });
-                } else if seq_id > expected {
-                    // Sequence Gap detected
-                    let resync_pkt = Packet::ResyncRequest {
-                        epoch: state.epoch,
-                        missing_from_seq: expected,
-                        missing_to_seq: seq_id - 1,
-                        reason: ResyncReason::SequenceGap,
-                    };
-                    let _ = cmd_sender.send(ClientCommand::Send(encode_packet(&resync_pkt)));
-                }
+            let expected = state.sequence + 1;
+            if seq_id == expected || (state.sequence == 0 && seq_id <= expected) {
+                state.sequence = seq_id;
+                let affected =
+                    apply_delta_entries_to_world(changes, &state.palette_map, world, state.min_pos);
+                state.pending_dirty_rebuild = true;
+                state.last_progress_at = Instant::now();
+                let _ = event_sender.send(SyncEvent::DeltaApplied {
+                    change_count: changes.len(),
+                    affected_sections: affected,
+                });
+            } else if seq_id < expected {
+                // Duplicate / already applied delta (e.g. replay overlap). Ignore.
+            } else {
+                // Sequence gap detected: recover from a clean snapshot instead of
+                // silently diverging from the server.
+                state.awaiting_baseline();
+                send_resync_request(
+                    state,
+                    cmd_sender,
+                    event_sender,
+                    ResyncReason::SequenceGap,
+                    &format!(
+                        "Delta sequence gap (expected {}, got {}); resynchronizing...",
+                        expected, seq_id
+                    ),
+                );
             }
         }
 
@@ -516,12 +882,29 @@ pub fn handle_packet(
             }
         }
 
+        Packet::Cancel { reason, .. } => {
+            // Server aborted the current snapshot (selection change / resource limit).
+            state.awaiting_baseline();
+            let _ = event_sender.send(SyncEvent::Warning(format!(
+                "Server cancelled the baseline stream ({:?}); waiting for the next snapshot...",
+                reason
+            )));
+        }
+
         Packet::Ping { timestamp } => {
             let pong = Packet::Pong { timestamp };
             let _ = cmd_sender.send(ClientCommand::Send(encode_packet(&pong)));
         }
 
         Packet::Error { message, .. } => {
+            if matches!(
+                state.lifecycle,
+                SyncLifecycle::ReceivingBaseline
+                    | SyncLifecycle::ValidatingHash
+                    | SyncLifecycle::ReplayingStaged
+            ) {
+                state.awaiting_baseline();
+            }
             let _ = event_sender.send(SyncEvent::Error(message));
         }
 
@@ -548,7 +931,7 @@ fn apply_delta_entries_to_world(
         string_changes.push((abs_x, abs_y, abs_z, state_str));
     }
 
-    let mut w = world.write().unwrap();
+    let mut w = lock_world_write(world);
     w.apply_delta_update(min_pos.x, min_pos.y, min_pos.z, &string_changes);
 
     let mut affected = Vec::new();
@@ -559,4 +942,75 @@ fn apply_delta_entries_to_world(
         }
     }
     affected
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn expect_resync(rx: &Receiver<ClientCommand>) {
+        match rx.try_recv().expect("expected a RESYNC_REQUEST command") {
+            ClientCommand::Send(bytes) => match decode_packet(&bytes).expect("valid packet") {
+                Packet::ResyncRequest { reason, .. } => {
+                    assert_eq!(reason, ResyncReason::SequenceGap);
+                }
+                other => panic!("unexpected packet: {:?}", other),
+            },
+            other => panic!("unexpected command: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_baseline_watchdog_recovers_from_stalled_stream() {
+        let mut state = SessionState::new();
+        state.lifecycle = SyncLifecycle::ReceivingBaseline;
+        state.epoch = 1;
+        state.sequence = 42;
+        state.last_progress_at = Instant::now() - Duration::from_secs(120);
+
+        let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+        let (ev_tx, ev_rx) = crossbeam_channel::unbounded();
+
+        check_baseline_watchdog(&mut state, &cmd_tx, &ev_tx);
+
+        assert_eq!(state.lifecycle, SyncLifecycle::ReceivingBaseline);
+        assert_eq!(state.sequence, 42);
+        expect_resync(&cmd_rx);
+        assert!(ev_rx.try_recv().is_ok());
+    }
+
+    #[test]
+    fn test_baseline_watchdog_is_rate_limited() {
+        let mut state = SessionState::new();
+        state.lifecycle = SyncLifecycle::ReceivingBaseline;
+        state.last_progress_at = Instant::now() - Duration::from_secs(120);
+
+        let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+        let (ev_tx, _ev_rx) = crossbeam_channel::unbounded();
+
+        check_baseline_watchdog(&mut state, &cmd_tx, &ev_tx);
+        // Immediately stall again: the second recovery attempt must be suppressed.
+        state.last_progress_at = Instant::now() - Duration::from_secs(120);
+        check_baseline_watchdog(&mut state, &cmd_tx, &ev_tx);
+
+        expect_resync(&cmd_rx);
+        assert!(
+            cmd_rx.try_recv().is_err(),
+            "resync requests must be rate limited to avoid a livelock"
+        );
+    }
+
+    #[test]
+    fn test_live_state_is_never_touched_by_watchdog() {
+        let mut state = SessionState::new();
+        state.lifecycle = SyncLifecycle::Live;
+        state.last_progress_at = Instant::now() - Duration::from_secs(3600);
+
+        let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+        let (ev_tx, _ev_rx) = crossbeam_channel::unbounded();
+
+        check_baseline_watchdog(&mut state, &cmd_tx, &ev_tx);
+        assert!(cmd_rx.try_recv().is_err());
+        assert_eq!(state.lifecycle, SyncLifecycle::Live);
+    }
 }

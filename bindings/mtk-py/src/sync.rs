@@ -189,6 +189,18 @@ impl PyLiveSyncSession {
         self.inner.current_epoch()
     }
 
+    /// Returns the last server-confirmed canonical world state hash.
+    #[getter]
+    pub fn state_hash(&self) -> u64 {
+        self.inner.current_state_hash()
+    }
+
+    /// Returns the server instance UUID as a 32-character lowercase hex string.
+    #[getter]
+    pub fn server_uuid(&self) -> String {
+        self.inner.server_uuid_hex()
+    }
+
     /// Polls all pending synchronization events from the background Rust engine (non-blocking).
     pub fn poll_events<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
         let events = self.inner.poll_events();
