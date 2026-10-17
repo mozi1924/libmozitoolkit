@@ -263,6 +263,22 @@ impl VoxelWorld {
         crate::source::ingest_from_source(source, &mut self.storage, sections)
     }
 
+    /// Exports manifest metadata (bounds, generation, section CRCs) as JSON.
+    #[cfg(feature = "serde")]
+    pub fn export_manifest_metadata(&self) -> serde_json::Value {
+        self.storage.export_manifest_metadata()
+    }
+
+    /// Imports manifest metadata from JSON to restore persistent scene state.
+    #[cfg(feature = "serde")]
+    pub fn import_manifest_metadata(&mut self, data: &serde_json::Value) -> bool {
+        let ok = self.storage.import_manifest_metadata(data);
+        if ok {
+            self.sync_selection_bounds();
+        }
+        ok
+    }
+
     /// Synchronizes selection bounds if origin centering is enabled.
     fn sync_selection_bounds(&mut self) {
         if self.config.origin_centered {

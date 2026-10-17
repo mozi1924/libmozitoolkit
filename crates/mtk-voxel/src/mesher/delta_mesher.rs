@@ -60,6 +60,8 @@ impl DeltaMesher {
                     config,
                 );
                 results.push((coord, mesh));
+            } else {
+                results.push((coord, MeshData::new()));
             }
         }
 

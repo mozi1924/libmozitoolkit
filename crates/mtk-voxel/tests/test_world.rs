@@ -91,3 +91,63 @@ fn test_voxel_world_clear_cache_and_hot_reload() {
     assert!(world.get_section_cache().is_empty());
     assert!(!world.storage.dirty_sections.is_empty());
 }
+
+#[test]
+fn test_voxel_world_incremental_empty_section_removes_cache() {
+    let mut world = VoxelWorld::new(None, None, None, true);
+    world.set_bounds(0, 0, 0, 32, 16, 16);
+    // Section 0 has 1 block, Section 1 has 1 block
+    world.set_block(0, 0, 0, "minecraft:stone", None);
+    world.set_block(16, 0, 0, "minecraft:stone", None);
+
+    let mesh = world.rebuild_all().unwrap();
+    assert!(!mesh.is_empty());
+    assert_eq!(world.get_section_cache().len(), 2);
+
+    // Completely empty Section 0 by setting to air
+    world.set_block(0, 0, 0, "minecraft:air", None);
+    assert!(world
+        .storage
+        .dirty_sections
+        .contains(&glam::IVec3::new(0, 0, 0)));
+
+    let rebuilt = world.rebuild_dirty().unwrap();
+    // DeltaMesher must return Section 0 as empty MeshData
+    assert!(rebuilt
+        .iter()
+        .any(|(coord, m)| *coord == glam::IVec3::new(0, 0, 0) && m.is_empty()));
+
+    // Crucial check: section_mesh_cache must now ONLY contain Section 1 (Section 0 removed!)
+    assert_eq!(world.get_section_cache().len(), 1);
+    assert!(!world
+        .get_section_cache()
+        .contains_key(&glam::IVec3::new(0, 0, 0)));
+    assert!(world
+        .get_section_cache()
+        .contains_key(&glam::IVec3::new(1, 0, 0)));
+
+    // World mesh must only have geometry from Section 1 (welded cube = 8 vertices)
+    let unified = world.get_world_mesh().unwrap();
+    assert_eq!(unified.vertex_count(), 8);
+}
+
+#[test]
+fn test_voxel_world_manifest_export_import() {
+    let mut world = VoxelWorld::new(None, None, None, true);
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+    world.set_block(0, 0, 0, "minecraft:stone", None);
+    world
+        .storage
+        .calculate_and_store_section_crc(glam::IVec3::new(0, 0, 0));
+    world.rebuild_all().unwrap();
+
+    let meta = world.export_manifest_metadata();
+    assert_eq!(meta["size_x"], 16);
+
+    let mut restored = VoxelWorld::new(None, None, None, true);
+    assert!(restored.import_manifest_metadata(&meta));
+    let (min_x, _, _, sz_x, _, _) = restored.storage.get_bounds();
+    assert_eq!(min_x, 0);
+    assert_eq!(sz_x, 16);
+    assert_eq!(restored.storage.section_crc_map.len(), 1);
+}

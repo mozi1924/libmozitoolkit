@@ -442,3 +442,49 @@ fn test_section_manifest_repair_cooldown() {
     }
     assert!(saw_cooldown_event);
 }
+
+#[test]
+fn test_manifest_restore_instant_validation_no_full_sync() {
+    use glam::IVec3;
+    use mtk_sync::protocol::packet::{ManifestSectionEntry, Packet};
+    use mtk_sync::SyncEvent;
+
+    // 1. Session A builds state and exports manifest
+    let session_a = LiveSyncSession::new(Some(MesherConfig::default()), None, None, true);
+    let crc = {
+        let mut w = session_a.world.write().unwrap();
+        w.set_bounds(0, 0, 0, 16, 16, 16);
+        w.set_block(5, 5, 5, "minecraft:diamond_block", None);
+        w.storage
+            .calculate_and_store_section_crc(IVec3::new(0, 0, 0))
+    };
+    let manifest_meta = session_a.export_manifest_metadata();
+
+    // 2. Session B imports manifest (simulating reconnect with scene metadata)
+    let session_b = LiveSyncSession::new(Some(MesherConfig::default()), None, None, true);
+    assert!(session_b.import_manifest_metadata(&manifest_meta));
+
+    // 3. Dispatch matching SectionManifest from server
+    session_b.process_packet_direct(Packet::SectionManifest {
+        seq_id: 1,
+        sections: vec![ManifestSectionEntry {
+            coord: IVec3::new(0, 0, 0),
+            crc32: crc,
+        }],
+    });
+
+    // 4. Verify: sync_requested must remain false (NO full sync requested!), and event is Verified (100% in sync)
+    assert!(
+        !session_b.is_sync_requested(),
+        "sync_requested must remain false on 0ms instant verification!"
+    );
+
+    let events = session_b.poll_events();
+    let verified_event = events
+        .iter()
+        .find(|e| matches!(e, SyncEvent::Verified { .. }));
+    assert!(verified_event.is_some(), "Must emit Verified event!");
+    if let Some(SyncEvent::Verified { is_verified, .. }) = verified_event {
+        assert!(is_verified, "is_verified must be true!");
+    }
+}

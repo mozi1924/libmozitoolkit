@@ -263,4 +263,23 @@ impl PyLiveSyncSession {
             inner: w.storage.clone(),
         })
     }
+
+    /// Exports manifest metadata (bounds, generation, section CRCs) as JSON string.
+    pub fn export_manifest_metadata(&self) -> PyResult<String> {
+        let w = self.inner.world.read().map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!("World lock poisoned: {}", e))
+        })?;
+        Ok(w.storage.export_manifest_metadata().to_string())
+    }
+
+    /// Imports manifest metadata from JSON string to restore persistent scene state and enable 0ms reconnect verification.
+    pub fn import_manifest_metadata(&self, json_str: &str) -> PyResult<bool> {
+        let val: serde_json::Value = serde_json::from_str(json_str).map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Invalid manifest JSON: {}", e))
+        })?;
+        let mut w = self.inner.world.write().map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!("World lock poisoned: {}", e))
+        })?;
+        Ok(w.import_manifest_metadata(&val))
+    }
 }

@@ -88,19 +88,23 @@ pub fn event_worker_loop(
                     last_mesh_dispatch_time = Some(std::time::Instant::now());
                     sync_requested.store(false, Ordering::SeqCst);
                     last_sync_request_time = None;
-                    let (unified, world_mesh) = {
+                    let (rebuilt, unified, world_mesh) = {
                         let mut w = world.write().unwrap();
-                        let _ = w.rebuild_dirty();
+                        let r = w.rebuild_dirty().unwrap_or_default();
                         let wm = if w.unified_mesh {
                             w.get_world_mesh().cloned()
                         } else {
                             None
                         };
-                        (w.unified_mesh, wm)
+                        (r, w.unified_mesh, wm)
                     };
                     if unified {
                         if let Some(mesh) = world_mesh {
                             let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
+                        }
+                    } else {
+                        for (coord, mesh) in rebuilt {
+                            let _ = event_sender.send(SyncEvent::SectionMeshReady { coord, mesh });
                         }
                     }
                 }
@@ -145,19 +149,23 @@ pub fn event_worker_loop(
             last_mesh_dispatch_time = Some(std::time::Instant::now());
             sync_requested.store(false, Ordering::SeqCst);
             last_sync_request_time = None;
-            let (unified, world_mesh) = {
+            let (rebuilt, unified, world_mesh) = {
                 let mut w = world.write().unwrap();
-                let _ = w.rebuild_dirty();
+                let r = w.rebuild_dirty().unwrap_or_default();
                 let wm = if w.unified_mesh {
                     w.get_world_mesh().cloned()
                 } else {
                     None
                 };
-                (w.unified_mesh, wm)
+                (r, w.unified_mesh, wm)
             };
             if unified {
                 if let Some(mesh) = world_mesh {
                     let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
+                }
+            } else {
+                for (coord, mesh) in rebuilt {
+                    let _ = event_sender.send(SyncEvent::SectionMeshReady { coord, mesh });
                 }
             }
         }
@@ -496,11 +504,12 @@ pub fn handle_packet(
                 .map(|s| (s.coord.x, s.coord.y, s.coord.z, s.crc32))
                 .collect();
 
-            let (mismatched, is_storage_empty) = {
+            let (mismatched, has_known_manifest, is_storage_empty) = {
                 let mut w = world.write().unwrap();
                 let mismatches = w.storage.validate_manifest(&raw_entries, None);
+                let known = !w.storage.section_crc_map.is_empty();
                 let empty = w.storage.get_all_non_empty_sections().is_empty();
-                (mismatches, empty)
+                (mismatches, known, empty)
             };
 
             let is_streaming = stream_id_atomic.load(Ordering::SeqCst) != 0;
@@ -586,7 +595,9 @@ pub fn handle_packet(
 
                     if let Some(sender) = cmd_sender {
                         if !sync_requested.load(Ordering::SeqCst) {
-                            if is_storage_empty || eligible_repairs.len() == raw_entries.len() {
+                            if (is_storage_empty && !has_known_manifest)
+                                || eligible_repairs.len() == raw_entries.len()
+                            {
                                 let _ =
                                     sender.send(ClientCommand::Send(encode_full_sync_request()));
                                 sync_requested.store(true, Ordering::SeqCst);

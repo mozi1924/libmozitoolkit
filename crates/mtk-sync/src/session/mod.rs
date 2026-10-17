@@ -99,6 +99,18 @@ impl LiveSyncSession {
         w.clear_cache();
     }
 
+    /// Exports manifest metadata (bounds, generation, section CRCs) as JSON value.
+    #[cfg(feature = "serde")]
+    pub fn export_manifest_metadata(&self) -> serde_json::Value {
+        self.world.read().unwrap().export_manifest_metadata()
+    }
+
+    /// Imports manifest metadata from JSON value to restore persistent scene state.
+    #[cfg(feature = "serde")]
+    pub fn import_manifest_metadata(&self, data: &serde_json::Value) -> bool {
+        self.world.write().unwrap().import_manifest_metadata(data)
+    }
+
     /// Returns whether the background sync session worker is actively running.
     pub fn is_active(&self) -> bool {
         self.worker_running.load(Ordering::SeqCst)
@@ -112,6 +124,11 @@ impl LiveSyncSession {
     /// Returns the current connection status string ("CONNECTED", "CONNECTING...", "DISCONNECTED", etc.).
     pub fn status(&self) -> String {
         self.status.read().unwrap().clone()
+    }
+
+    /// Returns whether a full sync or repair request has been dispatched to server.
+    pub fn is_sync_requested(&self) -> bool {
+        self.sync_requested.load(Ordering::SeqCst)
     }
 
     /// Starts the live sync session connecting to the given WebSocket `url`.
