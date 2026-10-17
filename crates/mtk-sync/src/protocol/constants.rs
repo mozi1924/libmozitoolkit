@@ -1,90 +1,209 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Protocol magic header bytes: 'M' (0x4D), 'C' (0x43).
-pub const PROTOCOL_MAGIC: [u8; 2] = [0x4D, 0x43];
+/// Protocol magic header bytes: 'M' (0x4D), 'T' (0x54).
+pub const PROTOCOL_MAGIC: [u8; 2] = [0x4D, 0x54];
 
-/// Canonical protocol version number (Version 2, aligned with Yefira Mod).
-pub const PROTOCOL_VERSION: u8 = 0x02;
-
-/// Minimum and maximum supported protocol versions for backward & forward compatibility.
-pub const MIN_SUPPORTED_PROTOCOL_VERSION: u8 = 0x01;
-pub const MAX_SUPPORTED_PROTOCOL_VERSION: u8 = 0x02;
+/// Canonical protocol version number (Version 3.1, Protocol v3).
+pub const PROTOCOL_VERSION: u8 = 0x03;
 
 /// Checks whether the given protocol version byte is supported.
 #[inline]
 pub fn is_supported_protocol_version(version: u8) -> bool {
-    (MIN_SUPPORTED_PROTOCOL_VERSION..=MAX_SUPPORTED_PROTOCOL_VERSION).contains(&version)
+    version == PROTOCOL_VERSION
 }
 
-/// Packet Type IDs.
+/// Standard 4-byte header size: Magic(2) + Version(1) + Opcode(1).
+pub const HEADER_SIZE: usize = 4;
+
+/// Resource limit guards (RFC Section 2.2).
+pub const MAX_MESSAGE_SIZE: usize = 512 * 1024; // 512 KiB max message frame size
+pub const MAX_PALETTE_STRING_BYTES: usize = 1024;
+pub const MAX_PALETTE_ENTRIES: usize = 65535;
+pub const TOTAL_PALETTE_STRING_BYTES: usize = 4 * 1024 * 1024; // 4 MiB
+pub const MAX_BASELINE_ENCODED_BYTES: usize = 64 * 1024 * 1024; // 64 MiB
+pub const MAX_BASELINE_DECODED_BYTES: usize = 256 * 1024 * 1024; // 256 MiB
+pub const MAX_SELECTION_VOLUME: u64 = 33_554_432; // 32M voxels
+pub const MAX_DELTA_BATCH_CHANGES: usize = 16384;
+pub const MAX_DELTA_STAGING_BATCHES: usize = 256;
+
+/// Protocol Opcode enumeration (RFC Section 4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(u8)]
-pub enum PacketType {
-    // S -> C Packets (Server to Client)
-    SelectionInfo = 0x01,
-    FullSnapshot = 0x02,
-    DeltaUpdate = 0x03,
-    SectionManifest = 0x05,
-    SectionSnapshot = 0x06,
-    HandshakeInfo = 0x07,
-    StreamBegin = 0x08,
-    StreamEnd = 0x09,
-
-    // C -> S Packets (Client to Server)
-    ReqFullSync = 0x80,
-    ReqSectionSync = 0x81,
-    SyncConfig = 0x82,
+pub enum Opcode {
+    /// 0x01: Client Handshake Initiation (C -> S)
+    Hello = 0x01,
+    /// 0x02: Server Handshake Response (S -> C)
+    Welcome = 0x02,
+    /// 0x03: Full Baseline Header Metadata (S -> C)
+    BaselineBegin = 0x03,
+    /// 0x04: Baseline Voxel Chunk Stream (S -> C)
+    BaselineChunk = 0x04,
+    /// 0x05: Baseline Finished Notification (S -> C)
+    BaselineEnd = 0x05,
+    /// 0x06: Baseline Client Commit Acknowledgment (C -> S)
+    BaselineAck = 0x06,
+    /// 0x07: Incremental Block Delta Batch (S -> C)
+    DeltaOp = 0x07,
+    /// 0x08: Dynamic Palette Append (S -> C)
+    PaletteUpdate = 0x08,
+    /// 0x09: State Verification Request (Bidirectional)
+    StateVerifyReq = 0x09,
+    /// 0x0A: State Verification Response (Bidirectional)
+    StateVerifyResp = 0x0A,
+    /// 0x0B: Task / Session Cancellation (Bidirectional)
+    Cancel = 0x0B,
+    /// 0x0D: Resync and Gap Recovery Request (C -> S)
+    ResyncRequest = 0x0D,
+    /// 0x0E: Keepalive Ping (Bidirectional)
+    Ping = 0x0E,
+    /// 0x0F: Keepalive Pong (Bidirectional)
+    Pong = 0x0F,
+    /// 0x10: Diagnostic Error Response (Bidirectional)
+    Error = 0x10,
 }
 
-impl PacketType {
+impl Opcode {
     pub fn from_u8(val: u8) -> Option<Self> {
         match val {
-            0x01 => Some(PacketType::SelectionInfo),
-            0x02 => Some(PacketType::FullSnapshot),
-            0x03 => Some(PacketType::DeltaUpdate),
-            0x05 => Some(PacketType::SectionManifest),
-            0x06 => Some(PacketType::SectionSnapshot),
-            0x07 => Some(PacketType::HandshakeInfo),
-            0x08 => Some(PacketType::StreamBegin),
-            0x09 => Some(PacketType::StreamEnd),
-            0x80 => Some(PacketType::ReqFullSync),
-            0x81 => Some(PacketType::ReqSectionSync),
-            0x82 => Some(PacketType::SyncConfig),
+            0x01 => Some(Opcode::Hello),
+            0x02 => Some(Opcode::Welcome),
+            0x03 => Some(Opcode::BaselineBegin),
+            0x04 => Some(Opcode::BaselineChunk),
+            0x05 => Some(Opcode::BaselineEnd),
+            0x06 => Some(Opcode::BaselineAck),
+            0x07 => Some(Opcode::DeltaOp),
+            0x08 => Some(Opcode::PaletteUpdate),
+            0x09 => Some(Opcode::StateVerifyReq),
+            0x0A => Some(Opcode::StateVerifyResp),
+            0x0B => Some(Opcode::Cancel),
+            0x0D => Some(Opcode::ResyncRequest),
+            0x0E => Some(Opcode::Ping),
+            0x0F => Some(Opcode::Pong),
+            0x10 => Some(Opcode::Error),
             _ => None,
         }
     }
 }
 
-// Fixed Header and Payload Sizes (in bytes)
-pub const HEADER_SIZE: usize = 4; // Magic(2) + Version(1) + Type(1)
-pub const SELECTION_INFO_SIZE: usize = 24; // 6 * i32
-pub const DELTA_HEADER_SIZE: usize = 18; // seq_id(u32) + min_x..z(3*i32) + count(u16)
-pub const DELTA_CHANGE_PREFIX_SIZE: usize = 8; // rel_x..z(3*u16) + str_len(u16)
-pub const MANIFEST_HEADER_SIZE: usize = 8; // seq_id(u32) + count(u32)
-pub const MANIFEST_ENTRY_SIZE: usize = 16; // sec_x..z(3*i32) + crc32(u32)
-pub const SECTION_SNAPSHOT_HEADER_SIZE: usize = 38; // sec_x..z(3*i32) + start_x..z(3*i32) + size_x..z(3*i32) + palette_count(u16)
-pub const HANDSHAKE_INFO_HEADER_SIZE: usize = 14; // total_sec(u32) + non_empty_sec(u32) + volume(u32) + dim_len(u16)
-pub const STREAM_BEGIN_SIZE: usize = 10; // stream_id(u32) + total_sec(u32) + flags(u16)
-pub const STREAM_END_SIZE: usize = 10; // stream_id(u32) + sent_sec(u32) + status(u16)
-
-/// Stream status codes reported in `StreamEnd`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// SyncDecision returned in WELCOME response (RFC Section 4.2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[repr(u16)]
-pub enum StreamStatus {
-    Success = 0,
-    Cancelled = 1,
-    Error = 2,
+#[repr(u8)]
+pub enum SyncDecision {
+    VerifiedSkipRebuild = 0x00,
+    ReplayDeltas = 0x01,
+    FullBaselineRequired = 0x02,
+    Rejected = 0xFF,
 }
 
-impl StreamStatus {
-    pub fn from_u16(val: u16) -> Self {
+impl SyncDecision {
+    pub fn from_u8(val: u8) -> Option<Self> {
         match val {
-            0 => StreamStatus::Success,
-            1 => StreamStatus::Cancelled,
-            _ => StreamStatus::Error,
+            0x00 => Some(SyncDecision::VerifiedSkipRebuild),
+            0x01 => Some(SyncDecision::ReplayDeltas),
+            0x02 => Some(SyncDecision::FullBaselineRequired),
+            0xFF => Some(SyncDecision::Rejected),
+            _ => None,
+        }
+    }
+}
+
+/// Baseline ACK result code (RFC Section 4.6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[repr(u8)]
+pub enum BaselineAckResult {
+    SuccessCommitted = 0x00,
+    ValidationFailed = 0x01,
+    BufferOverflow = 0x02,
+}
+
+impl BaselineAckResult {
+    pub fn from_u8(val: u8) -> Option<Self> {
+        match val {
+            0x00 => Some(BaselineAckResult::SuccessCommitted),
+            0x01 => Some(BaselineAckResult::ValidationFailed),
+            0x02 => Some(BaselineAckResult::BufferOverflow),
+            _ => None,
+        }
+    }
+}
+
+/// Cancel reason code (RFC Section 4.12).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[repr(u8)]
+pub enum CancelReason {
+    SelectionChanged = 0x01,
+    UserAbort = 0x02,
+    ReasonBadChunk = 0x03,
+    Timeout = 0x04,
+}
+
+impl CancelReason {
+    pub fn from_u8(val: u8) -> Option<Self> {
+        match val {
+            0x01 => Some(CancelReason::SelectionChanged),
+            0x02 => Some(CancelReason::UserAbort),
+            0x03 => Some(CancelReason::ReasonBadChunk),
+            0x04 => Some(CancelReason::Timeout),
+            _ => None,
+        }
+    }
+}
+
+/// Resync request reason code (RFC Section 4.9).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[repr(u8)]
+pub enum ResyncReason {
+    SequenceGap = 0x01,
+    PaletteRevisionMismatch = 0x02,
+    StateHashMismatch = 0x03,
+    ChunkCorrupted = 0x04,
+}
+
+impl ResyncReason {
+    pub fn from_u8(val: u8) -> Option<Self> {
+        match val {
+            0x01 => Some(ResyncReason::SequenceGap),
+            0x02 => Some(ResyncReason::PaletteRevisionMismatch),
+            0x03 => Some(ResyncReason::StateHashMismatch),
+            0x04 => Some(ResyncReason::ChunkCorrupted),
+            _ => None,
+        }
+    }
+}
+
+/// Protocol Error code (RFC Section 4.14).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[repr(u16)]
+pub enum ErrorCode {
+    UnsupportedVersion = 0x0001,
+    InvalidBounds = 0x0002,
+    SequenceGapUnrecoverable = 0x0003,
+    ChecksumMismatch = 0x0004,
+    ResourceLimitExceeded = 0x0005,
+    PermissionDenied = 0x0006,
+    UnknownOpcode = 0x0007,
+    InvalidPalette = 0x0008,
+}
+
+impl ErrorCode {
+    pub fn from_u16(val: u16) -> Option<Self> {
+        match val {
+            0x0001 => Some(ErrorCode::UnsupportedVersion),
+            0x0002 => Some(ErrorCode::InvalidBounds),
+            0x0003 => Some(ErrorCode::SequenceGapUnrecoverable),
+            0x0004 => Some(ErrorCode::ChecksumMismatch),
+            0x0005 => Some(ErrorCode::ResourceLimitExceeded),
+            0x0006 => Some(ErrorCode::PermissionDenied),
+            0x0007 => Some(ErrorCode::UnknownOpcode),
+            0x0008 => Some(ErrorCode::InvalidPalette),
+            _ => None,
         }
     }
 }

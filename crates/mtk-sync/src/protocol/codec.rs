@@ -1,640 +1,873 @@
-//! # Binary Packet Codec for Live Sync
+//! # Protocol Codec Implementation (RFC v3.1)
 //!
-//! High-performance Little-Endian binary packet decoder and encoder.
+//! Encodes and decodes strongly-typed `Packet`s to and from little-endian binary buffers.
 
 use glam::IVec3;
+use xxhash_rust::xxh64::Xxh64;
 
 use super::constants::*;
 use super::error::ProtocolError;
 use super::packet::*;
 
-/// Computes `size_x * size_y * size_z` with checked arithmetic.
-///
-/// Network-supplied dimensions are untrusted: a malicious or corrupt packet can
-/// trigger an `i32` overflow (which panics in debug builds) or request an
-/// astronomically large allocation. Negative or overflowing volumes are rejected.
-fn checked_block_volume(size_x: i32, size_y: i32, size_z: i32) -> Result<usize, ProtocolError> {
-    (size_x as i64)
-        .checked_mul(size_y as i64)
-        .and_then(|v| v.checked_mul(size_z as i64))
-        .filter(|&v| v >= 0 && (v as u64) <= usize::MAX as u64)
-        .map(|v| v as usize)
-        .ok_or(ProtocolError::InvalidDimensions(size_x, size_y, size_z))
+/// Computes the xxHash64 checksum for delta batch payload.
+pub fn compute_delta_batch_hash(changes: &[DeltaChangeEntry]) -> u64 {
+    let mut hasher = Xxh64::new(0);
+    for entry in changes {
+        hasher.update(&entry.rel_pos.x.to_le_bytes());
+        hasher.update(&entry.rel_pos.y.to_le_bytes());
+        hasher.update(&entry.rel_pos.z.to_le_bytes());
+        hasher.update(&entry.state_id.to_le_bytes());
+    }
+    hasher.digest()
 }
 
-/// Decodes a flat grid of `count` palette indices of `bytes_per_index` bytes each.
-///
-/// Validates the payload length *before* allocating so a forged `size` header cannot
-/// force a multi-gigabyte allocation. Returns the decoded indices and the next offset.
-fn decode_block_grid(
-    data: &[u8],
-    offset: usize,
-    count: usize,
-    bytes_per_index: u8,
+/// Helper to read a little-endian u16-length prefixed UTF-8 string.
+fn read_str<'a>(
+    buf: &'a [u8],
+    offset: &mut usize,
     field: &'static str,
-) -> Result<(Vec<u16>, usize), ProtocolError> {
-    let bp = bytes_per_index as usize;
-    // `count` can be at most `i64::MAX`, so `count * bp` may exceed `usize::MAX`.
-    let needed = count
-        .checked_mul(bp)
-        .ok_or(ProtocolError::TruncatedPayload { field })?;
-    let end = offset
-        .checked_add(needed)
-        .filter(|&end| end <= data.len())
-        .ok_or(ProtocolError::TruncatedPayload { field })?;
-
-    let mut out = Vec::with_capacity(count);
-    if bp == 1 {
-        for &b in &data[offset..end] {
-            out.push(b as u16);
+) -> Result<&'a str, ProtocolError> {
+    if *offset + 2 > buf.len() {
+        return Err(ProtocolError::TruncatedPayload { field });
+    }
+    let len = u16::from_le_bytes([buf[*offset], buf[*offset + 1]]) as usize;
+    *offset += 2;
+    if *offset + len > buf.len() {
+        return Err(ProtocolError::TruncatedPayload { field });
+    }
+    let s = std::str::from_utf8(&buf[*offset..*offset + len]).map_err(|e| {
+        ProtocolError::Utf8Error {
+            field,
+            detail: e.to_string(),
         }
-    } else {
-        for i in 0..count {
-            let start = offset + i * 2;
-            out.push(u16::from_le_bytes(
-                data[start..start + 2].try_into().unwrap(),
-            ));
+    })?;
+    *offset += len;
+    Ok(s)
+}
+
+/// Helper to write a little-endian u16-length prefixed string.
+fn write_str(buf: &mut Vec<u8>, s: &str) {
+    let bytes = s.as_bytes();
+    buf.extend_from_slice(&(bytes.len() as u16).to_le_bytes());
+    buf.extend_from_slice(bytes);
+}
+
+/// Encodes any `Packet` into a complete WebSocket binary payload with standard 4-byte header.
+pub fn encode_packet(packet: &Packet) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(64);
+    buf.extend_from_slice(&PROTOCOL_MAGIC);
+    buf.push(PROTOCOL_VERSION);
+
+    match packet {
+        Packet::Hello {
+            min_version,
+            max_version,
+            capabilities,
+            flags,
+            cached_world_uuid,
+            cached_epoch,
+            cached_seq,
+            cached_min,
+            cached_size,
+            cached_state_hash,
+            auth_token,
+            cached_dimension,
+        } => {
+            buf.push(Opcode::Hello as u8);
+            buf.extend_from_slice(&min_version.to_le_bytes());
+            buf.extend_from_slice(&max_version.to_le_bytes());
+            buf.extend_from_slice(&capabilities.to_le_bytes());
+            buf.extend_from_slice(&flags.to_le_bytes());
+            buf.extend_from_slice(cached_world_uuid);
+            buf.extend_from_slice(&cached_epoch.to_le_bytes());
+            buf.extend_from_slice(&cached_seq.to_le_bytes());
+            buf.extend_from_slice(&cached_min.x.to_le_bytes());
+            buf.extend_from_slice(&cached_min.y.to_le_bytes());
+            buf.extend_from_slice(&cached_min.z.to_le_bytes());
+            buf.extend_from_slice(&cached_size.x.to_le_bytes());
+            buf.extend_from_slice(&cached_size.y.to_le_bytes());
+            buf.extend_from_slice(&cached_size.z.to_le_bytes());
+            buf.extend_from_slice(&cached_state_hash.to_le_bytes());
+            write_str(&mut buf, auth_token);
+            write_str(&mut buf, cached_dimension);
+        }
+
+        Packet::Welcome {
+            negotiated_version,
+            server_uuid,
+            epoch,
+            server_seq,
+            current_min,
+            current_size,
+            current_state_hash,
+            decision,
+            message_or_dimension,
+        } => {
+            buf.push(Opcode::Welcome as u8);
+            buf.extend_from_slice(&negotiated_version.to_le_bytes());
+            buf.extend_from_slice(server_uuid);
+            buf.extend_from_slice(&epoch.to_le_bytes());
+            buf.extend_from_slice(&server_seq.to_le_bytes());
+            buf.extend_from_slice(&current_min.x.to_le_bytes());
+            buf.extend_from_slice(&current_min.y.to_le_bytes());
+            buf.extend_from_slice(&current_min.z.to_le_bytes());
+            buf.extend_from_slice(&current_size.x.to_le_bytes());
+            buf.extend_from_slice(&current_size.y.to_le_bytes());
+            buf.extend_from_slice(&current_size.z.to_le_bytes());
+            buf.extend_from_slice(&current_state_hash.to_le_bytes());
+            buf.push(*decision as u8);
+            write_str(&mut buf, message_or_dimension);
+        }
+
+        Packet::BaselineBegin {
+            epoch,
+            snapshot_uuid,
+            snapshot_seq,
+            min_pos,
+            size,
+            state_hash,
+            palette_revision,
+            total_chunks,
+            total_encoded_bytes,
+            total_decoded_bytes,
+            compression_mode,
+            palette_bits_per_block,
+            biome_bits_per_quart,
+            dimension,
+            block_palette,
+            biome_palette,
+        } => {
+            buf.push(Opcode::BaselineBegin as u8);
+            buf.extend_from_slice(&epoch.to_le_bytes());
+            buf.extend_from_slice(snapshot_uuid);
+            buf.extend_from_slice(&snapshot_seq.to_le_bytes());
+            buf.extend_from_slice(&min_pos.x.to_le_bytes());
+            buf.extend_from_slice(&min_pos.y.to_le_bytes());
+            buf.extend_from_slice(&min_pos.z.to_le_bytes());
+            buf.extend_from_slice(&size.x.to_le_bytes());
+            buf.extend_from_slice(&size.y.to_le_bytes());
+            buf.extend_from_slice(&size.z.to_le_bytes());
+            buf.extend_from_slice(&state_hash.to_le_bytes());
+            buf.extend_from_slice(&palette_revision.to_le_bytes());
+            buf.extend_from_slice(&total_chunks.to_le_bytes());
+            buf.extend_from_slice(&total_encoded_bytes.to_le_bytes());
+            buf.extend_from_slice(&total_decoded_bytes.to_le_bytes());
+            buf.push(*compression_mode);
+            buf.push(*palette_bits_per_block);
+            buf.push(*biome_bits_per_quart);
+            write_str(&mut buf, dimension);
+
+            buf.extend_from_slice(&(block_palette.len() as u32).to_le_bytes());
+            for p in block_palette {
+                write_str(&mut buf, p);
+            }
+
+            buf.extend_from_slice(&(biome_palette.len() as u16).to_le_bytes());
+            for b in biome_palette {
+                write_str(&mut buf, b);
+            }
+        }
+
+        Packet::BaselineChunk {
+            epoch,
+            snapshot_uuid,
+            chunk_index,
+            total_chunks,
+            first_voxel_index,
+            voxel_count,
+            payload_len: _,
+            decoded_target_bytes,
+            chunk_xxhash64,
+            payload,
+        } => {
+            buf.push(Opcode::BaselineChunk as u8);
+            buf.extend_from_slice(&epoch.to_le_bytes());
+            buf.extend_from_slice(snapshot_uuid);
+            buf.extend_from_slice(&chunk_index.to_le_bytes());
+            buf.extend_from_slice(&total_chunks.to_le_bytes());
+            buf.extend_from_slice(&first_voxel_index.to_le_bytes());
+            buf.extend_from_slice(&voxel_count.to_le_bytes());
+            buf.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+            buf.extend_from_slice(&decoded_target_bytes.to_le_bytes());
+            buf.extend_from_slice(&chunk_xxhash64.to_le_bytes());
+            buf.extend_from_slice(payload);
+        }
+
+        Packet::BaselineEnd {
+            epoch,
+            snapshot_uuid,
+            snapshot_seq,
+            total_chunks_sent,
+            final_state_hash,
+            status,
+        } => {
+            buf.push(Opcode::BaselineEnd as u8);
+            buf.extend_from_slice(&epoch.to_le_bytes());
+            buf.extend_from_slice(snapshot_uuid);
+            buf.extend_from_slice(&snapshot_seq.to_le_bytes());
+            buf.extend_from_slice(&total_chunks_sent.to_le_bytes());
+            buf.extend_from_slice(&final_state_hash.to_le_bytes());
+            buf.push(*status);
+        }
+
+        Packet::BaselineAck {
+            epoch,
+            snapshot_uuid,
+            committed_seq,
+            result_code,
+        } => {
+            buf.push(Opcode::BaselineAck as u8);
+            buf.extend_from_slice(&epoch.to_le_bytes());
+            buf.extend_from_slice(snapshot_uuid);
+            buf.extend_from_slice(&committed_seq.to_le_bytes());
+            buf.push(*result_code as u8);
+        }
+
+        Packet::DeltaOp {
+            epoch,
+            seq_id,
+            palette_revision,
+            count: _,
+            batch_xxhash64,
+            changes,
+        } => {
+            buf.push(Opcode::DeltaOp as u8);
+            buf.extend_from_slice(&epoch.to_le_bytes());
+            buf.extend_from_slice(&seq_id.to_le_bytes());
+            buf.extend_from_slice(&palette_revision.to_le_bytes());
+            buf.extend_from_slice(&(changes.len() as u16).to_le_bytes());
+            buf.extend_from_slice(&batch_xxhash64.to_le_bytes());
+            for c in changes {
+                buf.extend_from_slice(&c.rel_pos.x.to_le_bytes());
+                buf.extend_from_slice(&c.rel_pos.y.to_le_bytes());
+                buf.extend_from_slice(&c.rel_pos.z.to_le_bytes());
+                buf.extend_from_slice(&c.state_id.to_le_bytes());
+            }
+        }
+
+        Packet::PaletteUpdate {
+            epoch,
+            seq_id,
+            base_revision,
+            new_revision,
+            entries,
+        } => {
+            buf.push(Opcode::PaletteUpdate as u8);
+            buf.extend_from_slice(&epoch.to_le_bytes());
+            buf.extend_from_slice(&seq_id.to_le_bytes());
+            buf.extend_from_slice(&base_revision.to_le_bytes());
+            buf.extend_from_slice(&new_revision.to_le_bytes());
+            buf.extend_from_slice(&(entries.len() as u16).to_le_bytes());
+            for (id, s) in entries {
+                buf.extend_from_slice(&id.to_le_bytes());
+                write_str(&mut buf, s);
+            }
+        }
+
+        Packet::StateVerifyReq {
+            epoch,
+            sequence,
+            state_hash,
+        } => {
+            buf.push(Opcode::StateVerifyReq as u8);
+            buf.extend_from_slice(&epoch.to_le_bytes());
+            buf.extend_from_slice(&sequence.to_le_bytes());
+            buf.extend_from_slice(&state_hash.to_le_bytes());
+        }
+
+        Packet::StateVerifyResp {
+            epoch,
+            sequence,
+            is_match,
+        } => {
+            buf.push(Opcode::StateVerifyResp as u8);
+            buf.extend_from_slice(&epoch.to_le_bytes());
+            buf.extend_from_slice(&sequence.to_le_bytes());
+            buf.push(if *is_match { 1 } else { 0 });
+        }
+
+        Packet::Cancel {
+            epoch,
+            snapshot_uuid,
+            reason,
+        } => {
+            buf.push(Opcode::Cancel as u8);
+            buf.extend_from_slice(&epoch.to_le_bytes());
+            buf.extend_from_slice(snapshot_uuid);
+            buf.push(*reason as u8);
+        }
+
+        Packet::ResyncRequest {
+            epoch,
+            missing_from_seq,
+            missing_to_seq,
+            reason,
+        } => {
+            buf.push(Opcode::ResyncRequest as u8);
+            buf.extend_from_slice(&epoch.to_le_bytes());
+            buf.extend_from_slice(&missing_from_seq.to_le_bytes());
+            buf.extend_from_slice(&missing_to_seq.to_le_bytes());
+            buf.push(*reason as u8);
+        }
+
+        Packet::Ping { timestamp } => {
+            buf.push(Opcode::Ping as u8);
+            buf.extend_from_slice(&timestamp.to_le_bytes());
+        }
+
+        Packet::Pong { timestamp } => {
+            buf.push(Opcode::Pong as u8);
+            buf.extend_from_slice(&timestamp.to_le_bytes());
+        }
+
+        Packet::Error {
+            epoch,
+            error_code,
+            message,
+        } => {
+            buf.push(Opcode::Error as u8);
+            buf.extend_from_slice(&epoch.to_le_bytes());
+            buf.extend_from_slice(&(*error_code as u16).to_le_bytes());
+            write_str(&mut buf, message);
         }
     }
-    Ok((out, end))
+
+    buf
 }
 
-/// Decodes a raw binary WebSocket frame into a strongly-typed `Packet`.
-pub fn decode_packet(data: &[u8]) -> Result<Packet, ProtocolError> {
-    if data.len() < HEADER_SIZE {
+/// Decodes binary buffer into a strongly typed `Packet`.
+pub fn decode_packet(buf: &[u8]) -> Result<Packet, ProtocolError> {
+    if buf.len() < HEADER_SIZE {
         return Err(ProtocolError::PacketTooShort {
             expected: HEADER_SIZE,
-            actual: data.len(),
+            actual: buf.len(),
         });
     }
 
-    let magic = [data[0], data[1]];
-    if magic != PROTOCOL_MAGIC {
-        return Err(ProtocolError::InvalidMagic(data[0], data[1]));
+    if buf[0] != PROTOCOL_MAGIC[0] || buf[1] != PROTOCOL_MAGIC[1] {
+        return Err(ProtocolError::InvalidMagic(buf[0], buf[1]));
     }
 
-    let version = data[2];
+    let version = buf[2];
     if !is_supported_protocol_version(version) {
         return Err(ProtocolError::UnsupportedVersion(version));
     }
 
-    let packet_type_raw = data[3];
-    let packet_type = PacketType::from_u8(packet_type_raw)
-        .ok_or(ProtocolError::UnknownPacketType(packet_type_raw))?;
+    let opcode_byte = buf[3];
+    let opcode = Opcode::from_u8(opcode_byte).ok_or(ProtocolError::UnknownOpcode(opcode_byte))?;
 
     let mut offset = HEADER_SIZE;
 
-    match packet_type {
-        PacketType::SelectionInfo => {
-            if data.len() < offset + SELECTION_INFO_SIZE {
-                return Err(ProtocolError::PacketTooShort {
-                    expected: offset + SELECTION_INFO_SIZE,
-                    actual: data.len(),
-                });
-            }
-            let min_x = i32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
-            let min_y = i32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap());
-            let min_z = i32::from_le_bytes(data[offset + 8..offset + 12].try_into().unwrap());
-            let size_x = i32::from_le_bytes(data[offset + 12..offset + 16].try_into().unwrap());
-            let size_y = i32::from_le_bytes(data[offset + 16..offset + 20].try_into().unwrap());
-            let size_z = i32::from_le_bytes(data[offset + 20..offset + 24].try_into().unwrap());
-
-            Ok(Packet::SelectionInfo {
-                min_pos: IVec3::new(min_x, min_y, min_z),
-                size: IVec3::new(size_x, size_y, size_z),
-            })
-        }
-
-        PacketType::FullSnapshot => {
-            if data.len() < offset + SELECTION_INFO_SIZE + 2 {
-                return Err(ProtocolError::PacketTooShort {
-                    expected: offset + SELECTION_INFO_SIZE + 2,
-                    actual: data.len(),
-                });
-            }
-            let min_x = i32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
-            let min_y = i32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap());
-            let min_z = i32::from_le_bytes(data[offset + 8..offset + 12].try_into().unwrap());
-            let size_x = i32::from_le_bytes(data[offset + 12..offset + 16].try_into().unwrap());
-            let size_y = i32::from_le_bytes(data[offset + 16..offset + 20].try_into().unwrap());
-            let size_z = i32::from_le_bytes(data[offset + 20..offset + 24].try_into().unwrap());
-            offset += SELECTION_INFO_SIZE;
-
-            let palette_count =
-                u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
-            offset += 2;
-
-            let mut palette = Vec::with_capacity(palette_count);
-            for _ in 0..palette_count {
-                if data.len() < offset + 2 {
-                    return Err(ProtocolError::TruncatedPayload {
-                        field: "block_palette",
-                    });
-                }
-                let str_len =
-                    u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
-                offset += 2;
-                if data.len() < offset + str_len {
-                    return Err(ProtocolError::TruncatedPayload {
-                        field: "block_palette_entry",
-                    });
-                }
-                let s = std::str::from_utf8(&data[offset..offset + str_len])
-                    .map_err(|e| ProtocolError::Utf8Error {
-                        field: "block_palette",
-                        detail: e.to_string(),
-                    })?
-                    .to_string();
-                offset += str_len;
-                palette.push(s);
-            }
-
-            if data.len() < offset + 1 {
+    match opcode {
+        Opcode::Hello => {
+            if offset + 76 > buf.len() {
                 return Err(ProtocolError::TruncatedPayload {
-                    field: "index_format",
+                    field: "Hello fixed fields",
                 });
             }
-            let index_bytes_per_block = data[offset];
-            offset += 1;
+            let min_version = u16::from_le_bytes(buf[offset..offset + 2].try_into().unwrap());
+            let max_version = u16::from_le_bytes(buf[offset + 2..offset + 4].try_into().unwrap());
+            let capabilities = u32::from_le_bytes(buf[offset + 4..offset + 8].try_into().unwrap());
+            let flags = u32::from_le_bytes(buf[offset + 8..offset + 12].try_into().unwrap());
+            let mut cached_world_uuid = [0u8; 16];
+            cached_world_uuid.copy_from_slice(&buf[offset + 12..offset + 28]);
+            let cached_epoch =
+                u64::from_le_bytes(buf[offset + 28..offset + 36].try_into().unwrap());
+            let cached_seq = u64::from_le_bytes(buf[offset + 36..offset + 44].try_into().unwrap());
+            let c_min_x = i32::from_le_bytes(buf[offset + 44..offset + 48].try_into().unwrap());
+            let c_min_y = i32::from_le_bytes(buf[offset + 48..offset + 52].try_into().unwrap());
+            let c_min_z = i32::from_le_bytes(buf[offset + 52..offset + 56].try_into().unwrap());
+            let c_size_x = i32::from_le_bytes(buf[offset + 56..offset + 60].try_into().unwrap());
+            let c_size_y = i32::from_le_bytes(buf[offset + 60..offset + 64].try_into().unwrap());
+            let c_size_z = i32::from_le_bytes(buf[offset + 64..offset + 68].try_into().unwrap());
+            let cached_state_hash =
+                u64::from_le_bytes(buf[offset + 68..offset + 76].try_into().unwrap());
+            offset += 76;
 
-            let total_blocks = checked_block_volume(size_x, size_y, size_z)?;
-            let (grid_indices, next_offset) = if index_bytes_per_block == 1 {
-                decode_block_grid(data, offset, total_blocks, 1, "grid_indices_u8")?
-            } else if index_bytes_per_block == 2 {
-                decode_block_grid(data, offset, total_blocks, 2, "grid_indices_u16")?
-            } else {
-                return Err(ProtocolError::InvalidIndexFormat(index_bytes_per_block));
-            };
-            offset = next_offset;
+            let auth_token = read_str(buf, &mut offset, "Hello auth_token")?.to_string();
+            let cached_dimension =
+                read_str(buf, &mut offset, "Hello cached_dimension")?.to_string();
 
-            let mut biome_palette = None;
-            let mut biome_indices = None;
-
-            if data.len() >= offset + 2 {
-                let b_count =
-                    u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
-                offset += 2;
-                let mut bp = Vec::with_capacity(b_count);
-                for _ in 0..b_count {
-                    if data.len() < offset + 2 {
-                        break;
-                    }
-                    let b_len =
-                        u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
-                    offset += 2;
-                    if data.len() < offset + b_len {
-                        break;
-                    }
-                    if let Ok(s) = std::str::from_utf8(&data[offset..offset + b_len]) {
-                        bp.push(s.to_string());
-                    }
-                    offset += b_len;
-                }
-
-                if b_count == 1 {
-                    biome_indices = Some(vec![0u16; total_blocks]);
-                    biome_palette = Some(bp);
-                } else if b_count > 1 && data.len() > offset {
-                    let b_idx_bytes = data[offset];
-                    offset += 1;
-                    let mut bi = Vec::with_capacity(total_blocks);
-                    if b_idx_bytes == 1 && data.len() >= offset + total_blocks {
-                        for &b in &data[offset..offset + total_blocks] {
-                            bi.push(b as u16);
-                        }
-                    } else if b_idx_bytes == 2 && data.len() >= offset + total_blocks * 2 {
-                        for i in 0..total_blocks {
-                            let val = u16::from_le_bytes(
-                                data[offset + i * 2..offset + i * 2 + 2].try_into().unwrap(),
-                            );
-                            bi.push(val);
-                        }
-                    }
-                    biome_indices = Some(bi);
-                    biome_palette = Some(bp);
-                } else if !bp.is_empty() {
-                    biome_palette = Some(bp);
-                }
-            }
-
-            Ok(Packet::FullSnapshot {
-                min_pos: IVec3::new(min_x, min_y, min_z),
-                size: IVec3::new(size_x, size_y, size_z),
-                palette,
-                grid_indices,
-                biome_palette,
-                biome_indices,
+            Ok(Packet::Hello {
+                min_version,
+                max_version,
+                capabilities,
+                flags,
+                cached_world_uuid,
+                cached_epoch,
+                cached_seq,
+                cached_min: IVec3::new(c_min_x, c_min_y, c_min_z),
+                cached_size: IVec3::new(c_size_x, c_size_y, c_size_z),
+                cached_state_hash,
+                auth_token,
+                cached_dimension,
             })
         }
 
-        PacketType::DeltaUpdate => {
-            if data.len() < offset + DELTA_HEADER_SIZE {
-                return Err(ProtocolError::PacketTooShort {
-                    expected: offset + DELTA_HEADER_SIZE,
-                    actual: data.len(),
+        Opcode::Welcome => {
+            if offset + 67 > buf.len() {
+                return Err(ProtocolError::TruncatedPayload {
+                    field: "Welcome fixed fields",
                 });
             }
-            let seq_id = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
-            let min_x = i32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap());
-            let min_y = i32::from_le_bytes(data[offset + 8..offset + 12].try_into().unwrap());
-            let min_z = i32::from_le_bytes(data[offset + 12..offset + 16].try_into().unwrap());
-            let change_count =
-                u16::from_le_bytes(data[offset + 16..offset + 18].try_into().unwrap()) as usize;
-            offset += DELTA_HEADER_SIZE;
+            let negotiated_version =
+                u16::from_le_bytes(buf[offset..offset + 2].try_into().unwrap());
+            let mut server_uuid = [0u8; 16];
+            server_uuid.copy_from_slice(&buf[offset + 2..offset + 18]);
+            let epoch = u64::from_le_bytes(buf[offset + 18..offset + 26].try_into().unwrap());
+            let server_seq = u64::from_le_bytes(buf[offset + 26..offset + 34].try_into().unwrap());
+            let min_x = i32::from_le_bytes(buf[offset + 34..offset + 38].try_into().unwrap());
+            let min_y = i32::from_le_bytes(buf[offset + 38..offset + 42].try_into().unwrap());
+            let min_z = i32::from_le_bytes(buf[offset + 42..offset + 46].try_into().unwrap());
+            let size_x = i32::from_le_bytes(buf[offset + 46..offset + 50].try_into().unwrap());
+            let size_y = i32::from_le_bytes(buf[offset + 50..offset + 54].try_into().unwrap());
+            let size_z = i32::from_le_bytes(buf[offset + 54..offset + 58].try_into().unwrap());
+            let current_state_hash =
+                u64::from_le_bytes(buf[offset + 58..offset + 66].try_into().unwrap());
+            let dec_byte = buf[offset + 66];
+            let decision = SyncDecision::from_u8(dec_byte).ok_or(ProtocolError::InvalidEnum {
+                field: "SyncDecision",
+                val: dec_byte as u32,
+            })?;
+            offset += 67;
 
-            let mut changes = Vec::with_capacity(change_count);
-            for _ in 0..change_count {
-                if data.len() < offset + DELTA_CHANGE_PREFIX_SIZE {
-                    return Err(ProtocolError::TruncatedPayload {
-                        field: "delta_change_prefix",
-                    });
-                }
-                let rel_x = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as i32;
-                let rel_y =
-                    u16::from_le_bytes(data[offset + 2..offset + 4].try_into().unwrap()) as i32;
-                let rel_z =
-                    u16::from_le_bytes(data[offset + 4..offset + 6].try_into().unwrap()) as i32;
-                let str_len =
-                    u16::from_le_bytes(data[offset + 6..offset + 8].try_into().unwrap()) as usize;
-                offset += DELTA_CHANGE_PREFIX_SIZE;
+            let message_or_dimension =
+                read_str(buf, &mut offset, "Welcome message_or_dimension")?.to_string();
 
-                if data.len() < offset + str_len {
-                    return Err(ProtocolError::TruncatedPayload {
-                        field: "delta_state_str",
-                    });
-                }
-                let state_str = std::str::from_utf8(&data[offset..offset + str_len])
-                    .map_err(|e| ProtocolError::Utf8Error {
-                        field: "delta_state",
-                        detail: e.to_string(),
-                    })?
-                    .to_string();
-                offset += str_len;
+            Ok(Packet::Welcome {
+                negotiated_version,
+                server_uuid,
+                epoch,
+                server_seq,
+                current_min: IVec3::new(min_x, min_y, min_z),
+                current_size: IVec3::new(size_x, size_y, size_z),
+                current_state_hash,
+                decision,
+                message_or_dimension,
+            })
+        }
 
-                changes.push(DeltaChange {
-                    rel_pos: IVec3::new(rel_x, rel_y, rel_z),
-                    state: state_str,
+        Opcode::BaselineBegin => {
+            if offset + 91 > buf.len() {
+                return Err(ProtocolError::TruncatedPayload {
+                    field: "BaselineBegin fixed fields",
+                });
+            }
+            let epoch = u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap());
+            let mut snapshot_uuid = [0u8; 16];
+            snapshot_uuid.copy_from_slice(&buf[offset + 8..offset + 24]);
+            let snapshot_seq =
+                u64::from_le_bytes(buf[offset + 24..offset + 32].try_into().unwrap());
+            let min_x = i32::from_le_bytes(buf[offset + 32..offset + 36].try_into().unwrap());
+            let min_y = i32::from_le_bytes(buf[offset + 36..offset + 40].try_into().unwrap());
+            let min_z = i32::from_le_bytes(buf[offset + 40..offset + 44].try_into().unwrap());
+            let size_x = i32::from_le_bytes(buf[offset + 44..offset + 48].try_into().unwrap());
+            let size_y = i32::from_le_bytes(buf[offset + 48..offset + 52].try_into().unwrap());
+            let size_z = i32::from_le_bytes(buf[offset + 52..offset + 56].try_into().unwrap());
+            let state_hash = u64::from_le_bytes(buf[offset + 56..offset + 64].try_into().unwrap());
+            let palette_revision =
+                u32::from_le_bytes(buf[offset + 64..offset + 68].try_into().unwrap());
+            let total_chunks =
+                u32::from_le_bytes(buf[offset + 68..offset + 72].try_into().unwrap());
+            let total_encoded_bytes =
+                u64::from_le_bytes(buf[offset + 72..offset + 80].try_into().unwrap());
+            let total_decoded_bytes =
+                u64::from_le_bytes(buf[offset + 80..offset + 88].try_into().unwrap());
+            let compression_mode = buf[offset + 88];
+            let palette_bits_per_block = buf[offset + 89];
+            let biome_bits_per_quart = buf[offset + 90];
+            offset += 91;
+
+            if total_decoded_bytes as usize > MAX_BASELINE_DECODED_BYTES {
+                return Err(ProtocolError::ResourceLimitExceeded {
+                    resource: "Total Decoded Voxel Bytes",
+                    limit: MAX_BASELINE_DECODED_BYTES,
+                    actual: total_decoded_bytes as usize,
                 });
             }
 
-            Ok(Packet::DeltaUpdate {
-                seq_id,
+            let dimension = read_str(buf, &mut offset, "BaselineBegin dimension")?.to_string();
+
+            if offset + 4 > buf.len() {
+                return Err(ProtocolError::TruncatedPayload {
+                    field: "block_palette length",
+                });
+            }
+            let block_palette_len =
+                u32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap()) as usize;
+            offset += 4;
+            if block_palette_len > MAX_PALETTE_ENTRIES {
+                return Err(ProtocolError::ResourceLimitExceeded {
+                    resource: "Block Palette Entries",
+                    limit: MAX_PALETTE_ENTRIES,
+                    actual: block_palette_len,
+                });
+            }
+
+            let mut block_palette = Vec::with_capacity(block_palette_len);
+            for _ in 0..block_palette_len {
+                block_palette.push(read_str(buf, &mut offset, "block_palette entry")?.to_string());
+            }
+
+            if offset + 2 > buf.len() {
+                return Err(ProtocolError::TruncatedPayload {
+                    field: "biome_palette length",
+                });
+            }
+            let biome_palette_len =
+                u16::from_le_bytes(buf[offset..offset + 2].try_into().unwrap()) as usize;
+            offset += 2;
+            let mut biome_palette = Vec::with_capacity(biome_palette_len);
+            for _ in 0..biome_palette_len {
+                biome_palette.push(read_str(buf, &mut offset, "biome_palette entry")?.to_string());
+            }
+
+            Ok(Packet::BaselineBegin {
+                epoch,
+                snapshot_uuid,
+                snapshot_seq,
                 min_pos: IVec3::new(min_x, min_y, min_z),
+                size: IVec3::new(size_x, size_y, size_z),
+                state_hash,
+                palette_revision,
+                total_chunks,
+                total_encoded_bytes,
+                total_decoded_bytes,
+                compression_mode,
+                palette_bits_per_block,
+                biome_bits_per_quart,
+                dimension,
+                block_palette,
+                biome_palette,
+            })
+        }
+
+        Opcode::BaselineChunk => {
+            if offset + 60 > buf.len() {
+                return Err(ProtocolError::TruncatedPayload {
+                    field: "BaselineChunk header",
+                });
+            }
+            let epoch = u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap());
+            let mut snapshot_uuid = [0u8; 16];
+            snapshot_uuid.copy_from_slice(&buf[offset + 8..offset + 24]);
+            let chunk_index = u32::from_le_bytes(buf[offset + 24..offset + 28].try_into().unwrap());
+            let total_chunks =
+                u32::from_le_bytes(buf[offset + 28..offset + 32].try_into().unwrap());
+            let first_voxel_index =
+                u64::from_le_bytes(buf[offset + 32..offset + 40].try_into().unwrap());
+            let voxel_count = u32::from_le_bytes(buf[offset + 40..offset + 44].try_into().unwrap());
+            let payload_len =
+                u32::from_le_bytes(buf[offset + 44..offset + 48].try_into().unwrap()) as usize;
+            let decoded_target_bytes =
+                u32::from_le_bytes(buf[offset + 48..offset + 52].try_into().unwrap());
+            let chunk_xxhash64 =
+                u64::from_le_bytes(buf[offset + 52..offset + 60].try_into().unwrap());
+            offset += 60;
+
+            if offset + payload_len > buf.len() {
+                return Err(ProtocolError::TruncatedPayload {
+                    field: "BaselineChunk payload",
+                });
+            }
+            let payload = buf[offset..offset + payload_len].to_vec();
+
+            // Verify chunk hash
+            let mut hasher = Xxh64::new(0);
+            hasher.update(&payload);
+            let computed = hasher.digest();
+            if computed != chunk_xxhash64 {
+                return Err(ProtocolError::ChecksumMismatch {
+                    field: "BaselineChunk payload",
+                    expected: chunk_xxhash64,
+                    actual: computed,
+                });
+            }
+
+            Ok(Packet::BaselineChunk {
+                epoch,
+                snapshot_uuid,
+                chunk_index,
+                total_chunks,
+                first_voxel_index,
+                voxel_count,
+                payload_len: payload_len as u32,
+                decoded_target_bytes,
+                chunk_xxhash64,
+                payload,
+            })
+        }
+
+        Opcode::BaselineEnd => {
+            if offset + 45 > buf.len() {
+                return Err(ProtocolError::TruncatedPayload {
+                    field: "BaselineEnd",
+                });
+            }
+            let epoch = u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap());
+            let mut snapshot_uuid = [0u8; 16];
+            snapshot_uuid.copy_from_slice(&buf[offset + 8..offset + 24]);
+            let snapshot_seq =
+                u64::from_le_bytes(buf[offset + 24..offset + 32].try_into().unwrap());
+            let total_chunks_sent =
+                u32::from_le_bytes(buf[offset + 32..offset + 36].try_into().unwrap());
+            let final_state_hash =
+                u64::from_le_bytes(buf[offset + 36..offset + 44].try_into().unwrap());
+            let status = buf[offset + 44];
+
+            Ok(Packet::BaselineEnd {
+                epoch,
+                snapshot_uuid,
+                snapshot_seq,
+                total_chunks_sent,
+                final_state_hash,
+                status,
+            })
+        }
+
+        Opcode::BaselineAck => {
+            if offset + 33 > buf.len() {
+                return Err(ProtocolError::TruncatedPayload {
+                    field: "BaselineAck",
+                });
+            }
+            let epoch = u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap());
+            let mut snapshot_uuid = [0u8; 16];
+            snapshot_uuid.copy_from_slice(&buf[offset + 8..offset + 24]);
+            let committed_seq =
+                u64::from_le_bytes(buf[offset + 24..offset + 32].try_into().unwrap());
+            let res_byte = buf[offset + 32];
+            let result_code =
+                BaselineAckResult::from_u8(res_byte).ok_or(ProtocolError::InvalidEnum {
+                    field: "BaselineAckResult",
+                    val: res_byte as u32,
+                })?;
+
+            Ok(Packet::BaselineAck {
+                epoch,
+                snapshot_uuid,
+                committed_seq,
+                result_code,
+            })
+        }
+
+        Opcode::DeltaOp => {
+            if offset + 30 > buf.len() {
+                return Err(ProtocolError::TruncatedPayload {
+                    field: "DeltaOp header",
+                });
+            }
+            let epoch = u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap());
+            let seq_id = u64::from_le_bytes(buf[offset + 8..offset + 16].try_into().unwrap());
+            let palette_revision =
+                u32::from_le_bytes(buf[offset + 16..offset + 20].try_into().unwrap());
+            let count =
+                u16::from_le_bytes(buf[offset + 20..offset + 22].try_into().unwrap()) as usize;
+            let batch_xxhash64 =
+                u64::from_le_bytes(buf[offset + 22..offset + 30].try_into().unwrap());
+            offset += 30;
+
+            if count > MAX_DELTA_BATCH_CHANGES {
+                return Err(ProtocolError::ResourceLimitExceeded {
+                    resource: "Delta Changes per Batch",
+                    limit: MAX_DELTA_BATCH_CHANGES,
+                    actual: count,
+                });
+            }
+
+            let entry_size = 14; // 3 * 4 + 2
+            if offset + count * entry_size > buf.len() {
+                return Err(ProtocolError::TruncatedPayload {
+                    field: "DeltaOp entries",
+                });
+            }
+
+            let mut changes = Vec::with_capacity(count);
+            for _ in 0..count {
+                let rx = i32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
+                let ry = i32::from_le_bytes(buf[offset + 4..offset + 8].try_into().unwrap());
+                let rz = i32::from_le_bytes(buf[offset + 8..offset + 12].try_into().unwrap());
+                let state_id =
+                    u16::from_le_bytes(buf[offset + 12..offset + 14].try_into().unwrap());
+                offset += 14;
+                changes.push(DeltaChangeEntry {
+                    rel_pos: IVec3::new(rx, ry, rz),
+                    state_id,
+                });
+            }
+
+            let computed = compute_delta_batch_hash(&changes);
+            if computed != batch_xxhash64 {
+                return Err(ProtocolError::ChecksumMismatch {
+                    field: "DeltaOp batch entries",
+                    expected: batch_xxhash64,
+                    actual: computed,
+                });
+            }
+
+            Ok(Packet::DeltaOp {
+                epoch,
+                seq_id,
+                palette_revision,
+                count: count as u16,
+                batch_xxhash64,
                 changes,
             })
         }
 
-        PacketType::SectionManifest => {
-            if data.len() < offset + MANIFEST_HEADER_SIZE {
-                return Err(ProtocolError::PacketTooShort {
-                    expected: offset + MANIFEST_HEADER_SIZE,
-                    actual: data.len(),
-                });
-            }
-            let seq_id = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
-            let section_count =
-                u32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap()) as usize;
-            offset += MANIFEST_HEADER_SIZE;
-
-            if data.len() < offset + section_count * MANIFEST_ENTRY_SIZE {
+        Opcode::PaletteUpdate => {
+            if offset + 26 > buf.len() {
                 return Err(ProtocolError::TruncatedPayload {
-                    field: "section_manifest_entries",
+                    field: "PaletteUpdate header",
                 });
             }
+            let epoch = u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap());
+            let seq_id = u64::from_le_bytes(buf[offset + 8..offset + 16].try_into().unwrap());
+            let base_revision =
+                u32::from_le_bytes(buf[offset + 16..offset + 20].try_into().unwrap());
+            let new_revision =
+                u32::from_le_bytes(buf[offset + 20..offset + 24].try_into().unwrap());
+            let count =
+                u16::from_le_bytes(buf[offset + 24..offset + 26].try_into().unwrap()) as usize;
+            offset += 26;
 
-            let mut sections = Vec::with_capacity(section_count);
-            for i in 0..section_count {
-                let entry_offset = offset + i * MANIFEST_ENTRY_SIZE;
-                let sx =
-                    i32::from_le_bytes(data[entry_offset..entry_offset + 4].try_into().unwrap());
-                let sy = i32::from_le_bytes(
-                    data[entry_offset + 4..entry_offset + 8].try_into().unwrap(),
-                );
-                let sz = i32::from_le_bytes(
-                    data[entry_offset + 8..entry_offset + 12]
-                        .try_into()
-                        .unwrap(),
-                );
-                let crc = u32::from_le_bytes(
-                    data[entry_offset + 12..entry_offset + 16]
-                        .try_into()
-                        .unwrap(),
-                );
-                sections.push(ManifestSectionEntry {
-                    coord: IVec3::new(sx, sy, sz),
-                    crc32: crc,
-                });
-            }
-
-            Ok(Packet::SectionManifest { seq_id, sections })
-        }
-
-        PacketType::SectionSnapshot => {
-            if data.len() < offset + SECTION_SNAPSHOT_HEADER_SIZE {
-                return Err(ProtocolError::PacketTooShort {
-                    expected: offset + SECTION_SNAPSHOT_HEADER_SIZE,
-                    actual: data.len(),
-                });
-            }
-            let sec_x = i32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
-            let sec_y = i32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap());
-            let sec_z = i32::from_le_bytes(data[offset + 8..offset + 12].try_into().unwrap());
-
-            let start_x = i32::from_le_bytes(data[offset + 12..offset + 16].try_into().unwrap());
-            let start_y = i32::from_le_bytes(data[offset + 16..offset + 20].try_into().unwrap());
-            let start_z = i32::from_le_bytes(data[offset + 20..offset + 24].try_into().unwrap());
-
-            let size_x = i32::from_le_bytes(data[offset + 24..offset + 28].try_into().unwrap());
-            let size_y = i32::from_le_bytes(data[offset + 28..offset + 32].try_into().unwrap());
-            let size_z = i32::from_le_bytes(data[offset + 32..offset + 36].try_into().unwrap());
-
-            let palette_count =
-                u16::from_le_bytes(data[offset + 36..offset + 38].try_into().unwrap()) as usize;
-            offset += SECTION_SNAPSHOT_HEADER_SIZE;
-
-            let mut palette = Vec::with_capacity(palette_count);
-            for _ in 0..palette_count {
-                if data.len() < offset + 2 {
+            let mut entries = Vec::with_capacity(count);
+            for _ in 0..count {
+                if offset + 2 > buf.len() {
                     return Err(ProtocolError::TruncatedPayload {
-                        field: "section_palette",
+                        field: "PaletteUpdate state_id",
                     });
                 }
-                let str_len =
-                    u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+                let id = u16::from_le_bytes(buf[offset..offset + 2].try_into().unwrap());
                 offset += 2;
-                if data.len() < offset + str_len {
-                    return Err(ProtocolError::TruncatedPayload {
-                        field: "section_palette_entry",
-                    });
-                }
-                let s = std::str::from_utf8(&data[offset..offset + str_len])
-                    .map_err(|e| ProtocolError::Utf8Error {
-                        field: "section_palette",
-                        detail: e.to_string(),
-                    })?
-                    .to_string();
-                offset += str_len;
-                palette.push(s);
+                let s = read_str(buf, &mut offset, "PaletteUpdate state string")?.to_string();
+                entries.push((id, s));
             }
 
-            if data.len() < offset + 1 {
+            Ok(Packet::PaletteUpdate {
+                epoch,
+                seq_id,
+                base_revision,
+                new_revision,
+                entries,
+            })
+        }
+
+        Opcode::StateVerifyReq => {
+            if offset + 24 > buf.len() {
                 return Err(ProtocolError::TruncatedPayload {
-                    field: "section_index_format",
+                    field: "StateVerifyReq",
                 });
             }
-            let index_bytes = data[offset];
-            offset += 1;
+            let epoch = u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap());
+            let sequence = u64::from_le_bytes(buf[offset + 8..offset + 16].try_into().unwrap());
+            let state_hash = u64::from_le_bytes(buf[offset + 16..offset + 24].try_into().unwrap());
 
-            let total_blocks = checked_block_volume(size_x, size_y, size_z)?;
-            let (grid_indices, next_offset) = if index_bytes == 1 {
-                decode_block_grid(data, offset, total_blocks, 1, "section_indices_u8")?
-            } else if index_bytes == 2 {
-                decode_block_grid(data, offset, total_blocks, 2, "section_indices_u16")?
-            } else {
-                return Err(ProtocolError::InvalidIndexFormat(index_bytes));
-            };
-            offset = next_offset;
-
-            let mut biome_palette = None;
-            let mut biome_indices = None;
-
-            if data.len() >= offset + 2 {
-                let b_count =
-                    u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
-                offset += 2;
-                let mut bp = Vec::with_capacity(b_count);
-                for _ in 0..b_count {
-                    if data.len() < offset + 2 {
-                        break;
-                    }
-                    let b_len =
-                        u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
-                    offset += 2;
-                    if data.len() < offset + b_len {
-                        break;
-                    }
-                    if let Ok(s) = std::str::from_utf8(&data[offset..offset + b_len]) {
-                        bp.push(s.to_string());
-                    }
-                    offset += b_len;
-                }
-
-                if b_count == 1 {
-                    biome_indices = Some(vec![0u16; 64]);
-                    biome_palette = Some(bp);
-                } else if b_count > 1 && data.len() > offset {
-                    let b_idx_bytes = data[offset];
-                    offset += 1;
-                    let remaining = data.len() - offset;
-                    let count =
-                        if remaining >= 64 && (remaining < total_blocks || total_blocks == 64) {
-                            64
-                        } else {
-                            total_blocks
-                        };
-                    let mut bi = Vec::with_capacity(count);
-                    if b_idx_bytes == 1 && data.len() >= offset + count {
-                        for &b in &data[offset..offset + count] {
-                            bi.push(b as u16);
-                        }
-                    } else if b_idx_bytes == 2 && data.len() >= offset + count * 2 {
-                        for i in 0..count {
-                            let val = u16::from_le_bytes(
-                                data[offset + i * 2..offset + i * 2 + 2].try_into().unwrap(),
-                            );
-                            bi.push(val);
-                        }
-                    }
-                    biome_indices = Some(bi);
-                    biome_palette = Some(bp);
-                } else if !bp.is_empty() {
-                    biome_palette = Some(bp);
-                }
-            }
-
-            Ok(Packet::SectionSnapshot {
-                sec_coord: IVec3::new(sec_x, sec_y, sec_z),
-                start_pos: IVec3::new(start_x, start_y, start_z),
-                size: IVec3::new(size_x, size_y, size_z),
-                palette,
-                grid_indices,
-                biome_palette,
-                biome_indices,
+            Ok(Packet::StateVerifyReq {
+                epoch,
+                sequence,
+                state_hash,
             })
         }
 
-        PacketType::HandshakeInfo => {
-            if data.len() < offset + HANDSHAKE_INFO_HEADER_SIZE {
-                return Err(ProtocolError::PacketTooShort {
-                    expected: offset + HANDSHAKE_INFO_HEADER_SIZE,
-                    actual: data.len(),
-                });
-            }
-            let total_sections = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
-            let non_empty_sections =
-                u32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap());
-            let total_volume =
-                u32::from_le_bytes(data[offset + 8..offset + 12].try_into().unwrap());
-            let dim_len =
-                u16::from_le_bytes(data[offset + 12..offset + 14].try_into().unwrap()) as usize;
-            offset += HANDSHAKE_INFO_HEADER_SIZE;
-
-            if data.len() < offset + dim_len + 2 {
+        Opcode::StateVerifyResp => {
+            if offset + 17 > buf.len() {
                 return Err(ProtocolError::TruncatedPayload {
-                    field: "handshake_dimension_flags",
+                    field: "StateVerifyResp",
                 });
             }
-            let dimension = std::str::from_utf8(&data[offset..offset + dim_len])
-                .map_err(|e| ProtocolError::Utf8Error {
-                    field: "handshake_dimension",
-                    detail: e.to_string(),
-                })?
-                .to_string();
-            offset += dim_len;
+            let epoch = u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap());
+            let sequence = u64::from_le_bytes(buf[offset + 8..offset + 16].try_into().unwrap());
+            let is_match = buf[offset + 16] != 0;
 
-            let flags = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap());
-
-            Ok(Packet::HandshakeInfo {
-                total_sections,
-                non_empty_sections,
-                total_volume,
-                dimension,
-                flags,
+            Ok(Packet::StateVerifyResp {
+                epoch,
+                sequence,
+                is_match,
             })
         }
 
-        PacketType::StreamBegin => {
-            if data.len() < offset + STREAM_BEGIN_SIZE {
-                return Err(ProtocolError::PacketTooShort {
-                    expected: offset + STREAM_BEGIN_SIZE,
-                    actual: data.len(),
-                });
+        Opcode::Cancel => {
+            if offset + 25 > buf.len() {
+                return Err(ProtocolError::TruncatedPayload { field: "Cancel" });
             }
-            let stream_id = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
-            let total_sections =
-                u32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap());
-            let flags = u16::from_le_bytes(data[offset + 8..offset + 10].try_into().unwrap());
+            let epoch = u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap());
+            let mut snapshot_uuid = [0u8; 16];
+            snapshot_uuid.copy_from_slice(&buf[offset + 8..offset + 24]);
+            let r_byte = buf[offset + 24];
+            let reason = CancelReason::from_u8(r_byte).ok_or(ProtocolError::InvalidEnum {
+                field: "CancelReason",
+                val: r_byte as u32,
+            })?;
 
-            Ok(Packet::StreamBegin {
-                stream_id,
-                total_sections,
-                flags,
+            Ok(Packet::Cancel {
+                epoch,
+                snapshot_uuid,
+                reason,
             })
         }
 
-        PacketType::StreamEnd => {
-            if data.len() < offset + STREAM_END_SIZE {
-                return Err(ProtocolError::PacketTooShort {
-                    expected: offset + STREAM_END_SIZE,
-                    actual: data.len(),
-                });
-            }
-            let stream_id = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
-            let sent_sections =
-                u32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap());
-            let status_code = u16::from_le_bytes(data[offset + 8..offset + 10].try_into().unwrap());
-
-            Ok(Packet::StreamEnd {
-                stream_id,
-                sent_sections,
-                status: StreamStatus::from_u16(status_code),
-            })
-        }
-
-        PacketType::ReqFullSync => Ok(Packet::ReqFullSync),
-
-        PacketType::ReqSectionSync => {
-            if data.len() < offset + 2 {
-                return Err(ProtocolError::PacketTooShort {
-                    expected: offset + 2,
-                    actual: data.len(),
-                });
-            }
-            let count = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
-            offset += 2;
-            if data.len() < offset + count * 12 {
+        Opcode::ResyncRequest => {
+            if offset + 25 > buf.len() {
                 return Err(ProtocolError::TruncatedPayload {
-                    field: "req_section_sync_entries",
+                    field: "ResyncRequest",
                 });
             }
-            let mut sections = Vec::with_capacity(count);
-            for i in 0..count {
-                let ent = offset + i * 12;
-                let sx = i32::from_le_bytes(data[ent..ent + 4].try_into().unwrap());
-                let sy = i32::from_le_bytes(data[ent + 4..ent + 8].try_into().unwrap());
-                let sz = i32::from_le_bytes(data[ent + 8..ent + 12].try_into().unwrap());
-                sections.push(IVec3::new(sx, sy, sz));
-            }
-            Ok(Packet::ReqSectionSync { sections })
+            let epoch = u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap());
+            let missing_from_seq =
+                u64::from_le_bytes(buf[offset + 8..offset + 16].try_into().unwrap());
+            let missing_to_seq =
+                u64::from_le_bytes(buf[offset + 16..offset + 24].try_into().unwrap());
+            let r_byte = buf[offset + 24];
+            let reason = ResyncReason::from_u8(r_byte).ok_or(ProtocolError::InvalidEnum {
+                field: "ResyncReason",
+                val: r_byte as u32,
+            })?;
+
+            Ok(Packet::ResyncRequest {
+                epoch,
+                missing_from_seq,
+                missing_to_seq,
+                reason,
+            })
         }
 
-        PacketType::SyncConfig => {
-            if data.len() < offset + 3 {
-                return Err(ProtocolError::PacketTooShort {
-                    expected: offset + 3,
-                    actual: data.len(),
+        Opcode::Ping => {
+            if offset + 8 > buf.len() {
+                return Err(ProtocolError::TruncatedPayload { field: "Ping" });
+            }
+            let timestamp = u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap());
+            Ok(Packet::Ping { timestamp })
+        }
+
+        Opcode::Pong => {
+            if offset + 8 > buf.len() {
+                return Err(ProtocolError::TruncatedPayload { field: "Pong" });
+            }
+            let timestamp = u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap());
+            Ok(Packet::Pong { timestamp })
+        }
+
+        Opcode::Error => {
+            if offset + 10 > buf.len() {
+                return Err(ProtocolError::TruncatedPayload {
+                    field: "Error fixed fields",
                 });
             }
-            let throttle_mode = data[offset];
-            let target_fps = data[offset + 1];
-            let is_active = data[offset + 2] != 0;
+            let epoch = u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap());
+            let code_val = u16::from_le_bytes(buf[offset + 8..offset + 10].try_into().unwrap());
+            let error_code = ErrorCode::from_u16(code_val).ok_or(ProtocolError::InvalidEnum {
+                field: "ErrorCode",
+                val: code_val as u32,
+            })?;
+            offset += 10;
+            let message = read_str(buf, &mut offset, "Error message")?.to_string();
 
-            Ok(Packet::SyncConfig {
-                throttle_mode,
-                target_fps,
-                is_active,
+            Ok(Packet::Error {
+                epoch,
+                error_code,
+                message,
             })
         }
     }
-}
-
-/// Encodes a Client-to-Server Full Sync Request packet (0x80).
-pub fn encode_full_sync_request() -> Vec<u8> {
-    let mut buf = Vec::with_capacity(HEADER_SIZE);
-    buf.extend_from_slice(&PROTOCOL_MAGIC);
-    buf.push(PROTOCOL_VERSION);
-    buf.push(PacketType::ReqFullSync as u8);
-    buf
-}
-
-/// Encodes Section Repair Requests (0x81) split into chunks of at most `max_batch_size` (default 64).
-pub fn encode_repair_requests(sections: &[IVec3], max_batch_size: usize) -> Vec<Vec<u8>> {
-    if sections.is_empty() {
-        return Vec::new();
-    }
-    let chunk_size = if max_batch_size == 0 {
-        64
-    } else {
-        max_batch_size
-    };
-    let mut packets = Vec::new();
-
-    for chunk in sections.chunks(chunk_size) {
-        let count = chunk.len() as u16;
-        let mut buf = Vec::with_capacity(HEADER_SIZE + 2 + chunk.len() * 12);
-        buf.extend_from_slice(&PROTOCOL_MAGIC);
-        buf.push(PROTOCOL_VERSION);
-        buf.push(PacketType::ReqSectionSync as u8);
-        buf.extend_from_slice(&count.to_le_bytes());
-        for pos in chunk {
-            buf.extend_from_slice(&pos.x.to_le_bytes());
-            buf.extend_from_slice(&pos.y.to_le_bytes());
-            buf.extend_from_slice(&pos.z.to_le_bytes());
-        }
-        packets.push(buf);
-    }
-
-    packets
-}
-
-/// Encodes a Sync Configuration update packet (0x82).
-pub fn encode_sync_config(throttle_mode: u8, target_fps: u8, is_active: bool) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(HEADER_SIZE + 3);
-    buf.extend_from_slice(&PROTOCOL_MAGIC);
-    buf.push(PROTOCOL_VERSION);
-    buf.push(PacketType::SyncConfig as u8);
-    buf.push(throttle_mode);
-    buf.push(target_fps);
-    buf.push(if is_active { 1 } else { 0 });
-    buf
 }

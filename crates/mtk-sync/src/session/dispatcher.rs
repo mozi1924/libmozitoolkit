@@ -1,37 +1,96 @@
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, RwLock};
+//! # Sync Session Dispatcher and State Machine (RFC v3.1 Section 5)
+//!
+//! Event-driven background worker thread managing handshake negotiation,
+//! progressive baseline chunk assembly, snapshot barrier staging, gap detection,
+//! and parallel Rayon world meshing.
+
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Receiver, Sender};
 use glam::IVec3;
 use mtk_voxel::VoxelWorld;
 
+use super::assembler::BaselineAssembler;
+use super::staging::DeltaStagingBuffer;
 use crate::client::{ClientCommand, ClientMessage};
 use crate::events::SyncEvent;
 use crate::protocol::*;
 
-/// Runs the background event worker loop processing incoming network messages and packet dispatch.
+/// Sync session lifecycle states (RFC Section 5.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SyncLifecycle {
+    Disconnected,
+    Connecting,
+    Negotiating,
+    Verifying,
+    ReceivingBaseline,
+    ValidatingHash,
+    ReplayingStaged,
+    BuildingMesh,
+    Live,
+}
+
+/// Internal session state data container.
+pub struct SessionState {
+    pub lifecycle: SyncLifecycle,
+    pub epoch: u64,
+    pub sequence: u64,
+    pub server_uuid: [u8; 16],
+    pub min_pos: IVec3,
+    pub size: IVec3,
+    pub dimension: String,
+    pub palette_revision: u32,
+    pub palette_map: HashMap<u16, String>,
+    pub staging: DeltaStagingBuffer,
+    pub assembler: Option<BaselineAssembler>,
+    pub last_mesh_time: Option<Instant>,
+    pub pending_dirty_rebuild: bool,
+}
+
+impl SessionState {
+    pub fn new() -> Self {
+        Self {
+            lifecycle: SyncLifecycle::Connecting,
+            epoch: 0,
+            sequence: 0,
+            server_uuid: [0u8; 16],
+            min_pos: IVec3::ZERO,
+            size: IVec3::ZERO,
+            dimension: "minecraft:overworld".to_string(),
+            palette_revision: 0,
+            palette_map: HashMap::new(),
+            staging: DeltaStagingBuffer::new(),
+            assembler: None,
+            last_mesh_time: None,
+            pending_dirty_rebuild: false,
+        }
+    }
+}
+
+impl Default for SessionState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Background worker loop processing incoming network messages and driving the sync state machine.
 pub fn event_worker_loop(
     msg_receiver: Receiver<ClientMessage>,
     cmd_sender: Sender<ClientCommand>,
     world: Arc<RwLock<VoxelWorld>>,
     event_sender: Sender<SyncEvent>,
-    stream_id_atomic: Arc<AtomicU32>,
-    sync_requested: Arc<AtomicBool>,
     running: Arc<AtomicBool>,
     is_connected: Arc<AtomicBool>,
-    status_lock: Arc<std::sync::RwLock<String>>,
+    status_lock: Arc<RwLock<String>>,
+    generation_atomic: Arc<AtomicU64>,
+    state_lock: Arc<Mutex<SessionState>>,
+    initial_hello: Option<Packet>,
 ) {
-    let mut stream_total_sections: usize = 0;
-    let mut stream_received_sections: usize = 0;
-    let mut stream_received_bytes: usize = 0;
-    let mut pending_non_streaming_updates = false;
-    let mut pending_stream_mesh_rebuild = false;
-    let mut last_sync_request_time: Option<std::time::Instant> = None;
-    let mut repair_history = std::collections::HashMap::<IVec3, (std::time::Instant, u32)>::new();
-    let mut last_mesh_dispatch_time: Option<std::time::Instant> = None;
-
     while running.load(Ordering::Relaxed) {
-        match msg_receiver.recv_timeout(std::time::Duration::from_millis(25)) {
+        match msg_receiver.recv_timeout(Duration::from_millis(20)) {
             Ok(ClientMessage::Status(status)) => {
                 let conn = status == "CONNECTED";
                 is_connected.store(conn, Ordering::SeqCst);
@@ -39,6 +98,29 @@ pub fn event_worker_loop(
                     *guard = status.clone();
                 }
                 let _ = event_sender.send(SyncEvent::StatusChange(status));
+
+                if conn {
+                    if let Ok(mut state) = state_lock.lock() {
+                        state.lifecycle = SyncLifecycle::Negotiating;
+                    }
+                    // Send initial HELLO packet
+                    let hello_pkt = initial_hello.clone().unwrap_or(Packet::Hello {
+                        min_version: PROTOCOL_VERSION as u16,
+                        max_version: PROTOCOL_VERSION as u16,
+                        capabilities: 0x03, // Zstd + DNA Direct Memory
+                        flags: 0,
+                        cached_world_uuid: [0u8; 16],
+                        cached_epoch: 0,
+                        cached_seq: 0,
+                        cached_min: IVec3::ZERO,
+                        cached_size: IVec3::ZERO,
+                        cached_state_hash: 0,
+                        auth_token: String::new(),
+                        cached_dimension: "minecraft:overworld".to_string(),
+                    });
+                    let bytes = encode_packet(&hello_pkt);
+                    let _ = cmd_sender.send(ClientCommand::Send(bytes));
+                }
             }
             Ok(ClientMessage::Disconnected) => {
                 is_connected.store(false, Ordering::SeqCst);
@@ -46,649 +128,435 @@ pub fn event_worker_loop(
                     *guard = "DISCONNECTED".to_string();
                 }
                 running.store(false, Ordering::SeqCst);
+                if let Ok(mut state) = state_lock.lock() {
+                    state.lifecycle = SyncLifecycle::Disconnected;
+                }
                 let _ = event_sender.send(SyncEvent::StatusChange("DISCONNECTED".to_string()));
                 break;
             }
             Ok(ClientMessage::PacketReceived { packet, bytes }) => {
-                let is_sec_snapshot = matches!(packet, Packet::SectionSnapshot { .. });
-                let is_delta_update = matches!(packet, Packet::DeltaUpdate { .. });
-                let is_stream_end = matches!(packet, Packet::StreamEnd { .. });
-                let more_pending = !msg_receiver.is_empty();
-                handle_packet(
-                    packet,
-                    bytes,
-                    &world,
-                    &event_sender,
-                    &stream_id_atomic,
-                    &mut stream_total_sections,
-                    &mut stream_received_sections,
-                    &mut stream_received_bytes,
-                    Some(&cmd_sender),
-                    &sync_requested,
-                    more_pending,
-                    Some(&mut repair_history),
-                    Some(&mut pending_non_streaming_updates),
-                    Some(&mut last_mesh_dispatch_time),
-                );
-                if (is_sec_snapshot && stream_id_atomic.load(Ordering::SeqCst) == 0)
-                    || (is_delta_update && more_pending)
-                {
-                    pending_non_streaming_updates = true;
-                }
-                if is_stream_end && more_pending {
-                    pending_stream_mesh_rebuild = true;
+                if let Ok(mut state) = state_lock.lock() {
+                    handle_packet(
+                        packet,
+                        bytes,
+                        &mut state,
+                        &world,
+                        &cmd_sender,
+                        &event_sender,
+                        &generation_atomic,
+                    );
                 }
             }
             Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
-                let can_dispatch_mesh = last_mesh_dispatch_time
-                    .is_none_or(|t| t.elapsed() >= std::time::Duration::from_millis(60));
-
-                if pending_non_streaming_updates && can_dispatch_mesh {
-                    pending_non_streaming_updates = false;
-                    last_mesh_dispatch_time = Some(std::time::Instant::now());
-                    sync_requested.store(false, Ordering::SeqCst);
-                    last_sync_request_time = None;
-                    let (rebuilt, unified, world_mesh) = {
-                        let mut w = world.write().unwrap();
-                        let r = w.rebuild_dirty().unwrap_or_default();
-                        let wm = if w.unified_mesh {
-                            w.get_world_mesh().cloned()
-                        } else {
-                            None
-                        };
-                        (r, w.unified_mesh, wm)
-                    };
-                    if unified {
-                        if let Some(mesh) = world_mesh {
-                            let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
-                        }
-                    } else {
-                        for (coord, mesh) in rebuilt {
-                            let _ = event_sender.send(SyncEvent::SectionMeshReady { coord, mesh });
-                        }
-                    }
-                }
-                if pending_stream_mesh_rebuild {
-                    pending_stream_mesh_rebuild = false;
-                    last_mesh_dispatch_time = Some(std::time::Instant::now());
-                    let (unified, world_mesh) = {
-                        let mut w = world.write().unwrap();
-                        let m = w.rebuild_all().cloned().unwrap_or_default();
-                        (w.unified_mesh, m)
-                    };
-                    if unified && !world_mesh.is_empty() {
-                        let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
-                    }
-                }
-                // Auto-expire sync_requested latch after silence to recover from dropped packets
-                if sync_requested.load(Ordering::SeqCst)
-                    && stream_id_atomic.load(Ordering::SeqCst) == 0
-                {
-                    if let Some(t) = last_sync_request_time {
-                        if t.elapsed() > std::time::Duration::from_millis(1500) {
-                            sync_requested.store(false, Ordering::SeqCst);
-                            last_sync_request_time = None;
-                        }
-                    } else {
-                        last_sync_request_time = Some(std::time::Instant::now());
-                    }
-                } else {
-                    last_sync_request_time = None;
+                if let Ok(mut state) = state_lock.lock() {
+                    check_debounced_remesh(&mut state, &world, &event_sender, &generation_atomic);
                 }
                 continue;
             }
             Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
         }
 
-        let can_dispatch_mesh = last_mesh_dispatch_time
-            .is_none_or(|t| t.elapsed() >= std::time::Duration::from_millis(60));
-
-        // If a batch of non-streaming section snapshots or throttled deltas finished and channel is now quiet, remesh once
-        if pending_non_streaming_updates && msg_receiver.is_empty() && can_dispatch_mesh {
-            pending_non_streaming_updates = false;
-            last_mesh_dispatch_time = Some(std::time::Instant::now());
-            sync_requested.store(false, Ordering::SeqCst);
-            last_sync_request_time = None;
-            let (rebuilt, unified, world_mesh) = {
-                let mut w = world.write().unwrap();
-                let r = w.rebuild_dirty().unwrap_or_default();
-                let wm = if w.unified_mesh {
-                    w.get_world_mesh().cloned()
-                } else {
-                    None
-                };
-                (r, w.unified_mesh, wm)
-            };
-            if unified {
-                if let Some(mesh) = world_mesh {
-                    let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
-                }
-            } else {
-                for (coord, mesh) in rebuilt {
-                    let _ = event_sender.send(SyncEvent::SectionMeshReady { coord, mesh });
-                }
-            }
+        if let Ok(mut state) = state_lock.lock() {
+            check_debounced_remesh(&mut state, &world, &event_sender, &generation_atomic);
         }
-
-        // If consecutive stream batches finished and channel is now quiet, remesh all once
-        if pending_stream_mesh_rebuild && msg_receiver.is_empty() {
-            pending_stream_mesh_rebuild = false;
-            last_mesh_dispatch_time = Some(std::time::Instant::now());
-            let (unified, world_mesh) = {
-                let mut w = world.write().unwrap();
-                let m = w.rebuild_all().cloned().unwrap_or_default();
-                (w.unified_mesh, m)
-            };
-            if unified && !world_mesh.is_empty() {
-                let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: world_mesh });
-            }
-        }
-    }
-
-    running.store(false, Ordering::SeqCst);
-    is_connected.store(false, Ordering::SeqCst);
-    if let Ok(mut guard) = status_lock.write() {
-        *guard = "DISCONNECTED".to_string();
     }
 }
 
-/// Dispatches a single packet into the session pipeline and triggers corresponding meshing and events.
-pub fn handle_packet(
-    packet: Packet,
-    packet_bytes: usize,
+/// Checks and performs throttled incremental dirty remeshing.
+pub fn check_debounced_remesh(
+    state: &mut SessionState,
     world: &Arc<RwLock<VoxelWorld>>,
     event_sender: &Sender<SyncEvent>,
-    stream_id_atomic: &Arc<AtomicU32>,
-    stream_total_sections: &mut usize,
-    stream_received_sections: &mut usize,
-    stream_received_bytes: &mut usize,
-    cmd_sender: Option<&Sender<ClientCommand>>,
-    sync_requested: &Arc<AtomicBool>,
-    more_pending: bool,
-    mut repair_history: Option<&mut std::collections::HashMap<IVec3, (std::time::Instant, u32)>>,
-    mut pending_non_streaming_updates: Option<&mut bool>,
-    mut last_mesh_dispatch_time: Option<&mut Option<std::time::Instant>>,
+    generation_atomic: &Arc<AtomicU64>,
+) {
+    if !state.pending_dirty_rebuild || state.lifecycle != SyncLifecycle::Live {
+        return;
+    }
+
+    let can_remesh = state
+        .last_mesh_time
+        .is_none_or(|t| t.elapsed() >= Duration::from_millis(60));
+
+    if can_remesh {
+        state.pending_dirty_rebuild = false;
+        state.last_mesh_time = Some(Instant::now());
+
+        let mut w = world.write().unwrap();
+        let _ = w.rebuild_dirty();
+        if let Some(wm) = w.get_world_mesh().cloned() {
+            let gen = generation_atomic.fetch_add(1, Ordering::SeqCst) + 1;
+            let _ = event_sender.send(SyncEvent::WorldMeshReady {
+                mesh: wm,
+                generation: gen,
+            });
+        }
+    }
+}
+
+/// Dispatches an individual packet against the session state machine.
+pub fn handle_packet(
+    packet: Packet,
+    bytes_len: usize,
+    state: &mut SessionState,
+    world: &Arc<RwLock<VoxelWorld>>,
+    cmd_sender: &Sender<ClientCommand>,
+    event_sender: &Sender<SyncEvent>,
+    generation_atomic: &Arc<AtomicU64>,
 ) {
     match packet {
-        Packet::SelectionInfo { min_pos, size } => {
-            {
-                let mut w = world.write().unwrap();
-                w.set_bounds(min_pos.x, min_pos.y, min_pos.z, size.x, size.y, size.z);
-            }
-            let _ = event_sender.send(SyncEvent::SelectionUpdated { min_pos, size });
-        }
-
-        Packet::HandshakeInfo {
-            total_sections,
-            non_empty_sections,
-            total_volume,
-            dimension,
-            flags,
+        Packet::Welcome {
+            negotiated_version: _,
+            server_uuid,
+            epoch,
+            server_seq,
+            current_min,
+            current_size,
+            current_state_hash: _,
+            decision,
+            message_or_dimension,
         } => {
-            let _ = event_sender.send(SyncEvent::Handshake {
-                total_sections,
-                non_empty_sections,
-                total_volume,
-                dimension,
-                flags,
+            state.server_uuid = server_uuid;
+            state.epoch = epoch;
+            state.min_pos = current_min;
+            state.size = current_size;
+            state.dimension = message_or_dimension.clone();
+
+            let _ = event_sender.send(SyncEvent::SelectionUpdated {
+                min_pos: current_min,
+                size: current_size,
             });
+
+            let decision_str = match decision {
+                SyncDecision::VerifiedSkipRebuild => "VERIFIED_SKIP_REBUILD",
+                SyncDecision::ReplayDeltas => "REPLAY_DELTAS",
+                SyncDecision::FullBaselineRequired => "FULL_BASELINE_REQUIRED",
+                SyncDecision::Rejected => "REJECTED",
+            };
+
+            let _ = event_sender.send(SyncEvent::Handshake {
+                epoch,
+                sequence: server_seq,
+                decision: decision_str.to_string(),
+                dimension: message_or_dimension.clone(),
+            });
+
+            match decision {
+                SyncDecision::VerifiedSkipRebuild => {
+                    // Update sequence and enter LIVE immediately without rebuilding geometry
+                    state.sequence = server_seq;
+                    state.lifecycle = SyncLifecycle::Live;
+                    let _ = event_sender.send(SyncEvent::Verified {
+                        is_verified: true,
+                        message: "100% in sync with scene (Zero-Rebuild verified)".to_string(),
+                    });
+                }
+                SyncDecision::FullBaselineRequired => {
+                    state.staging.clear();
+                    state.assembler = None;
+                    state.lifecycle = SyncLifecycle::ReceivingBaseline;
+                    let _ = event_sender.send(SyncEvent::StreamProgress {
+                        stage: "sync_download".to_string(),
+                        current: 0,
+                        total: 100,
+                        message: "Waiting for Baseline stream...".to_string(),
+                    });
+                }
+                SyncDecision::ReplayDeltas => {
+                    state.lifecycle = SyncLifecycle::ReplayingStaged;
+                }
+                SyncDecision::Rejected => {
+                    state.lifecycle = SyncLifecycle::Disconnected;
+                    let _ = event_sender.send(SyncEvent::Error(format!(
+                        "Connection rejected by server: {}",
+                        message_or_dimension
+                    )));
+                }
+            }
         }
 
-        Packet::FullSnapshot {
+        Packet::BaselineBegin {
             min_pos,
             size,
-            palette,
-            grid_indices,
-            biome_palette,
-            biome_indices,
+            ref block_palette,
+            total_chunks,
+            ..
         } => {
-            sync_requested.store(false, Ordering::SeqCst);
-            let identical = {
-                let w = world.read().unwrap();
-                w.storage.is_snapshot_identical(
-                    min_pos.x,
-                    min_pos.y,
-                    min_pos.z,
-                    size.x,
-                    size.y,
-                    size.z,
-                    &palette,
-                    &grid_indices,
-                )
-            };
+            state.min_pos = min_pos;
+            state.size = size;
+            let _ = event_sender.send(SyncEvent::SelectionUpdated { min_pos, size });
 
-            if identical {
-                let _ = event_sender.send(SyncEvent::Verified {
-                    is_verified: true,
-                    message: "Data 100% identical, skipping rebuild".to_string(),
-                });
-                return;
+            state.palette_map.clear();
+            for (idx, p) in block_palette.iter().enumerate() {
+                state.palette_map.insert(idx as u16, p.clone());
             }
 
-            let _ = event_sender.send(SyncEvent::StreamProgress {
-                stage: "sync_download".to_string(),
-                current: 1,
-                total: 1,
-                message: if packet_bytes > 0 {
-                    format!(
-                        "Received full snapshot [{:.1} MB]",
-                        packet_bytes as f64 / (1024.0 * 1024.0)
-                    )
-                } else {
-                    "Received full snapshot, rebuilding world mesh...".to_string()
-                },
-            });
-
-            let (total_sections, unified, mesh) = {
-                let mut w = world.write().unwrap();
-                w.set_full_snapshot(
-                    min_pos.x,
-                    min_pos.y,
-                    min_pos.z,
-                    size.x,
-                    size.y,
-                    size.z,
-                    &palette,
-                    &grid_indices,
-                    biome_palette.as_deref(),
-                    biome_indices.as_deref(),
-                );
-                let total = w.storage.get_all_non_empty_sections().len();
-                let sender = event_sender.clone();
-                let m = w
-                    .rebuild_all_with_progress(Some(&|p| {
-                        let _ = sender.send(SyncEvent::StreamProgress {
-                            stage: "sync_meshing".to_string(),
-                            current: p.current,
-                            total: p.total,
-                            message: p.message,
-                        });
-                    }))
-                    .cloned()
-                    .unwrap_or_default();
-                (total, w.unified_mesh, m)
-            };
-
-            if unified {
-                if let Some(ref mut last_time_opt) = last_mesh_dispatch_time {
-                    **last_time_opt = Some(std::time::Instant::now());
-                }
-                let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
-            } else {
-                let w = world.read().unwrap();
-                for (i, (&coord, s_mesh)) in w.get_section_cache().iter().enumerate() {
-                    let _ = event_sender.send(SyncEvent::SectionMeshReady {
-                        coord,
-                        mesh: s_mesh.clone(),
-                    });
+            match BaselineAssembler::new(&packet) {
+                Ok(assembler) => {
+                    state.assembler = Some(assembler);
+                    state.lifecycle = SyncLifecycle::ReceivingBaseline;
                     let _ = event_sender.send(SyncEvent::StreamProgress {
-                        stage: "sync_meshing".to_string(),
-                        current: i + 1,
-                        total: total_sections,
-                        message: format!("Meshed chunk ({}/{})", i + 1, total_sections),
+                        stage: "sync_download".to_string(),
+                        current: 0,
+                        total: total_chunks as usize,
+                        message: format!("Receiving Baseline stream (0/{})", total_chunks),
                     });
                 }
-            }
-
-            let _ = event_sender.send(SyncEvent::StreamFinished {
-                stream_id: 0,
-                built_sections: total_sections,
-            });
-        }
-
-        Packet::SectionSnapshot {
-            sec_coord,
-            start_pos,
-            size,
-            palette,
-            grid_indices,
-            biome_palette,
-            biome_indices,
-        } => {
-            {
-                let mut w = world.write().unwrap();
-                w.set_section_snapshot(
-                    sec_coord.x,
-                    sec_coord.y,
-                    sec_coord.z,
-                    start_pos.x,
-                    start_pos.y,
-                    start_pos.z,
-                    size.x,
-                    size.y,
-                    size.z,
-                    &palette,
-                    &grid_indices,
-                    biome_palette.as_deref(),
-                    biome_indices.as_deref(),
-                );
-            }
-
-            let is_streaming = stream_id_atomic.load(Ordering::SeqCst) != 0;
-            if is_streaming {
-                *stream_received_sections += 1;
-                *stream_received_bytes += packet_bytes;
-                let mb_str = if *stream_received_bytes > 0 {
-                    format!(
-                        " [{:.1} MB]",
-                        *stream_received_bytes as f64 / (1024.0 * 1024.0)
-                    )
-                } else {
-                    String::new()
-                };
-                let _ = event_sender.send(SyncEvent::StreamProgress {
-                    stage: "sync_download".to_string(),
-                    current: *stream_received_sections,
-                    total: *stream_total_sections,
-                    message: format!(
-                        "Receiving chunk ({}/{}){}",
-                        *stream_received_sections, *stream_total_sections, mb_str
-                    ),
-                });
-            } else if !more_pending {
-                let is_empty = {
-                    let w = world.read().unwrap();
-                    w.storage.get_all_non_empty_sections().is_empty()
-                };
-                if !is_empty {
-                    let (unified, section_mesh, world_mesh) = {
-                        let mut w = world.write().unwrap();
-                        let _ = w.rebuild_dirty();
-                        let s_mesh = w
-                            .get_section_cache()
-                            .get(&sec_coord)
-                            .cloned()
-                            .unwrap_or_default();
-                        let w_mesh = if w.unified_mesh {
-                            w.get_world_mesh().cloned()
-                        } else {
-                            None
-                        };
-                        (w.unified_mesh, s_mesh, w_mesh)
+                Err(reason) => {
+                    let cancel_pkt = Packet::Cancel {
+                        epoch: state.epoch,
+                        snapshot_uuid: [0u8; 16],
+                        reason,
                     };
+                    let _ = cmd_sender.send(ClientCommand::Send(encode_packet(&cancel_pkt)));
+                    let _ = event_sender.send(SyncEvent::Error(
+                        "Failed initializing baseline stream assembler".to_string(),
+                    ));
+                }
+            }
+        }
 
-                    if unified {
-                        if let Some(mesh) = world_mesh {
-                            if let Some(ref mut last_time_opt) = last_mesh_dispatch_time {
-                                **last_time_opt = Some(std::time::Instant::now());
-                            }
-                            let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
-                        }
-                    } else {
-                        let _ = event_sender.send(SyncEvent::SectionMeshReady {
-                            coord: sec_coord,
-                            mesh: section_mesh,
+        Packet::BaselineChunk {
+            chunk_index,
+            total_chunks,
+            ..
+        } => {
+            if let Some(ref mut assembler) = state.assembler {
+                match assembler.process_chunk(&packet) {
+                    Ok(()) => {
+                        let _ = event_sender.send(SyncEvent::StreamProgress {
+                            stage: "sync_download".to_string(),
+                            current: (chunk_index + 1) as usize,
+                            total: total_chunks as usize,
+                            message: format!(
+                                "Receiving chunk {}/{}",
+                                chunk_index + 1,
+                                total_chunks
+                            ),
                         });
                     }
-                }
-            }
-        }
-
-        Packet::DeltaUpdate {
-            min_pos, changes, ..
-        } => {
-            let borrowed_changes: Vec<(i32, i32, i32, &str)> = changes
-                .iter()
-                .map(|c| {
-                    (
-                        c.rel_pos.x + min_pos.x,
-                        c.rel_pos.y + min_pos.y,
-                        c.rel_pos.z + min_pos.z,
-                        c.state.as_str(),
-                    )
-                })
-                .collect();
-
-            let is_throttled = if let Some(Some(last_time)) = last_mesh_dispatch_time.as_deref() {
-                last_time.elapsed() < std::time::Duration::from_millis(60)
-            } else {
-                false
-            };
-
-            if more_pending || is_throttled {
-                // Batching / rate-limit fast-path: Ingest delta into voxel memory immediately (<0.1ms),
-                // defer remeshing until incoming queue clears or throttle interval elapses to coalesce rapid redstone bursts.
-                {
-                    let mut w = world.write().unwrap();
-                    w.apply_delta_update(min_pos.x, min_pos.y, min_pos.z, &borrowed_changes);
-                }
-                let _ = event_sender.send(SyncEvent::DeltaApplied {
-                    change_count: changes.len(),
-                    affected_sections: Vec::new(),
-                });
-                if let Some(ref mut pending) = pending_non_streaming_updates {
-                    **pending = true;
-                }
-                return;
-            }
-
-            let (rebuilt, unified, world_mesh) = {
-                let mut w = world.write().unwrap();
-                w.apply_delta_update(min_pos.x, min_pos.y, min_pos.z, &borrowed_changes);
-                let r = w.rebuild_dirty().unwrap_or_default();
-                let wm = if w.unified_mesh {
-                    w.get_world_mesh().cloned()
-                } else {
-                    None
-                };
-                (r, w.unified_mesh, wm)
-            };
-
-            if let Some(ref mut last_time_opt) = last_mesh_dispatch_time {
-                **last_time_opt = Some(std::time::Instant::now());
-            }
-
-            let affected: Vec<IVec3> = rebuilt.iter().map(|(c, _)| *c).collect();
-            if unified {
-                if let Some(mesh) = world_mesh {
-                    let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
-                }
-            } else {
-                for (coord, mesh) in rebuilt {
-                    let _ = event_sender.send(SyncEvent::SectionMeshReady { coord, mesh });
-                }
-            }
-
-            let _ = event_sender.send(SyncEvent::DeltaApplied {
-                change_count: changes.len(),
-                affected_sections: affected,
-            });
-        }
-
-        Packet::SectionManifest {
-            seq_id: _,
-            sections,
-        } => {
-            let raw_entries: Vec<(i32, i32, i32, u32)> = sections
-                .iter()
-                .map(|s| (s.coord.x, s.coord.y, s.coord.z, s.crc32))
-                .collect();
-
-            let (mismatched, has_known_manifest, is_storage_empty) = {
-                let mut w = world.write().unwrap();
-                let mismatches = w.storage.validate_manifest(&raw_entries, None);
-                let known = !w.storage.section_crc_map.is_empty();
-                let empty = w.storage.get_all_non_empty_sections().is_empty();
-                (mismatches, known, empty)
-            };
-
-            let is_streaming = stream_id_atomic.load(Ordering::SeqCst) != 0;
-
-            if mismatched.is_empty() {
-                if let Some(ref mut history) = repair_history {
-                    history.clear();
-                }
-                let (rebuilt_mesh, is_unified) = {
-                    let mut w = world.write().unwrap();
-                    let needs_remesh =
-                        w.get_world_mesh().is_none() || !w.storage.dirty_sections.is_empty();
-                    if needs_remesh && !w.storage.get_all_non_empty_sections().is_empty() {
-                        let m = w.rebuild_all().cloned().unwrap_or_default();
-                        (Some(m), w.unified_mesh)
-                    } else {
-                        (None, w.unified_mesh)
-                    }
-                };
-                if is_unified {
-                    if let Some(m) = rebuilt_mesh {
-                        if !m.is_empty() {
-                            if let Some(ref mut last_time_opt) = last_mesh_dispatch_time {
-                                **last_time_opt = Some(std::time::Instant::now());
-                            }
-                            let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh: m });
-                        }
-                    }
-                }
-                let _ = event_sender.send(SyncEvent::Verified {
-                    is_verified: true,
-                    message: "100% in sync with scene".to_string(),
-                });
-            } else if !is_streaming {
-                let now = std::time::Instant::now();
-                let mut eligible_repairs: Vec<IVec3> = Vec::new();
-
-                if let Some(ref mut history) = repair_history {
-                    history.retain(|coord, _| mismatched.contains(coord));
-                    for &coord in &mismatched {
-                        if let Some((last_attempt, attempts)) = history.get_mut(&coord) {
-                            let cooldown = if *attempts >= 3 {
-                                std::time::Duration::from_secs(10)
-                            } else {
-                                std::time::Duration::from_millis(2500)
-                            };
-
-                            if last_attempt.elapsed() >= cooldown {
-                                if last_attempt.elapsed() >= std::time::Duration::from_secs(10) {
-                                    *attempts = 1;
-                                } else {
-                                    *attempts += 1;
-                                }
-                                *last_attempt = now;
-                                eligible_repairs.push(coord);
-                            }
-                        } else {
-                            history.insert(coord, (now, 1));
-                            eligible_repairs.push(coord);
-                        }
-                    }
-                } else {
-                    eligible_repairs = mismatched.clone();
-                }
-
-                if eligible_repairs.is_empty() {
-                    let _ = event_sender.send(SyncEvent::Verified {
-                        is_verified: false,
-                        message: format!(
-                            "Detected {} out-of-sync sections (repair cooling down)",
-                            mismatched.len()
-                        ),
-                    });
-                } else {
-                    let _ = event_sender.send(SyncEvent::Verified {
-                        is_verified: false,
-                        message: format!(
-                            "Detected {} out-of-sync sections (requesting repair for {})",
-                            mismatched.len(),
-                            eligible_repairs.len()
-                        ),
-                    });
-
-                    if let Some(sender) = cmd_sender {
-                        if !sync_requested.load(Ordering::SeqCst) {
-                            if (is_storage_empty && !has_known_manifest)
-                                || eligible_repairs.len() == raw_entries.len()
-                            {
-                                let _ =
-                                    sender.send(ClientCommand::Send(encode_full_sync_request()));
-                                sync_requested.store(true, Ordering::SeqCst);
-                            } else {
-                                for packet in encode_repair_requests(&eligible_repairs, 512) {
-                                    let _ = sender.send(ClientCommand::Send(packet));
-                                }
-                                sync_requested.store(true, Ordering::SeqCst);
-                            }
-                        }
+                    Err(reason) => {
+                        let resync_pkt = Packet::ResyncRequest {
+                            epoch: state.epoch,
+                            missing_from_seq: state.sequence,
+                            missing_to_seq: state.sequence + 1,
+                            reason,
+                        };
+                        let _ = cmd_sender.send(ClientCommand::Send(encode_packet(&resync_pkt)));
                     }
                 }
             }
         }
 
-        Packet::StreamBegin {
-            stream_id,
-            total_sections,
-            flags: _,
+        Packet::BaselineEnd {
+            snapshot_uuid,
+            snapshot_seq,
+            ..
         } => {
-            stream_id_atomic.store(stream_id, Ordering::SeqCst);
-            sync_requested.store(false, Ordering::SeqCst);
-            *stream_total_sections = total_sections as usize;
-            *stream_received_sections = 0;
-            *stream_received_bytes = 0;
+            state.lifecycle = SyncLifecycle::ValidatingHash;
             let _ = event_sender.send(SyncEvent::StreamProgress {
-                stage: "sync_download".to_string(),
-                current: 0,
-                total: *stream_total_sections,
-                message: format!("Receiving {} chunks from server...", *stream_total_sections),
+                stage: "sync_meshing".to_string(),
+                current: 50,
+                total: 100,
+                message: "Validating state hash and assembling voxels...".to_string(),
             });
+
+            if let Some(assembler) = state.assembler.take() {
+                match assembler.finalize(&packet) {
+                    Ok(assembled_storage) => {
+                        // 1. Sync assembled VoxelStorage to VoxelWorld
+                        {
+                            let mut w = world.write().unwrap();
+                            w.sync_from_storage(&assembled_storage);
+                        }
+
+                        // 2. Commit Baseline ACK
+                        let ack_pkt = Packet::BaselineAck {
+                            epoch: state.epoch,
+                            snapshot_uuid,
+                            committed_seq: snapshot_seq,
+                            result_code: BaselineAckResult::SuccessCommitted,
+                        };
+                        let _ = cmd_sender.send(ClientCommand::Send(encode_packet(&ack_pkt)));
+
+                        // 3. Replay in-flight staged deltas (S + 1 .. latest)
+                        state.lifecycle = SyncLifecycle::ReplayingStaged;
+                        match state.staging.drain_replaying_after_snapshot(snapshot_seq) {
+                            Ok(replayed_packets) => {
+                                let mut current_seq = snapshot_seq;
+                                for pkt in replayed_packets {
+                                    if let Packet::DeltaOp {
+                                        seq_id, changes, ..
+                                    } = pkt
+                                    {
+                                        current_seq = seq_id;
+                                        apply_delta_entries_to_world(
+                                            &changes,
+                                            &state.palette_map,
+                                            world,
+                                            state.min_pos,
+                                        );
+                                    }
+                                }
+                                state.sequence = current_seq;
+                            }
+                            Err(resync_reason) => {
+                                let resync_pkt = Packet::ResyncRequest {
+                                    epoch: state.epoch,
+                                    missing_from_seq: snapshot_seq + 1,
+                                    missing_to_seq: snapshot_seq + 2,
+                                    reason: resync_reason,
+                                };
+                                let _ = cmd_sender
+                                    .send(ClientCommand::Send(encode_packet(&resync_pkt)));
+                            }
+                        }
+
+                        // 4. Build unified MeshData using parallel Rayon mesher
+                        state.lifecycle = SyncLifecycle::BuildingMesh;
+                        let _ = event_sender.send(SyncEvent::StreamProgress {
+                            stage: "sync_meshing".to_string(),
+                            current: 80,
+                            total: 100,
+                            message: "Building unified world mesh...".to_string(),
+                        });
+
+                        let (world_mesh, built_sections) = {
+                            let mut w = world.write().unwrap();
+                            let _ = w.rebuild_all();
+                            let mesh = w.get_world_mesh().cloned().unwrap_or_default();
+                            let count = w.storage.sections.len();
+                            (mesh, count)
+                        };
+
+                        let gen = generation_atomic.fetch_add(1, Ordering::SeqCst) + 1;
+                        let _ = event_sender.send(SyncEvent::WorldMeshReady {
+                            mesh: world_mesh,
+                            generation: gen,
+                        });
+                        let _ = event_sender.send(SyncEvent::StreamFinished { built_sections });
+
+                        state.lifecycle = SyncLifecycle::Live;
+                    }
+                    Err(resync_reason) => {
+                        let ack_pkt = Packet::BaselineAck {
+                            epoch: state.epoch,
+                            snapshot_uuid,
+                            committed_seq: snapshot_seq,
+                            result_code: BaselineAckResult::ValidationFailed,
+                        };
+                        let _ = cmd_sender.send(ClientCommand::Send(encode_packet(&ack_pkt)));
+
+                        let resync_pkt = Packet::ResyncRequest {
+                            epoch: state.epoch,
+                            missing_from_seq: snapshot_seq,
+                            missing_to_seq: snapshot_seq + 1,
+                            reason: resync_reason,
+                        };
+                        let _ = cmd_sender.send(ClientCommand::Send(encode_packet(&resync_pkt)));
+                    }
+                }
+            }
         }
 
-        Packet::StreamEnd {
-            stream_id,
-            sent_sections: _,
-            status: _,
+        Packet::DeltaOp {
+            epoch,
+            seq_id,
+            count: _,
+            ref changes,
+            ..
         } => {
-            stream_id_atomic.store(0, Ordering::SeqCst);
-            sync_requested.store(false, Ordering::SeqCst);
-
-            if more_pending {
+            if epoch != state.epoch {
                 return;
             }
 
-            let (total, unified, mesh) = {
-                let mut w = world.write().unwrap();
-                let sender = event_sender.clone();
-                let m = w
-                    .rebuild_all_with_progress(Some(&|p| {
-                        let _ = sender.send(SyncEvent::StreamProgress {
-                            stage: "sync_meshing".to_string(),
-                            current: p.current,
-                            total: p.total,
-                            message: p.message,
-                        });
-                    }))
-                    .cloned()
-                    .unwrap_or_default();
-                let total_sections = w.get_section_cache().len();
-                (total_sections, w.unified_mesh, m)
-            };
-
-            if unified {
-                if let Some(ref mut last_time_opt) = last_mesh_dispatch_time {
-                    **last_time_opt = Some(std::time::Instant::now());
-                }
-                let _ = event_sender.send(SyncEvent::WorldMeshReady { mesh });
-            } else {
-                let w = world.read().unwrap();
-                for (i, (&coord, s_mesh)) in w.get_section_cache().iter().enumerate() {
-                    let _ = event_sender.send(SyncEvent::SectionMeshReady {
-                        coord,
-                        mesh: s_mesh.clone(),
-                    });
-                    let _ = event_sender.send(SyncEvent::StreamProgress {
-                        stage: "sync_meshing".to_string(),
-                        current: i + 1,
-                        total,
-                        message: format!("Meshed chunk ({}/{})", i + 1, total),
-                    });
-                }
+            if state.lifecycle == SyncLifecycle::ReceivingBaseline {
+                let _ = state.staging.push(seq_id, packet, bytes_len);
+                return;
             }
 
-            let built = *stream_received_sections;
-            let _ = event_sender.send(SyncEvent::StreamFinished {
-                stream_id,
-                built_sections: built,
-            });
+            if state.lifecycle == SyncLifecycle::Live {
+                let expected = state.sequence + 1;
+                if seq_id == expected || state.sequence == 0 {
+                    state.sequence = seq_id;
+                    let affected = apply_delta_entries_to_world(
+                        changes,
+                        &state.palette_map,
+                        world,
+                        state.min_pos,
+                    );
+                    state.pending_dirty_rebuild = true;
+                    let _ = event_sender.send(SyncEvent::DeltaApplied {
+                        change_count: changes.len(),
+                        affected_sections: affected,
+                    });
+                } else if seq_id > expected {
+                    // Sequence Gap detected
+                    let resync_pkt = Packet::ResyncRequest {
+                        epoch: state.epoch,
+                        missing_from_seq: expected,
+                        missing_to_seq: seq_id - 1,
+                        reason: ResyncReason::SequenceGap,
+                    };
+                    let _ = cmd_sender.send(ClientCommand::Send(encode_packet(&resync_pkt)));
+                }
+            }
+        }
+
+        Packet::PaletteUpdate {
+            epoch,
+            new_revision,
+            entries,
+            ..
+        } => {
+            if epoch == state.epoch {
+                state.palette_revision = new_revision;
+                for (id, str_val) in entries {
+                    state.palette_map.insert(id, str_val);
+                }
+            }
+        }
+
+        Packet::Ping { timestamp } => {
+            let pong = Packet::Pong { timestamp };
+            let _ = cmd_sender.send(ClientCommand::Send(encode_packet(&pong)));
+        }
+
+        Packet::Error { message, .. } => {
+            let _ = event_sender.send(SyncEvent::Error(message));
         }
 
         _ => {}
     }
+}
+
+/// Applies a list of delta entries into VoxelWorld storage.
+fn apply_delta_entries_to_world(
+    changes: &[DeltaChangeEntry],
+    palette_map: &HashMap<u16, String>,
+    world: &Arc<RwLock<VoxelWorld>>,
+    min_pos: IVec3,
+) -> Vec<IVec3> {
+    let mut string_changes: Vec<(i32, i32, i32, &str)> = Vec::with_capacity(changes.len());
+    for entry in changes {
+        let abs_x = min_pos.x + entry.rel_pos.x;
+        let abs_y = min_pos.y + entry.rel_pos.y;
+        let abs_z = min_pos.z + entry.rel_pos.z;
+        let state_str = palette_map
+            .get(&entry.state_id)
+            .map(|s| s.as_str())
+            .unwrap_or("minecraft:air");
+        string_changes.push((abs_x, abs_y, abs_z, state_str));
+    }
+
+    let mut w = world.write().unwrap();
+    w.apply_delta_update(min_pos.x, min_pos.y, min_pos.z, &string_changes);
+
+    let mut affected = Vec::new();
+    for &(x, y, z, _) in &string_changes {
+        let sec = IVec3::new(x >> 4, y >> 4, z >> 4);
+        if !affected.contains(&sec) {
+            affected.push(sec);
+        }
+    }
+    affected
 }

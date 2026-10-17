@@ -39,7 +39,8 @@ pub use mesher::PySectionMesher;
 pub use model::{PyBakedModelDatabase, PyModelBaker};
 pub use point_cloud::PyVoxelPointCloud;
 pub use protocol::{
-    decode_packet, encode_full_sync_request, encode_repair_requests, encode_sync_config,
+    compute_canonical_state_hash, decode_packet, encode_baseline_begin, encode_baseline_chunk,
+    encode_baseline_end, encode_delta_op, encode_palette_update, encode_welcome,
 };
 pub use resource::{
     create_test_cache_package, get_cache_manifest, is_valid_cache_package, precompile_all_assets,
@@ -143,9 +144,13 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // 5. Live Sync & Protocol
     m.add_class::<PyLiveSyncSession>()?;
     m.add_function(wrap_pyfunction!(decode_packet, m)?)?;
-    m.add_function(wrap_pyfunction!(encode_full_sync_request, m)?)?;
-    m.add_function(wrap_pyfunction!(encode_repair_requests, m)?)?;
-    m.add_function(wrap_pyfunction!(encode_sync_config, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_canonical_state_hash, m)?)?;
+    m.add_function(wrap_pyfunction!(encode_welcome, m)?)?;
+    m.add_function(wrap_pyfunction!(encode_baseline_begin, m)?)?;
+    m.add_function(wrap_pyfunction!(encode_baseline_chunk, m)?)?;
+    m.add_function(wrap_pyfunction!(encode_baseline_end, m)?)?;
+    m.add_function(wrap_pyfunction!(encode_delta_op, m)?)?;
+    m.add_function(wrap_pyfunction!(encode_palette_update, m)?)?;
 
     // 6. Resource Pack & Textures
     m.add_class::<PyResourcePackStack>()?;
@@ -363,10 +368,9 @@ mod tests {
     fn test_python_live_sync_session_and_protocol() {
         pyo3::prepare_freethreaded_python();
         Python::with_gil(|py| {
-            // Test packet decode
+            // Test packet decode (Ping 0x0E)
             let pkt_bytes = [
-                0x4D, 0x43, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00,
+                0x4D, 0x54, 0x03, 0x0E, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             ];
             let dict = decode_packet(py, &pkt_bytes).unwrap();
             assert_eq!(
@@ -375,7 +379,7 @@ mod tests {
                     .unwrap()
                     .extract::<String>()
                     .unwrap(),
-                "SELECTION_INFO"
+                "PING"
             );
 
             // Test session

@@ -1,4 +1,4 @@
-//! # Live Sync Events
+//! # Live Sync Events (RFC v3.1)
 //!
 //! Event types dispatched from the Rust background sync thread to host applications.
 
@@ -19,18 +19,14 @@ pub enum SyncEvent {
 
     /// Handshake synchronization metadata.
     Handshake {
-        total_sections: u32,
-        non_empty_sections: u32,
-        total_volume: u32,
+        epoch: u64,
+        sequence: u64,
+        decision: String,
         dimension: String,
-        flags: u16,
     },
 
-    /// A 16x16x16 chunk section mesh has been assembled in background and is ready for DCC ingestion.
-    SectionMeshReady { coord: IVec3, mesh: MeshData },
-
     /// A unified, merged world mesh containing the entire active volume has been assembled.
-    WorldMeshReady { mesh: MeshData },
+    WorldMeshReady { mesh: MeshData, generation: u64 },
 
     /// Stream batch progress update.
     StreamProgress {
@@ -41,10 +37,7 @@ pub enum SyncEvent {
     },
 
     /// Stream batch completed.
-    StreamFinished {
-        stream_id: u32,
-        built_sections: usize,
-    },
+    StreamFinished { built_sections: usize },
 
     /// Incremental delta modifications applied.
     DeltaApplied {

@@ -20,6 +20,8 @@ thiserror = { workspace = true }
 tungstenite = { workspace = true }
 crossbeam-channel = { workspace = true }
 url = { workspace = true }
+xxhash-rust = { workspace = true }
+zstd = { workspace = true }
 
 [features]
 default = ["serde"]

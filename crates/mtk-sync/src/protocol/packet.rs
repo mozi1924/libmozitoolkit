@@ -1,4 +1,4 @@
-//! # Strongly Typed Live Sync Binary Packets
+//! # Strongly Typed Live Sync Binary Packets (Protocol v3.1)
 //!
 //! Representation of all Minecraft (Yefira) <-> DCC Live Sync packet payloads.
 
@@ -6,98 +6,161 @@ use glam::IVec3;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::protocol::constants::StreamStatus;
+use super::constants::{BaselineAckResult, CancelReason, ErrorCode, ResyncReason, SyncDecision};
 
-/// Strongly-typed Live Sync Packet enum.
+/// Single block modification entry in a `DELTA_OP` packet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct DeltaChangeEntry {
+    /// Relative position within selection box: 0 <= rel_pos < size.
+    pub rel_pos: IVec3,
+    /// Direct index into current palette revision.
+    pub state_id: u16,
+}
+
+/// Strongly-typed Live Sync Packet enum (RFC v3.1 Section 4).
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Packet {
-    /// 0x01: Selection Bounding Box Information
-    SelectionInfo { min_pos: IVec3, size: IVec3 },
+    /// 0x01: Client Handshake Initiation (C -> S)
+    Hello {
+        min_version: u16,
+        max_version: u16,
+        capabilities: u32,
+        flags: u32,
+        cached_world_uuid: [u8; 16],
+        cached_epoch: u64,
+        cached_seq: u64,
+        cached_min: IVec3,
+        cached_size: IVec3,
+        cached_state_hash: u64,
+        auth_token: String,
+        cached_dimension: String,
+    },
 
-    /// 0x02: Full Selection Snapshot
-    FullSnapshot {
+    /// 0x02: Server Handshake Response (S -> C)
+    Welcome {
+        negotiated_version: u16,
+        server_uuid: [u8; 16],
+        epoch: u64,
+        server_seq: u64,
+        current_min: IVec3,
+        current_size: IVec3,
+        current_state_hash: u64,
+        decision: SyncDecision,
+        message_or_dimension: String,
+    },
+
+    /// 0x03: Baseline Metadata Beginning (S -> C)
+    BaselineBegin {
+        epoch: u64,
+        snapshot_uuid: [u8; 16],
+        snapshot_seq: u64,
         min_pos: IVec3,
         size: IVec3,
-        palette: Vec<String>,
-        grid_indices: Vec<u16>,
-        biome_palette: Option<Vec<String>>,
-        biome_indices: Option<Vec<u16>>,
-    },
-
-    /// 0x03: Block Delta Updates (incremental modifications)
-    DeltaUpdate {
-        seq_id: u32,
-        min_pos: IVec3,
-        changes: Vec<DeltaChange>,
-    },
-
-    /// 0x05: Section CRC32 Manifest
-    SectionManifest {
-        seq_id: u32,
-        sections: Vec<ManifestSectionEntry>,
-    },
-
-    /// 0x06: Single 16x16x16 Chunk Section Snapshot
-    SectionSnapshot {
-        sec_coord: IVec3,
-        start_pos: IVec3,
-        size: IVec3,
-        palette: Vec<String>,
-        grid_indices: Vec<u16>,
-        biome_palette: Option<Vec<String>>,
-        biome_indices: Option<Vec<u16>>,
-    },
-
-    /// 0x07: Handshake and Metadata
-    HandshakeInfo {
-        total_sections: u32,
-        non_empty_sections: u32,
-        total_volume: u32,
+        state_hash: u64,
+        palette_revision: u32,
+        total_chunks: u32,
+        total_encoded_bytes: u64,
+        total_decoded_bytes: u64,
+        compression_mode: u8,
+        palette_bits_per_block: u8,
+        biome_bits_per_quart: u8,
         dimension: String,
-        flags: u16,
+        block_palette: Vec<String>,
+        biome_palette: Vec<String>,
     },
 
-    /// 0x08: Progressive Section Stream Beginning
-    StreamBegin {
-        stream_id: u32,
-        total_sections: u32,
-        flags: u16,
+    /// 0x04: Baseline Voxel Chunk Stream (S -> C)
+    BaselineChunk {
+        epoch: u64,
+        snapshot_uuid: [u8; 16],
+        chunk_index: u32,
+        total_chunks: u32,
+        first_voxel_index: u64,
+        voxel_count: u32,
+        payload_len: u32,
+        decoded_target_bytes: u32,
+        chunk_xxhash64: u64,
+        payload: Vec<u8>,
     },
 
-    /// 0x09: Progressive Section Stream Ending
-    StreamEnd {
-        stream_id: u32,
-        sent_sections: u32,
-        status: StreamStatus,
+    /// 0x05: Baseline Finished Notification (S -> C)
+    BaselineEnd {
+        epoch: u64,
+        snapshot_uuid: [u8; 16],
+        snapshot_seq: u64,
+        total_chunks_sent: u32,
+        final_state_hash: u64,
+        status: u8,
     },
 
-    /// 0x80: Client requests Full Snapshot
-    ReqFullSync,
-
-    /// 0x81: Client requests specific Section Repairs
-    ReqSectionSync { sections: Vec<IVec3> },
-
-    /// 0x82: Client configuration
-    SyncConfig {
-        throttle_mode: u8,
-        target_fps: u8,
-        is_active: bool,
+    /// 0x06: Baseline Client Commit Acknowledgment (C -> S)
+    BaselineAck {
+        epoch: u64,
+        snapshot_uuid: [u8; 16],
+        committed_seq: u64,
+        result_code: BaselineAckResult,
     },
-}
 
-/// Single block modification entry in a `DeltaUpdate` packet.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct DeltaChange {
-    pub rel_pos: IVec3,
-    pub state: String,
-}
+    /// 0x07: Incremental Block Delta Batch (S -> C)
+    DeltaOp {
+        epoch: u64,
+        seq_id: u64,
+        palette_revision: u32,
+        count: u16,
+        batch_xxhash64: u64,
+        changes: Vec<DeltaChangeEntry>,
+    },
 
-/// Single section CRC entry in a `SectionManifest` packet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct ManifestSectionEntry {
-    pub coord: IVec3,
-    pub crc32: u32,
+    /// 0x08: Dynamic Palette Append (S -> C)
+    PaletteUpdate {
+        epoch: u64,
+        seq_id: u64,
+        base_revision: u32,
+        new_revision: u32,
+        entries: Vec<(u16, String)>,
+    },
+
+    /// 0x09: State Verification Request (Bidirectional)
+    StateVerifyReq {
+        epoch: u64,
+        sequence: u64,
+        state_hash: u64,
+    },
+
+    /// 0x0A: State Verification Response (Bidirectional)
+    StateVerifyResp {
+        epoch: u64,
+        sequence: u64,
+        is_match: bool,
+    },
+
+    /// 0x0B: Task / Session Cancellation (Bidirectional)
+    Cancel {
+        epoch: u64,
+        snapshot_uuid: [u8; 16],
+        reason: CancelReason,
+    },
+
+    /// 0x0D: Resync and Gap Recovery Request (C -> S)
+    ResyncRequest {
+        epoch: u64,
+        missing_from_seq: u64,
+        missing_to_seq: u64,
+        reason: ResyncReason,
+    },
+
+    /// 0x0E: Keepalive Ping (Bidirectional)
+    Ping { timestamp: u64 },
+
+    /// 0x0F: Keepalive Pong (Bidirectional)
+    Pong { timestamp: u64 },
+
+    /// 0x10: Diagnostic Error Response (Bidirectional)
+    Error {
+        epoch: u64,
+        error_code: ErrorCode,
+        message: String,
+    },
 }

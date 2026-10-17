@@ -2,6 +2,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
 use glam::IVec3;
+use mtk_sync::protocol::*;
 use mtk_sync::{LiveSyncSession, SyncEvent};
 
 use crate::cull::PyFaceCuller;
@@ -9,7 +10,7 @@ use crate::mesh::PyMeshData;
 use crate::model::PyBakedModelDatabase;
 use crate::voxel::{PyMesherConfig, PyVoxelStorage};
 
-/// Python wrapper for `LiveSyncSession` real-time WebSocket synchronization engine.
+/// Python wrapper for `LiveSyncSession` real-time WebSocket synchronization engine (RFC v3.1).
 #[pyclass(name = "LiveSyncSession")]
 pub struct PyLiveSyncSession {
     inner: LiveSyncSession,
@@ -53,8 +54,7 @@ impl PyLiveSyncSession {
         self.inner.set_config(config.inner.clone());
     }
 
-    /// Hot-reloads mesher configuration and model database on the underlying VoxelWorld,
-    /// clearing all cached section meshes.
+    /// Hot-reloads mesher configuration and model database on the underlying VoxelWorld.
     #[pyo3(signature = (config=None, model_db=None))]
     pub fn hot_reload(
         &self,
@@ -74,22 +74,83 @@ impl PyLiveSyncSession {
         }
     }
 
-    /// Starts the background sync client thread connecting to Minecraft at `url`.
-    #[pyo3(signature = (url="ws://localhost:8765", auto_reconnect=true, max_reconnect_attempts=5))]
+    /// Starts the background sync client thread connecting to Minecraft at `url`,
+    /// optionally passing cached session parameters for zero-rebuild fast path verification.
+    #[pyo3(signature = (
+        url="ws://localhost:8765",
+        auto_reconnect=true,
+        max_reconnect_attempts=5,
+        cached_uuid=None,
+        cached_epoch=0,
+        cached_seq=0,
+        cached_min=None,
+        cached_size=None,
+        cached_state_hash=0,
+        auth_token=None,
+        cached_dimension=None
+    ))]
     pub fn start(
         &mut self,
         url: &str,
         auto_reconnect: bool,
         max_reconnect_attempts: usize,
+        cached_uuid: Option<&[u8]>,
+        cached_epoch: u64,
+        cached_seq: u64,
+        cached_min: Option<(i32, i32, i32)>,
+        cached_size: Option<(i32, i32, i32)>,
+        cached_state_hash: u64,
+        auth_token: Option<&str>,
+        cached_dimension: Option<&str>,
     ) -> PyResult<()> {
+        let initial_hello = if cached_uuid.is_some() || cached_state_hash != 0 {
+            let mut uuid_arr = [0u8; 16];
+            if let Some(b) = cached_uuid {
+                if b.len() == 16 {
+                    uuid_arr.copy_from_slice(b);
+                }
+            }
+            let c_min = cached_min
+                .map(|(x, y, z)| IVec3::new(x, y, z))
+                .unwrap_or(IVec3::ZERO);
+            let c_sz = cached_size
+                .map(|(x, y, z)| IVec3::new(x, y, z))
+                .unwrap_or(IVec3::ZERO);
+            Some(Packet::Hello {
+                min_version: PROTOCOL_VERSION as u16,
+                max_version: PROTOCOL_VERSION as u16,
+                capabilities: 0x03, // Zstd + DNA Direct Memory
+                flags: 0,
+                cached_world_uuid: uuid_arr,
+                cached_epoch,
+                cached_seq,
+                cached_min: c_min,
+                cached_size: c_sz,
+                cached_state_hash,
+                auth_token: auth_token.unwrap_or("").to_string(),
+                cached_dimension: cached_dimension
+                    .unwrap_or("minecraft:overworld")
+                    .to_string(),
+            })
+        } else {
+            None
+        };
+
         self.inner
-            .start(url, auto_reconnect, max_reconnect_attempts)
+            .start_with_hello(url, auto_reconnect, max_reconnect_attempts, initial_hello)
             .map_err(pyo3::exceptions::PyRuntimeError::new_err)
     }
 
     /// Stops the live sync session cleanly and disconnects from server.
     pub fn stop(&mut self) {
         self.inner.stop();
+    }
+
+    /// Sends a RESYNC_REQUEST to the server.
+    pub fn request_resync(&self) -> PyResult<()> {
+        self.inner
+            .request_resync()
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err)
     }
 
     /// Whether the background synchronization session worker is currently active.
@@ -108,6 +169,24 @@ impl PyLiveSyncSession {
     #[getter]
     pub fn status(&self) -> String {
         self.inner.status()
+    }
+
+    /// Returns current client generation ID.
+    #[getter]
+    pub fn client_generation(&self) -> u64 {
+        self.inner.client_generation()
+    }
+
+    /// Returns current session sequence ID.
+    #[getter]
+    pub fn current_sequence(&self) -> u64 {
+        self.inner.current_sequence()
+    }
+
+    /// Returns current session epoch ID.
+    #[getter]
+    pub fn current_epoch(&self) -> u64 {
+        self.inner.current_epoch()
     }
 
     /// Polls all pending synchronization events from the background Rust engine (non-blocking).
@@ -132,30 +211,21 @@ impl PyLiveSyncSession {
                     dict.set_item("size_z", size.z)?;
                 }
                 SyncEvent::Handshake {
-                    total_sections,
-                    non_empty_sections,
-                    total_volume,
+                    epoch,
+                    sequence,
+                    decision,
                     dimension,
-                    flags,
                 } => {
                     dict.set_item("type", "HANDSHAKE")?;
-                    dict.set_item("total_sections", total_sections)?;
-                    dict.set_item("non_empty_sections", non_empty_sections)?;
-                    dict.set_item("total_volume", total_volume)?;
+                    dict.set_item("epoch", epoch)?;
+                    dict.set_item("sequence", sequence)?;
+                    dict.set_item("decision", decision)?;
                     dict.set_item("dimension", dimension)?;
-                    dict.set_item("flags", flags)?;
                 }
-                SyncEvent::SectionMeshReady { coord, mesh } => {
-                    dict.set_item("type", "SECTION_MESH_READY")?;
-                    dict.set_item("sec_x", coord.x)?;
-                    dict.set_item("sec_y", coord.y)?;
-                    dict.set_item("sec_z", coord.z)?;
-                    dict.set_item("coord", (coord.x, coord.y, coord.z))?;
-                    dict.set_item("mesh", PyMeshData { inner: mesh })?;
-                }
-                SyncEvent::WorldMeshReady { mesh } => {
+                SyncEvent::WorldMeshReady { mesh, generation } => {
                     dict.set_item("type", "WORLD_MESH_READY")?;
                     dict.set_item("mesh", PyMeshData { inner: mesh })?;
+                    dict.set_item("generation", generation)?;
                 }
                 SyncEvent::StreamProgress {
                     stage,
@@ -175,12 +245,8 @@ impl PyLiveSyncSession {
                     };
                     dict.set_item("percent", pct)?;
                 }
-                SyncEvent::StreamFinished {
-                    stream_id,
-                    built_sections,
-                } => {
+                SyncEvent::StreamFinished { built_sections } => {
                     dict.set_item("type", "STREAM_FINISHED")?;
-                    dict.set_item("stream_id", stream_id)?;
                     dict.set_item("built_sections", built_sections)?;
                 }
                 SyncEvent::DeltaApplied {
@@ -218,42 +284,6 @@ impl PyLiveSyncSession {
         Ok(list)
     }
 
-    /// Sends a Full Sync Request (0x80) to server.
-    pub fn send_full_sync_request(&self) -> PyResult<()> {
-        self.inner
-            .send_full_sync_request()
-            .map_err(pyo3::exceptions::PyRuntimeError::new_err)
-    }
-
-    /// Sends Section Repair Requests (0x81) to server.
-    pub fn send_repair_request(&self, sections: Vec<(i32, i32, i32)>) -> PyResult<()> {
-        let vec: Vec<IVec3> = sections
-            .into_iter()
-            .map(|(x, y, z)| IVec3::new(x, y, z))
-            .collect();
-        self.inner
-            .send_repair_request(&vec)
-            .map_err(pyo3::exceptions::PyRuntimeError::new_err)
-    }
-
-    /// Sends Sync Configuration (0x82) to server.
-    #[pyo3(signature = (throttle_mode=0, target_fps=60, is_active=true))]
-    pub fn send_sync_config(
-        &self,
-        throttle_mode: u8,
-        target_fps: u8,
-        is_active: bool,
-    ) -> PyResult<()> {
-        self.inner
-            .send_sync_config(throttle_mode, target_fps, is_active)
-            .map_err(pyo3::exceptions::PyRuntimeError::new_err)
-    }
-
-    /// Returns the unique Atlas Chunk IDs used by the active world mesh.
-    pub fn used_chunk_ids(&self) -> Vec<u32> {
-        self.inner.used_chunk_ids()
-    }
-
     /// Returns a copy of the underlying `VoxelStorage`.
     pub fn get_storage(&self) -> PyResult<PyVoxelStorage> {
         let w = self.inner.world.read().map_err(|e| {
@@ -262,24 +292,5 @@ impl PyLiveSyncSession {
         Ok(PyVoxelStorage {
             inner: w.storage.clone(),
         })
-    }
-
-    /// Exports manifest metadata (bounds, generation, section CRCs) as JSON string.
-    pub fn export_manifest_metadata(&self) -> PyResult<String> {
-        let w = self.inner.world.read().map_err(|e| {
-            pyo3::exceptions::PyRuntimeError::new_err(format!("World lock poisoned: {}", e))
-        })?;
-        Ok(w.storage.export_manifest_metadata().to_string())
-    }
-
-    /// Imports manifest metadata from JSON string to restore persistent scene state and enable 0ms reconnect verification.
-    pub fn import_manifest_metadata(&self, json_str: &str) -> PyResult<bool> {
-        let val: serde_json::Value = serde_json::from_str(json_str).map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("Invalid manifest JSON: {}", e))
-        })?;
-        let mut w = self.inner.world.write().map_err(|e| {
-            pyo3::exceptions::PyRuntimeError::new_err(format!("World lock poisoned: {}", e))
-        })?;
-        Ok(w.import_manifest_metadata(&val))
     }
 }

@@ -1,18 +1,15 @@
-//! # Live Sync Protocol Module
+//! # Live Sync Protocol Module (RFC v3.1)
 //!
-//! Binary serialization, packet definitions, and network codecs for Minecraft Yefira Live Sync.
+//! Binary serialization, packet definitions, xxHash64 hasher, and network codecs for Minecraft Yefira Live Sync.
 
 pub mod codec;
 pub mod constants;
 pub mod error;
+pub mod hasher;
 pub mod packet;
 
-pub use codec::{
-    decode_packet, encode_full_sync_request, encode_repair_requests, encode_sync_config,
-};
-pub use constants::{
-    is_supported_protocol_version, PacketType, StreamStatus, MAX_SUPPORTED_PROTOCOL_VERSION,
-    MIN_SUPPORTED_PROTOCOL_VERSION, PROTOCOL_MAGIC, PROTOCOL_VERSION,
-};
+pub use codec::{compute_delta_batch_hash, decode_packet, encode_packet};
+pub use constants::*;
 pub use error::ProtocolError;
-pub use packet::{DeltaChange, ManifestSectionEntry, Packet};
+pub use hasher::{compute_canonical_state_hash, normalize_canonical_blockstate};
+pub use packet::*;

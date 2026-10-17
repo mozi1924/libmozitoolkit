@@ -143,8 +143,8 @@ pub use mtk_sync as sync;
 pub use mtk_sync::protocol;
 #[cfg(feature = "sync")]
 pub use mtk_sync::protocol::{
-    decode_packet, encode_full_sync_request, encode_repair_requests, encode_sync_config,
-    DeltaChange, ManifestSectionEntry, Packet, PacketType, ProtocolError, StreamStatus,
+    compute_canonical_state_hash, decode_packet, encode_packet, DeltaChangeEntry, Opcode, Packet,
+    ProtocolError, SyncDecision,
 };
 #[cfg(feature = "sync")]
 pub use mtk_sync::{LiveSyncSession, SyncClient, SyncEvent};

@@ -2,10 +2,10 @@
 //! # mtk-sync
 //!
 //! **mtk-sync** provides native WebSocket Live Sync client implementations,
-//! binary network protocol codecs, and session lifecycle controllers for libmtk.
+//! binary network protocol codecs, and session lifecycle controllers for libmtk (RFC v3.1).
 //!
 //! It connects directly to Minecraft streaming servers, deserializes block delta changes,
-//! and synchronizes chunk data into `mtk-voxel` storage containers.
+//! and synchronizes chunk data into `mtk-voxel` storage containers with DNA zero-copy handoff.
 
 pub mod client;
 pub mod events;
@@ -15,9 +15,8 @@ pub mod session;
 pub use client::{ClientCommand, ClientMessage, SyncClient};
 pub use events::SyncEvent;
 pub use protocol::{
-    decode_packet, encode_full_sync_request, encode_repair_requests, encode_sync_config,
-    is_supported_protocol_version, DeltaChange, ManifestSectionEntry, Packet, PacketType,
-    ProtocolError, StreamStatus, MAX_SUPPORTED_PROTOCOL_VERSION, MIN_SUPPORTED_PROTOCOL_VERSION,
-    PROTOCOL_MAGIC, PROTOCOL_VERSION,
+    compute_canonical_state_hash, decode_packet, encode_packet, is_supported_protocol_version,
+    BaselineAckResult, CancelReason, DeltaChangeEntry, ErrorCode, Opcode, Packet, ProtocolError,
+    ResyncReason, SyncDecision, PROTOCOL_MAGIC, PROTOCOL_VERSION,
 };
-pub use session::LiveSyncSession;
+pub use session::{BaselineAssembler, DeltaStagingBuffer, LiveSyncSession, SyncLifecycle};

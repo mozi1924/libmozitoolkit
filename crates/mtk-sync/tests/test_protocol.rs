@@ -2,186 +2,149 @@ use glam::IVec3;
 use mtk_sync::protocol::*;
 
 #[test]
-fn test_selection_info_codec() {
-    let mut data = vec![0x4D, 0x43, 0x01, 0x01];
-    data.extend_from_slice(&(-10i32).to_le_bytes());
-    data.extend_from_slice(&(64i32).to_le_bytes());
-    data.extend_from_slice(&(-20i32).to_le_bytes());
-    data.extend_from_slice(&(16i32).to_le_bytes());
-    data.extend_from_slice(&(32i32).to_le_bytes());
-    data.extend_from_slice(&(16i32).to_le_bytes());
-
-    let packet = decode_packet(&data).expect("Failed to decode SelectionInfo");
-    match packet {
-        Packet::SelectionInfo { min_pos, size } => {
-            assert_eq!(min_pos, IVec3::new(-10, 64, -20));
-            assert_eq!(size, IVec3::new(16, 32, 16));
-        }
-        _ => panic!("Unexpected packet type"),
-    }
-}
-
-#[test]
-fn test_delta_update_codec() {
-    let mut data = vec![0x4D, 0x43, 0x01, 0x03];
-    data.extend_from_slice(&1001u32.to_le_bytes()); // seq_id
-    data.extend_from_slice(&0i32.to_le_bytes()); // min_x
-    data.extend_from_slice(&0i32.to_le_bytes()); // min_y
-    data.extend_from_slice(&0i32.to_le_bytes()); // min_z
-    data.extend_from_slice(&2u16.to_le_bytes()); // count
-
-    // change 1
-    data.extend_from_slice(&1u16.to_le_bytes());
-    data.extend_from_slice(&2u16.to_le_bytes());
-    data.extend_from_slice(&3u16.to_le_bytes());
-    let st1 = "minecraft:stone";
-    data.extend_from_slice(&(st1.len() as u16).to_le_bytes());
-    data.extend_from_slice(st1.as_bytes());
-
-    // change 2
-    data.extend_from_slice(&4u16.to_le_bytes());
-    data.extend_from_slice(&5u16.to_le_bytes());
-    data.extend_from_slice(&6u16.to_le_bytes());
-    let st2 = "minecraft:dirt";
-    data.extend_from_slice(&(st2.len() as u16).to_le_bytes());
-    data.extend_from_slice(st2.as_bytes());
-
-    let packet = decode_packet(&data).expect("Failed to decode DeltaUpdate");
-    match packet {
-        Packet::DeltaUpdate {
-            seq_id,
-            min_pos,
-            changes,
-        } => {
-            assert_eq!(seq_id, 1001);
-            assert_eq!(min_pos, IVec3::new(0, 0, 0));
-            assert_eq!(changes.len(), 2);
-            assert_eq!(changes[0].rel_pos, IVec3::new(1, 2, 3));
-            assert_eq!(changes[0].state, "minecraft:stone");
-            assert_eq!(changes[1].rel_pos, IVec3::new(4, 5, 6));
-            assert_eq!(changes[1].state, "minecraft:dirt");
-        }
-        _ => panic!("Unexpected packet type"),
-    }
-}
-
-#[test]
-fn test_section_manifest_codec() {
-    let mut data = vec![0x4D, 0x43, 0x01, 0x05];
-    data.extend_from_slice(&42u32.to_le_bytes()); // seq_id
-    data.extend_from_slice(&2u32.to_le_bytes()); // count = 2
-
-    // entry 1: (0, 4, 0, 0x12345678)
-    data.extend_from_slice(&0i32.to_le_bytes());
-    data.extend_from_slice(&4i32.to_le_bytes());
-    data.extend_from_slice(&0i32.to_le_bytes());
-    data.extend_from_slice(&0x12345678u32.to_le_bytes());
-
-    // entry 2: (1, 4, 0, 0xABCDEF01)
-    data.extend_from_slice(&1i32.to_le_bytes());
-    data.extend_from_slice(&4i32.to_le_bytes());
-    data.extend_from_slice(&0i32.to_le_bytes());
-    data.extend_from_slice(&0xABCDEF01u32.to_le_bytes());
-
-    let packet = decode_packet(&data).expect("Failed to decode SectionManifest");
-    match packet {
-        Packet::SectionManifest { seq_id, sections } => {
-            assert_eq!(seq_id, 42);
-            assert_eq!(sections.len(), 2);
-            assert_eq!(sections[0].coord, IVec3::new(0, 4, 0));
-            assert_eq!(sections[0].crc32, 0x12345678);
-            assert_eq!(sections[1].coord, IVec3::new(1, 4, 0));
-            assert_eq!(sections[1].crc32, 0xABCDEF01);
-        }
-        _ => panic!("Unexpected packet type"),
-    }
-}
-
-#[test]
-fn test_client_request_encoders() {
-    let full_req = encode_full_sync_request();
-    assert_eq!(full_req, vec![0x4D, 0x43, 0x02, 0x80]);
-
-    let config_req = encode_sync_config(1, 60, true);
-    assert_eq!(config_req, vec![0x4D, 0x43, 0x02, 0x82, 1, 60, 1]);
-
-    let repair_reqs = encode_repair_requests(&[IVec3::new(0, 1, 2), IVec3::new(3, 4, 5)], 64);
-    assert_eq!(repair_reqs.len(), 1);
-    assert_eq!(repair_reqs[0][0..4], [0x4D, 0x43, 0x02, 0x81]);
-}
-
-#[test]
-fn test_protocol_version_compatibility() {
-    let make_pkt = |ver: u8| -> Vec<u8> {
-        let mut data = vec![0x4D, 0x43, ver, 0x01];
-        data.extend_from_slice(&(0i32).to_le_bytes());
-        data.extend_from_slice(&(64i32).to_le_bytes());
-        data.extend_from_slice(&(0i32).to_le_bytes());
-        data.extend_from_slice(&(16i32).to_le_bytes());
-        data.extend_from_slice(&(16i32).to_le_bytes());
-        data.extend_from_slice(&(16i32).to_le_bytes());
-        data
+fn test_hello_and_welcome_codec_roundtrip() {
+    let hello = Packet::Hello {
+        min_version: 0x0003,
+        max_version: 0x0003,
+        capabilities: 0x03,
+        flags: 0x01,
+        cached_world_uuid: [1u8; 16],
+        cached_epoch: 42,
+        cached_seq: 100,
+        cached_min: IVec3::new(-16, 60, -16),
+        cached_size: IVec3::new(32, 64, 32),
+        cached_state_hash: 0xDEADBEEFCAFE,
+        auth_token: "secret_token".to_string(),
+        cached_dimension: "minecraft:overworld".to_string(),
     };
 
-    // v1 is supported for backward compatibility
-    assert!(decode_packet(&make_pkt(0x01)).is_ok());
+    let encoded = encode_packet(&hello);
+    assert_eq!(&encoded[0..2], &PROTOCOL_MAGIC);
+    assert_eq!(encoded[2], PROTOCOL_VERSION);
+    assert_eq!(encoded[3], Opcode::Hello as u8);
 
-    // v2 is the canonical active protocol version from Yefira Mod
-    assert!(decode_packet(&make_pkt(0x02)).is_ok());
+    let decoded = decode_packet(&encoded).expect("Failed decoding Hello");
+    assert_eq!(decoded, hello);
 
-    // v3 is unsupported
-    match decode_packet(&make_pkt(0x03)) {
-        Err(ProtocolError::UnsupportedVersion(3)) => {}
-        other => panic!("Expected UnsupportedVersion(3), got {:?}", other),
-    }
+    let welcome = Packet::Welcome {
+        negotiated_version: 0x0003,
+        server_uuid: [2u8; 16],
+        epoch: 42,
+        server_seq: 105,
+        current_min: IVec3::new(-16, 60, -16),
+        current_size: IVec3::new(32, 64, 32),
+        current_state_hash: 0xDEADBEEFCAFE,
+        decision: SyncDecision::VerifiedSkipRebuild,
+        message_or_dimension: "minecraft:overworld".to_string(),
+    };
 
-    // v0 is unsupported
-    match decode_packet(&make_pkt(0x00)) {
-        Err(ProtocolError::UnsupportedVersion(0)) => {}
-        other => panic!("Expected UnsupportedVersion(0), got {:?}", other),
-    }
-}
-
-/// Builds a minimal `FullSnapshot` header with the given dimensions and no palette.
-fn full_snapshot_header(size_x: i32, size_y: i32, size_z: i32, index_bytes: u8) -> Vec<u8> {
-    let mut data = vec![0x4D, 0x43, 0x02, 0x02];
-    for _ in 0..3 {
-        data.extend_from_slice(&0i32.to_le_bytes()); // min_pos
-    }
-    data.extend_from_slice(&size_x.to_le_bytes());
-    data.extend_from_slice(&size_y.to_le_bytes());
-    data.extend_from_slice(&size_z.to_le_bytes());
-    data.extend_from_slice(&0u16.to_le_bytes()); // empty palette
-    data.push(index_bytes);
-    data
+    let encoded_welcome = encode_packet(&welcome);
+    let decoded_welcome = decode_packet(&encoded_welcome).expect("Failed decoding Welcome");
+    assert_eq!(decoded_welcome, welcome);
 }
 
 #[test]
-fn test_full_snapshot_overflowing_dimensions_rejected() {
-    // i32::MAX^3 overflows i64 and must be rejected instead of panicking.
-    let data = full_snapshot_header(i32::MAX, i32::MAX, i32::MAX, 1);
-    match decode_packet(&data) {
-        Err(ProtocolError::InvalidDimensions(..)) => {}
-        other => panic!("Expected InvalidDimensions, got {:?}", other),
-    }
+fn test_baseline_begin_and_end_roundtrip() {
+    let begin = Packet::BaselineBegin {
+        epoch: 1,
+        snapshot_uuid: [3u8; 16],
+        snapshot_seq: 50,
+        min_pos: IVec3::new(0, 0, 0),
+        size: IVec3::new(16, 16, 16),
+        state_hash: 0x12345678,
+        palette_revision: 1,
+        total_chunks: 1,
+        total_encoded_bytes: 1024,
+        total_decoded_bytes: 4096,
+        compression_mode: 0,
+        palette_bits_per_block: 8,
+        biome_bits_per_quart: 8,
+        dimension: "minecraft:overworld".to_string(),
+        block_palette: vec!["minecraft:air".to_string(), "minecraft:stone".to_string()],
+        biome_palette: vec!["minecraft:plains".to_string()],
+    };
+
+    let encoded = encode_packet(&begin);
+    let decoded = decode_packet(&encoded).expect("Failed decoding BaselineBegin");
+    assert_eq!(decoded, begin);
+
+    let end = Packet::BaselineEnd {
+        epoch: 1,
+        snapshot_uuid: [3u8; 16],
+        snapshot_seq: 50,
+        total_chunks_sent: 1,
+        final_state_hash: 0x12345678,
+        status: 0,
+    };
+
+    let encoded_end = encode_packet(&end);
+    let decoded_end = decode_packet(&encoded_end).expect("Failed decoding BaselineEnd");
+    assert_eq!(decoded_end, end);
 }
 
 #[test]
-fn test_full_snapshot_negative_dimensions_rejected() {
-    let data = full_snapshot_header(-1, 16, 16, 1);
-    match decode_packet(&data) {
-        Err(ProtocolError::InvalidDimensions(-1, 16, 16)) => {}
-        other => panic!("Expected InvalidDimensions, got {:?}", other),
-    }
+fn test_delta_op_codec_and_hash_roundtrip() {
+    let changes = vec![
+        DeltaChangeEntry {
+            rel_pos: IVec3::new(0, 1, 2),
+            state_id: 1,
+        },
+        DeltaChangeEntry {
+            rel_pos: IVec3::new(3, 4, 5),
+            state_id: 2,
+        },
+    ];
+
+    let hash = compute_delta_batch_hash(&changes);
+
+    let delta = Packet::DeltaOp {
+        epoch: 2,
+        seq_id: 101,
+        palette_revision: 1,
+        count: changes.len() as u16,
+        batch_xxhash64: hash,
+        changes,
+    };
+
+    let encoded = encode_packet(&delta);
+    let decoded = decode_packet(&encoded).expect("Failed decoding DeltaOp");
+    assert_eq!(decoded, delta);
 }
 
 #[test]
-fn test_full_snapshot_huge_grid_rejected_before_allocation() {
-    // Volume fits in i64 but far exceeds the payload: must fail as truncated,
-    // without attempting a multi-gigabyte `Vec` allocation.
-    let data = full_snapshot_header(1_000_000, 1_000_000, 1, 1);
-    match decode_packet(&data) {
-        Err(ProtocolError::TruncatedPayload { field }) => assert_eq!(field, "grid_indices_u8"),
-        other => panic!("Expected TruncatedPayload, got {:?}", other),
-    }
+fn test_corrupted_chunk_hash_rejection() {
+    let payload = vec![0xAB; 64];
+    let chunk = Packet::BaselineChunk {
+        epoch: 1,
+        snapshot_uuid: [0u8; 16],
+        chunk_index: 0,
+        total_chunks: 1,
+        first_voxel_index: 0,
+        voxel_count: 64,
+        payload_len: 64,
+        decoded_target_bytes: 64,
+        chunk_xxhash64: 0x1122334455667788, // Intentionally wrong
+        payload,
+    };
+
+    let encoded = encode_packet(&chunk);
+    let res = decode_packet(&encoded);
+    assert!(matches!(res, Err(ProtocolError::ChecksumMismatch { .. })));
+}
+
+#[test]
+fn test_invalid_magic_and_version() {
+    let mut buf = vec![0x00, 0x00, 0x03, 0x01]; // Bad magic
+    assert!(matches!(
+        decode_packet(&buf),
+        Err(ProtocolError::InvalidMagic(..))
+    ));
+
+    buf[0] = PROTOCOL_MAGIC[0];
+    buf[1] = PROTOCOL_MAGIC[1];
+    buf[2] = 0x99; // Bad version
+    assert!(matches!(
+        decode_packet(&buf),
+        Err(ProtocolError::UnsupportedVersion(0x99))
+    ));
 }

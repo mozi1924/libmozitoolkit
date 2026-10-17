@@ -52,6 +52,7 @@ flate2 = { version = "1.0", default-features = false, features = ["rust_backend"
 rustc-hash = { version = "2.1", features = ["std"] }
 zstd = "0.13"
 crc32fast = "1.4"
+xxhash-rust = { version = "0.8", default-features = false, features = ["xxh64"] }
 memmap2 = "0.9"
 bytemuck = { version = "1.25", default-features = false }
 
