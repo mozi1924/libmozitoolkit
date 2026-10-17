@@ -21,10 +21,14 @@ use crate::protocol::*;
 
 pub mod assembler;
 pub mod dispatcher;
+#[cfg(feature = "serde")]
+pub mod persisted;
 pub mod staging;
 
 pub use assembler::*;
 pub use dispatcher::*;
+#[cfg(feature = "serde")]
+pub use persisted::*;
 pub use staging::*;
 
 /// High-level Live Sync Session managing WebSocket streaming, VoxelWorld scene synchronization, and event queues.

@@ -104,8 +104,11 @@ Python 模块名：`libmtk_py`
 
 ### 2.6 实时网络协同 (`sync` & `protocol`)
 - **`LiveSyncSession` (`PyLiveSyncSession`)**：原生 WebSocket 实时协同客户端。
-  - `connect()`, `disconnect()`, `is_connected()`, `poll_events()`, `clear_cache()`, `set_config(config)`, `hot_reload(config=None, model_db=None)`
-  - `send_block_update(x, y, z, block_state)`, `request_full_sync(min_pos, max_pos)`
+  - `start(...)`, `start_with_persisted_state(..., state_json=None, auth_token=None)`, `stop()`, `poll_events()`
+  - `export_persisted_state_json(user_modified=false)`：导出 UUID/epoch/sequence/bounds/hash 的不透明 JSON
+  - `client_generation`, `current_sequence`, `current_epoch`, `state_hash`, `server_uuid`
+  - `clear_cache()`, `set_config(config)`, `hot_reload(config=None, model_db=None)`, `request_resync()`
+  - `STREAM_PROGRESS.percent` 已由 Rust 归一化为 0..100；`HANDSHAKE.decision_code` 为 RFC v3.1 原始值
 - **二进制协议编解码**：`decode_packet(bytes)`, `encode_full_sync_request(...)`, `encode_repair_requests(...)`, `encode_sync_config(...)`
 
 ### 2.7 资源包预烘焙与图集 (`resource` & `texture`)
@@ -118,6 +121,9 @@ Python 模块名：`libmtk_py`
 ### 2.8 生物群系与材质解析 (`material`)
 - **`BiomeResolver` (`PyBiomeResolver`)**：原版 66 种生物群系调色板映射与混合器。
 - **`MaterialResolver` (`PyMaterialResolver`)**：着色器材质槽位与外部别名解算器。
+  - `remap_mesh_uvs(...)` / `remap_mesh_multi_uvs(..., enable_animated_textures=false)`
+  - `resolve_mesh_routes(face_texture_keys, atlas, aliases=None, enable_animated_textures=false)`
+  - `reroute_mesh_animation(uvs, face_loop_ranges, face_texture_keys, face_old_chunk_ids, atlas, aliases=None, enable_animated_textures=false)`
 - **`GridAtlasSpec` (`PyGridAtlasSpec`)**：网格图集元数据规范。
 - **色彩数学与常量**：`compute_biome_tint_attributes`, `compute_mesh_biome_attributes_from_storage`, `get_swamp_grass_color`, `blend_biome_colors`, `sample_colormap_pixel`, `srgb_to_linear`, `linear_to_srgb`, `TINT_TYPE_NONE..DRY_FOLIAGE`
 

@@ -440,6 +440,7 @@ pub fn handle_packet(
                 epoch,
                 sequence: server_seq,
                 decision: decision_str.to_string(),
+                decision_code: decision as u8,
                 dimension: message_or_dimension.clone(),
             });
 

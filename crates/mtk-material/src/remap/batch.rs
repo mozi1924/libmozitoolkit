@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use mtk_texture::AtlasAddressMap;
+use mtk_texture::{AtlasAddressMap, AtlasSpriteLocation};
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
@@ -8,8 +8,9 @@ use crate::remap::{
     detect_face_uv_rotation, normalize_face_uv_for_atlas_tiling, remap_local_to_atlas,
     straighten_face_uv,
 };
-use crate::resolver::decode_grid_atlas_uv;
-use crate::resolver::MaterialResolver;
+use crate::resolver::{
+    decode_grid_atlas_uv, extract_animation_metrics, resolve_routed_sprite, MaterialResolver,
+};
 use crate::types::{GridAtlasSpec, MeshMultiUvRemapResult, MeshRemapResult};
 
 #[inline]
@@ -80,6 +81,10 @@ fn remap_single_face_uvs(
 }
 
 /// Parallel batch remapper for entire mesh UV layers and face material assignments.
+///
+/// This legacy entry point always prefers the static Frame-0 baseline. Use
+/// [`remap_mesh_multi_uvs_parallel_with_options`] when animated-atlas routing is
+/// required.
 pub fn remap_mesh_uvs_parallel(
     uvs: &mut [[f32; 2]],
     face_materials: &[String],
@@ -189,9 +194,33 @@ struct FaceOut {
     uv_rotation: f32,
     uv_mode: u8,
     is_overlay: bool,
+    is_animated: bool,
+    anim_timing: [f32; 3],
+    anim_frame_size: [f32; 3],
     success: bool,
 }
 
+fn default_face_out(is_overlay: bool) -> FaceOut {
+    FaceOut {
+        chunk_id: 0,
+        texture_id: 0,
+        uv_transform: [1.0, 1.0, 0.0, 0.0],
+        uv_rotation: 0.0,
+        uv_mode: 0,
+        is_overlay,
+        is_animated: false,
+        anim_timing: [1.0, 1.0, 0.0],
+        anim_frame_size: [16.0, 16.0, 0.0],
+        success: false,
+    }
+}
+
+fn route_fields(sprite: &AtlasSpriteLocation) -> (bool, [f32; 3], [f32; 3]) {
+    let (timing, frame_size) = extract_animation_metrics(Some(sprite));
+    (sprite.is_animated, timing, frame_size)
+}
+
+#[allow(clippy::too_many_arguments)]
 fn remap_single_face_multi_uvs(
     mat_name: &str,
     src_uvs: &[[f32; 2]],
@@ -200,18 +229,11 @@ fn remap_single_face_multi_uvs(
     address_map: &AtlasAddressMap,
     aliases: Option<&HashMap<String, Vec<String>>>,
     grid_atlas_spec: Option<&GridAtlasSpec>,
+    enable_animated_textures: bool,
 ) -> FaceOut {
     let count = src_uvs.len();
     if count == 0 {
-        return FaceOut {
-            chunk_id: 0,
-            texture_id: 0,
-            uv_transform: [1.0, 1.0, 0.0, 0.0],
-            uv_rotation: 0.0,
-            uv_mode: 0,
-            is_overlay: false,
-            success: false,
-        };
+        return default_face_out(false);
     }
 
     let is_overlay = mat_name.contains("overlay") || mat_name.contains("grass_side_overlay");
@@ -226,9 +248,14 @@ fn remap_single_face_multi_uvs(
         let avg_u = sum_u / (count as f32);
         let avg_v = sum_v / (count as f32);
 
-        if let Some((_, sprite_loc, _)) =
+        if let Some((res_loc, mut sprite_loc, _)) =
             MaterialResolver::resolve_grid_atlas_face(avg_u, avg_v, spec, aliases, address_map)
         {
+            if enable_animated_textures {
+                if let Some(anim) = address_map.lookup_animated(&res_loc) {
+                    sprite_loc = anim;
+                }
+            }
             let uv_mode = if is_overlay { 3 } else { 0 };
             for (i, &[u_in, v_in]) in src_uvs.iter().enumerate() {
                 let (_, local_uv) = decode_grid_atlas_uv(u_in, v_in, spec);
@@ -236,6 +263,7 @@ fn remap_single_face_multi_uvs(
                 out_atlas_uvs[i] = target_atlas_uv;
                 out_local_uvs[i] = local_uv;
             }
+            let (is_animated, anim_timing, anim_frame_size) = route_fields(sprite_loc);
             return FaceOut {
                 chunk_id: sprite_loc.chunk_id,
                 texture_id: sprite_loc.texture_id,
@@ -243,6 +271,9 @@ fn remap_single_face_multi_uvs(
                 uv_rotation: 0.0,
                 uv_mode,
                 is_overlay,
+                is_animated,
+                anim_timing,
+                anim_frame_size,
                 success: true,
             };
         }
@@ -250,19 +281,13 @@ fn remap_single_face_multi_uvs(
         // Unresolved grid atlas face
         out_atlas_uvs.copy_from_slice(src_uvs);
         out_local_uvs.copy_from_slice(src_uvs);
-        return FaceOut {
-            chunk_id: 0,
-            texture_id: 0,
-            uv_transform: [1.0, 1.0, 0.0, 0.0],
-            uv_rotation: 0.0,
-            uv_mode: 0,
-            is_overlay,
-            success: false,
-        };
+        return default_face_out(is_overlay);
     }
 
     // Standard material path
-    if let Some((_, sprite_loc)) = MaterialResolver::resolve(mat_name, aliases, address_map) {
+    if let Some((_, sprite_loc)) =
+        resolve_routed_sprite(mat_name, aliases, address_map, enable_animated_textures)
+    {
         let uv_mode = if is_overlay { 3 } else { 0 };
 
         // 1. Copy face loop UVs
@@ -289,6 +314,7 @@ fn remap_single_face_multi_uvs(
             };
         }
 
+        let (is_animated, anim_timing, anim_frame_size) = route_fields(sprite_loc);
         FaceOut {
             chunk_id: sprite_loc.chunk_id,
             texture_id: sprite_loc.texture_id,
@@ -296,25 +322,24 @@ fn remap_single_face_multi_uvs(
             uv_rotation: angle,
             uv_mode,
             is_overlay,
+            is_animated,
+            anim_timing,
+            anim_frame_size,
             success: true,
         }
     } else {
         out_atlas_uvs.copy_from_slice(src_uvs);
         out_local_uvs.copy_from_slice(src_uvs);
-        FaceOut {
-            chunk_id: 0,
-            texture_id: 0,
-            uv_transform: [1.0, 1.0, 0.0, 0.0],
-            uv_rotation: 0.0,
-            uv_mode: 0,
-            is_overlay,
-            success: false,
-        }
+        default_face_out(is_overlay)
     }
 }
 
 /// Parallel batch remapper producing both Atlas UVs (chunk-mapped) and Local UVs ([0..1] normalized),
 /// along with per-face UV mode routing flags and overlay detection.
+///
+/// Legacy entry point preserving the static Frame-0 policy. Prefer
+/// [`remap_mesh_multi_uvs_parallel_with_options`] when the host exposes an
+/// animated-texture preference.
 pub fn remap_mesh_multi_uvs_parallel(
     source_uvs: &[[f32; 2]],
     face_materials: &[String],
@@ -322,6 +347,32 @@ pub fn remap_mesh_multi_uvs_parallel(
     address_map: &AtlasAddressMap,
     aliases: Option<&HashMap<String, Vec<String>>>,
     grid_atlas_spec: Option<&GridAtlasSpec>,
+) -> MeshMultiUvRemapResult {
+    remap_mesh_multi_uvs_parallel_with_options(
+        source_uvs,
+        face_materials,
+        face_loop_ranges,
+        address_map,
+        aliases,
+        grid_atlas_spec,
+        false,
+    )
+}
+
+/// Animation-aware variant of [`remap_mesh_multi_uvs_parallel`].
+///
+/// When `enable_animated_textures` is true, multi-frame sprites are routed to
+/// their dedicated animated atlas chunk and per-face animation metrics are
+/// returned. When false, the static Frame-0 chunk remains the only target.
+#[allow(clippy::too_many_arguments)]
+pub fn remap_mesh_multi_uvs_parallel_with_options(
+    source_uvs: &[[f32; 2]],
+    face_materials: &[String],
+    face_loop_ranges: &[(u32, u32)],
+    address_map: &AtlasAddressMap,
+    aliases: Option<&HashMap<String, Vec<String>>>,
+    grid_atlas_spec: Option<&GridAtlasSpec>,
+    enable_animated_textures: bool,
 ) -> MeshMultiUvRemapResult {
     let face_count = face_materials.len();
     let total_uv_len = source_uvs.len();
@@ -338,6 +389,9 @@ pub fn remap_mesh_multi_uvs_parallel(
             face_uv_rotations: vec![0.0; face_count],
             face_uv_modes: vec![0; face_count],
             face_is_overlay: vec![false; face_count],
+            face_is_animated: vec![false; face_count],
+            face_anim_timing: vec![[1.0, 1.0, 0.0]; face_count],
+            face_anim_frame_size: vec![[16.0, 16.0, 0.0]; face_count],
             unmapped_faces: face_count,
         };
     }
@@ -383,6 +437,7 @@ pub fn remap_mesh_multi_uvs_parallel(
                     address_map,
                     aliases,
                     grid_atlas_spec,
+                    enable_animated_textures,
                 )
             })
             .collect();
@@ -402,6 +457,7 @@ pub fn remap_mesh_multi_uvs_parallel(
                     address_map,
                     aliases,
                     grid_atlas_spec,
+                    enable_animated_textures,
                 )
             })
             .collect();
@@ -416,15 +472,7 @@ pub fn remap_mesh_multi_uvs_parallel(
             let start_idx = start as usize;
             let end_idx = start_idx + (count as usize);
             if start_idx >= total_uv_len || end_idx > total_uv_len || count == 0 {
-                results.push(FaceOut {
-                    chunk_id: 0,
-                    texture_id: 0,
-                    uv_transform: [1.0, 1.0, 0.0, 0.0],
-                    uv_rotation: 0.0,
-                    uv_mode: 0,
-                    is_overlay: false,
-                    success: false,
-                });
+                results.push(default_face_out(false));
                 continue;
             }
             let mat_name = &face_materials[face_idx];
@@ -439,6 +487,7 @@ pub fn remap_mesh_multi_uvs_parallel(
                 address_map,
                 aliases,
                 grid_atlas_spec,
+                enable_animated_textures,
             );
             atlas_uvs[start_idx..end_idx].copy_from_slice(&a_tmp);
             local_uvs[start_idx..end_idx].copy_from_slice(&l_tmp);
@@ -453,6 +502,9 @@ pub fn remap_mesh_multi_uvs_parallel(
     let mut face_uv_rotations = vec![0.0f32; face_count];
     let mut face_uv_modes = vec![0u8; face_count];
     let mut face_is_overlay = vec![false; face_count];
+    let mut face_is_animated = vec![false; face_count];
+    let mut face_anim_timing = vec![[1.0f32, 1.0f32, 0.0f32]; face_count];
+    let mut face_anim_frame_size = vec![[16.0f32, 16.0f32, 0.0f32]; face_count];
     let mut mapped_faces = 0usize;
 
     for (i, out) in face_results.into_iter().enumerate() {
@@ -462,6 +514,9 @@ pub fn remap_mesh_multi_uvs_parallel(
         face_uv_rotations[i] = out.uv_rotation;
         face_uv_modes[i] = out.uv_mode;
         face_is_overlay[i] = out.is_overlay;
+        face_is_animated[i] = out.is_animated;
+        face_anim_timing[i] = out.anim_timing;
+        face_anim_frame_size[i] = out.anim_frame_size;
         if out.success {
             mapped_faces += 1;
         }
@@ -478,6 +533,9 @@ pub fn remap_mesh_multi_uvs_parallel(
         face_uv_rotations,
         face_uv_modes,
         face_is_overlay,
+        face_is_animated,
+        face_anim_timing,
+        face_anim_frame_size,
         unmapped_faces: face_count.saturating_sub(mapped_faces),
     }
 }

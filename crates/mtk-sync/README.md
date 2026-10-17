@@ -208,6 +208,12 @@ pub struct LiveSyncSession {
 - `is_connected() -> bool`：查询当前是否已建立有效网络连接。
 - `status() -> String`：获取当前连接状态文本（`"CONNECTED"`、`"CONNECTING..."`、`"DISCONNECTED"` 等）。
 - `poll_events() -> Vec<SyncEvent>`：非阻塞提取当前已就绪的所有高阶事件。
+- `export_persisted_state_json(user_modified) -> String`：导出宿主可持久化的不透明状态 JSON
+  （UUID / epoch / sequence / bounds / dimension / state_hash）。
+- `start_with_persisted_state_json(url, auto, max, state_json, auth_token)`：从持久化 JSON
+  构造缓存 HELLO；`user_modified = true` 或状态无效时自动回退全量基线。
+- `normalize_stream_progress(stage, current, total) -> f32`：把 download/meshing 两阶段
+  统一归一化为单调 0..100 百分比。
 - `get_world_mesh() -> MeshData`：主动并行网格化当前 `VoxelWorld` 内的所有区块并合并为焊接后的全局网格。
 - `clear_cache()`：清空底层 `VoxelWorld` 的区块网格缓存与全局网格，标记所有区块为脏。
 - `set_config(config)`：动态更新底层 `VoxelWorld` 的网格化配置（AO、流体、图集映射等）。
@@ -232,10 +238,10 @@ pub struct LiveSyncSession {
 pub enum SyncEvent {
     StatusChange(String),                      // 连接状态变更 ("CONNECTED", "DISCONNECTED" 等)
     SelectionUpdated { min_pos: IVec3, size: IVec3 }, // 选区尺寸或位置发生改变
-    Handshake { total_sections: u32, ... },    // 场景元数据就绪
+    Handshake { epoch, sequence, decision, decision_code, dimension }, // 场景元数据就绪；decision_code 为 RFC v3.1 原始值
     SectionMeshReady { coord: IVec3, mesh: MeshData }, // 单个切片网格就绪 (独立切片模式)
     WorldMeshReady { mesh: MeshData },         // 全局合并大网格就绪 (unified_mesh 模式)
-    StreamProgress { stage: String, current: usize, total: usize, message: String }, // 批处理传输与网格构建多阶段物理进度
+    StreamProgress { stage: String, current: usize, total: usize, message: String }, // 物理进度；宿主应使用 normalize_stream_progress 归一化
     StreamFinished { stream_id: u32, built_sections: usize },         // 流传输结束
     DeltaApplied { change_count: usize, affected_sections: Vec<IVec3> }, // 增量修改已应用
     Verified { is_verified: bool, message: String }, // 校验结果

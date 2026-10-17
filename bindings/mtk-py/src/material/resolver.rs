@@ -3,8 +3,9 @@
 use std::collections::HashMap;
 
 use mtk_material::{
-    clean_identifier, remap_grid_atlas_uv_to_local, remap_mesh_multi_uvs_parallel,
-    remap_mesh_uvs_parallel, BiomeResolver, MaterialResolver,
+    clean_identifier, remap_grid_atlas_uv_to_local, remap_mesh_multi_uvs_parallel_with_options,
+    remap_mesh_uvs_parallel, reroute_mesh_animation, resolve_mesh_material_routes, BiomeResolver,
+    MaterialResolver,
 };
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -115,11 +116,15 @@ impl PyMaterialResolver {
     ///         "face_texture_ids": list of texture ID integers per face
     ///         "face_uv_modes": list of UV routing mode integers per face (0=Atlas, 1=Static, 2=Anim, 3=Overlay)
     ///         "face_is_overlay": list of boolean flags per face
+    ///         "face_is_animated": list of boolean flags per face
+    ///         "face_anim_timing": flat list of [total_frames, frametime, interpolate] per face
+    ///         "face_anim_frame_size": flat list of [frame_width, frame_height, 0] per face
     ///         "unmapped_faces": count of unmapped faces
     ///         "face_count": face count
     ///         "loop_count": loop count
+    ///     enable_animated_textures: Route multi-frame sprites to dedicated animated atlas chunks.
     #[staticmethod]
-    #[pyo3(signature = (uvs, face_materials, face_loop_ranges, atlas, aliases=None, grid_atlas_spec=None))]
+    #[pyo3(signature = (uvs, face_materials, face_loop_ranges, atlas, aliases=None, grid_atlas_spec=None, enable_animated_textures=false))]
     pub fn remap_mesh_multi_uvs(
         py: Python<'_>,
         uvs: Vec<f32>,
@@ -128,6 +133,7 @@ impl PyMaterialResolver {
         atlas: &PyBakedAtlas,
         aliases: Option<HashMap<String, Vec<String>>>,
         grid_atlas_spec: Option<&PyGridAtlasSpec>,
+        enable_animated_textures: bool,
     ) -> PyResult<PyObject> {
         let loop_count = uvs.len() / 2;
         let mut uv_pairs: Vec<[f32; 2]> = Vec::with_capacity(loop_count);
@@ -136,13 +142,14 @@ impl PyMaterialResolver {
         }
 
         let result = py.allow_threads(|| {
-            remap_mesh_multi_uvs_parallel(
+            remap_mesh_multi_uvs_parallel_with_options(
                 &uv_pairs,
                 &face_materials,
                 &face_loop_ranges,
                 &atlas.inner.address_map,
                 aliases.as_ref(),
                 grid_atlas_spec.map(|s| &s.inner),
+                enable_animated_textures,
             )
         });
 
@@ -167,10 +174,109 @@ impl PyMaterialResolver {
         dict.set_item("face_uv_rotations", result.face_uv_rotations)?;
         dict.set_item("face_uv_modes", result.face_uv_modes)?;
         dict.set_item("face_is_overlay", result.face_is_overlay)?;
+        dict.set_item("face_is_animated", result.face_is_animated)?;
+        dict.set_item("face_anim_timing", result.face_anim_timing)?;
+        dict.set_item("face_anim_frame_size", result.face_anim_frame_size)?;
         dict.set_item("unmapped_faces", result.unmapped_faces)?;
         dict.set_item("face_count", result.face_count)?;
         dict.set_item("loop_count", result.loop_count)?;
 
+        Ok(dict.into())
+    }
+
+    /// Resolve atlas routing (chunk/texture/animation metadata) for face texture keys.
+    #[staticmethod]
+    #[pyo3(signature = (face_texture_keys, atlas, aliases=None, enable_animated_textures=false))]
+    pub fn resolve_mesh_routes(
+        py: Python<'_>,
+        face_texture_keys: Vec<String>,
+        atlas: &PyBakedAtlas,
+        aliases: Option<HashMap<String, Vec<String>>>,
+        enable_animated_textures: bool,
+    ) -> PyResult<PyObject> {
+        let routes = py.allow_threads(|| {
+            resolve_mesh_material_routes(
+                &face_texture_keys,
+                aliases.as_ref(),
+                &atlas.inner.address_map,
+                enable_animated_textures,
+            )
+        });
+
+        let mut chunk_ids = Vec::with_capacity(routes.len());
+        let mut texture_ids = Vec::with_capacity(routes.len());
+        let mut is_animated = Vec::with_capacity(routes.len());
+        let mut anim_timing = Vec::with_capacity(routes.len() * 3);
+        let mut anim_frame_size = Vec::with_capacity(routes.len() * 3);
+        let mut mapped = 0usize;
+        for route in &routes {
+            chunk_ids.push(route.chunk_id);
+            texture_ids.push(route.texture_id);
+            is_animated.push(route.is_animated);
+            anim_timing.extend_from_slice(&route.anim_timing);
+            anim_frame_size.extend_from_slice(&route.anim_frame_size);
+            if route.mapped {
+                mapped += 1;
+            }
+        }
+
+        let dict = PyDict::new(py);
+        dict.set_item("chunk_ids", chunk_ids)?;
+        dict.set_item("texture_ids", texture_ids)?;
+        dict.set_item("is_animated", is_animated)?;
+        dict.set_item("anim_timing", anim_timing)?;
+        dict.set_item("anim_frame_size", anim_frame_size)?;
+        dict.set_item("mapped_faces", mapped)?;
+        dict.set_item("unmapped_faces", routes.len().saturating_sub(mapped))?;
+        Ok(dict.into())
+    }
+
+    /// Re-project existing atlas UVs from the previous chunk routing to the current animation policy.
+    #[staticmethod]
+    #[pyo3(signature = (uvs, face_loop_ranges, face_texture_keys, face_old_chunk_ids, atlas, aliases=None, enable_animated_textures=false))]
+    pub fn reroute_mesh_animation(
+        py: Python<'_>,
+        uvs: Vec<f32>,
+        face_loop_ranges: Vec<(u32, u32)>,
+        face_texture_keys: Vec<String>,
+        face_old_chunk_ids: Vec<u16>,
+        atlas: &PyBakedAtlas,
+        aliases: Option<HashMap<String, Vec<String>>>,
+        enable_animated_textures: bool,
+    ) -> PyResult<PyObject> {
+        let loop_count = uvs.len() / 2;
+        let mut uv_pairs: Vec<[f32; 2]> = Vec::with_capacity(loop_count);
+        for i in 0..loop_count {
+            uv_pairs.push([uvs[i * 2], uvs[i * 2 + 1]]);
+        }
+
+        let result = py.allow_threads(|| {
+            reroute_mesh_animation(
+                &uv_pairs,
+                &face_loop_ranges,
+                &face_texture_keys,
+                &face_old_chunk_ids,
+                &atlas.inner.address_map,
+                aliases.as_ref(),
+                enable_animated_textures,
+            )
+        });
+
+        let mut flat_atlas_uvs = Vec::with_capacity(result.atlas_uvs.len() * 2);
+        for p in &result.atlas_uvs {
+            flat_atlas_uvs.push(p[0]);
+            flat_atlas_uvs.push(p[1]);
+        }
+
+        let dict = PyDict::new(py);
+        dict.set_item("atlas_uvs", flat_atlas_uvs)?;
+        dict.set_item("face_chunk_ids", result.face_chunk_ids)?;
+        dict.set_item("face_texture_ids", result.face_texture_ids)?;
+        dict.set_item("face_is_animated", result.face_is_animated)?;
+        dict.set_item("face_anim_timing", result.face_anim_timing)?;
+        dict.set_item("face_anim_frame_size", result.face_anim_frame_size)?;
+        dict.set_item("unmapped_faces", result.unmapped_faces)?;
+        dict.set_item("uv_unmapped_faces", result.uv_unmapped_faces)?;
         Ok(dict.into())
     }
 }

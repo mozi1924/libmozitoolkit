@@ -176,6 +176,127 @@ fn get_fluid_candidates(name: &str) -> Option<&'static [&'static str]> {
     }
 }
 
+/// Resolve a raw material name to a dedicated animated sprite, if one exists.
+///
+/// This is the shared animation-routing policy used by both the voxel mesher and
+/// the external-mesh material remapper. It checks the exact string first, then the
+/// parsed resource location, the cleaned identifier, and finally user aliases.
+pub fn resolve_animated_sprite<'a>(
+    raw_material_name: &str,
+    custom_aliases: Option<&HashMap<String, Vec<String>>>,
+    address_map: &'a AtlasAddressMap,
+) -> Option<(ResourceLocation, &'a AtlasSpriteLocation)> {
+    let raw = raw_material_name.trim();
+    if raw.is_empty() {
+        return None;
+    }
+
+    // 1. Direct O(1) lookup on the raw string.
+    if let Some(sprite) = address_map.lookup_animated_str(raw) {
+        if let Ok(loc) = ResourceLocation::parse_texture_path(raw) {
+            return Some((loc, sprite));
+        }
+        if let Ok(loc) = ResourceLocation::parse(raw) {
+            return Some((loc, sprite));
+        }
+    }
+
+    // 2. Parsed resource location.
+    if let Ok(loc) = ResourceLocation::parse(raw) {
+        if let Some(sprite) = address_map.lookup_animated(&loc) {
+            return Some((loc, sprite));
+        }
+    }
+
+    // 3. Cleaned identifier.
+    let cleaned = clean_identifier(raw);
+    if cleaned != raw {
+        if let Some(sprite) = address_map.lookup_animated_str(&cleaned) {
+            if let Ok(loc) = ResourceLocation::parse(&cleaned) {
+                return Some((loc, sprite));
+            }
+        }
+    }
+
+    // 4. Custom alias table.
+    if let Some(aliases) = custom_aliases {
+        if let Some(candidates) = aliases.get(raw).or_else(|| aliases.get(&cleaned)) {
+            for cand in candidates {
+                if let Some(sprite) = address_map.lookup_animated_str(cand) {
+                    let loc = ResourceLocation::parse(cand)
+                        .unwrap_or_else(|_| ResourceLocation::new("minecraft", cand.as_str()));
+                    return Some((loc, sprite));
+                }
+            }
+        }
+    }
+
+    // 5. Fall back to the canonical resolver so built-in aliases (fluids, legacy
+    // redstone names, etc.) also gain animated routing.
+    if let Some((loc, _)) = MaterialResolver::resolve(raw, custom_aliases, address_map) {
+        if let Some(sprite) = address_map.lookup_animated(&loc) {
+            return Some((loc, sprite));
+        }
+    }
+
+    None
+}
+
+/// Resolve a face material using the caller's animation policy.
+///
+/// When `enable_animated_textures` is true, a dedicated animated sprite wins over
+/// the static Frame-0 baseline. When false, the static sprite is always preferred.
+pub fn resolve_routed_sprite<'a>(
+    raw_material_name: &str,
+    custom_aliases: Option<&HashMap<String, Vec<String>>>,
+    address_map: &'a AtlasAddressMap,
+    enable_animated_textures: bool,
+) -> Option<(ResourceLocation, &'a AtlasSpriteLocation)> {
+    if enable_animated_textures {
+        if let Some(animated) =
+            resolve_animated_sprite(raw_material_name, custom_aliases, address_map)
+        {
+            return Some(animated);
+        }
+    }
+    MaterialResolver::resolve(raw_material_name, custom_aliases, address_map)
+}
+
+/// Extract `[total_frames, frametime, interpolate]` and `[frame_width, frame_height, 0]`
+/// from an atlas sprite. Static sprites return safe defaults.
+pub fn extract_animation_metrics(sprite: Option<&AtlasSpriteLocation>) -> ([f32; 3], [f32; 3]) {
+    if let Some(sprite) = sprite {
+        if sprite.is_animated {
+            let total_frames = sprite.frame_count.max(1) as f32;
+            let frametime = sprite
+                .animation
+                .as_ref()
+                .map(|a| a.frametime as f32)
+                .unwrap_or(1.0)
+                .max(1.0);
+            let interpolate = if sprite
+                .animation
+                .as_ref()
+                .map(|a| a.interpolate)
+                .unwrap_or(false)
+            {
+                1.0
+            } else {
+                0.0
+            };
+            return (
+                [total_frames, frametime, interpolate],
+                [
+                    sprite.frame_size[0] as f32,
+                    sprite.frame_size[1] as f32,
+                    0.0,
+                ],
+            );
+        }
+    }
+    ([1.0, 1.0, 0.0], [16.0, 16.0, 0.0])
+}
+
 /// Unified data-driven resolver for mapping raw DCC material names to canonical AtlasSpriteLocations.
 pub struct MaterialResolver;
 

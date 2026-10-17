@@ -83,6 +83,35 @@
 
 ---
 
+## 🧭 Host-Agnostic 胶水下沉 (2026-10-18)
+
+> 背景：Blender 前端近期在胶水层积累了材质路由、Live Sync 状态与进度语义。
+> 这些逻辑对 C4D / 独立查看器同样适用，应留在 Rust 核心，而不是复制到每个宿主。
+> 详细清单见 [`MoziToolKit/docs/planning/2026-10-18_material_animation_and_rust_downshift.md`](../MoziToolKit/docs/planning/2026-10-18_material_animation_and_rust_downshift.md)。
+
+### ✅ 已完成
+- [x] `mtk-material` 统一 static/anim 图集路由：
+  - `resolve_animated_sprite` / `resolve_routed_sprite` / `extract_animation_metrics`；
+  - `remap_mesh_multi_uvs_parallel_with_options`（旧函数保持静态 Frame 0 兼容）；
+  - `resolve_mesh_material_routes` / `reroute_mesh_animation`（已有 Atlas UV 的静态↔动画重投影）。
+- [x] `mtk-voxel` mesher 的动画策略改为委托 `mtk-material`，消除双实现。
+- [x] `mtk-sync`：
+  - `PersistedSessionState`（JSON roundtrip、UUID hex、HELLO、user_modified）；
+  - `normalize_stream_progress`（两阶段权重只在 Rust 计算）；
+  - `SyncEvent::Handshake.decision_code`（避免宿主拿字符串和数字比较）。
+- [x] `bindings/mtk-py` 暴露上述 API。
+
+### 📋 后续
+- [ ] **P1 `mtk-material::biome::inplace`**：base tint type 解析 + uniform biome recolor，
+      把 `utils/materials/biome/updater.py` 的逐面逻辑下沉。
+- [ ] **P1 外部网格材质提取批量化**：slot/source-key 调色板化解析，避免逐 polygon Python 循环。
+- [ ] **P2 `mtk-sync` 事件合并**：`poll_latest_world_mesh` / 代际栅栏下沉。
+- [ ] **P2 `mtk-package::CacheResolver`**：`.mtkcache` 指纹/路径选择下沉。
+- [ ] **P2 `bindings/mtk-ffi`**：为 C4D / C++ 宿主导出 material route、persisted-state 与
+      mesh buffer 新接口。
+
+---
+
 ## 🚀 v2.1 版本：高级实体、特殊渲染器、动作重定向与场景交换 (规划排期中 📋)
 
 > **2.1 版本主题**：拓展特殊渲染模型、实体数据流、动作重定向数学库与自包含场景交换包。

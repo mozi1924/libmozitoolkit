@@ -192,8 +192,14 @@ pub fn compute_mesh_material_props(
 | `remap_atlas_to_local(u, v, sprite) -> [f32; 2]` | 将图集 UV 逆变换还原为 [0, 1] 局部 UV。 |
 | `is_quad_uv_diamond(uvs: &[[f32; 2]; 4]) -> bool` | 检测是否为 45 度旋转倾斜的流动液体 UV。 |
 | `straighten_diamond_quad_uv(uvs: &mut [[f32; 2]; 4]) -> bool` | 将 45 度菱形 UV 扶正为标准正交四边形。 |
-| `MaterialResolver::resolve(mat_name, aliases, address_map)` | 多级匹配解析材质名称到 `AtlasSpriteLocation`。 |
-| `remap_mesh_multi_uvs_parallel(...) -> MeshMultiUvRemapResult` | 批量并行生成图集 UV、局部 UV 与着色器路由模式。 |
+| `MaterialResolver::resolve(mat_name, aliases, address_map)` | 多级匹配解析材质名称到 `AtlasSpriteLocation`（静态 Frame 0 优先）。 |
+| `resolve_animated_sprite(mat_name, aliases, address_map)` | 仅查找专用动画 sprite（`anim_sprites`），支持原生别名/清理名/用户别名。 |
+| `resolve_routed_sprite(mat_name, aliases, address_map, enable_animated)` | 按宿主动画策略选择 static 或 animated sprite 的统一入口。 |
+| `extract_animation_metrics(sprite) -> ([frames, frametime, interpolate], [w, h, 0])` | 统一提取动画调度器所需元数据；静态 sprite 返回安全默认值。 |
+| `remap_mesh_multi_uvs_parallel(...) -> MeshMultiUvRemapResult` | 批量并行生成图集 UV、局部 UV 与着色器路由模式；保持静态 Frame 0 兼容行为。 |
+| `remap_mesh_multi_uvs_parallel_with_options(..., enable_animated_textures)` | 动画感知版本：动画面路由到 `anim` chunk，并返回逐面动画元数据。 |
+| `resolve_mesh_material_routes(keys, aliases, address_map, enable_animated)` | 只解析逐面 chunk/texture/动画路由，不触碰 UV。 |
+| `reroute_mesh_animation(uvs, ranges, keys, old_chunk_ids, atlas, aliases, enable_animated)` | 将已有 Atlas UV 从旧 sprite 反解并投影到新 sprite，支持静态↔动画幂等切换。 |
 
 ### 3.3 材质物理属性与数据驱动配置 (Data-Driven Properties)
 | 函数签名 | 描述 |

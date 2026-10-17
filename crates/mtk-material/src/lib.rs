@@ -31,12 +31,20 @@ pub use biome::{
     TINT_TYPE_GRASS, TINT_TYPE_HARDCODED, TINT_TYPE_NONE, TINT_TYPE_WATER,
 };
 pub use error::MaterialError;
-pub use remap::batch::{remap_mesh_multi_uvs_parallel, remap_mesh_uvs_parallel};
+pub use remap::batch::{
+    remap_mesh_multi_uvs_parallel, remap_mesh_multi_uvs_parallel_with_options,
+    remap_mesh_uvs_parallel,
+};
+pub use remap::routes::{reroute_mesh_animation, resolve_mesh_material_routes};
 pub use remap::{
     is_quad_uv_diamond, remap_atlas_to_local, remap_local_to_atlas, remap_sprite_to_sprite,
     straighten_diamond_quad_uv,
 };
 pub use resolver::{
-    clean_identifier, decode_grid_atlas_uv, remap_grid_atlas_uv_to_local, MaterialResolver,
+    clean_identifier, decode_grid_atlas_uv, extract_animation_metrics,
+    remap_grid_atlas_uv_to_local, resolve_animated_sprite, resolve_routed_sprite, MaterialResolver,
 };
-pub use types::{GridAtlasSpec, MeshMultiUvRemapResult, MeshRemapResult, SourceUvSpace};
+pub use types::{
+    GridAtlasSpec, MeshAnimationRerouteResult, MeshMaterialRoute, MeshMultiUvRemapResult,
+    MeshRemapResult, SourceUvSpace,
+};

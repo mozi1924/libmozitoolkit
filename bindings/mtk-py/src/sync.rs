@@ -3,7 +3,7 @@ use pyo3::types::{PyDict, PyList};
 
 use glam::IVec3;
 use mtk_sync::protocol::*;
-use mtk_sync::{LiveSyncSession, SyncEvent};
+use mtk_sync::{normalize_stream_progress, LiveSyncSession, SyncEvent};
 
 use crate::cull::PyFaceCuller;
 use crate::mesh::PyMeshData;
@@ -226,12 +226,14 @@ impl PyLiveSyncSession {
                     epoch,
                     sequence,
                     decision,
+                    decision_code,
                     dimension,
                 } => {
                     dict.set_item("type", "HANDSHAKE")?;
                     dict.set_item("epoch", epoch)?;
                     dict.set_item("sequence", sequence)?;
                     dict.set_item("decision", decision)?;
+                    dict.set_item("decision_code", decision_code)?;
                     dict.set_item("dimension", dimension)?;
                 }
                 SyncEvent::WorldMeshReady { mesh, generation } => {
@@ -246,16 +248,13 @@ impl PyLiveSyncSession {
                     message,
                 } => {
                     dict.set_item("type", "STREAM_PROGRESS")?;
-                    dict.set_item("stage", stage)?;
+                    dict.set_item("stage", &stage)?;
                     dict.set_item("current", current)?;
                     dict.set_item("total", total)?;
                     dict.set_item("message", message)?;
-                    let pct = if total > 0 {
-                        (current as f32 / total as f32) * 100.0
-                    } else {
-                        0.0
-                    };
+                    let pct = normalize_stream_progress(&stage, current, total);
                     dict.set_item("percent", pct)?;
+                    dict.set_item("overall_percent", pct)?;
                 }
                 SyncEvent::StreamFinished { built_sections } => {
                     dict.set_item("type", "STREAM_FINISHED")?;
@@ -294,6 +293,39 @@ impl PyLiveSyncSession {
         }
 
         Ok(list)
+    }
+
+    /// Export host-agnostic persisted session state as JSON.
+    #[pyo3(signature = (user_modified=false))]
+    pub fn export_persisted_state_json(&self, user_modified: bool) -> String {
+        self.inner.export_persisted_state_json(user_modified)
+    }
+
+    /// Start a session, restoring a cached HELLO from persisted state JSON when possible.
+    #[pyo3(signature = (
+        url="ws://localhost:8765",
+        auto_reconnect=true,
+        max_reconnect_attempts=5,
+        state_json=None,
+        auth_token=None
+    ))]
+    pub fn start_with_persisted_state(
+        &mut self,
+        url: &str,
+        auto_reconnect: bool,
+        max_reconnect_attempts: usize,
+        state_json: Option<&str>,
+        auth_token: Option<&str>,
+    ) -> PyResult<()> {
+        self.inner
+            .start_with_persisted_state_json(
+                url,
+                auto_reconnect,
+                max_reconnect_attempts,
+                state_json,
+                auth_token,
+            )
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err)
     }
 
     /// Returns a copy of the underlying `VoxelStorage`.

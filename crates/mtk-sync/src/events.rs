@@ -22,6 +22,9 @@ pub enum SyncEvent {
         epoch: u64,
         sequence: u64,
         decision: String,
+        /// Raw RFC v3.1 decision code (0x00 VERIFIED_SKIP_REBUILD, 0x01 REPLAY_DELTAS,
+        /// 0x02 FULL_BASELINE_REQUIRED, 0xFF REJECTED).
+        decision_code: u8,
         dimension: String,
     },
 
@@ -53,4 +56,44 @@ pub enum SyncEvent {
 
     /// Fatal or recoverable error message.
     Error(String),
+}
+
+/// Normalize a raw stream-progress report into a monotonic 0..100 percentage.
+///
+/// The dispatcher reports download progress as `current / total`, and meshing
+/// progress as an already-weighted 50..100 `current`. Centralizing the phase
+/// weights here prevents every host from re-deriving (and accidentally
+/// double-counting) the same two-phase mapping.
+pub fn normalize_stream_progress(stage: &str, current: usize, total: usize) -> f32 {
+    let fraction = if total > 0 {
+        (current as f32 / total as f32).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let percent = match stage {
+        "sync_request" => 0.0,
+        "sync_download" => fraction * 50.0,
+        "sync_meshing" => fraction * 100.0,
+        _ => fraction * 100.0,
+    };
+    percent.clamp(0.0, 100.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_stream_progress;
+
+    #[test]
+    fn progress_phases_are_normalized_without_double_weighting() {
+        assert_eq!(normalize_stream_progress("sync_request", 0, 100), 0.0);
+        assert_eq!(normalize_stream_progress("sync_download", 0, 200), 0.0);
+        assert_eq!(normalize_stream_progress("sync_download", 100, 200), 25.0);
+        assert_eq!(normalize_stream_progress("sync_download", 200, 200), 50.0);
+        // The dispatcher already reports meshing as 50..100, so it must not be
+        // offset by 50 again.
+        assert_eq!(normalize_stream_progress("sync_meshing", 50, 100), 50.0);
+        assert_eq!(normalize_stream_progress("sync_meshing", 75, 100), 75.0);
+        assert_eq!(normalize_stream_progress("sync_meshing", 100, 100), 100.0);
+        assert_eq!(normalize_stream_progress("other", 1, 4), 25.0);
+    }
 }

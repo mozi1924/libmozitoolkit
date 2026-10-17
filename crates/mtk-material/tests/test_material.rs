@@ -340,3 +340,158 @@ fn test_special_block_material_aliases() {
     assert!(res.is_some());
     assert_eq!(res.unwrap().0.path, "block/oak_hanging_sign");
 }
+
+fn animated_water_atlas() -> AtlasAddressMap {
+    let mut address_map = AtlasAddressMap::new();
+    let key = ResourceLocation::new("minecraft", "block/water_still");
+
+    address_map.chunks.push(mtk_texture::AtlasChunkMeta {
+        chunk_id: 0,
+        category: "blocks".to_string(),
+        is_animated: false,
+        category_chunk_index: 1,
+        width: 1024,
+        height: 1024,
+        has_normal: false,
+        has_specular: false,
+        has_overlay: false,
+    });
+    address_map.chunks.push(mtk_texture::AtlasChunkMeta {
+        chunk_id: 1,
+        category: "blocks".to_string(),
+        is_animated: true,
+        category_chunk_index: 1,
+        width: 1024,
+        height: 1024,
+        has_normal: false,
+        has_specular: false,
+        has_overlay: false,
+    });
+
+    address_map.sprites.insert(
+        key.clone(),
+        AtlasSpriteLocation {
+            chunk_id: 0,
+            category: "blocks".to_string(),
+            is_animated: false,
+            sprite_kind: SpriteKind::StaticAtlas,
+            texture_id: 10,
+            uv_bounds: [0.0, 0.0, 0.25, 0.25],
+            frame_0_uv_bounds: [0.0, 0.0, 0.25, 0.25],
+            frame_size: [16, 16],
+            frame_count: 1,
+            ..Default::default()
+        },
+    );
+
+    address_map.anim_sprites.insert(
+        key,
+        AtlasSpriteLocation {
+            chunk_id: 1,
+            category: "blocks".to_string(),
+            is_animated: true,
+            sprite_kind: SpriteKind::AnimatedAtlas,
+            texture_id: 11,
+            uv_bounds: [0.5, 0.75, 1.0, 1.0],
+            frame_0_uv_bounds: [0.5, 0.75, 1.0, 1.0],
+            frame_uv_step: [0.0, 0.25],
+            frame_size: [16, 16],
+            frame_count: 4,
+            animation: Some(mtk_resource::AnimationMetadata {
+                frametime: 2,
+                interpolate: true,
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    );
+
+    address_map
+}
+
+#[test]
+fn test_animated_routing_toggle_and_metrics() {
+    use mtk_material::remap_mesh_multi_uvs_parallel_with_options;
+
+    let atlas = animated_water_atlas();
+    let face_materials = vec!["water_still".to_string()];
+    let face_loop_ranges = vec![(0, 4)];
+    let uvs = vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
+
+    let animated = remap_mesh_multi_uvs_parallel_with_options(
+        &uvs,
+        &face_materials,
+        &face_loop_ranges,
+        &atlas,
+        None,
+        None,
+        true,
+    );
+    assert_eq!(animated.face_chunk_ids, vec![1]);
+    assert_eq!(animated.face_texture_ids, vec![11]);
+    assert!(animated.face_is_animated[0]);
+    assert_eq!(animated.face_anim_timing, vec![[4.0, 2.0, 1.0]]);
+    assert_eq!(animated.face_anim_frame_size, vec![[16.0, 16.0, 0.0]]);
+    assert!((animated.atlas_uvs[0][0] - 0.5).abs() < 1e-6);
+    assert!((animated.atlas_uvs[0][1] - 0.75).abs() < 1e-6);
+
+    let static_only = remap_mesh_multi_uvs_parallel_with_options(
+        &uvs,
+        &face_materials,
+        &face_loop_ranges,
+        &atlas,
+        None,
+        None,
+        false,
+    );
+    assert_eq!(static_only.face_chunk_ids, vec![0]);
+    assert_eq!(static_only.face_texture_ids, vec![10]);
+    assert!(!static_only.face_is_animated[0]);
+    assert_eq!(static_only.face_anim_timing, vec![[1.0, 1.0, 0.0]]);
+    assert_eq!(static_only.atlas_uvs[0], [0.0, 0.0]);
+}
+
+#[test]
+fn test_resolve_routes_and_reroute_animation() {
+    use mtk_material::{reroute_mesh_animation, resolve_mesh_material_routes};
+
+    let atlas = animated_water_atlas();
+    let keys = vec!["minecraft:block/water_still".to_string()];
+
+    let routes = resolve_mesh_material_routes(&keys, None, &atlas, true);
+    assert_eq!(routes.len(), 1);
+    assert_eq!(routes[0].chunk_id, 1);
+    assert!(routes[0].is_animated);
+    assert_eq!(routes[0].anim_timing, [4.0, 2.0, 1.0]);
+
+    // Start from the static sprite's atlas UVs.
+    let static_uvs = vec![[0.0, 0.0], [0.25, 0.0], [0.25, 0.25], [0.0, 0.25]];
+    let ranges = vec![(0, 4)];
+    let old_chunks = vec![0u16];
+
+    let animated =
+        reroute_mesh_animation(&static_uvs, &ranges, &keys, &old_chunks, &atlas, None, true);
+    assert_eq!(animated.face_chunk_ids, vec![1]);
+    assert!(animated.face_is_animated[0]);
+    assert_eq!(animated.unmapped_faces, 0);
+    assert_eq!(animated.uv_unmapped_faces, 0);
+    assert!((animated.atlas_uvs[0][0] - 0.5).abs() < 1e-6);
+    assert!((animated.atlas_uvs[0][1] - 0.75).abs() < 1e-6);
+
+    // And back to the static baseline without any original local UVs.
+    let back = reroute_mesh_animation(
+        &animated.atlas_uvs,
+        &ranges,
+        &keys,
+        &animated.face_chunk_ids,
+        &atlas,
+        None,
+        false,
+    );
+    assert_eq!(back.face_chunk_ids, vec![0]);
+    assert!(!back.face_is_animated[0]);
+    for (actual, expected) in back.atlas_uvs.iter().zip(static_uvs.iter()) {
+        assert!((actual[0] - expected[0]).abs() < 1e-6);
+        assert!((actual[1] - expected[1]).abs() < 1e-6);
+    }
+}

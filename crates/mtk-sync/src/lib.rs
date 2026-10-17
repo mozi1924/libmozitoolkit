@@ -13,10 +13,12 @@ pub mod protocol;
 pub mod session;
 
 pub use client::{ClientCommand, ClientMessage, SyncClient};
-pub use events::SyncEvent;
+pub use events::{normalize_stream_progress, SyncEvent};
 pub use protocol::{
     compute_canonical_state_hash, decode_packet, encode_packet, is_supported_protocol_version,
     BaselineAckResult, CancelReason, DeltaChangeEntry, ErrorCode, Opcode, Packet, ProtocolError,
     ResyncReason, SyncDecision, PROTOCOL_MAGIC, PROTOCOL_VERSION,
 };
+#[cfg(feature = "serde")]
+pub use session::PersistedSessionState;
 pub use session::{BaselineAssembler, DeltaStagingBuffer, LiveSyncSession, SyncLifecycle};
