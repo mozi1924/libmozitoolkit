@@ -5,7 +5,7 @@ use glam::IVec3;
 use mtk_sync::protocol::constants::*;
 use mtk_sync::protocol::hasher::compute_canonical_state_hash;
 use mtk_sync::protocol::packet::*;
-use mtk_sync::{LiveSyncSession, SyncLifecycle};
+use mtk_sync::{BaselineAssembler, LiveSyncSession, SyncLifecycle};
 
 /// Builds a single-chunk baseline payload for `size` voxels plus optional biome indices.
 fn build_chunk(voxel_indices: &[u8], biome_indices: &[u8]) -> (Vec<u8>, u64) {
@@ -227,4 +227,132 @@ fn test_superseded_baseline_frames_are_ignored() {
     });
 
     assert_eq!(session.lifecycle(), SyncLifecycle::Live);
+}
+
+/// A live-sync selection is anchored at `min_pos`, so its quart grid only covers part of
+/// the sections it touches. Cells outside the sampling grid must be filled from the
+/// nearest sampled biome instead of silently inheriting palette[0] (the selection's
+/// min corner, usually deep_dark/lush_caves). Otherwise border sections flip between the
+/// 2D (256) and 3D (1024) smoothing modes and leak the wrong tint.
+#[test]
+fn test_partial_section_biomes_are_filled_from_nearest_sample() {
+    let session = LiveSyncSession::new(None, None, None, true);
+
+    // 8x1x1 selection starting at x=4: section (0,0,0) quart cells 1 and 2 are sampled,
+    // cells 0 and 3 are not. Palette is built in scan order: [plains, desert].
+    let min_pos = IVec3::new(4, 0, 0);
+    let size = IVec3::new(8, 1, 1);
+    let voxels = [0u8; 8];
+    let biomes = [0u8, 1u8];
+
+    let expected_hash = compute_canonical_state_hash(
+        min_pos,
+        size,
+        "minecraft:overworld",
+        |_, _, _| "minecraft:air".to_string(),
+        |qx, _, _| {
+            if qx == 0 {
+                "minecraft:plains".to_string()
+            } else {
+                "minecraft:desert".to_string()
+            }
+        },
+    );
+
+    send_baseline(&session, min_pos, size, &voxels, &biomes, 8, expected_hash);
+    assert_eq!(session.lifecycle(), SyncLifecycle::Live);
+
+    let storage = session.get_storage();
+    let sec = storage
+        .sections
+        .get(&IVec3::new(0, 0, 0))
+        .expect("section must exist");
+    let sb = sec.biomes.as_ref().expect("section biomes must be present");
+
+    // Sampled cells keep their streamed values.
+    assert_eq!(sb.get_quart_biome(1, 0, 0), Some("minecraft:plains"));
+    assert_eq!(sb.get_quart_biome(2, 0, 0), Some("minecraft:desert"));
+
+    // Unsampled cells are filled from the nearest sample, never left as palette[0] for
+    // the whole section. Cell 3 is closest to the desert sample at cell 2.
+    assert!(sb.is_fully_assigned());
+    assert_eq!(sb.get_quart_biome(0, 0, 0), Some("minecraft:plains"));
+    assert_eq!(sb.get_quart_biome(3, 0, 0), Some("minecraft:desert"));
+    assert!(!sb.varies_vertically());
+}
+
+/// The server splits its payload on fixed byte offsets, so a large multi-biome selection
+/// can produce trailing chunks whose `first_voxel_index` is `k * voxelsPerChunk` while
+/// `voxel_count == 0`. Those are pure biome continuation chunks and must not be treated
+/// as a sequence gap (which used to put the client into an endless resync loop).
+#[test]
+fn test_trailing_biome_only_chunk_is_accepted() {
+    let min_pos = IVec3::new(0, 0, 0);
+    let size = IVec3::new(8, 1, 1);
+    // 2 quart cells along X, 1 along Y/Z => 2 biome indices.
+    let block_palette = vec!["minecraft:air".to_string(), "minecraft:stone".to_string()];
+    let biome_palette = vec![
+        "minecraft:plains".to_string(),
+        "minecraft:desert".to_string(),
+    ];
+
+    let begin = Packet::BaselineBegin {
+        epoch: 1,
+        snapshot_uuid: [5u8; 16],
+        snapshot_seq: 3,
+        min_pos,
+        size,
+        state_hash: 0,
+        palette_revision: 1,
+        total_chunks: 2,
+        total_encoded_bytes: 10,
+        total_decoded_bytes: 10,
+        compression_mode: 0,
+        palette_bits_per_block: 8,
+        biome_bits_per_quart: 8,
+        dimension: "minecraft:overworld".to_string(),
+        block_palette,
+        biome_palette,
+    };
+    let mut assembler = BaselineAssembler::new(&begin).expect("valid begin");
+
+    let voxel_payload = vec![0u8; 8];
+    let (_, voxel_hash) = build_chunk(&voxel_payload, &[]);
+    assembler
+        .process_chunk(&Packet::BaselineChunk {
+            epoch: 1,
+            snapshot_uuid: [5u8; 16],
+            chunk_index: 0,
+            total_chunks: 2,
+            first_voxel_index: 0,
+            voxel_count: 8,
+            payload_len: voxel_payload.len() as u32,
+            decoded_target_bytes: voxel_payload.len() as u32,
+            chunk_xxhash64: voxel_hash,
+            payload: voxel_payload,
+        })
+        .expect("voxel chunk must be accepted");
+
+    // Trailing biome-only chunk: first_voxel_index is a byte-offset-derived cursor that
+    // overshoots total_voxels (as produced by the Java server's chunker).
+    let biome_payload = vec![0u8, 1u8];
+    let (_, biome_hash) = build_chunk(&biome_payload, &[]);
+    assembler
+        .process_chunk(&Packet::BaselineChunk {
+            epoch: 1,
+            snapshot_uuid: [5u8; 16],
+            chunk_index: 1,
+            total_chunks: 2,
+            first_voxel_index: 16,
+            voxel_count: 0,
+            payload_len: biome_payload.len() as u32,
+            decoded_target_bytes: biome_payload.len() as u32,
+            chunk_xxhash64: biome_hash,
+            payload: biome_payload,
+        })
+        .expect("biome-only continuation chunk must not be a sequence gap");
+
+    assert_eq!(assembler.chunks_received, 2);
+    assert_eq!(assembler.expected_next_voxel_index, 8);
+    assert_eq!(assembler.raw_quart_biome_indices, vec![0, 1]);
 }

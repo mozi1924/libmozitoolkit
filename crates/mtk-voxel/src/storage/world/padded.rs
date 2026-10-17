@@ -49,6 +49,23 @@ impl VoxelStorage {
             let min_bound_z = min_z;
             let max_bound_z = min_z + size_z - 1;
 
+            // Sample queries must never escape the active selection: an unclamped read
+            // would pick up placeholder/out-of-selection biome data at section borders.
+            let clamp_x = |bx: i32| -> i32 {
+                if has_bounds {
+                    bx.clamp(min_bound_x, max_bound_x)
+                } else {
+                    bx
+                }
+            };
+            let clamp_z = |bz: i32| -> i32 {
+                if has_bounds {
+                    bz.clamp(min_bound_z, max_bound_z)
+                } else {
+                    bz
+                }
+            };
+
             let is_3d = sec.biomes.as_ref().is_some_and(|b| b.varies_vertically());
 
             if is_3d {
@@ -59,19 +76,11 @@ impl VoxelStorage {
                         let wx = sec_wx + lx;
                         for lz in 0..16 {
                             let wz = sec_wz + lz;
-                            let center_b = self.get_biome(wx, sample_y, wz);
+                            let center_b = self.get_biome(clamp_x(wx), sample_y, clamp_z(wz));
                             let col = crate::biome::get_smoothed_column_biome(
                                 |bx, y, bz| {
-                                    let cbx = if has_bounds {
-                                        bx.clamp(min_bound_x, max_bound_x)
-                                    } else {
-                                        bx
-                                    };
-                                    let cbz = if has_bounds {
-                                        bz.clamp(min_bound_z, max_bound_z)
-                                    } else {
-                                        bz
-                                    };
+                                    let cbx = clamp_x(bx);
+                                    let cbz = clamp_z(bz);
                                     let b = self.get_biome(cbx, y, cbz);
                                     if b == "minecraft:plains"
                                         && center_b != "minecraft:plains"
@@ -114,20 +123,12 @@ impl VoxelStorage {
                             }
                         }
 
-                        let center_b = self.get_biome(wx, sample_y, wz);
+                        let center_b = self.get_biome(clamp_x(wx), sample_y, clamp_z(wz));
 
                         let col = crate::biome::get_smoothed_column_biome(
                             |bx, y, bz| {
-                                let cbx = if has_bounds {
-                                    bx.clamp(min_bound_x, max_bound_x)
-                                } else {
-                                    bx
-                                };
-                                let cbz = if has_bounds {
-                                    bz.clamp(min_bound_z, max_bound_z)
-                                } else {
-                                    bz
-                                };
+                                let cbx = clamp_x(bx);
+                                let cbz = clamp_z(bz);
                                 let b = self.get_biome(cbx, y, cbz);
                                 if b == "minecraft:plains"
                                     && center_b != "minecraft:plains"

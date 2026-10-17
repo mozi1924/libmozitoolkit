@@ -260,7 +260,15 @@ impl BaselineAssembler {
             return Err(ResyncReason::SequenceGap);
         }
 
-        if first_voxel_index != self.expected_next_voxel_index {
+        // Every chunk must advance the voxel cursor monotonically. Pure biome chunks
+        // (voxel_count == 0) may start at or beyond the cursor: the server splits the
+        // payload on fixed byte offsets, so the trailing biome stream can occupy one or
+        // more chunks whose `first_voxel_index` is `k * voxelsPerChunk` rather than the
+        // exact voxel count. Rejecting those used to put large selections into an endless
+        // resync loop (e.g. 512x128x512 with more than one biome).
+        let is_biome_continuation =
+            voxel_count == 0 && first_voxel_index >= self.expected_next_voxel_index;
+        if first_voxel_index != self.expected_next_voxel_index && !is_biome_continuation {
             return Err(ResyncReason::SequenceGap);
         }
 
@@ -437,7 +445,12 @@ impl BaselineAssembler {
                     if bp_len == 1 {
                         SectionBiomes::uniform(biome_str)
                     } else {
-                        SectionBiomes::new(self.biome_palette.clone(), vec![0u8; 64])
+                        // Placeholder cells stay unassigned and are filled with the
+                        // nearest sampled biome after the stream is consumed. Marking
+                        // them as authoritative palette[0] (the selection's min corner,
+                        // usually deep_dark/lush_caves) used to leak that biome into
+                        // partial border sections and flip the 2D/3D smoothing mode.
+                        SectionBiomes::blank(self.biome_palette.clone())
                     }
                 });
 
@@ -448,10 +461,14 @@ impl BaselineAssembler {
                 let sec_qx = ((wx >> 2) & 3) as usize;
                 let sec_qy = ((wy >> 2) & 3) as usize;
                 let sec_qz = ((wz >> 2) & 3) as usize;
-                sb.set_quart_biome(sec_qx, sec_qy, sec_qz, biome_str);
+                sb.set_sampled_quart_biome(sec_qx, sec_qy, sec_qz, biome_str);
             }
 
-            for (sec_coord, sb) in section_biomes_map {
+            for (sec_coord, mut sb) in section_biomes_map {
+                // A selection-anchored quart grid does not cover every cell of the
+                // sections it touches. Fill the holes from the nearest sampled cell so
+                // the section is self-consistent with what the save loader produces.
+                sb.fill_unwritten_nearest();
                 if let Some(sec) = storage.sections.get_mut(&sec_coord) {
                     sec.biomes = Some(sb);
                 }

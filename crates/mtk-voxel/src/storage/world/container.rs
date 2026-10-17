@@ -435,7 +435,11 @@ impl VoxelStorage {
         if let Some(b) = biome {
             self.biome_map.insert(IVec3::new(x, y, z), b.to_string());
             self.biome_column_map.insert([x, z], b.to_string());
-            let sec_biomes = sec.biomes.get_or_insert_with(|| SectionBiomes::uniform(b));
+            // Use a non-authoritative placeholder: `set_biome` below propagates the biome
+            // to the whole column unless individual quarts were explicitly claimed.
+            let sec_biomes = sec
+                .biomes
+                .get_or_insert_with(|| SectionBiomes::blank(vec![b.to_string()]));
             sec_biomes.set_biome(lx, ly, lz, b);
         }
 
