@@ -272,3 +272,59 @@ fn test_biome_resolver_model_inheritance() {
     assert_eq!(info.tint_category, "foliage");
     assert_eq!(info.tint_weight, 1.0);
 }
+
+#[test]
+fn test_reapply_uniform_biome_tint_preserves_hardcoded_and_custom_override() {
+    use mtk_material::biome::{
+        reapply_uniform_biome_tint, BiomeColorSet, TINT_TYPE_FOLIAGE, TINT_TYPE_GRASS,
+        TINT_TYPE_HARDCODED, TINT_TYPE_NONE, TINT_TYPE_WATER,
+    };
+
+    let base = vec![
+        TINT_TYPE_NONE,
+        TINT_TYPE_GRASS,
+        TINT_TYPE_FOLIAGE,
+        TINT_TYPE_WATER,
+        TINT_TYPE_HARDCODED,
+    ];
+    let packed = vec![
+        [0.0, 0.0, 0.0, 0.0],
+        [0.5, 0.0, 1.0, 1.0],
+        [0.25, 0.25, 0.5, 2.0],
+        [0.0, 0.0, 1.0, 3.0],
+        [0.0, 0.0, 1.0, 4.0],
+    ];
+    let existing = vec![
+        [1.0, 1.0, 1.0, 1.0],
+        [1.0, 1.0, 1.0, 1.0],
+        [1.0, 1.0, 1.0, 1.0],
+        [1.0, 1.0, 1.0, 1.0],
+        [0.9, 0.1, 0.2, 1.0],
+    ];
+    let colors = BiomeColorSet {
+        grass: [0.2, 0.8, 0.2, 1.0],
+        foliage: [0.1, 0.6, 0.1, 1.0],
+        dry_foliage: [0.5, 0.4, 0.1, 1.0],
+        water: [0.1, 0.2, 0.9, 1.0],
+        colormap_uv: [0.2, 0.32],
+    };
+
+    let out = reapply_uniform_biome_tint(&base, &packed, &existing, colors, false, false, false);
+    assert_eq!(out.packed_tint_data.len(), 5);
+    assert_eq!(out.packed_tint_data[1], [0.5, 0.0, 1.0, 1.0]);
+    assert_eq!(out.tint_colors[1], colors.grass);
+    assert_eq!(out.tint_colors[2], colors.foliage);
+    assert_eq!(out.tint_colors[3], colors.water);
+    // Hardcoded color is preserved.
+    assert_eq!(out.tint_colors[4], existing[4]);
+    assert_eq!(out.packed_tint_data[4][3], TINT_TYPE_HARDCODED as f32);
+    assert_eq!(out.colormap_uvs[0], [0.2, 0.32, 0.0]);
+
+    // Custom grass override keeps the new grass color but routes to HARDCODED.
+    let custom = reapply_uniform_biome_tint(&base, &packed, &existing, colors, true, false, false);
+    assert_eq!(custom.packed_tint_data[1][3], TINT_TYPE_HARDCODED as f32);
+    assert_eq!(custom.tint_colors[1], colors.grass);
+    // Non-grass categories are untouched by the grass flag.
+    assert_eq!(custom.packed_tint_data[2][3], TINT_TYPE_FOLIAGE as f32);
+    assert_eq!(custom.tint_colors[3], colors.water);
+}

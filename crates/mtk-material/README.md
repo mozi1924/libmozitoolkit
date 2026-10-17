@@ -184,6 +184,8 @@ pub fn compute_mesh_material_props(
 | `blend_biome_colors(weights: &[(&str, f32)], category: &str) -> [f32; 4]` | 多生物群系加权线性混合色彩。 |
 | `compute_mesh_biome_attributes(texture_keys, biome, multi_biomes, resolver)` | Rayon 并行计算全网格染色面属性数组。 |
 | `compute_mesh_biome_attributes_per_face(texture_keys, face_biomes, resolver)` | Rayon 并行按逐面生物群系数组计算染色面属性与特异群系路由。 |
+| `reapply_uniform_biome_tint_flat(base_tt, packed, old_colors, colors, flags)` | 即时统一群系重着色：并行输出扁平 tint data/color/colormap UV，不重新解析贴图键。 |
+| `reapply_uniform_biome_tint(...)` | 同上，返回 array-of-structs 形式，便于非 Python 宿主。 |
 
 ### 3.2 材质与 UV 重映射
 | 函数签名 | 描述 |

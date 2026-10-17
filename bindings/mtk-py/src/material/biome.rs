@@ -1,10 +1,62 @@
 //! Standalone Biome, Colormap, and Material attribute functions.
 
 use super::resolver::PyBiomeResolver;
+use crate::buffer::create_owned_f32_memoryview;
 use crate::voxel::PyVoxelStorage;
+use pyo3::buffer::PyBuffer;
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyMemoryView};
 use std::collections::HashMap;
+
+enum BorrowedU8Buffer {
+    Py(PyBuffer<u8>),
+    Owned(Vec<u8>),
+}
+
+impl BorrowedU8Buffer {
+    fn extract(obj: &Bound<'_, PyAny>) -> PyResult<Self> {
+        if let Ok(buf) = PyBuffer::<u8>::get(obj) {
+            if buf.is_c_contiguous() {
+                return Ok(Self::Py(buf));
+            }
+        }
+        Ok(Self::Owned(obj.extract::<Vec<u8>>()?))
+    }
+
+    fn as_slice(&self) -> &[u8] {
+        match self {
+            Self::Py(buf) => unsafe {
+                std::slice::from_raw_parts(buf.buf_ptr() as *const u8, buf.item_count())
+            },
+            Self::Owned(vec) => vec.as_slice(),
+        }
+    }
+}
+
+enum BorrowedF32Buffer {
+    Py(PyBuffer<f32>),
+    Owned(Vec<f32>),
+}
+
+impl BorrowedF32Buffer {
+    fn extract(obj: &Bound<'_, PyAny>) -> PyResult<Self> {
+        if let Ok(buf) = PyBuffer::<f32>::get(obj) {
+            if buf.is_c_contiguous() {
+                return Ok(Self::Py(buf));
+            }
+        }
+        Ok(Self::Owned(obj.extract::<Vec<f32>>()?))
+    }
+
+    fn as_slice(&self) -> &[f32] {
+        match self {
+            Self::Py(buf) => unsafe {
+                std::slice::from_raw_parts(buf.buf_ptr() as *const f32, buf.item_count())
+            },
+            Self::Owned(vec) => vec.as_slice(),
+        }
+    }
+}
 
 /// Retrieve canonical metadata and colors for a single biome.
 #[pyfunction]
@@ -215,6 +267,92 @@ pub fn compute_biome_tint_attributes(
     Ok(dict.into())
 }
 
+/// Re-apply a uniform biome palette in-place-compatible flat float buffers.
+///
+/// Inputs must be C-contiguous buffers:
+/// - `base_tint_types`: `uint8` per face (0=None, 1=Grass, 2=Foliage, 3=Water, 4=Hardcoded, 5=DryFoliage)
+/// - `packed_tint_data`: `float32` x 4 per face
+/// - `existing_tint_colors`: `float32` x 4 per face (empty buffer allowed; hardcoded faces then use white)
+///
+/// Returns three zero-copy memoryviews over Rust-owned buffers:
+/// `(packed_tint_data, tint_colors, colormap_uvs)`.
+#[pyfunction]
+#[pyo3(signature = (
+    base_tint_types,
+    packed_tint_data,
+    existing_tint_colors,
+    grass_color,
+    foliage_color,
+    dry_foliage_color,
+    water_color,
+    colormap_uv,
+    has_custom_grass=false,
+    has_custom_foliage=false,
+    has_custom_dry_foliage=false,
+))]
+pub fn reapply_uniform_biome_tint<'py>(
+    py: Python<'py>,
+    base_tint_types: &Bound<'_, PyAny>,
+    packed_tint_data: &Bound<'_, PyAny>,
+    existing_tint_colors: &Bound<'_, PyAny>,
+    grass_color: [f32; 4],
+    foliage_color: [f32; 4],
+    dry_foliage_color: [f32; 4],
+    water_color: [f32; 4],
+    colormap_uv: [f32; 2],
+    has_custom_grass: bool,
+    has_custom_foliage: bool,
+    has_custom_dry_foliage: bool,
+) -> PyResult<(
+    Bound<'py, PyMemoryView>,
+    Bound<'py, PyMemoryView>,
+    Bound<'py, PyMemoryView>,
+)> {
+    let base = BorrowedU8Buffer::extract(base_tint_types)?;
+    let packed = BorrowedF32Buffer::extract(packed_tint_data)?;
+    let existing = BorrowedF32Buffer::extract(existing_tint_colors)?;
+
+    let face_count = base.as_slice().len();
+    let packed_slice = packed.as_slice();
+    if packed_slice.len() < face_count * 4 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "packed_tint_data must contain at least face_count * 4 floats",
+        ));
+    }
+
+    let packed_pairs: &[[f32; 4]] =
+        unsafe { std::slice::from_raw_parts(packed_slice.as_ptr() as *const [f32; 4], face_count) };
+    let existing_slice = existing.as_slice();
+    let existing_pairs: &[[f32; 4]] = if existing_slice.len() >= face_count * 4 {
+        unsafe {
+            std::slice::from_raw_parts(existing_slice.as_ptr() as *const [f32; 4], face_count)
+        }
+    } else {
+        &[]
+    };
+
+    let result = mtk_material::reapply_uniform_biome_tint_flat(
+        base.as_slice(),
+        packed_pairs,
+        existing_pairs,
+        mtk_material::BiomeColorSet {
+            grass: grass_color,
+            foliage: foliage_color,
+            dry_foliage: dry_foliage_color,
+            water: water_color,
+            colormap_uv,
+        },
+        has_custom_grass,
+        has_custom_foliage,
+        has_custom_dry_foliage,
+    );
+
+    let packed_mv = create_owned_f32_memoryview(py, result.packed_tint_data)?;
+    let colors_mv = create_owned_f32_memoryview(py, result.tint_colors)?;
+    let uvs_mv = create_owned_f32_memoryview(py, result.colormap_uvs)?;
+    Ok((packed_mv, colors_mv, uvs_mv))
+}
+
 /// Compute 3D coordinate-aware biome tinting attributes using a VoxelStorage container.
 #[pyfunction]
 #[pyo3(signature = (
@@ -402,6 +540,26 @@ pub fn compute_flat_material_props(
         flat
     });
     Ok(res)
+}
+
+/// Compute flat packed material properties as a zero-copy memoryview.
+#[pyfunction]
+#[pyo3(signature = (face_texture_keys, block_names=None))]
+pub fn compute_flat_material_props_memoryview<'py>(
+    py: Python<'py>,
+    face_texture_keys: Vec<String>,
+    block_names: Option<Vec<String>>,
+) -> PyResult<Bound<'py, PyMemoryView>> {
+    let flat = py.allow_threads(|| {
+        let props =
+            mtk_material::compute_mesh_material_props(&face_texture_keys, block_names.as_deref());
+        let mut flat = Vec::with_capacity(props.len() * 4);
+        for p in props {
+            flat.extend_from_slice(&p);
+        }
+        flat
+    });
+    create_owned_f32_memoryview(py, flat)
 }
 
 /// Query individual block material physical properties `[emission, thin_wall, transmission, sticker_threshold]`.

@@ -8,7 +8,9 @@ pub mod resolver;
 
 pub use batch::{
     compute_mesh_biome_attributes, compute_mesh_biome_attributes_custom,
-    compute_mesh_biome_attributes_per_face, CustomBiomeSettings, MeshBiomeAttributesResult,
+    compute_mesh_biome_attributes_per_face, reapply_uniform_biome_tint,
+    reapply_uniform_biome_tint_flat, BiomeColorSet, BiomeTintFlatBuffers, CustomBiomeSettings,
+    MeshBiomeAttributesResult,
 };
 pub use hardcoded::{
     classify_tint_category, get_hardcoded_tint, get_hardcoded_tint_hex, get_swamp_grass_color,

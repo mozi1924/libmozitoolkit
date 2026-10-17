@@ -31,8 +31,9 @@ pub use ctm::PyCtmSolver;
 pub use cull::PyFaceCuller;
 pub use material::{
     blend_biome_colors, classify_tint_category, compute_biome_tint_attributes,
-    compute_mesh_biome_attributes_from_storage, get_all_biomes, get_biome_meta,
-    sample_colormap_pixel, PyBiomeResolver, PyGridAtlasSpec, PyMaterialResolver,
+    compute_flat_material_props_memoryview, compute_mesh_biome_attributes_from_storage,
+    get_all_biomes, get_biome_meta, reapply_uniform_biome_tint, sample_colormap_pixel,
+    PyBiomeResolver, PyGridAtlasSpec, PyMaterialResolver,
 };
 pub use mesh::{PyAttributeDomain, PyMeshData};
 pub use mesher::PySectionMesher;
@@ -183,6 +184,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
         compute_mesh_biome_attributes_from_storage,
         m
     )?)?;
+    m.add_function(wrap_pyfunction!(reapply_uniform_biome_tint, m)?)?;
     m.add_function(wrap_pyfunction!(classify_tint_category, m)?)?;
     m.add_function(wrap_pyfunction!(blend_biome_colors, m)?)?;
     m.add_function(wrap_pyfunction!(sample_colormap_pixel, m)?)?;
@@ -195,6 +197,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(material::get_hardcoded_tint_hex, m)?)?;
     m.add_function(wrap_pyfunction!(material::compute_mesh_material_props, m)?)?;
     m.add_function(wrap_pyfunction!(material::compute_flat_material_props, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_flat_material_props_memoryview, m)?)?;
     m.add_function(wrap_pyfunction!(material::get_material_props, m)?)?;
     m.add_function(wrap_pyfunction!(material::get_block_emission_strength, m)?)?;
     m.add_function(wrap_pyfunction!(material::is_thin_wall_block, m)?)?;

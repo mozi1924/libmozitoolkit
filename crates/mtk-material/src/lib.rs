@@ -25,10 +25,11 @@ pub use biome::{
     compute_mesh_biome_attributes_custom, compute_mesh_biome_attributes_per_face,
     get_biome_palette, get_colormap_uv, get_hardcoded_tint, get_hardcoded_tint_hex,
     get_swamp_grass_color, get_unit_cube_tint_index, hex_to_linear_rgba, hex_to_srgb,
-    linear_to_srgb, sample_colormap_pixel, srgb_to_linear, BiomePalette, BiomeResolver,
-    CustomBiomeSettings, MeshBiomeAttributesResult, TintInfo, BLOCK_TINT_REGISTRY,
-    CANONICAL_BIOMES, HARDCODED_BLOCK_TINTS, TINT_TYPE_DRY_FOLIAGE, TINT_TYPE_FOLIAGE,
-    TINT_TYPE_GRASS, TINT_TYPE_HARDCODED, TINT_TYPE_NONE, TINT_TYPE_WATER,
+    linear_to_srgb, reapply_uniform_biome_tint, reapply_uniform_biome_tint_flat,
+    sample_colormap_pixel, srgb_to_linear, BiomeColorSet, BiomePalette, BiomeResolver,
+    BiomeTintFlatBuffers, CustomBiomeSettings, MeshBiomeAttributesResult, TintInfo,
+    BLOCK_TINT_REGISTRY, CANONICAL_BIOMES, HARDCODED_BLOCK_TINTS, TINT_TYPE_DRY_FOLIAGE,
+    TINT_TYPE_FOLIAGE, TINT_TYPE_GRASS, TINT_TYPE_HARDCODED, TINT_TYPE_NONE, TINT_TYPE_WATER,
 };
 pub use error::MaterialError;
 pub use remap::batch::{

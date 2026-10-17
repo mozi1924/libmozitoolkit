@@ -100,11 +100,16 @@
   - `normalize_stream_progress`（两阶段权重只在 Rust 计算）；
   - `SyncEvent::Handshake.decision_code`（避免宿主拿字符串和数字比较）。
 - [x] `bindings/mtk-py` 暴露上述 API。
+- [x] **P1 Biome 即时更新下沉**：
+  - `mtk-material::biome::reapply_uniform_biome_tint_flat`（Rayon 扁平输出）；
+  - PyO3 零拷贝 memoryview；Blender 侧 `foreach_set` 写入；
+  - 498k faces 实测 6~8 ms → ~2.1 ms。
+- [x] DNA 适用范围实测：通用 face 属性 `foreach_set` 与 DNA memcpy 等价，
+      且 DNA 需要手动 `mesh.update()`；DNA 继续用于拓扑/位置/法线/UV/顶点色/点云。
 
 ### 📋 后续
-- [ ] **P1 `mtk-material::biome::inplace`**：base tint type 解析 + uniform biome recolor，
-      把 `utils/materials/biome/updater.py` 的逐面逻辑下沉。
-- [ ] **P1 外部网格材质提取批量化**：slot/source-key 调色板化解析，避免逐 polygon Python 循环。
+- [x] **P1 外部网格材质提取（部分）**：Blender 侧 `foreach_get` + NumPy 索引；
+- [ ] **P1 外部网格 palette-native remap（剩余）**：Rust palette + u32 indices，避免 `Vec<String>`。
 - [ ] **P2 `mtk-sync` 事件合并**：`poll_latest_world_mesh` / 代际栅栏下沉。
 - [ ] **P2 `mtk-package::CacheResolver`**：`.mtkcache` 指纹/路径选择下沉。
 - [ ] **P2 `bindings/mtk-ffi`**：为 C4D / C++ 宿主导出 material route、persisted-state 与
