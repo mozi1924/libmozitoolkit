@@ -90,7 +90,11 @@ pub fn extract_canonical_state_str(raw_state: &str) -> &str {
         }
     }
 
-    match res {
+    // Property-insensitive family matching, mirroring the Java `BlockState.is(...)` SSOT.
+    let base = res
+        .find('[')
+        .map_or(res, |property_start| &res[..property_start]);
+    match base {
         "minecraft:air"
         | "minecraft:cave_air"
         | "minecraft:void_air"
@@ -101,9 +105,6 @@ pub fn extract_canonical_state_str(raw_state: &str) -> &str {
         | "minecraft:structure_void"
         | "bubble_column"
         | "minecraft:bubble_column" => "minecraft:air",
-        s if s.starts_with("minecraft:bubble_column[") || s.starts_with("bubble_column[") => {
-            "minecraft:air"
-        }
         _ => res,
     }
 }

@@ -11,21 +11,27 @@ use xxhash_rust::xxh64::Xxh64;
 #[inline]
 pub fn normalize_canonical_blockstate(raw: &str) -> &str {
     let trimmed = raw.trim();
-    if trimmed.is_empty()
-        || trimmed == "minecraft:air"
-        || trimmed == "air"
-        || trimmed == "minecraft:cave_air"
-        || trimmed == "cave_air"
-        || trimmed == "minecraft:void_air"
-        || trimmed == "void_air"
-        || trimmed == "minecraft:structure_void"
-        || trimmed == "structure_void"
-        || trimmed == "minecraft:bubble_column"
-        || trimmed == "bubble_column"
-    {
+    if trimmed.is_empty() {
+        return "minecraft:air";
+    }
+    // The Java SSOT normalizes the *block type* (`state.is(Blocks.BUBBLE_COLUMN)`),
+    // which ignores properties. Strip an optional `[...]` suffix before matching so
+    // `minecraft:bubble_column[drag=true]` canonicalises to air exactly like the server.
+    let base = trimmed
+        .find('[')
+        .map_or(trimmed, |property_start| &trimmed[..property_start]);
+    match base {
         "minecraft:air"
-    } else {
-        trimmed
+        | "air"
+        | "minecraft:cave_air"
+        | "cave_air"
+        | "minecraft:void_air"
+        | "void_air"
+        | "minecraft:structure_void"
+        | "structure_void"
+        | "minecraft:bubble_column"
+        | "bubble_column" => "minecraft:air",
+        _ => trimmed,
     }
 }
 
@@ -128,5 +134,33 @@ mod tests {
 
         assert_eq!(h1, h2);
         assert_ne!(h1, 0);
+    }
+
+    #[test]
+    fn test_air_family_normalization_matches_java_ssot() {
+        // Java normalizes by block type (`state.is(...)`), so property variants of the
+        // air family must collapse to air as well. Otherwise the client hash diverges
+        // from the server whenever a selection contains a bubble column.
+        for raw in [
+            "minecraft:air",
+            "minecraft:cave_air",
+            "minecraft:void_air",
+            "minecraft:structure_void",
+            "minecraft:bubble_column",
+            "minecraft:bubble_column[drag=true]",
+            "minecraft:bubble_column[drag=false]",
+            "bubble_column[drag=true]",
+        ] {
+            assert_eq!(
+                normalize_canonical_blockstate(raw),
+                "minecraft:air",
+                "raw state {raw} must canonicalise to air"
+            );
+        }
+        // Non-air states keep their full property string.
+        assert_eq!(
+            normalize_canonical_blockstate("minecraft:oak_stairs[facing=north]"),
+            "minecraft:oak_stairs[facing=north]"
+        );
     }
 }

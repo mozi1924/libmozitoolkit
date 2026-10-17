@@ -250,6 +250,11 @@ pub enum SyncEvent {
 
 ### 5.1 两阶段流式传输 (Two-Phase Progressive Streaming)
 
+> **Legacy notice:** 以下 `StreamBegin` / `SectionSnapshot` / `StreamEnd` 属于旧版协议描述。
+> RFC v3.1 实际使用 `BaselineBegin` / `BaselineChunk` / `BaselineEnd` 的扁平基线流，
+> 并在装配完成后统一调用 `VoxelStorage::finalize_biome_metadata()`。两条路径共用同一
+> `SectionStorage` / `SectionBiomes` ingest 契约。
+
 当场景规模较大（如上千个区块切片）时，一次性发送巨石封包会导致严重网络停顿。`mtk-sync` 采用**两阶段流水线**：
 
 1. **阶段 1：数据摄取 (Ingestion Phase)**
@@ -284,10 +289,33 @@ pub enum SyncEvent {
 
 ### 5.4 CRC32 清单比对与自愈修复机制
 
+> **Legacy notice:** `SectionManifest` / `ReqFullSync` / `ReqSectionSync` 同样属于旧版
+> 协议；RFC v3.1 通过 `StateVerifyReq/Resp` 与 `ResyncRequest` 完成校验与恢复。
+
 服务端周期性广播 `SectionManifest` 数据包携带各区块的权威 CRC32 校验码：
 1. 调度器在本地调用 `VoxelStorage::validate_manifest` 进行哈希比对；
 2. 若本地存储为空或差异区块数量过多（$> 64$ 个），客户端自动向服务端发送 `ReqFullSync` (0x80) 请求全量快照；
 3. 若仅有零星几个区块数据不一致，客户端将损坏的区块坐标分批编码为 `ReqSectionSync` (0x81) 发起针对性差量修复。
+
+---
+
+### 5.5 存档导入与实时同步的对齐契约
+
+**实时同步 = 存档导入的流式变体**。为了保证同一世界区域在两条 ingest 路径上得到完全一致的
+`VoxelStorage`，以下契约由 golden 测试强制锁定（`tests/test_save_alignment.rs`）：
+
+1. **Section 级 4×4×4 群系是唯一交换格式**：基线流按 `min + 4q` 采样并映射到 section-local
+   quart 单元；选择区边缘未覆盖的单元由 `SectionBiomes::fill_unwritten_nearest()` 用最近
+   采样填充，绝不回退到 `palette[0]`。
+2. **派生元数据只有一份实现**：`VoxelStorage::finalize_biome_metadata()` 统一生成
+   `biome_column_map` 与主导 `primary_biome`，存档导入、Live Sync、点云重建共享。
+3. **规范化 (canonicalisation) 与 Java SSOT 一致**：空气族（`air` / `cave_air` / `void_air`
+   / `structure_void` / `bubble_column`）按**方块类型**归一（忽略 `[...]` 属性），
+   `normalize_canonical_blockstate` 与服务端 `CanonicalVoxelScanner.getCanonicalBlock`
+   逐字节一致，否则 `state_hash` 会在含气泡柱的选区上失配。
+4. **CI 门禁**：hermetic 合成世界（按象限对齐 / 非对齐 / 边缘越界三种场景）在每次
+   `cargo test` 中回放真实 `LiveSyncSession`，逐方块、逐采样 quart、逐网格染色对比；
+   设置 `MTK_TEST_SAVE` 时还会对真实 `.mca` 存档做端到端对齐校验。
 
 ---
 
