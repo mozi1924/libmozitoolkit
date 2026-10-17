@@ -1,9 +1,7 @@
 use glam::IVec3;
-use mtk_core::constants::voxel::block_index;
 use mtk_core::progress::{ProgressCallback, ProgressReport, ProgressThrottler};
 use mtk_voxel::source::VoxelWriter;
 use mtk_voxel::storage::VoxelStorage;
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::chunk::ChunkParser;
@@ -234,7 +232,6 @@ impl SaveLoader {
             .with_prefix("Loading chunk");
 
         let mut loaded_sections = 0usize;
-        let mut biome_counts: HashMap<String, usize> = HashMap::new();
 
         // 2. Iterate only over regions that overlap the bounding box
         for rx in min_reg_x..=max_reg_x {
@@ -297,121 +294,10 @@ impl SaveLoader {
                             loaded_sections += 1;
                         }
 
-                        if !parsed.biomes.is_empty() {
-                            let chunk_wx = cx * 16;
-                            let chunk_wz = cz * 16;
-                            let mut sec_ys: Vec<i32> = parsed.biomes.keys().copied().collect();
-                            sec_ys.sort_unstable_by(|a, b| b.cmp(a)); // Descending Y to sample surface first
-
-                            // 1. Establish 2D column surface biomes across all 16 quart columns
-                            for qx in 0..4 {
-                                for qz in 0..4 {
-                                    let mut col_surf_biome = "minecraft:plains";
-                                    for &sy in &sec_ys {
-                                        if let Some(b_data) = parsed.biomes.get(&sy) {
-                                            if let Some(b) = b_data.get_quart_biome(qx, 3, qz) {
-                                                col_surf_biome = b;
-                                                break;
-                                            }
-                                        }
-                                    }
-
-                                    *biome_counts.entry(col_surf_biome.to_string()).or_insert(0) +=
-                                        16;
-
-                                    for dx in 0..4 {
-                                        for dz in 0..4 {
-                                            let bx = chunk_wx + (qx as i32) * 4 + dx;
-                                            let bz = chunk_wz + (qz as i32) * 4 + dz;
-                                            storage
-                                                .biome_column_map
-                                                .insert([bx, bz], col_surf_biome.to_string());
-                                        }
-                                    }
-                                }
-                            }
-
-                            // 2. Map 3D height-varying biomes (e.g. underground caves) for non-air blocks
-                            for &sec_y in &sec_ys {
-                                if let Some(b_data) = parsed.biomes.get(&sec_y) {
-                                    if let Some(sec) =
-                                        storage.sections.get(&IVec3::new(cx, sec_y, cz))
-                                    {
-                                        if sec.non_air_count > 0 {
-                                            // Fast skip if entire section matches its column biomes
-                                            if b_data.palette.len() == 1 {
-                                                let single_b = &b_data.palette[0];
-                                                let mut all_match = true;
-                                                for qx in 0..4 {
-                                                    for qz in 0..4 {
-                                                        let bx = chunk_wx + qx * 4;
-                                                        let bz = chunk_wz + qz * 4;
-                                                        if storage
-                                                            .biome_column_map
-                                                            .get(&[bx, bz])
-                                                            .map(|s| s.as_str())
-                                                            != Some(single_b.as_str())
-                                                        {
-                                                            all_match = false;
-                                                            break;
-                                                        }
-                                                    }
-                                                    if !all_match {
-                                                        break;
-                                                    }
-                                                }
-                                                if all_match {
-                                                    continue;
-                                                }
-                                            }
-
-                                            for lx in 0..16 {
-                                                for ly in 0..16 {
-                                                    for lz in 0..16 {
-                                                        let idx = block_index(lx, ly, lz);
-                                                        if sec.voxels[idx] != 0 {
-                                                            let bx = chunk_wx + lx as i32;
-                                                            let by = sec_y * 16 + ly as i32;
-                                                            let bz = chunk_wz + lz as i32;
-                                                            if let Some(b) =
-                                                                b_data.get_biome(lx, ly, lz)
-                                                            {
-                                                                let col_b = storage
-                                                                    .biome_column_map
-                                                                    .get(&[bx, bz])
-                                                                    .map(|s| s.as_str());
-                                                                if col_b != Some(b) {
-                                                                    storage.biome_map.insert(
-                                                                        IVec3::new(bx, by, bz),
-                                                                        b.to_string(),
-                                                                    );
-                                                                    *biome_counts
-                                                                        .entry(b.to_string())
-                                                                        .or_insert(0) += 1;
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
                         throttler.inc();
                     }
                 }
             }
-        }
-
-        // Establish dominant primary biome for default fallbacks
-        if storage.primary_biome.is_none() {
-            storage.primary_biome = biome_counts
-                .into_iter()
-                .max_by_key(|(_, count)| *count)
-                .map(|(b, _)| b);
         }
 
         // 3. Set the active world bounds on VoxelStorage
@@ -419,6 +305,11 @@ impl SaveLoader {
         let size_y = (true_max.y - true_min.y + 1).max(1);
         let size_z = (true_max.z - true_min.z + 1).max(1);
         storage.set_bounds(true_min.x, true_min.y, true_min.z, size_x, size_y, size_z);
+
+        // 4. Derive biome metadata through the single shared implementation. The save
+        // loader is the authoritative whole-world provider, so it also builds the
+        // per-block override fallback map.
+        storage.finalize_biome_metadata();
 
         if let Some(cb) = progress {
             cb(ProgressReport::new(

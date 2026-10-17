@@ -47,9 +47,7 @@ pub struct VoxelStorage {
     pub size_z: i32,
     /// Sparse map of section coordinates `(sx, sy, sz)` to `SectionStorage`.
     pub sections: HashMap<IVec3, SectionStorage>,
-    /// Global biome map by block coordinate `(x, y, z)`.
-    pub biome_map: HashMap<IVec3, String>,
-    /// 2D column biome cache for fast lookup independent of elevation differences.
+    /// 2D column biome cache: surface biome per block column `(x, z)`.
     pub biome_column_map: HashMap<[i32; 2], String>,
     /// Default primary biome when unspecified.
     pub primary_biome: Option<String>,
@@ -76,7 +74,6 @@ impl Clone for VoxelStorage {
             size_y: self.size_y,
             size_z: self.size_z,
             sections: self.sections.clone(),
-            biome_map: self.biome_map.clone(),
             biome_column_map: self.biome_column_map.clone(),
             primary_biome: self.primary_biome.clone(),
             dirty_sections: self.dirty_sections.clone(),
@@ -98,7 +95,6 @@ impl Default for VoxelStorage {
             size_y: 0,
             size_z: 0,
             sections: HashMap::new(),
-            biome_map: HashMap::new(),
             biome_column_map: HashMap::new(),
             primary_biome: None,
             dirty_sections: HashSet::new(),
@@ -137,7 +133,6 @@ impl VoxelStorage {
     /// Clears all sections, biomes, and bounds.
     pub fn clear(&mut self) {
         self.sections.clear();
-        self.biome_map.clear();
         self.biome_column_map.clear();
         self.dirty_sections.clear();
         self.known_empty_sections.clear();
@@ -295,16 +290,7 @@ impl VoxelStorage {
                 && coord.z <= new_max_sec_z
         });
 
-        // Prune out-of-bounds biomes
-        self.biome_map.retain(|pos, _| {
-            pos.x >= min_x
-                && pos.x <= new_max_x
-                && pos.y >= min_y
-                && pos.y <= new_max_y
-                && pos.z >= min_z
-                && pos.z <= new_max_z
-        });
-
+        // Prune out-of-bounds column biomes
         self.biome_column_map
             .retain(|&[x, z], _| x >= min_x && x <= new_max_x && z >= min_z && z <= new_max_z);
 
@@ -433,7 +419,6 @@ impl VoxelStorage {
             .or_insert_with(|| SectionStorage::new(sec_coord));
 
         if let Some(b) = biome {
-            self.biome_map.insert(IVec3::new(x, y, z), b.to_string());
             self.biome_column_map.insert([x, z], b.to_string());
             // Use a non-authoritative placeholder: `set_biome` below propagates the biome
             // to the whole column unless individual quarts were explicitly claimed.
@@ -489,16 +474,6 @@ impl VoxelStorage {
                 }
             }
         }
-        if !self.biome_map.is_empty() {
-            if let Some(b) = self.biome_map.get(&IVec3::new(x, y, z)) {
-                return b;
-            }
-            for dy in [1, -1, 2, -2, 4, -4, 8, -8, 16, -16] {
-                if let Some(b) = self.biome_map.get(&IVec3::new(x, y + dy, z)) {
-                    return b;
-                }
-            }
-        }
         if let Some(b) = self.biome_column_map.get(&[x, z]) {
             return b;
         }
@@ -516,11 +491,6 @@ impl VoxelStorage {
                         if let Some(b) = biomes.get_biome(clx, cly, clz) {
                             return b;
                         }
-                    }
-                }
-                if !self.biome_map.is_empty() {
-                    if let Some(b) = self.biome_map.get(&IVec3::new(cx, y, cz)) {
-                        return b;
                     }
                 }
                 if let Some(b) = self.biome_column_map.get(&[cx, cz]) {

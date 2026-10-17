@@ -192,3 +192,60 @@ fn test_section_snapshot_3d_biome_ingestion_and_meshing() {
         "PaddedArray with 3D biomes must have 1024 smoothed column entries"
     );
 }
+
+#[test]
+fn test_finalize_biome_metadata_derives_column_map_and_primary() {
+    use mtk_voxel::storage::{SectionBiomes, SectionStorage};
+
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 32, 16, 16);
+
+    // Two sections side by side. Left column set is horizontally uniform (`desert`),
+    // right one is vertically varying (`taiga` surface above `lush_caves`).
+    for (sx, make) in [(0i32, 0usize), (1i32, 1usize)] {
+        let coord = IVec3::new(sx, 0, 0);
+        let mut sec = SectionStorage::new(coord);
+        sec.set_local(0, 0, 0, "minecraft:stone");
+
+        let mut biomes = SectionBiomes::uniform("minecraft:desert");
+        if make == 1 {
+            for qx in 0..4 {
+                for qz in 0..4 {
+                    biomes.set_sampled_quart_biome(qx, 3, qz, "minecraft:taiga");
+                    biomes.set_sampled_quart_biome(qx, 0, qz, "minecraft:lush_caves");
+                    biomes.set_sampled_quart_biome(qx, 1, qz, "minecraft:lush_caves");
+                    biomes.set_sampled_quart_biome(qx, 2, qz, "minecraft:lush_caves");
+                }
+            }
+        }
+        sec.biomes = Some(biomes);
+        world.sections.insert(coord, sec);
+    }
+
+    world.finalize_biome_metadata();
+
+    // One entry per block column inside the active bounds.
+    assert_eq!(world.biome_column_map.len(), 32 * 16);
+    assert_eq!(
+        world.get_biome(3, 8, 3),
+        "minecraft:desert",
+        "left section surface biome"
+    );
+    assert_eq!(
+        world.biome_column_map.get(&[20, 3]).map(String::as_str),
+        Some("minecraft:taiga"),
+        "column map must use the top quart layer of the highest section"
+    );
+    assert_eq!(
+        world.get_biome(20, 12, 3),
+        "minecraft:taiga",
+        "right section surface quart biome"
+    );
+    assert_eq!(
+        world.get_biome(20, 2, 3),
+        "minecraft:lush_caves",
+        "right section underground quart biome"
+    );
+    // Dominant primary is the surface biome of the majority of columns.
+    assert_eq!(world.primary_biome.as_deref(), Some("minecraft:desert"));
+}

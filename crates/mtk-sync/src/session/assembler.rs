@@ -423,7 +423,15 @@ impl BaselineAssembler {
 
         // Apply Biomes if present
         let bp_len = self.biome_palette.len();
-        if bp_len > 0 && !self.raw_quart_biome_indices.is_empty() {
+        if bp_len == 1 {
+            // Single-biome selection: the server omits the quart index stream entirely and
+            // only ships a one-entry palette. Every section in the selection is that biome.
+            let biome = self.biome_palette[0].clone();
+            for sec in storage.sections.values_mut() {
+                sec.biomes = Some(SectionBiomes::uniform(biome.clone()));
+            }
+            storage.finalize_biome_metadata();
+        } else if bp_len > 1 && !self.raw_quart_biome_indices.is_empty() {
             for (q_idx, &b_idx_raw) in self.raw_quart_biome_indices.iter().enumerate() {
                 let b_idx = b_idx_raw as usize;
                 if b_idx >= bp_len {
@@ -441,18 +449,14 @@ impl BaselineAssembler {
                 let wz = self.min_pos.z + qz * 4;
 
                 let sec_coord = IVec3::new(wx >> 4, wy >> 4, wz >> 4);
-                let sb = section_biomes_map.entry(sec_coord).or_insert_with(|| {
-                    if bp_len == 1 {
-                        SectionBiomes::uniform(biome_str)
-                    } else {
-                        // Placeholder cells stay unassigned and are filled with the
-                        // nearest sampled biome after the stream is consumed. Marking
-                        // them as authoritative palette[0] (the selection's min corner,
-                        // usually deep_dark/lush_caves) used to leak that biome into
-                        // partial border sections and flip the 2D/3D smoothing mode.
-                        SectionBiomes::blank(self.biome_palette.clone())
-                    }
-                });
+                // Placeholder cells stay unassigned and are filled with the nearest
+                // sampled biome after the stream is consumed. Marking them as
+                // authoritative palette[0] (the selection's min corner, usually
+                // deep_dark/lush_caves) used to leak that biome into partial border
+                // sections and flip the 2D/3D smoothing mode.
+                let sb = section_biomes_map
+                    .entry(sec_coord)
+                    .or_insert_with(|| SectionBiomes::blank(self.biome_palette.clone()));
 
                 // Quart indices must be derived from the SECTION-LOCAL block coordinate.
                 // The selection quart grid is anchored at `min_pos`, which is not
@@ -473,6 +477,10 @@ impl BaselineAssembler {
                     sec.biomes = Some(sb);
                 }
             }
+
+            // Derive the shared biome metadata (surface column map + dominant primary)
+            // through the same implementation the save loader uses.
+            storage.finalize_biome_metadata();
         }
 
         // Validate state_hash SSOT

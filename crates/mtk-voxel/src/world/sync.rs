@@ -83,7 +83,6 @@ impl VoxelWorld {
         self.storage.has_explicit_bounds = new_storage.has_explicit_bounds;
         self.storage.primary_biome = new_storage.primary_biome.clone();
         self.storage.biome_column_map = new_storage.biome_column_map.clone();
-        self.storage.biome_map = new_storage.biome_map.clone();
 
         let count = dirty.len();
         self.storage.dirty_sections = dirty;

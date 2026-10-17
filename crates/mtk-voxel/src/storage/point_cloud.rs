@@ -13,6 +13,7 @@ use mtk_core::mesh::MeshData;
 use serde::{Deserialize, Serialize};
 
 use crate::source::VoxelSource;
+use crate::storage::biome::SectionBiomes;
 use crate::storage::section::SectionStorage;
 use crate::storage::world::VoxelStorage;
 use crate::types::{MesherConfig, VoxelError};
@@ -462,21 +463,6 @@ impl VoxelPointCloud {
         let mut max_y = i32::MIN;
         let mut max_z = i32::MIN;
 
-        // Establish Biomes efficiently without inserting millions of duplicate entries into biome_map.
-        let mut primary_biome = "minecraft:plains";
-        let mut has_varying_biomes = false;
-        if !self.biomes.is_empty() {
-            let first_b = &self.biomes[0];
-            primary_biome = first_b.as_str();
-            for b in &self.biomes[1..] {
-                if b != first_b {
-                    has_varying_biomes = true;
-                    break;
-                }
-            }
-        }
-        storage.primary_biome = Some(primary_biome.to_string());
-
         for i in 0..count {
             let bx = self.block_x[i];
             let by = self.block_y[i];
@@ -490,21 +476,6 @@ impl VoxelPointCloud {
             max_y = max_y.max(by);
             max_z = max_z.max(bz);
 
-            if has_varying_biomes && i < self.biomes.len() {
-                let b = &self.biomes[i];
-                if b != primary_biome {
-                    let col_key = [bx, bz];
-                    if let Some(existing_col_b) = storage.biome_column_map.get(&col_key) {
-                        if existing_col_b != b {
-                            // Column has 3D height-varying biomes
-                            storage.biome_map.insert(IVec3::new(bx, by, bz), b.clone());
-                        }
-                    } else {
-                        storage.biome_column_map.insert(col_key, b.clone());
-                    }
-                }
-            }
-
             let sec_coord = IVec3::new(bx >> 4, by >> 4, bz >> 4);
             let lx = (bx & 15) as usize;
             let ly = (by & 15) as usize;
@@ -515,6 +486,25 @@ impl VoxelPointCloud {
                 .entry(sec_coord)
                 .or_insert_with(|| SectionStorage::new(sec_coord));
             sec.set_local(lx, ly, lz, state);
+
+            // Rebuild the section-level 4x4x4 quart biomes from the per-point data so the
+            // reconstructed storage is structurally identical to save/live-sync storage.
+            if let Some(biome) = self.biomes.get(i) {
+                if !biome.is_empty() {
+                    let sb = sec
+                        .biomes
+                        .get_or_insert_with(|| SectionBiomes::blank(vec![biome.clone()]));
+                    sb.set_sampled_quart_biome((lx >> 2) & 3, (ly >> 2) & 3, (lz >> 2) & 3, biome);
+                }
+            }
+        }
+
+        // Fill quart cells that carry no point with the nearest sampled biome, then derive
+        // the shared column map / primary biome through the single authoritative path.
+        for sec in storage.sections.values_mut() {
+            if let Some(biomes) = sec.biomes.as_mut() {
+                biomes.fill_unwritten_nearest();
+            }
         }
 
         // If bounds were recorded on the cloud, preserve exact bounds for origin stability.
@@ -531,6 +521,7 @@ impl VoxelPointCloud {
             );
         }
 
+        storage.finalize_biome_metadata();
         storage.mark_all_sections_dirty();
         storage
     }

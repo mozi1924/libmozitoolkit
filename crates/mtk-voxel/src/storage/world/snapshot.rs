@@ -106,7 +106,6 @@ impl VoxelStorage {
                         let b_idx = bi[idx] as usize;
                         if b_idx < bp.len() {
                             let b_str = &bp[b_idx];
-                            self.biome_map.insert(IVec3::new(wx, wy, wz), b_str.clone());
                             if ly == 0 || !self.biome_column_map.contains_key(&[wx, wz]) {
                                 self.biome_column_map.insert([wx, wz], b_str.clone());
                             }
@@ -126,7 +125,6 @@ impl VoxelStorage {
                 } else if let Some(bp) = biome_palette {
                     if !bp.is_empty() {
                         let b_str = &bp[0];
-                        self.biome_map.insert(IVec3::new(wx, wy, wz), b_str.clone());
                         if ly == 0 || !self.biome_column_map.contains_key(&[wx, wz]) {
                             self.biome_column_map.insert([wx, wz], b_str.clone());
                         }
@@ -301,7 +299,6 @@ impl VoxelStorage {
                                 let b_idx = bi[idx] as usize;
                                 if b_idx < bp.len() {
                                     let b_str = &bp[b_idx];
-                                    self.biome_map.insert(IVec3::new(wx, wy, wz), b_str.clone());
                                     if ly == 0 || !self.biome_column_map.contains_key(&[wx, wz]) {
                                         self.biome_column_map.insert([wx, wz], b_str.clone());
                                     }

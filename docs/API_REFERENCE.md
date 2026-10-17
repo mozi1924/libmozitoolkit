@@ -173,7 +173,7 @@ cache_output_dir/
 - **`RegionFile`**: 针对 32x32 区块 Anvil `.mca` 文件直接寻址 4096 字节 Location Table，按扇区偏移直接 Seek 并仅解压目标区块。
 - **`ChunkParser`**: 解密现代 Section 结构，对紧凑长整型数组（`bits_per_block >= 4`）进行纯位解包并将 Palette 状态规范化为唯一排序属性字符串（如 `minecraft:oak_stairs[facing=north,half=bottom]`）；同时解包 `biomes` 调色板与 4x4x4 quart 3D 生物群系，产出 `ParsedChunk`。
 - **按需切片加载器 (`SaveLoader`)**:
-  - `load_box_into_storage(save_dir, dimension, min_block, max_block, &mut storage)`: 依据用户 3D 边界盒直接定位所需相交的 Region / Chunk / Section，仅加载并填充所选区域进入 `VoxelStorage`，彻底杜绝数十 GB 全图扫描；同步解构 2D 柱群系与 3D 纵向变动群系（洞穴群系等），确立全域 `primary_biome` 与 `biome_column_map`。
+  - `load_box_into_storage(save_dir, dimension, min_block, max_block, &mut storage)`: 依据用户 3D 边界盒直接定位所需相交的 Region / Chunk / Section，仅加载并填充所选区域进入 `VoxelStorage`，彻底杜绝数十 GB 全图扫描；解析完整 4×4×4 Section 群系后统一调用 `VoxelStorage::finalize_biome_metadata()` 派生地表列群系 `biome_column_map` 与主导 `primary_biome`（与实时同步、点云重建共用同一实现）。
   - `AnvilWorldSource`: 遵循统一 `VoxelSource` 接口，支持向 `VoxelWorld` 持续提供体素切片流。
 
 ---

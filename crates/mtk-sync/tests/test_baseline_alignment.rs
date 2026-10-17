@@ -279,6 +279,23 @@ fn test_partial_section_biomes_are_filled_from_nearest_sample() {
     assert_eq!(sb.get_quart_biome(0, 0, 0), Some("minecraft:plains"));
     assert_eq!(sb.get_quart_biome(3, 0, 0), Some("minecraft:desert"));
     assert!(!sb.varies_vertically());
+
+    // The shared metadata derivation must now populate the same surface column map and
+    // primary biome that an Anvil save import would produce.
+    assert_eq!(
+        storage.biome_column_map.len(),
+        8,
+        "column map must cover the selection's 8 block columns"
+    );
+    assert_eq!(
+        storage.biome_column_map.get(&[4, 0]).map(String::as_str),
+        Some("minecraft:plains")
+    );
+    assert_eq!(
+        storage.biome_column_map.get(&[8, 0]).map(String::as_str),
+        Some("minecraft:desert")
+    );
+    assert!(storage.primary_biome.is_some());
 }
 
 /// The server splits its payload on fixed byte offsets, so a large multi-biome selection

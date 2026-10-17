@@ -64,6 +64,32 @@ fn test_point_cloud_extraction_no_culling_and_roundtrip() {
         "minecraft:diamond_block"
     );
     assert_eq!(restored_world.get_biome(10, 10, 10), "minecraft:plains");
+
+    // 3. Reconstruction must rebuild section-level quart biomes and the shared derived
+    // biome metadata instead of the old lossy ad-hoc column/override map.
+    let sec = restored_world
+        .sections
+        .get(&IVec3::new(0, 0, 0))
+        .expect("section must exist");
+    assert!(
+        sec.biomes.is_some(),
+        "point-cloud reconstruction must rebuild SectionBiomes"
+    );
+    assert_eq!(
+        restored_world
+            .biome_column_map
+            .get(&[0, 0])
+            .map(String::as_str),
+        Some("minecraft:desert")
+    );
+    assert_eq!(
+        restored_world
+            .biome_column_map
+            .get(&[10, 10])
+            .map(String::as_str),
+        Some("minecraft:plains")
+    );
+    assert!(restored_world.primary_biome.is_some());
 }
 
 #[test]

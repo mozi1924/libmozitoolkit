@@ -37,7 +37,6 @@ impl VoxelStorage {
         }
 
         let has_biomes = sec.biomes.is_some()
-            || !self.biome_map.is_empty()
             || self.primary_biome.is_some()
             || !self.biome_column_map.is_empty();
 
@@ -76,26 +75,8 @@ impl VoxelStorage {
                         let wx = sec_wx + lx;
                         for lz in 0..16 {
                             let wz = sec_wz + lz;
-                            let center_b = self.get_biome(clamp_x(wx), sample_y, clamp_z(wz));
                             let col = crate::biome::get_smoothed_column_biome(
-                                |bx, y, bz| {
-                                    let cbx = clamp_x(bx);
-                                    let cbz = clamp_z(bz);
-                                    let b = self.get_biome(cbx, y, cbz);
-                                    if b == "minecraft:plains"
-                                        && center_b != "minecraft:plains"
-                                        && !self.biome_column_map.contains_key(&[cbx, cbz])
-                                        && !self.biome_map.contains_key(&IVec3::new(cbx, y, cbz))
-                                        && !self.sections.contains_key(&IVec3::new(
-                                            cbx >> 4,
-                                            y >> 4,
-                                            cbz >> 4,
-                                        ))
-                                    {
-                                        return center_b;
-                                    }
-                                    b
-                                },
+                                |bx, y, bz| self.get_biome(clamp_x(bx), y, clamp_z(bz)),
                                 wx,
                                 sample_y,
                                 wz,
@@ -123,27 +104,8 @@ impl VoxelStorage {
                             }
                         }
 
-                        let center_b = self.get_biome(clamp_x(wx), sample_y, clamp_z(wz));
-
                         let col = crate::biome::get_smoothed_column_biome(
-                            |bx, y, bz| {
-                                let cbx = clamp_x(bx);
-                                let cbz = clamp_z(bz);
-                                let b = self.get_biome(cbx, y, cbz);
-                                if b == "minecraft:plains"
-                                    && center_b != "minecraft:plains"
-                                    && !self.biome_column_map.contains_key(&[cbx, cbz])
-                                    && !self.biome_map.contains_key(&IVec3::new(cbx, y, cbz))
-                                    && !self.sections.contains_key(&IVec3::new(
-                                        cbx >> 4,
-                                        y >> 4,
-                                        cbz >> 4,
-                                    ))
-                                {
-                                    return center_b;
-                                }
-                                b
-                            },
+                            |bx, y, bz| self.get_biome(clamp_x(bx), y, clamp_z(bz)),
                             wx,
                             sample_y,
                             wz,
