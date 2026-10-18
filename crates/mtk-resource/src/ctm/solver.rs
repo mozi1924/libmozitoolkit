@@ -15,27 +15,6 @@ use mtk_core::direction::Direction;
 use std::collections::HashMap;
 
 impl CtmRule {
-    /// Solves the final CTM sub-tile ResourceLocation for this face using canonical face tangents.
-    pub fn solve_tile<F, S>(
-        &self,
-        state: &str,
-        face: Direction,
-        world_pos: IVec3,
-        get_block: &F,
-    ) -> Option<ResourceLocation>
-    where
-        F: Fn(IVec3) -> Option<S>,
-        S: AsRef<str>,
-    {
-        self.solve_tile_with_tangents(
-            state,
-            face,
-            face.canonical_face_tangents(),
-            world_pos,
-            get_block,
-        )
-    }
-
     /// Solves the final CTM sub-tile ResourceLocation for this face with explicit 2D face tangents `(up, left)`.
     pub fn solve_tile_with_tangents<F, S>(
         &self,

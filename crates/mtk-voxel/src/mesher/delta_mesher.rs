@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use glam::IVec3;
@@ -67,54 +66,6 @@ impl DeltaMesher {
 
         world.clear_dirty_sections();
         results
-    }
-
-    /// Finds all section coordinates that would be affected by a set of block modifications,
-    /// including 3x3x3 neighbor bounds expansion for fluid modifications.
-    pub fn find_affected_sections(
-        changes: &[(i32, i32, i32)],
-        is_fluid_fn: impl Fn(i32, i32, i32) -> bool,
-    ) -> HashSet<IVec3> {
-        let mut affected = HashSet::new();
-
-        for &(x, y, z) in changes {
-            let sec_coord = IVec3::new(x >> 4, y >> 4, z >> 4);
-            affected.insert(sec_coord);
-
-            let is_fluid = is_fluid_fn(x, y, z);
-            if is_fluid {
-                // Expand to 3x3 horizontal window for fluid slope updates
-                for dx in -1..=1 {
-                    for dz in -1..=1 {
-                        for dy in -1..=1 {
-                            let nx = x + dx * 16;
-                            let ny = y + dy * 16;
-                            let nz = z + dz * 16;
-                            affected.insert(IVec3::new(nx >> 4, ny >> 4, nz >> 4));
-                        }
-                    }
-                }
-            } else {
-                // Check 6-direction boundary neighbor sections
-                if (x & 15) == 0 {
-                    affected.insert(sec_coord + IVec3::new(-1, 0, 0));
-                } else if (x & 15) == 15 {
-                    affected.insert(sec_coord + IVec3::new(1, 0, 0));
-                }
-                if (y & 15) == 0 {
-                    affected.insert(sec_coord + IVec3::new(0, -1, 0));
-                } else if (y & 15) == 15 {
-                    affected.insert(sec_coord + IVec3::new(0, 1, 0));
-                }
-                if (z & 15) == 0 {
-                    affected.insert(sec_coord + IVec3::new(0, 0, -1));
-                } else if (z & 15) == 15 {
-                    affected.insert(sec_coord + IVec3::new(0, 0, 1));
-                }
-            }
-        }
-
-        affected
     }
 }
 

@@ -1,8 +1,9 @@
 #![forbid(unsafe_code)]
 use std::time::Instant;
 
-use libmtk::{FaceCuller, MesherConfig, PaddedVoxelArray, SectionMesher, VoxelStorage, VoxelWorld};
 use mtk_core::mesh::MeshData;
+use mtk_cull::FaceCuller;
+use mtk_voxel::{MesherConfig, PaddedVoxelArray, SectionMesher, VoxelStorage, VoxelWorld};
 
 fn main() {
     println!("============================================================");

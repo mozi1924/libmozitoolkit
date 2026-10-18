@@ -71,33 +71,3 @@ pub fn batch_analyze_transparent_faces_f32(
         )
     })
 }
-
-#[pyfunction]
-#[pyo3(signature = (faces_uvs, width, height, pixels, mode="CENTER", threshold=0.01, invert_y=false))]
-pub fn batch_analyze_transparent_faces_u8(
-    py: Python<'_>,
-    faces_uvs: Vec<Vec<(f32, f32)>>,
-    width: u32,
-    height: u32,
-    pixels: Vec<u8>,
-    mode: &str,
-    threshold: f32,
-    invert_y: bool,
-) -> Vec<bool> {
-    let faces_vecs: Vec<Vec<glam::Vec2>> = faces_uvs
-        .into_iter()
-        .map(|uvs| uvs.iter().map(|(u, v)| glam::Vec2::new(*u, *v)).collect())
-        .collect();
-    let sample_mode = mtk_texture::SampleMode::from_str(mode);
-    py.allow_threads(|| {
-        mtk_texture::batch_analyze_transparent_faces_u8(
-            &faces_vecs,
-            width,
-            height,
-            &pixels,
-            sample_mode,
-            threshold,
-            invert_y,
-        )
-    })
-}

@@ -447,7 +447,7 @@ parallel = ["dep:rayon", "mtk-model/parallel", "mtk-resource/parallel", "mtk-tex
 serde = ["dep:serde", "dep:serde_json", "mtk-core/serde", "mtk-cull/serde"]
 ```
 
-- **`parallel`** (默认开启)：引入 `rayon` 启用多区块切片并行网格化 (`SectionMesher::mesh_sections`)。
+- **`parallel`** (默认开启)：引入 `rayon` 启用多区块切片并行网格化 (`SectionMesher::mesh_sections_parallel_with_source_and_progress`)。
 - **`serde`** (默认开启)：为 `SectionStorage`、`VoxelStorage`、`MesherConfig`、`WorldMeshBuildResult` 等结构体提供序列化与反序列化支持。
 
 ---

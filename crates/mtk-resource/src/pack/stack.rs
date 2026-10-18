@@ -98,50 +98,6 @@ impl ResourcePackStack {
         self.open_asset_raw(&path)
     }
 
-    /// List all unique texture locations discovered across all active packs in the stack.
-    /// List all unique texture locations discovered across all active packs in the stack.
-    /// Excludes companion files like `_n.png`, `_s.png`, `_overlay.png`.
-    pub fn list_all_texture_locations(&self) -> Vec<ResourceLocation> {
-        let mut seen = HashSet::new();
-        let mut results = Vec::new();
-
-        for pack in &self.packs {
-            for file in pack.list_files("assets/") {
-                if !file.ends_with(".png") {
-                    continue;
-                }
-                if is_companion_asset_path(&file) {
-                    continue;
-                }
-                if let Some(loc) = ResourceLocation::from_asset_path(&file, "textures", "png") {
-                    if seen.insert(loc.clone()) {
-                        results.push(loc);
-                    }
-                }
-            }
-        }
-
-        results
-    }
-
-    /// List all unique texture locations discovered across all active packs in the stack,
-    /// including any CTM sub-tiles referenced by active CTM rules.
-    pub fn list_all_texture_locations_including_ctm(&self) -> Vec<ResourceLocation> {
-        let mut results = self.list_all_texture_locations();
-        let mut seen: HashSet<ResourceLocation> = results.iter().cloned().collect();
-
-        let ctm_rules = self.load_ctm_rules();
-        for rule in &ctm_rules {
-            for tile_loc in rule.tiles.iter().flatten() {
-                if seen.insert(tile_loc.clone()) {
-                    results.push(tile_loc.clone());
-                }
-            }
-        }
-
-        results
-    }
-
     /// List all unique blockstate resource locations discovered across all active packs in the stack.
     pub fn list_all_blockstate_locations(&self) -> Vec<ResourceLocation> {
         let mut seen = HashSet::new();

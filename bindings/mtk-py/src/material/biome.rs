@@ -169,30 +169,6 @@ pub fn get_colormap_uv(temperature: f32, humidity: f32) -> [f32; 2] {
     mtk_material::get_colormap_uv(temperature, humidity)
 }
 
-/// Convert sRGB [r, g, b, a] color to Linear RGBA.
-#[pyfunction]
-#[pyo3(signature = (color))]
-pub fn srgb_to_linear(color: [f32; 4]) -> [f32; 4] {
-    [
-        mtk_material::srgb_to_linear(color[0]),
-        mtk_material::srgb_to_linear(color[1]),
-        mtk_material::srgb_to_linear(color[2]),
-        color[3],
-    ]
-}
-
-/// Convert Linear RGBA [r, g, b, a] color to sRGB.
-#[pyfunction]
-#[pyo3(signature = (color))]
-pub fn linear_to_srgb(color: [f32; 4]) -> [f32; 4] {
-    [
-        mtk_material::linear_to_srgb(color[0]),
-        mtk_material::linear_to_srgb(color[1]),
-        mtk_material::linear_to_srgb(color[2]),
-        color[3],
-    ]
-}
-
 /// Retrieve the hardcoded linear color for a block or texture stem, if any.
 #[pyfunction]
 #[pyo3(signature = (name))]
@@ -378,65 +354,6 @@ pub fn reapply_uniform_biome_tint<'py>(
     Ok((packed_mv, colors_mv, uvs_mv))
 }
 
-/// Palette-native full biome attribute computation, returning three zero-copy memoryviews.
-#[pyfunction]
-#[pyo3(signature = (
-    palette,
-    face_indices,
-    grass_color,
-    foliage_color,
-    dry_foliage_color,
-    water_color,
-    colormap_uv,
-    has_custom_grass=false,
-    has_custom_foliage=false,
-    has_custom_dry_foliage=false,
-    resolver=None
-))]
-#[allow(clippy::too_many_arguments)]
-pub fn compute_biome_tint_attributes_paletted<'py>(
-    py: Python<'py>,
-    palette: Vec<String>,
-    face_indices: &Bound<'_, PyAny>,
-    grass_color: [f32; 4],
-    foliage_color: [f32; 4],
-    dry_foliage_color: [f32; 4],
-    water_color: [f32; 4],
-    colormap_uv: [f32; 2],
-    has_custom_grass: bool,
-    has_custom_foliage: bool,
-    has_custom_dry_foliage: bool,
-    resolver: Option<&PyBiomeResolver>,
-) -> PyResult<(
-    Bound<'py, PyMemoryView>,
-    Bound<'py, PyMemoryView>,
-    Bound<'py, PyMemoryView>,
-)> {
-    let indices = BorrowedU32Buffer::extract(face_indices)?;
-    let default_resolver = mtk_material::BiomeResolver::new();
-    let res_ref = resolver.map(|r| &r.inner).unwrap_or(&default_resolver);
-    let result = mtk_material::compute_mesh_biome_attributes_paletted_flat(
-        &palette,
-        indices.as_slice(),
-        mtk_material::BiomeColorSet {
-            grass: grass_color,
-            foliage: foliage_color,
-            dry_foliage: dry_foliage_color,
-            water: water_color,
-            colormap_uv,
-        },
-        has_custom_grass,
-        has_custom_foliage,
-        has_custom_dry_foliage,
-        res_ref,
-    );
-    Ok((
-        create_owned_f32_memoryview(py, result.packed_tint_data)?,
-        create_owned_f32_memoryview(py, result.tint_colors)?,
-        create_owned_f32_memoryview(py, result.colormap_uvs)?,
-    ))
-}
-
 /// Compute 3D coordinate-aware biome tinting attributes using a VoxelStorage container.
 #[pyfunction]
 #[pyo3(signature = (
@@ -556,38 +473,6 @@ pub fn classify_tint_category(
     tint_index: Option<i32>,
 ) -> &'static str {
     mtk_material::classify_tint_category(clean_stem, block_name, tint_index)
-}
-
-/// Compute a smooth blended Linear RGBA color across multiple weighted biomes.
-#[pyfunction]
-#[pyo3(signature = (biome_weights, tint_type="grass"))]
-pub fn blend_biome_colors(biome_weights: Vec<(String, f32)>, tint_type: &str) -> [f32; 4] {
-    let weights_ref: Vec<(&str, f32)> = biome_weights
-        .iter()
-        .map(|(s, w)| (s.as_str(), *w))
-        .collect();
-    mtk_material::blend_biome_colors(&weights_ref, tint_type)
-}
-
-/// Sample an sRGB color [r, g, b] from 2D colormap image bytes using canonical Minecraft coordinates.
-#[pyfunction]
-#[pyo3(signature = (image_pixels, width, height, temperature, downfall, channels=4))]
-pub fn sample_colormap_pixel(
-    image_pixels: &[u8],
-    width: u32,
-    height: u32,
-    temperature: f32,
-    downfall: f32,
-    channels: usize,
-) -> [f32; 3] {
-    mtk_material::sample_colormap_pixel(
-        image_pixels,
-        width,
-        height,
-        temperature,
-        downfall,
-        channels,
-    )
 }
 
 /// Compute packed material properties `[emission, thin_wall, transmission, sticker_threshold]`

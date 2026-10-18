@@ -1,7 +1,6 @@
 #![forbid(unsafe_code)]
 pub mod baker;
 pub mod builtin;
-pub mod culling;
 pub mod error;
 pub mod parser;
 
@@ -13,7 +12,6 @@ pub use baker::{
     BakedFaceGeometry, BakedModel, BakedModelDatabase, BakedVariantGroup, ModelBaker,
     ModelMeshOptions,
 };
-pub use culling::{clip_face_excluding_hidden_volume, ClippedQuadPiece};
 pub use error::ModelError;
 pub use parser::{
     mesh_to_obj_string, BakedObjFace, BlockModelJson, BlockState, BlockStateDefinition,

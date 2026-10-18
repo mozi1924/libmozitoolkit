@@ -84,11 +84,6 @@ impl Aabb2d {
     }
 
     #[inline]
-    pub fn contains_point(&self, p: Vec2) -> bool {
-        p.x >= self.min.x && p.x <= self.max.x && p.y >= self.min.y && p.y <= self.max.y
-    }
-
-    #[inline]
     pub fn contains_rect(&self, other: &Self, eps: f32) -> bool {
         self.min.x <= other.min.x + eps
             && self.max.x >= other.max.x - eps
@@ -119,57 +114,6 @@ impl Aabb2d {
         } else {
             None
         }
-    }
-}
-
-/// 3D Axis-Aligned Bounding Box (AABB) in normalized block space [0, 1] or Minecraft [0, 16] space.
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct Aabb3d {
-    pub min: Vec3,
-    pub max: Vec3,
-}
-
-impl Aabb3d {
-    pub const ZERO: Self = Self {
-        min: Vec3::ZERO,
-        max: Vec3::ZERO,
-    };
-
-    pub const UNIT: Self = Self {
-        min: Vec3::ZERO,
-        max: Vec3::ONE,
-    };
-
-    #[inline]
-    pub const fn new(min: Vec3, max: Vec3) -> Self {
-        Self { min, max }
-    }
-
-    #[inline]
-    pub fn from_min_max(
-        min_x: f32,
-        min_y: f32,
-        min_z: f32,
-        max_x: f32,
-        max_y: f32,
-        max_z: f32,
-    ) -> Self {
-        Self {
-            min: Vec3::new(min_x.min(max_x), min_y.min(max_y), min_z.min(max_z)),
-            max: Vec3::new(min_x.max(max_x), min_y.max(max_y), min_z.max(max_z)),
-        }
-    }
-
-    #[inline]
-    pub fn size(&self) -> Vec3 {
-        (self.max - self.min).max(Vec3::ZERO)
-    }
-
-    #[inline]
-    pub fn volume(&self) -> f32 {
-        let s = self.size();
-        s.x * s.y * s.z
     }
 }
 

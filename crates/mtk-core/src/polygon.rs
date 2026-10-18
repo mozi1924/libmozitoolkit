@@ -150,16 +150,4 @@ impl FlatPolygonMesh {
             face_materials,
         }
     }
-
-    /// Converts this flat representation back into nested collections for compatibility.
-    pub fn to_nested(&self) -> (Vec<Vec<u32>>, Vec<Vec<[f32; 2]>>) {
-        let count = self.face_count();
-        let mut faces = Vec::with_capacity(count);
-        let mut uvs = Vec::with_capacity(count);
-        for i in 0..count {
-            faces.push(self.face_vertices(i).to_vec());
-            uvs.push(self.face_uvs(i).to_vec());
-        }
-        (faces, uvs)
-    }
 }

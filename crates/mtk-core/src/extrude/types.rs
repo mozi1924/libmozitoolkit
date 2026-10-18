@@ -44,13 +44,7 @@ pub struct MeshExtrudeRepairConfig {
     pub only_collapsed: bool,
 }
 
-impl MeshExtrudeRepairConfig {
-    /// Pure geometric alias for add_crease.
-    #[inline]
-    pub fn track_edges(&self) -> bool {
-        self.add_crease
-    }
-}
+impl MeshExtrudeRepairConfig {}
 
 impl Default for MeshExtrudeRepairConfig {
     fn default() -> Self {

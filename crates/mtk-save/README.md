@@ -18,12 +18,10 @@
   - [3.2 Anvil 区域文件与扇区寻址 (`region.rs`)](#32-anvil-区域文件与扇区寻址-regionrs)
   - [3.3 现代 1.18+ 区块切片解包 (`chunk.rs`)](#33-现代-118-区块切片解包-chunkrs)
   - [3.4 按需空间切片加载器 (`loader.rs`)](#34-按需空间切片加载器-loaderrs)
-  - [3.5 统一体素源桥接 (`source.rs`)](#35-统一体素源桥接-sourcers)
 - [4. 核心公共 API 清单](#4-核心公共-api-清单)
 - [5. 快速上手示例 (Quick Start)](#5-快速上手示例-quick-start)
   - [示例 1：读取并检查世界元数据 (`level.dat`)](#示例-1读取并检查世界元数据-leveldat)
   - [示例 2：按需 3D 边界盒切片加载至体素存储](#示例-2按需-3d-边界盒切片加载至体素存储)
-  - [示例 3：通过 `AnvilWorldSource` 流式驱动体素世界](#示例-3通过-anvilworldsource-流式驱动体素世界)
 - [6. Feature 开关与依赖](#6-feature-开关与依赖)
 - [7. 开源协议 (License)](#7-开源协议-license)
 
@@ -160,24 +158,9 @@ pub fn format_canonical_blockstate(block_comp: &NbtCompound) -> String;
 ```rust
 pub struct SaveLoader;
 ```
-- `SaveLoader::read_level_data(save_dir: impl AsRef<Path>) -> Result<LevelData, SaveError>`: 快速读取并审阅世界配置。
+- `SaveLoader::read_level_data(save_dir: &Path) -> Result<LevelData, SaveError>`: 快速读取并审阅世界配置。
 - `SaveLoader::load_box_into_storage(...) -> Result<usize, SaveError>`: 给定世界目录、维度名称与 3D 轴对齐空间范围 $[P_{\min}, P_{\max}]$，精确裁剪提取相交区块并灌入 `VoxelStorage`。
 - `SaveLoader::load_box_into_storage_with_progress(..., progress: Option<ProgressCallback>) -> Result<usize, SaveError>`: 带实时物理进度节流汇报的空间切片加载器。
-
----
-
-### 3.5 统一体素源桥接 (`source.rs`)
-
-```rust
-pub struct AnvilWorldSource {
-    save_dir: PathBuf,
-    dimension: String,
-    min_bound: IVec3,
-    max_bound: IVec3,
-    cached_regions: HashMap<(i32, i32), RegionFile>,
-}
-```
-- 实现了 `mtk_voxel::source::VoxelSource` 特征，提供 `get_voxel(pos)` 坐标直接探查与按需缓存。
 
 ---
 
@@ -185,13 +168,12 @@ pub struct AnvilWorldSource {
 
 | 函数 / 方法 | 签名 / 描述 |
 | :--- | :--- |
-| `SaveLoader::read_level_data` | `(save_dir: impl AsRef<Path>) -> Result<LevelData, SaveError>`：读取世界元数据。 |
+| `SaveLoader::read_level_data` | `(save_dir: &Path) -> Result<LevelData, SaveError>`：读取世界元数据。 |
 | `SaveLoader::load_box_into_storage` | `(save_dir, dimension, min_coord, max_coord, &mut storage) -> Result<usize, SaveError>`：按 3D 边界范围切片加载体素。 |
 | `SaveLoader::load_box_into_storage_with_progress` | `(..., &mut storage, progress: Option<ProgressCallback>) -> Result<usize, SaveError>`：带进度汇报的切片加载。 |
 | `RegionFile::open` | `(path: impl AsRef<Path>) -> Result<Self, SaveError>`：解析 Anvil 区域文件寻址头。 |
 | `ChunkParser::parse_chunk` | `(bytes: &[u8], min_y, max_y) -> Result<ParsedChunk, SaveError>`：解密区块内所有 Section 与 3D Biomes。 |
 | `ChunkParser::parse_chunk_sections` | `(bytes: &[u8], min_y, max_y) -> Result<Vec<SectionStorage>, SaveError>`：解密区块内所有几何 Section。 |
-| `AnvilWorldSource::new` | `(save_dir, dimension, min_bound, max_bound) -> Self`：创建流式体素源。 |
 
 ---
 
@@ -254,31 +236,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### 示例 3：通过 `AnvilWorldSource` 流式驱动体素世界
-
-```rust
-use std::path::Path;
-use glam::IVec3;
-use mtk_save::AnvilWorldSource;
-use mtk_voxel::source::VoxelSource;
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let save_dir = Path::new("/path/to/saves/MyWorld");
-    let min_pos = IVec3::new(0, -64, 0);
-    let max_pos = IVec3::new(128, 64, 128);
-
-    let mut source = AnvilWorldSource::new(save_dir, "overworld", min_pos, max_pos);
-
-    // 随机探查方块状态
-    let query_pos = IVec3::new(10, 64, 10);
-    if let Some(state_str) = source.get_block_state(query_pos) {
-        println!("Block at {:?}: {}", query_pos, state_str);
-    }
-
-    Ok(())
-}
-```
-
 ---
 
 ## 6. Feature 开关与依赖
@@ -287,7 +244,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 | Feature | 默认启用 | 描述 |
 | :--- | :---: | :--- |
-| `std` | 是 | 启用标准库与文件系统 I/O。 |
 | `serde` | 否 | 为 `LevelData` 等元数据结构体实现 `Serialize` 与 `Deserialize`。 |
 
 ---

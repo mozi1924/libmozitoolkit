@@ -125,14 +125,6 @@ impl TableOfContents {
         self.entries.push(entry);
     }
 
-    /// Rebuilds lookup indices (e.g. after deserialization).
-    pub fn rebuild_index(&mut self) {
-        self.index_by_id.clear();
-        for (idx, entry) in self.entries.iter().enumerate() {
-            self.index_by_id.insert(entry.identifier.clone(), idx);
-        }
-    }
-
     /// Finds a chunk entry by its logical identifier.
     pub fn get_by_identifier(&self, identifier: &str) -> Option<&ChunkEntry> {
         self.index_by_id

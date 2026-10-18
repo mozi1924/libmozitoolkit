@@ -201,11 +201,6 @@ pub fn process_mesh(
         }
         if source_textures.iter().any(|s| !s.is_empty()) {
             output_mesh.add_custom_attribute(MeshAttribute::new(
-                ATTR_SOURCE_TEXTURE,
-                AttributeDomain::Face,
-                AttributeData::String(source_textures.clone()),
-            ));
-            output_mesh.add_custom_attribute(MeshAttribute::new(
                 ATTR_SOURCE_TEXTURE_KEY,
                 AttributeDomain::Face,
                 AttributeData::String(source_textures),

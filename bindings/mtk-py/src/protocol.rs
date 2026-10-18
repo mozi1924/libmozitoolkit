@@ -76,7 +76,6 @@ pub fn decode_packet<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, P
             )?;
             let dec_str = match decision {
                 SyncDecision::VerifiedSkipRebuild => "VERIFIED_SKIP_REBUILD",
-                SyncDecision::ReplayDeltas => "REPLAY_DELTAS",
                 SyncDecision::FullBaselineRequired => "FULL_BASELINE_REQUIRED",
                 SyncDecision::Rejected => "REJECTED",
             };
@@ -353,8 +352,7 @@ pub fn encode_welcome<'py>(
     }
     let dec = match decision {
         0 => SyncDecision::VerifiedSkipRebuild,
-        1 => SyncDecision::ReplayDeltas,
-        2 => SyncDecision::FullBaselineRequired,
+        1 | 2 => SyncDecision::FullBaselineRequired,
         _ => SyncDecision::Rejected,
     };
     let pkt = Packet::Welcome {

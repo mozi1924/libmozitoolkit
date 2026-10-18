@@ -9,7 +9,6 @@ readme = "README.md"
 description = "Unified command-line interface for MoziToolKit (libmtk)."
 
 [dependencies]
-libmtk = { workspace = true }
 mtk-core = { workspace = true }
 mtk-cull = { workspace = true }
 mtk-model = { workspace = true }

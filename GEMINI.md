@@ -109,7 +109,7 @@ libmozitoolkit/
 │   ├── mtk-resource/   -> 虚拟文件系统 (VFS)、.mcmeta 动图元数据、原版 atlases/*.json 解析
 │   ├── mtk-texture/    -> 矩形装箱 Stitcher、多类别 PBR 图集与 Overlay 烘焙、Standalone 转换
 │   ├── mtk-material/   -> 66 生物群系调色板引擎、BiomeResolver、并行 UV 重映射与别名解析
-│   ├── libmtk/         -> 统一顶层门面、端到端预编译管线 (Prebake) 与统一错误处理
+│   ├── libmtk/         -> 应用编排层：端到端预编译管线 (Prebake)、网格处理管线 (Pipeline) 与 MtkError（不重导出领域类型）
 │   ├── mtk-bench/      -> 性能压测与基准测试套件
 │   └── mtk-cli/        -> 独立命令行工具 (mtk)
 │   └── mtk-testkit/    -> 仅测试用资产解析器与内置 JSON fixtures (publish = false)

@@ -76,17 +76,6 @@ impl GridAtlasSpec {
     }
 }
 
-/// Incoming source coordinate space for UV decoding.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum SourceUvSpace {
-    /// Normalized [0.0..1.0] (or tiled [0.0..N.0]) local texture space.
-    Local,
-    /// Grid-based atlas with texture pixel dimensions.
-    GridAtlas { width: u32, height: u32 },
-    /// Existing Atlas Chunk with normalized UV bounds [u_min, v_min, u_max, v_max].
-    AtlasSprite { bounds: [f32; 4] },
-}
-
 /// Summary result of a batch mesh UV remapping operation.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MeshRemapResult {

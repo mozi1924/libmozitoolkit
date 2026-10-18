@@ -185,8 +185,6 @@ pub struct CtmSolver {
 | `append_pack(pack: Box<dyn ResourcePack>)` | 追加低优先级兜底资源包（栈底）。 |
 | `open_asset_raw(asset_path: &str) -> Option<Vec<u8>>` | 按优先级自顶向下读取原始资产字节。 |
 | `open_texture_raw(loc: &ResourceLocation) -> Option<Vec<u8>>` | 读取指定纹理的原始 PNG 字节。 |
-| `list_all_texture_locations() -> Vec<ResourceLocation>` | 扫描所有活跃包中的非伴随主纹理标识符。 |
-| `list_all_texture_locations_including_ctm() -> Vec<ResourceLocation>` | 扫描包含所有 CTM 展开子贴图在内的全部纹理标识符。 |
 | `load_atlas_category(cat: &AtlasCategory) -> AtlasDefinition` | 加载或自动回退至默认类别图集定义。 |
 | `resolve_pbr_companions(loc: &ResourceLocation) -> PbrCompanions` | 跨包细粒度聚合 Albedo/Normal/Specular/Overlay/MCMETA。 |
 | `collect_sprites_for_atlas(def: &AtlasDefinition) -> Result<Vec<DiscoveredSprite>, ResourceError>` | 展开图集定义并提取所有待缝合精灵数据。 |

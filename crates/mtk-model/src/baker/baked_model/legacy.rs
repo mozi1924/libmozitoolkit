@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use super::database::BakedModelDatabase;
 use super::model::BakedModel;
 
-#[cfg(feature = "std")]
 impl BakedModelDatabase {
     pub fn to_bincode(&self) -> Result<Vec<u8>, bincode::Error> {
         let raw_bytes = bincode::serialize(self)?;

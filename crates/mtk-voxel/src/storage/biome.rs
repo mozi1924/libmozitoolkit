@@ -103,17 +103,6 @@ impl SectionBiomes {
         }
     }
 
-    /// Sets the biome identifier for all 4 quarts in local column `(lx, lz)`.
-    pub fn set_column_biome(&mut self, lx: usize, lz: usize, biome: &str) {
-        let qx = (lx >> 2) & 3;
-        let qz = (lz >> 2) & 3;
-        for qy in 0..4 {
-            let idx = (qy << 4) | (qz << 2) | qx;
-            self.explicit_mask |= 1u64 << idx;
-            self.set_quart_biome(qx, qy, qz, biome);
-        }
-    }
-
     /// Sets the biome identifier for quart coordinate `(qx, qy, qz)` where each is in `0..4`.
     pub fn set_quart_biome(&mut self, qx: usize, qy: usize, qz: usize, biome: &str) {
         let idx = ((qy & 3) << 4) | ((qz & 3) << 2) | (qx & 3);

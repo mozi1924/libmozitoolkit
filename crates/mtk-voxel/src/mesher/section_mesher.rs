@@ -492,35 +492,6 @@ impl SectionMesher {
         mesh
     }
 
-    /// Meshes a batch of `PaddedVoxelArray`s.
-    ///
-    /// - When `feature = "parallel"` is enabled: parallelizes across worker threads using Rayon.
-    /// - When compiled for WASM or single-threaded mode: falls back to sequential iteration.
-    pub fn mesh_sections<F>(
-        sections: &[PaddedVoxelArray],
-        culler: &FaceCuller,
-        model_provider: F,
-        config: &MesherConfig,
-    ) -> Result<Vec<(IVec3, MeshData)>, VoxelError>
-    where
-        F: Fn(&str) -> Option<Arc<BakedModel>> + Sync + Send,
-    {
-        Self::mesh_sections_with_source(sections, culler, |st| model_provider(st).into(), config)
-    }
-
-    /// Meshes a batch of `PaddedVoxelArray`s using a unified `ModelSource` provider.
-    pub fn mesh_sections_with_source<'a, F>(
-        sections: &[PaddedVoxelArray],
-        culler: &FaceCuller,
-        model_provider: F,
-        config: &MesherConfig,
-    ) -> Result<Vec<(IVec3, MeshData)>, VoxelError>
-    where
-        F: Fn(&str) -> ModelSource<'a> + Sync + Send,
-    {
-        Self::mesh_sections_with_source_and_progress(sections, culler, model_provider, config, None)
-    }
-
     /// Meshes a batch of `PaddedVoxelArray`s with optional progress feedback.
     pub fn mesh_sections_with_source_and_progress<'a, F>(
         sections: &[PaddedVoxelArray],

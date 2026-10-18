@@ -30,11 +30,10 @@ use pyo3::prelude::*;
 pub use ctm::PyCtmSolver;
 pub use cull::PyFaceCuller;
 pub use material::{
-    blend_biome_colors, classify_tint_category, compute_biome_tint_attributes,
-    compute_biome_tint_attributes_paletted, compute_flat_material_props_memoryview,
+    classify_tint_category, compute_biome_tint_attributes, compute_flat_material_props_memoryview,
     compute_flat_material_props_paletted_memoryview, compute_mesh_biome_attributes_from_storage,
-    get_all_biomes, get_biome_meta, reapply_uniform_biome_tint, sample_colormap_pixel,
-    PyBiomeResolver, PyGridAtlasSpec, PyMaterialResolver,
+    get_all_biomes, get_biome_meta, reapply_uniform_biome_tint, PyBiomeResolver, PyGridAtlasSpec,
+    PyMaterialResolver,
 };
 pub use mesh::{PyAttributeDomain, PyMeshData};
 pub use mesher::PySectionMesher;
@@ -51,7 +50,7 @@ pub use resource::{
 pub use save::PyLevelData;
 pub use sync::PyLiveSyncSession;
 pub use texture::{PyAtlasBuilder, PyBakedAtlas};
-pub use voxel::{create_debug_world_storage, PyMesherConfig, PyVoxelStorage, PyVoxelWorld};
+pub use voxel::{PyMesherConfig, PyVoxelStorage, PyVoxelWorld};
 
 /// Unified high-performance mesh processing pipeline entrypoint.
 ///
@@ -138,7 +137,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMesherConfig>()?;
     m.add_class::<PyVoxelWorld>()?;
     m.add_class::<PyVoxelPointCloud>()?;
-    m.add_function(wrap_pyfunction!(create_debug_world_storage, m)?)?;
 
     // 4. Meshing Generator
     m.add_class::<PySectionMesher>()?;
@@ -172,30 +170,21 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
         texture::batch_analyze_transparent_faces_f32,
         m
     )?)?;
-    m.add_function(wrap_pyfunction!(
-        texture::batch_analyze_transparent_faces_u8,
-        m
-    )?)?;
 
     // 7. Material & UV Remapper & Biome
     m.add_class::<PyGridAtlasSpec>()?;
     m.add_class::<PyMaterialResolver>()?;
     m.add_class::<PyBiomeResolver>()?;
     m.add_function(wrap_pyfunction!(compute_biome_tint_attributes, m)?)?;
-    m.add_function(wrap_pyfunction!(compute_biome_tint_attributes_paletted, m)?)?;
     m.add_function(wrap_pyfunction!(
         compute_mesh_biome_attributes_from_storage,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(reapply_uniform_biome_tint, m)?)?;
     m.add_function(wrap_pyfunction!(classify_tint_category, m)?)?;
-    m.add_function(wrap_pyfunction!(blend_biome_colors, m)?)?;
-    m.add_function(wrap_pyfunction!(sample_colormap_pixel, m)?)?;
     m.add_function(wrap_pyfunction!(get_biome_meta, m)?)?;
     m.add_function(wrap_pyfunction!(get_all_biomes, m)?)?;
     m.add_function(wrap_pyfunction!(material::get_colormap_uv, m)?)?;
-    m.add_function(wrap_pyfunction!(material::srgb_to_linear, m)?)?;
-    m.add_function(wrap_pyfunction!(material::linear_to_srgb, m)?)?;
     m.add_function(wrap_pyfunction!(material::get_hardcoded_tint, m)?)?;
     m.add_function(wrap_pyfunction!(material::get_hardcoded_tint_hex, m)?)?;
     m.add_function(wrap_pyfunction!(material::compute_mesh_material_props, m)?)?;
@@ -264,7 +253,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // 10. Minecraft Save Loader
     m.add_class::<save::PyLevelData>()?;
     m.add_function(wrap_pyfunction!(save::inspect_minecraft_save, m)?)?;
-    m.add_function(wrap_pyfunction!(save::load_minecraft_save_storage, m)?)?;
     m.add_function(wrap_pyfunction!(save::load_and_mesh_minecraft_save, m)?)?;
 
     // 11. Metadata

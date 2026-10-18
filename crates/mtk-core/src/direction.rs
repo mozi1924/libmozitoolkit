@@ -43,20 +43,6 @@ impl Direction {
         self as usize
     }
 
-    /// Converts an integer index (0..6) back into a Direction.
-    #[inline]
-    pub const fn from_index(index: usize) -> Option<Self> {
-        match index {
-            0 => Some(Direction::East),
-            1 => Some(Direction::West),
-            2 => Some(Direction::Up),
-            3 => Some(Direction::Down),
-            4 => Some(Direction::South),
-            5 => Some(Direction::North),
-            _ => None,
-        }
-    }
-
     /// Returns the opposite direction.
     #[inline]
     pub const fn opposite(self) -> Self {
@@ -197,7 +183,6 @@ mod tests {
     fn test_directions_basic() {
         for (i, dir) in Direction::ALL.iter().enumerate() {
             assert_eq!(dir.to_index(), i);
-            assert_eq!(Direction::from_index(i), Some(*dir));
             assert_eq!(dir.opposite().opposite(), *dir);
         }
     }

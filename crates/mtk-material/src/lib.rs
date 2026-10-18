@@ -47,5 +47,5 @@ pub use resolver::{
 };
 pub use types::{
     GridAtlasSpec, MeshAnimationRerouteResult, MeshMaterialRoute, MeshMultiUvRemapResult,
-    MeshPalettedUvRemapResult, MeshRemapResult, SourceUvSpace,
+    MeshPalettedUvRemapResult, MeshRemapResult,
 };

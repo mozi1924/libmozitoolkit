@@ -17,9 +17,6 @@ use crate::types::VoxelError;
 /// Canonical Minecraft debug world block plane elevation.
 pub const DEBUG_WORLD_Y: i32 = 70;
 
-/// Canonical Minecraft debug world barrier ground floor elevation.
-pub const DEBUG_BARRIER_Y: i32 = 60;
-
 static CACHED_DEBUG_STORAGE: RwLock<Option<VoxelStorage>> = RwLock::new(None);
 
 /// Returns true if the blockstate string represents any variant of air.

@@ -5,7 +5,11 @@
 [![Rayon](https://img.shields.io/badge/Rayon-Parallel-red.svg)](https://github.com/rayon-rs/rayon)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
-**`libmtk`** 是 MoziToolKit 2.0 的统一顶层门面（Unified Facade）与端到端资产编译引擎。纯 Rust 实现，严格遵循 **Host-Agnostic（宿主无关）** 架构设计，汇聚并编排所有底层领域子 Crate，对外提供一致的资产预编译（Asset Prebake）、高级几何处理管线（Mesh Pipeline）与统一错误处理系统。
+**`libmtk`** 是 libmozitoolkit 的**应用编排层（Application Layer）**，只负责两件事：端到端资产预编译（`prebake`）与统一网格处理管线（`pipeline`）。纯 Rust 实现，严格遵循 **Host-Agnostic（宿主无关）** 架构设计。
+
+> **边界约定（2026-10）**：本 crate **不再重导出**任何领域 crate 的符号。
+> `MeshData`、`BakedModel`、`FaceCuller`、`SectionMesher` 等类型请直接从对应的 `mtk-*` crate 引入——
+> 绑定层与工具链按"用哪层依赖哪层"直接依赖领域 crate，避免出现第二套入口。
 
 ---
 
@@ -27,19 +31,19 @@
 
 ## 1. 架构拓扑 (Sub-Crates Topology)
 
-`libmtk` 作为顶层入口，完整汇聚并按模块重导出以下领域 Crate：
+`libmtk` 依赖以下领域 Crate 来完成编排，但**不对外重导出**它们：
 
-| 领域模块 | 来源 Crate | 核心职责 |
+| 依赖 Crate | 核心职责 |
 | :--- | :--- | :--- |
-| **`libmtk::core`** | [`mtk-core`](../mtk-core/) | 基础几何基元、连续网格缓冲 (`MeshData`)、6 向拓扑与自适应像素细分/智能挤出算子。 |
-| **`libmtk::cull`** | [`mtk-cull`](../mtk-cull/) | 原版 1.21+ 邻域面遮挡判定器 (`FaceCuller`)、2D 矩形差集切分与 `MeshSanitizer` 叠面净化。 |
-| **`libmtk::model`** | [`mtk-model`](../mtk-model/) | BlockState 解析、1.21+ Block Model JSON 递归继承展开、模型烘焙数据库 (`BakedModelDatabase`)。 |
-| **`libmtk::voxel`** | [`mtk-voxel`](../mtk-voxel/) | 16x16x16 Section 体素存储、平滑 AO 计算、5x5 生物群系平滑核与无头区块网格化器 (`SectionMesher`)。 |
-| **`libmtk::resource`**| [`mtk-resource`](../mtk-resource/) | 虚拟文件系统 (VFS, `ResourcePackStack`)、.mcmeta 动图解析与 CTM 17/47 连接纹理求解器。 |
-| **`libmtk::texture`** | [`mtk-texture`](../mtk-texture/) | 2D 矩形装箱 (`Stitcher`)、多类别 PBR 图集烘焙、Overlay 贴图合成与 Standalone 资产对齐。 |
-| **`libmtk::material`**| [`mtk-material`](../mtk-material/) | 66 种原版生物群系调色板引擎 (SSOT)、`BiomeResolver` 映射提取与 Rayon 并行 UV 重映射。 |
-| **`libmtk::sync`** | [`mtk-sync`](../mtk-sync/) | 原生 WebSocket 实时协同客户端 (`LiveSyncSession`) 与 Yefira 二进制小端序协议编解码器。 |
-| **`libmtk::save`** | [`mtk-save`](../mtk-save/) | 现代 Minecraft 存档加载核心：基于内置零拷贝 NBT、Anvil `.mca` 寻址与按需空间切片流。 |
+| [`mtk-core`](../mtk-core/) | 基础几何基元、连续网格缓冲 (`MeshData`)、6 向拓扑与自适应像素细分/智能挤出算子。 |
+| [`mtk-cull`](../mtk-cull/) | 原版 1.21+ 邻域面遮挡判定器 (`FaceCuller`)、2D 矩形差集切分与外部网格叠面剔除 (`cull_mesh_faces`)。 |
+| [`mtk-model`](../mtk-model/) | BlockState 解析、1.21+ Block Model JSON 递归继承展开、模型烘焙数据库 (`BakedModelDatabase`)。 |
+| [`mtk-voxel`](../mtk-voxel/) | 16x16x16 Section 体素存储、平滑 AO 计算、5x5 生物群系平滑核与无头区块网格化器 (`SectionMesher`)。 |
+| [`mtk-resource`](../mtk-resource/) | 虚拟文件系统 (VFS, `ResourcePackStack`)、.mcmeta 动图解析与 CTM 17/47 连接纹理求解器。 |
+| [`mtk-texture`](../mtk-texture/) | 2D 矩形装箱 (`Stitcher`)、多类别 PBR 图集烘焙与 Companion Overlay 贴图合成。 |
+| [`mtk-material`](../mtk-material/) | 66 种原版生物群系调色板引擎 (SSOT)、`BiomeResolver` 映射提取与 Rayon 并行 UV 重映射。 |
+| [`mtk-sync`](../mtk-sync/) | 原生 WebSocket 实时协同客户端 (`LiveSyncSession`) 与 Yefira 二进制小端序协议编解码器。 |
+| [`mtk-save`](../mtk-save/) | 现代 Minecraft 存档加载核心：基于内置零拷贝 NBT、Anvil `.mca` 寻址与按需空间切片流。 |
 
 ---
 
@@ -57,7 +61,7 @@
 
 提供单次调用、数据输入输出（Data-In Data-Out）的外部网格处理入口 `process_mesh`：
 - 材质名称清洗与别名规范化解析；
-- 多线程 Rayon 并行 Atlas 与 Standalone 归一化 [0, 1] 双 UV 重映射；
+- 多线程 Rayon 并行 Atlas 双 UV（Atlas + Local）重映射；
 - 生成结构化的网格统计与材质分配元数据。
 
 ### 2.3 统一错误系统 (`MtkError`)
@@ -137,10 +141,8 @@ libmtk = { version = "0.1.0" }
 
 ```rust
 use std::path::Path;
-use libmtk::{
-    precompile_all_assets, CacheManifest, DirectoryPack, PrecompileConfig,
-    ResourcePackStack,
-};
+use libmtk::{precompile_all_assets, CacheManifest, PrecompileConfig};
+use mtk_resource::{DirectoryPack, ResourcePackStack};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stack = ResourcePackStack::new();
@@ -184,7 +186,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### 示例 2：高级网格处理流水线
 
 ```rust
-use libmtk::{process_mesh, MeshData, MeshPipelineConfig};
+use libmtk::{process_mesh, MeshPipelineConfig};
+use mtk_core::MeshData;
 
 fn main() {
     let input_mesh = MeshData::new();

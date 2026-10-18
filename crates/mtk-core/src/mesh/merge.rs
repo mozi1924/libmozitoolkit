@@ -168,13 +168,6 @@ impl MeshData {
         merged
     }
 
-    /// Efficiently merges multiple `MeshData` buffers into a single unified `MeshData`,
-    /// pre-allocating exact capacities upfront to eliminate vector reallocations.
-    pub fn merge_all(meshes: &[MeshData]) -> Self {
-        let refs: Vec<&MeshData> = meshes.iter().collect();
-        Self::merge_all_refs(&refs)
-    }
-
     /// Merges multiple internally-welded Section meshes into a single seamless unified mesh,
     /// deduplicating only co-located boundary vertices along chunk interfaces in a single streaming pass.
     ///

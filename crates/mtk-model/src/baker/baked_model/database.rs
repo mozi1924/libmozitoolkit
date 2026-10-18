@@ -112,14 +112,6 @@ impl BakedModelDatabase {
         None
     }
 
-    /// Resolves a baked model deterministically using 3D world integer coordinates.
-    pub fn get_with_pos(&self, state: &str, x: i32, y: i32, z: i32) -> Option<&BakedModel> {
-        if let Some(group) = self.get_variant_group(state) {
-            return Some(group.select_by_pos(x, y, z));
-        }
-        self.get(state)
-    }
-
     /// Eliminates overlapping, duplicate, and interior coplanar contacting faces
     /// across all baked models in the database, returning total faces removed.
     pub fn deduplicate_all(&mut self) -> usize {

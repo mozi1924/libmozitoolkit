@@ -6,7 +6,7 @@ use std::path::Path;
 
 use crate::error::{PackageError, PackageResult};
 use crate::header::{CompressionType, PackageHeader, HEADER_SIZE};
-use crate::toc::{ChunkEntry, TableOfContents};
+use crate::toc::TableOfContents;
 
 enum Storage {
     #[cfg(feature = "mmap")]
@@ -122,11 +122,6 @@ impl MtkPackageReader {
         &self.header.fingerprint
     }
 
-    /// Returns package creation timestamp in epoch seconds.
-    pub fn created_at(&self) -> u64 {
-        self.header.created_at
-    }
-
     /// Returns reference to Table of Contents.
     pub fn toc(&self) -> &TableOfContents {
         &self.toc
@@ -135,11 +130,6 @@ impl MtkPackageReader {
     /// Returns true if a chunk with the given identifier exists.
     pub fn has_chunk(&self, identifier: &str) -> bool {
         self.toc.get_by_identifier(identifier).is_some()
-    }
-
-    /// Returns metadata entry for a chunk identifier.
-    pub fn get_chunk_entry(&self, identifier: &str) -> Option<&ChunkEntry> {
-        self.toc.get_by_identifier(identifier)
     }
 
     /// Returns a zero-copy slice of the raw/compressed chunk payload.

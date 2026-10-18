@@ -15,6 +15,38 @@
 
 ---
 
+## 🧹 2026-10-18 公共 API 收敛（A 档已完成 / B/C 档待排期）
+
+> 背景：唯一消费者为 MoziToolKit；审计发现 Python 可见 API 约 35% 零引用、`libmtk` 175 条转发路径仅 16% 被指名使用。
+> 本轮只做"零调用方删除"，不改变任何仍在使用的行为。
+
+### ✅ 已完成
+- [x] **`libmtk` 收缩为应用层**：删除 42 个 `pub use` 块（175 → 9 个符号），只保留 `prebake` + `pipeline` + `MtkError`；
+  `mtk-cli` / `mtk-bench` / `mtk-py` 改为直连领域 crate，不再经门面转发。
+- [x] **死代码清理**：`AnvilWorldSource`（0 引用）、`MeshSanitizer`、`mtk-model::culling` shim、
+  `ATTR_SOURCE_TEXTURE` 重复属性、`SyncDecision::ReplayDeltas`（0x01 仍安全降级为全量基线）、
+  `BakedModelDatabase::get_with_pos`、`CtmSolver::solve_tile`、`mtk-package` 5 个 0 引用方法等。
+- [x] **`no_std` 假象清除**：删除 `#![cfg_attr(not(feature = "std"), no_std)]` 与全部 crate 的 `std` feature
+  （此前 `--no-default-features` 有 100+ 编译错误）；现声明为 **std-only**，`wasm32-unknown-unknown` 仍走 `std`。
+- [x] **文档纠偏**：`mtk-core`（Direction 编号/示例/API 表）、`mtk-cull`（SmallVec/LRU/MeshSanitizer）、
+  `mtk-save`（AnvilWorldSource）、`mtk-resource`、`libmtk`、`ARCHITECTURE.md`、`API_REFERENCE.md`；
+  `mtk-sync/README.md` 增加 v2 协议作废横幅。
+
+### 📋 待办（B 档）
+- [ ] `mtk-material` 删除 v1 `remap_mesh_uvs_parallel` 全链（与其 Python 入口），统一到 `*_multi_uvs*_with_options`。
+- [ ] `SectionMesher` 的 5 个 `mesh_sections*` 变体收敛为 1 个 + 1 个 progress 版。
+- [ ] `PyMesherConfig` 17 个 `set_*` / `#[setter]`（与构造 kwargs 重复）删除，保留只读 getter。
+- [ ] 贴图属性双名（`mtk_source_texture_key` / `mtk_uv_transform`）跨仓统一。
+- [ ] `mtk-py` 的 legacy `blender` 子模块（`src/blender.rs`，186 行镜像）删除并改指 `unstable::blender_dna`。
+- [ ] `mtk-py` 129 个零引用方法清理（`VoxelStorage` 20 / `MesherConfig` 17 / `MeshData` 14 / `BakedAtlas` 12 ...）。
+
+### 📋 待决策（C 档）
+- [ ] `mtk-ffi`（9 个导出、无 `mtk.h` 产物、零消费者）与 `mtk-wasm`（已落后于 mtk-py）的存废。
+- [ ] `mtk-model` 的 OBJ 导入路径（仅自测使用）与 `builtin/` 公开面收缩。
+- [ ] `mtk-cull` 的方块名目录 / `parse_block_name_and_props` 迁往 `mtk-model`；`mtk-core::random` 与 `concurrency` 移出。
+
+---
+
 ## 🎯 v2.0 正式版：核心世界计算与材质渲染基石 (✅ 已完成)
 
 ### 1. 双图集 (Dual-Atlas: Static & Animated) 烘焙与寻址映射 (✅ 已完成)

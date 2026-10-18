@@ -11,16 +11,16 @@
 | 层次 (Layer) | Crate / Binding | 核心定位与职责 | API 与技术手册 |
 | :--- | :--- | :--- | :--- |
 | **Layer 0: 基础几何** | **[`mtk-core`](../crates/mtk-core/README.md)** | 标准连续几何缓冲 (`MeshData`)、6向拓扑与标准化右手坐标转换、面切线基底推导 (`derive_quad_face_tangents`)、硬边分析 (`analyze_hard_edges`)、自适应像素网格切分 (`subdivide`)、智能挤出与 UV 修复 (`extrude`) | [查看 API 手册 ↗](../crates/mtk-core/README.md) |
-| **Layer 1: 遮挡与清洗** | **[`mtk-cull`](../crates/mtk-cull/README.md)** | 1.21+ 邻域遮挡状态机 (`FaceCuller`)、2D 矩形差集切分 (Subtract Rect)、外部网格叠面消重 (`MeshSanitizer`) | [查看 API 手册 ↗](../crates/mtk-cull/README.md) |
+| **Layer 1: 遮挡与清洗** | **[`mtk-cull`](../crates/mtk-cull/README.md)** | 1.21+ 邻域遮挡状态机 (`FaceCuller`)、2D 矩形差集切分 (Subtract Rect)、外部网格叠面剔除 (`cull_mesh_faces`) | [查看 API 手册 ↗](../crates/mtk-cull/README.md) |
 | **Layer 1: 模型与状态** | **[`mtk-model`](../crates/mtk-model/README.md)** | BlockState 状态机解析 (multipart/variants)、1.21+ Block Model JSON 递归继承展开与几何烘焙、`BakedModelDatabase` 多级回退、OBJ 加载 | [查看 API 手册 ↗](../crates/mtk-model/README.md) |
 | **Layer 1: 资源包 VFS** | **[`mtk-resource`](../crates/mtk-resource/README.md)** | 虚拟文件系统 (Zip/Jar/Dir)、PBR 多层资源栈合并、`.png.mcmeta` 动图元数据、`atlases/*.json` 规范与自适应切线 CTM 47/17 连接纹理求解器 (`resolve_face_with_tangents`) | [查看 API 手册 ↗](../crates/mtk-resource/README.md) |
-| **Layer 1: 贴图与图集** | **[`mtk-texture`](../crates/mtk-texture/README.md)** | 2D 矩形二叉装箱 Stitcher、多通道 PBR 图集烘焙、盔甲调色板置换、抗渗色填充与 Standalone PBR 资产库生成器 | [查看 API 手册 ↗](../crates/mtk-texture/README.md) |
+| **Layer 1: 贴图与图集** | **[`mtk-texture`](../crates/mtk-texture/README.md)** | 2D 矩形二叉装箱 Stitcher、多通道 PBR 图集烘焙、盔甲调色板置换与抗渗色填充 | [查看 API 手册 ↗](../crates/mtk-texture/README.md) |
 | **Layer 1: 材质与生物群系** | **[`mtk-material`](../crates/mtk-material/README.md)** | 66 种原版生物群系调色板与色彩数学权威唯一事实源 (SSOT)、`BiomeResolver` 染色模型扫描器、Rayon 并行多 UV 重映射与别名解析 | [查看 API 手册 ↗](../crates/mtk-material/README.md) |
 | **Layer 1: 体素世界与网格化** | **[`mtk-voxel`](../crates/mtk-voxel/README.md)** | 16×16×16 区块体素存储 (`SectionStorage` / `VoxelStorage`)、全量无剔除体素点云 (`VoxelPointCloud`)、平滑 AO 算法、物理流体曲面与原地拓扑批量修复 (`repair_mesh_fluid_uv_inplace`)、贪婪网格化、增量局部重构 (`DeltaMesher`)、统一 3D 场景引擎 (`VoxelWorld`) 与统一体素源抽象 (`VoxelSource`) | [查看 API 手册 ↗](../crates/mtk-voxel/README.md) |
 | **Layer 1: 实时网络协同** | **[`mtk-sync`](../crates/mtk-sync/README.md)** | 原生多线程 WebSocket 协同客户端 (`SyncClient`)、小端序二进制协议编解码、两阶段流式增量更新与单一世界大网格 (`WorldMeshReady`) 会话管理 | [查看 API 手册 ↗](../crates/mtk-sync/README.md) |
 | **Layer 1: 存档与空间切片** | **[`mtk-save`](../crates/mtk-save/README.md)** | 现代 Minecraft 存档加载核心：基于内置零拷贝 NBT、Anvil `.mca` 区域寻址、384 高度解包与按需空间切片流式数据源 (`VoxelSource`) | [查看 API 手册 ↗](../crates/mtk-save/README.md) |
 | **Layer 1: 二进制包容器** | **[`mtk-package`](../crates/mtk-package/README.md)** | 统一二进制包与场景交换容器：64 字节头部 CRC 校验、分块 Zstd 压缩 TOC、`memmap2` 零拷贝解析与逐块惰性解压 | [查看 API 手册 ↗](../crates/mtk-package/README.md) |
-| **Layer 2: 领域聚合门面** | **[`libmtk`](../crates/libmtk/README.md)** | 统一顶层门面、端到端全量资产预编译管线 (`precompile_all_assets`)、统一错误处理系统 (`MtkError`) | [查看 API 手册 ↗](../crates/libmtk/README.md) |
+| **Layer 2: 应用编排层** | **[`libmtk`](../crates/libmtk/README.md)** | 仅提供端到端全量资产预编译管线 (`precompile_all_assets`) 与网格处理管线 (`process_mesh`)，不重导出领域类型 | [查看 API 手册 ↗](../crates/libmtk/README.md) |
 | **Layer 3: Python 绑定** | **[`mtk-py`](../bindings/mtk-py/README.md)** | **P0 核心绑定**：PyO3 驱动的 `libmtk_py` 模块，为 MoziToolKit (Blender 4.2+ 插件) 提供零拷贝 Buffer Protocol / NumPy 视图与极速批处理算子 | [查看 API 手册 ↗](../bindings/mtk-py/README.md) |
 | **Layer 3: 独立命令行** | **[`mtk-cli`](../crates/mtk-cli/README.md)** | **P1 核心工具**：独立无头命令行终端工具 (`mtk`)，支持图集烘焙、模型导出、CTM 求解与遮挡校验 | [查看 API 手册 ↗](../crates/mtk-cli/README.md) |
 | **Layer 3: 性能基准测试** | **[`mtk-bench`](../crates/mtk-bench/README.md)** | **P1 压测套件**：4000+ 区块段多核网格化与数百万次遮挡剔除压力基准套件 | [查看 API 手册 ↗](../crates/mtk-bench/README.md) |
@@ -116,7 +116,7 @@ pub struct FlatPolygonMesh {
 ---
 
 ### 2.5 统一错误处理系统 (`MtkError`)
-`libmtk` 顶层门面将所有子领域错误聚合为单一 `MtkError`，并实现 `From<...>` 自动向上传播，杜绝 panic 崩溃：
+`libmtk` 应用层将各领域错误聚合为单一 `MtkError`，并实现 `From<...>` 自动向上传播；绑定层不直接消费它，而是在边界处映射为宿主原生异常：
 ```rust
 pub enum MtkError {
     Model(mtk_model::ModelError),
@@ -174,7 +174,6 @@ cache_output_dir/
 - **`ChunkParser`**: 解密现代 Section 结构，对紧凑长整型数组（`bits_per_block >= 4`）进行纯位解包并将 Palette 状态规范化为唯一排序属性字符串（如 `minecraft:oak_stairs[facing=north,half=bottom]`）；同时解包 `biomes` 调色板与 4x4x4 quart 3D 生物群系，产出 `ParsedChunk`。
 - **按需切片加载器 (`SaveLoader`)**:
   - `load_box_into_storage(save_dir, dimension, min_block, max_block, &mut storage)`: 依据用户 3D 边界盒直接定位所需相交的 Region / Chunk / Section，仅加载并填充所选区域进入 `VoxelStorage`，彻底杜绝数十 GB 全图扫描；解析完整 4×4×4 Section 群系后统一调用 `VoxelStorage::finalize_biome_metadata()` 派生地表列群系 `biome_column_map` 与主导 `primary_biome`（与实时同步、点云重建共用同一实现）。
-  - `AnvilWorldSource`: 遵循统一 `VoxelSource` 接口，支持向 `VoxelWorld` 持续提供体素切片流。
 
 ---
 
@@ -187,7 +186,7 @@ cache_output_dir/
   - `VoxelWorld::rebuild_all_with_progress(callback)`: 在 Rayon 并行重构体素网格时，实时将各 Chunk Section 的真实烘焙进度向外派发。
   - `mtk-sync`: 实时将网格烘焙进度转化为 `SyncEvent::StreamProgress` 并向前端推送，配合 Blender 宿主状态栏 API（`wm.progress_*` 与 `workspace.status_text_set`）实现全链路底栏真实进度条。
   - `SaveLoader::load_box_into_storage_with_progress(...)`: 在遍历 Anvil MCA 区域与解压 Chunk NBT 期间实时汇报 `load_chunks` 物理进度，使世界存档导入在 MCA 解压与网格构建全流程透明可见。
-  - `libmtk::precompile_all_assets_with_progress(...)` / `prebake_all_models_with_progress(...)`: 在端到端材质与资产预编译流程中，按阶段分发真实物理计数（`prebake_biome`、`prebake_atlas`、`prebake_standalone`、`prebake_models`、`prebake_manifest`），使图集拼接、独立材质对齐与模型变体烘焙全流程实时反馈在 DCC 宿主底栏。
+  - `libmtk::precompile_all_assets_with_progress(...)` / `prebake_all_models_with_progress(...)`: 在端到端材质与资产预编译流程中，按阶段分发真实物理计数（`prebake_biome`、`prebake_atlas`、`prebake_models`、`prebake_manifest`），使图集拼接、独立材质对齐与模型变体烘焙全流程实时反馈在 DCC 宿主底栏。
 
 ---
 
@@ -195,7 +194,7 @@ cache_output_dir/
 为了根除散文件磁盘 I/O 碎片，并在 Minecraft 场景交换中彻底避免传统 3D 网格的“几何爆炸”，系统定义了统一的通用二进制中间包契约：
 - **`Header & TOC` 架构**：固定 64 字节文件头、64 字节对齐分块、Zstd 块级压缩索引表，支持 `mmap` 零内存开销快速寻址。
 - **两大业务 Profile**：
-  1. **`AssetCache Profile` (`.mtkcache`)**：存储全量预烘焙图集、Standalone PBR 贴图库与全局模型数据库。
+  1. **`AssetCache Profile` (`.mtkcache`)**：存储全量预烘焙图集与全局模型数据库。
   2. **`SceneInterchange Profile` (`.mtkscene`)**：轻量级自包含场景交换包。仅存储稀疏体素网格（`VOXL`）、场景实际引用的独立贴图（`TXTR`，非固化图集）与剪枝方块模型（`MODL`），由接收方现场根据宿主配置实时重构网格。
 - 完整规范定义参见：[**`docs/PACKAGE_SPEC.md`**](./PACKAGE_SPEC.md)。
 

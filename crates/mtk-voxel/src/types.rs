@@ -129,13 +129,6 @@ impl MesherConfig {
             CoordinateSystem::YUpRightHanded => dir,
         }
     }
-
-    /// Converts a local coordinate (x, y, z in block space [0..1] or world space)
-    /// to the configured target coordinate system.
-    #[inline]
-    pub fn transform_coord(&self, pos: Vec3) -> Vec3 {
-        self.transform_position(pos)
-    }
 }
 
 /// Statistics and metrics returned after a world mesh assembly pass.

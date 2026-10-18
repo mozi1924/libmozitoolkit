@@ -30,7 +30,7 @@
 
 - **演进优先级**：`P1`（**核心工具链与无头资产验证**）。
 - **核心定位**：
-  1. **离线资产预编译与图集装箱**：在无 Blender 或图形界面环境下，极速解析 Minecraft 原版 JAR 与第三方面资源包（如 SPBR、LabPBR），输出 `atlas_mapping.json`、`biome_mapping.json` 与 Standalone PBR 独立资产包。
+  1. **离线资产预编译与图集装箱**：在无 Blender 或图形界面环境下，极速解析 Minecraft 原版 JAR 与第三方面资源包（如 SPBR、LabPBR），输出 `atlas_mapping.json`、`biome_mapping.json` 与 `<fingerprint>.mtkcache` 单一缓存包。
   2. **模型烘焙与几何排查**：验证 1.21+ BlockState 状态机与复杂模型几何结构，一键导出为标准 Wavefront OBJ/MTL 文件。
   3. **自动化测试与基准校验**：批量执行 CTM 连接纹理求解测试、面遮挡剔除测试用例校验以及模型烘焙吞吐量压测。
 

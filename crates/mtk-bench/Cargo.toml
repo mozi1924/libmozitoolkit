@@ -9,7 +9,6 @@ readme = "README.md"
 description = "Performance benchmarks and stress-test suite for libmtk."
 
 [dependencies]
-libmtk = { workspace = true }
 mtk-core = { workspace = true }
 mtk-cull = { workspace = true }
 mtk-model = { workspace = true }

@@ -42,10 +42,10 @@
 
 | 类型 / 结构体 | 说明 |
 | :--- | :--- |
-| [`MeshData`](src/mesh/mod.rs) | 核心连续网格缓冲，包含 `positions`, `normals`, `indices`, `uvs`, `secondary_uvs`, `colors`, `face_materials`, `face_tint_indices`, `quad_indices`, `custom_attributes`。提供 `merge_all(&[MeshData])`、零拷贝引用合并 `merge_all_refs(&[&MeshData])`、单阶段流式跨区块缝合合并 `merge_welded_sections(&[&MeshData], tolerance)` 以及基于 `FxHashMap` 极速哈希去重的 `weld_spatial_vertices(tolerance)`。 |
+| [`MeshData`](src/mesh/mod.rs) | 核心连续网格缓冲，包含 `positions`, `normals`, `indices`, `uvs`, `secondary_uvs`, `colors`, `face_materials`, `face_tint_indices`, `quad_indices`, `custom_attributes`。提供零拷贝引用合并 `merge_all_refs(&[&MeshData])`、单阶段流式跨区块缝合合并 `merge_welded_sections(&[&MeshData], tolerance)` 以及基于 `FxHashMap` 极速哈希去重的 `weld_spatial_vertices(tolerance)`。 |
 | [`Quad`](src/geometry.rs) | 4 顶点平面四边形基元。支持 `Quad::unit_cube_face(Direction)` 生成标准单位立方体面（对齐 Minecraft 1.21+ FaceInfo 逆时针环绕规范）。 |
 | [`FlatPolygonMesh`](src/polygon.rs) | 连续 1D 循环拓扑网格表示，提供 `face_vertices(i)` 与 `face_uvs(i)` 零拷贝切片访问器。 |
-| [`Aabb2d`](src/geometry.rs) / [`Aabb3d`](src/geometry.rs) | 2D / 3D 轴对齐包围盒，提供相交、包含判定与矩形布尔运算。 |
+| [`Aabb2d`](src/geometry.rs) | 2D 轴对齐包围盒，提供相交判定与矩形布尔运算。 |
 | [`FaceAttributes`](src/attributes.rs) | 面属性包，包含 `material_slot: MaterialSlotId` 与 `tint_index: TintIndex`。 |
 | [`MeshAttribute`](src/attributes.rs) | 通用动态属性层，支持 `Point`, `Corner`, `Face`, `Mesh` 作用域及多种数值类型（`AttributeData`）。 |
 | `analyze_hard_edges` | `(positions, edge_verts, face_loop_starts, face_loop_totals, loop_verts, sharp_angle_rad, explicit_sharp_edges) -> Vec<u8>`：基于网格二面角与边界的高性能拓扑硬边分析算子。 |
@@ -54,7 +54,7 @@
 
 | 函数 / 枚举 | 签名 / 描述 |
 | :--- | :--- |
-| [`Direction`](src/direction.rs) | `Down` (0), `Up` (1), `North` (2), `South` (3), `West` (4), `East` (5)。支持 `opposite()`, `to_vector()`, `normal()` 等。 |
+| [`Direction`](src/direction.rs) | `East` (0), `West` (1), `Up` (2), `Down` (3), `South` (4), `North` (5)。支持 `opposite()`, `normal()`, `offset()`, `mask()` 等。 |
 | [`DirMask`](src/direction.rs) | 6 方向位掩码（基于 `bitflags`），支持高效的相邻面快速位运算。 |
 | `mc_local_to_centered_z_up` | `(lx: f32, ly: f32, lz: f32) -> Vec3`：将 Minecraft 局部体素坐标转换为以方块中心为原点的右手 Z-Up 坐标。 |
 | `mc_world_to_z_up` | `(wx: f32, wy: f32, wz: f32) -> Vec3`：将 Minecraft 世界坐标 (+X East, +Y Up, +Z South) 转换为标准右手 Z-Up 坐标 (+X East, +Y North, +Z Up)。 |
@@ -69,7 +69,7 @@
 | `calculate_face_target_grid` | `(&uvs, tex_w, tex_h, pixels_per_face, max_subdivisions) -> (u32, u32)`：根据 UV 坐标与贴图尺寸推算最优细分列数和行数。 |
 | `calculate_pixel_grid_cut_factors` | `(&uvs, tex_w, tex_h, pixels_per_face, max_subdivisions) -> (Vec<f32>, Vec<f32>)`：计算四边形在纹理整数像素边界上的归一化切分参数因子。 |
 | `adaptive_pixel_split_mesh` | `(mesh, face_resolutions, default_res, pixels_per_face, max_subdiv, weld_dist) -> MeshData`：全网格批量自适应像素细分，支持多边形属性双线性插值与顶点焊接。 |
-| `weld_mesh_vertices` | `(mesh, threshold) -> MeshData`：基于空间哈希的高性能顶点焊接去重。 |
+| `weld_mesh_vertices` | `(&mut MeshData, weld_dist: f32)`：基于空间哈希的原地顶点焊接去重。 |
 
 ### 2.4 智能挤出与 UV 修复 (`extrude`, `extrude_mesh`)
 
@@ -127,10 +127,7 @@ fn main() {
     // 为 6 个主方向构建标准四边形面
     for dir in Direction::ALL {
         let quad = Quad::unit_cube_face(dir);
-        let attrs = FaceAttributes {
-            material_slot: 0,
-            tint_index: -1,
-        };
+        let attrs = FaceAttributes::default();
         mesh.append_quad(&quad, &attrs);
     }
 
@@ -157,8 +154,8 @@ fn main() {
     // 对面执行 16x16 纹理自适应像素切分（每个像素 1 个四边形）
     let subdivided = adaptive_pixel_split_mesh(
         &mesh,
-        None,             // 使用默认分辨率
-        [16, 16],         // default_resolution: 16x16
+        &[],              // 逐面可选分辨率覆盖（空表示全部走默认）
+        (16, 16),         // default_resolution: 16x16
         1.0,              // pixels_per_face
         64,               // max_subdivisions
         1e-4,             // weld_dist
@@ -197,8 +194,9 @@ fn main() {
 
 | Feature | 默认启用 | 描述 |
 | :--- | :---: | :--- |
-| `std` | 是 | 启用标准库与 `glam/std`。禁用时支持 `no_std`（依赖 `alloc`）。 |
 | `serde` | 是 | 为核心数据结构实现 `Serialize` 与 `Deserialize`。 |
+
+> 本 crate 仅支持 `std`（`wasm32-unknown-unknown` 亦走 `std`），不提供 `no_std` 构建。
 | `parallel` | 否 | 启用 `rayon` 多线程并行加速（如空间顶点焊接与大批量细分）。 |
 
 ---

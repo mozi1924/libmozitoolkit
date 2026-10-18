@@ -1,7 +1,6 @@
 //! Centralized physical, geometric, and voxel constants for MoziToolKit.
 
 use crate::geometry::Aabb2d;
-use glam::Vec2;
 
 /// Chunk section and voxel domain constants.
 pub mod voxel {
@@ -64,34 +63,16 @@ pub mod geometry {
 
     /// Canonical empty/degenerate 2D bounding rectangle.
     pub const EMPTY_FACE_RECT: Aabb2d = Aabb2d::ZERO;
-
-    /// Canonical 2D bounding rectangle in `[0.0..16.0, 0.0..16.0]` block texture space.
-    pub const BLOCK_UV_RECT: Aabb2d = Aabb2d {
-        min: Vec2::ZERO,
-        max: Vec2::new(BLOCK_UV_SIZE, BLOCK_UV_SIZE),
-    };
 }
 
 /// Fluid physics and rendering constants.
 pub mod fluid {
     /// Maximum height of a standard Minecraft still fluid block: `8/9` (~`0.8888889`).
     pub const MAX_FLUID_HEIGHT: f32 = 8.0 / 9.0;
-
-    /// Height multiplier for a falling fluid column: `8/9`.
-    pub const FLUID_FALLING_HEIGHT: f32 = 8.0 / 9.0;
-
-    /// Height step per fluid level gradient: `1/9` (~`0.1111111`).
-    pub const FLUID_LEVEL_STEP: f32 = 1.0 / 9.0;
-
-    /// Small offset applied to avoid Z-fighting on fluid corners (`0.001`).
-    pub const FLUID_CORNER_OFFSET: f32 = 0.001;
 }
 
 /// Lighting, ambient occlusion, and brightness constants.
 pub mod lighting {
-    /// Maximum block / sky light level (`15`).
-    pub const MAX_LIGHT_LEVEL: u8 = 15;
-
     /// Linear brightness multipliers for ambient occlusion discrete levels `0..=3`.
     ///
     /// - Level 0: `0.2`
@@ -117,8 +98,8 @@ pub mod concurrency {
     /// Safe hardware concurrency detector that works across Native OS and WebAssembly.
     ///
     /// - If an explicit override has been set via `set_hardware_concurrency`, returns that value.
-    /// - On native targets with `std`, retrieves `std::thread::available_parallelism()`.
-    /// - On `wasm32` or single-threaded targets without override, returns `1`.
+    /// - On native targets, retrieves `std::thread::available_parallelism()`.
+    /// - On `wasm32` without an explicit override, returns `1`.
     #[inline]
     pub fn get_safe_hardware_concurrency() -> usize {
         let override_val = GLOBAL_OVERRIDE_CONCURRENCY.load(Ordering::Relaxed);
@@ -126,13 +107,13 @@ pub mod concurrency {
             return override_val;
         }
 
-        #[cfg(all(feature = "std", not(target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             std::thread::available_parallelism()
                 .map(|n| n.get())
                 .unwrap_or(1)
         }
-        #[cfg(any(not(feature = "std"), target_arch = "wasm32"))]
+        #[cfg(target_arch = "wasm32")]
         {
             1
         }
@@ -144,18 +125,6 @@ pub mod concurrency {
     pub fn determine_conservative_threads(max_cap: usize) -> usize {
         let available = get_safe_hardware_concurrency();
         (available / 2).clamp(1, max_cap.max(1))
-    }
-
-    /// Optimal throughput thread count calculator: max(1, available - 1).
-    /// Uses maximum multi-core power while leaving 1 core for the main thread.
-    #[inline]
-    pub fn determine_optimal_threads() -> usize {
-        let available = get_safe_hardware_concurrency();
-        if available <= 1 {
-            1
-        } else {
-            available.saturating_sub(1)
-        }
     }
 
     /// Unified parallel execution helper that bridges native OS threads, Rayon thread pools,
@@ -201,6 +170,7 @@ pub mod concurrency {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use glam::Vec2;
 
     #[test]
     fn test_voxel_constants() {
@@ -221,13 +191,11 @@ mod tests {
         assert_eq!(geometry::FULL_FACE_RECT.max, Vec2::ONE);
         assert_eq!(geometry::EMPTY_FACE_RECT.min, Vec2::ZERO);
         assert_eq!(geometry::EMPTY_FACE_RECT.max, Vec2::ZERO);
-        assert_eq!(geometry::BLOCK_UV_RECT.max, Vec2::new(16.0, 16.0));
     }
 
     #[test]
     fn test_fluid_and_lighting_constants() {
         assert!((fluid::MAX_FLUID_HEIGHT - 8.0 / 9.0).abs() < 1e-6);
-        assert_eq!(lighting::MAX_LIGHT_LEVEL, 15);
         assert_eq!(lighting::AO_LEVEL_MULTIPLIERS.len(), 4);
     }
 
@@ -242,7 +210,6 @@ mod tests {
         // Test manual override
         concurrency::set_hardware_concurrency(16);
         assert_eq!(concurrency::get_safe_hardware_concurrency(), 16);
-        assert_eq!(concurrency::determine_optimal_threads(), 15);
         assert_eq!(concurrency::determine_conservative_threads(32), 8);
 
         // Test execute_parallel

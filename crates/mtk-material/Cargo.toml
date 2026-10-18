@@ -20,13 +20,8 @@ rayon = { workspace = true, optional = true }
 zip = { workspace = true, optional = true }
 
 [features]
-default = ["std", "parallel"]
-std = [
-    "mtk-core/std",
-    "mtk-resource/std",
-    "mtk-texture/std",
-    "dep:zip",
-]
+default = ["parallel", "zip"]
+zip = ["dep:zip"]
 parallel = [
     "dep:rayon",
     "mtk-resource/parallel",

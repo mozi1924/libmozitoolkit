@@ -78,13 +78,13 @@ mod tests {
 
         // Verify standard attributes
         use mtk_core::attributes::constants::*;
-        assert!(mesh.has_custom_attribute(ATTR_SOURCE_TEXTURE));
+        assert!(mesh.has_custom_attribute(ATTR_SOURCE_TEXTURE_KEY));
         assert!(mesh.has_custom_attribute(ATTR_FACE_DIR));
         assert!(mesh.has_custom_attribute(ATTR_EMISSION));
         assert!(mesh.has_custom_attribute(ATTR_MATERIAL_PROPS));
         assert!(mesh.has_custom_attribute(ATTR_UV_TRANSFORM));
 
-        let tex_attr = mesh.get_custom_attribute(ATTR_SOURCE_TEXTURE).unwrap();
+        let tex_attr = mesh.get_custom_attribute(ATTR_SOURCE_TEXTURE_KEY).unwrap();
         if let mtk_core::attributes::AttributeData::String(ref vals) = tex_attr.data {
             assert_eq!(vals[0], "minecraft:block/stone");
         } else {

@@ -1,8 +1,5 @@
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
-use alloc::vec::Vec;
-#[cfg(not(feature = "std"))]
-use core::cell::RefCell;
 use std::collections::HashMap;
 
 use mtk_core::direction::Direction;
@@ -20,10 +17,7 @@ pub use crate::rules::categories::*;
 pub struct FaceCuller {
     pub leaves_cull_mode: LeavesCullMode,
     pub glass_cull_mode: GlassCullMode,
-    #[cfg(feature = "std")]
     meta_cache: std::sync::Arc<std::sync::RwLock<HashMap<String, Arc<BlockCullMeta>>>>,
-    #[cfg(not(feature = "std"))]
-    meta_cache: std::rc::Rc<RefCell<HashMap<String, Arc<BlockCullMeta>>>>,
 }
 
 impl Clone for FaceCuller {
@@ -48,37 +42,20 @@ impl FaceCuller {
         Self {
             leaves_cull_mode,
             glass_cull_mode,
-            #[cfg(feature = "std")]
             meta_cache: std::sync::Arc::new(std::sync::RwLock::new(HashMap::new())),
-            #[cfg(not(feature = "std"))]
-            meta_cache: std::rc::Rc::new(RefCell::new(HashMap::new())),
         }
     }
 
     /// Clears the cached block culling metadata.
     pub fn clear_cache(&self) {
-        #[cfg(feature = "std")]
-        {
-            if let Ok(mut cache) = self.meta_cache.write() {
-                cache.clear();
-            }
-        }
-        #[cfg(not(feature = "std"))]
-        {
-            self.meta_cache.borrow_mut().clear();
+        if let Ok(mut cache) = self.meta_cache.write() {
+            cache.clear();
         }
     }
 
     /// Number of cached metadata entries.
     pub fn cache_len(&self) -> usize {
-        #[cfg(feature = "std")]
-        {
-            self.meta_cache.read().map(|g| g.len()).unwrap_or(0)
-        }
-        #[cfg(not(feature = "std"))]
-        {
-            self.meta_cache.borrow().len()
-        }
+        self.meta_cache.read().map(|g| g.len()).unwrap_or(0)
     }
 
     /// Retrieves or computes `BlockCullMeta` for a given blockstate string.
@@ -88,62 +65,32 @@ impl FaceCuller {
         element_quads: Option<&[([Vec3; 4], Direction)]>,
         is_opaque_hint: Option<bool>,
     ) -> Arc<BlockCullMeta> {
-        #[cfg(feature = "std")]
-        {
-            if let Ok(cache) = self.meta_cache.read() {
-                if let Some(meta) = cache.get(state_str) {
-                    if element_quads.is_some() && !meta.has_baked_model {
-                        // Needs re-bake with detailed quads
-                    } else {
-                        return Arc::clone(meta);
-                    }
-                }
-            }
-
-            let meta = Arc::new(compute_block_cull_meta(
-                state_str,
-                element_quads,
-                is_opaque_hint,
-            ));
-
-            if let Ok(mut cache) = self.meta_cache.write() {
-                if cache.len() >= 8192 && !cache.contains_key(state_str) {
-                    if let Some(first_key) = cache.keys().next().cloned() {
-                        cache.remove(&first_key);
-                    }
-                }
-                cache.insert(state_str.to_string(), Arc::clone(&meta));
-            }
-            meta
-        }
-        #[cfg(not(feature = "std"))]
-        {
-            let mut cache = self.meta_cache.borrow_mut();
+        if let Ok(cache) = self.meta_cache.read() {
             if let Some(meta) = cache.get(state_str) {
                 if element_quads.is_some() && !meta.has_baked_model {
-                    // Refresh
+                    // Needs re-bake with detailed quads
                 } else {
                     return Arc::clone(meta);
                 }
             }
+        }
 
-            let meta = Arc::new(compute_block_cull_meta(
-                state_str,
-                element_quads,
-                is_opaque_hint,
-            ));
+        let meta = Arc::new(compute_block_cull_meta(
+            state_str,
+            element_quads,
+            is_opaque_hint,
+        ));
 
+        if let Ok(mut cache) = self.meta_cache.write() {
             if cache.len() >= 8192 && !cache.contains_key(state_str) {
                 if let Some(first_key) = cache.keys().next().cloned() {
                     cache.remove(&first_key);
                 }
             }
-
             cache.insert(state_str.to_string(), Arc::clone(&meta));
-            meta
         }
+        meta
     }
-
     /// Evaluates Minecraft 1.21+ canonical face visibility test.
     ///
     /// Returns `true` if this face SHOULD be rendered, `false` if culled.
@@ -231,50 +178,4 @@ impl FaceCuller {
 
         true
     }
-}
-
-/// Compute all visible face directions for a single voxel block against surrounding neighbors.
-pub fn get_visible_face_directions<F>(
-    x: i32,
-    y: i32,
-    z: i32,
-    state_str: &str,
-    culler: &FaceCuller,
-    get_neighbor_state: F,
-) -> Vec<Direction>
-where
-    F: Fn(i32, i32, i32) -> Option<String>,
-{
-    if state_str.is_empty() {
-        return Vec::new();
-    }
-    let meta = culler.get_meta(state_str, None, None);
-    if meta.is_air {
-        return Vec::new();
-    }
-
-    let mut visible = Vec::with_capacity(6);
-    let block_pos = IVec3::new(x, y, z);
-
-    for dir in Direction::ALL {
-        let offset = dir.offset();
-        let n_pos = block_pos + offset;
-        let n_state_opt = get_neighbor_state(n_pos.x, n_pos.y, n_pos.z);
-        let n_meta_opt = n_state_opt
-            .as_deref()
-            .map(|s| culler.get_meta(s, None, None));
-
-        if culler.should_render_face(
-            &meta,
-            n_meta_opt.as_deref(),
-            dir,
-            None,
-            Some(block_pos),
-            Some(n_pos),
-        ) {
-            visible.push(dir);
-        }
-    }
-
-    visible
 }

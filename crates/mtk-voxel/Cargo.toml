@@ -23,8 +23,7 @@ flate2 = { workspace = true }
 rayon = { workspace = true, optional = true }
 
 [features]
-default = ["std", "parallel", "serde"]
-std = ["mtk-core/std", "mtk-cull/std", "mtk-model/std", "mtk-resource/std", "mtk-texture/std"]
+default = ["parallel", "serde"]
 parallel = ["dep:rayon", "mtk-model/parallel", "mtk-resource/parallel", "mtk-texture/parallel"]
 serde = ["dep:serde", "dep:serde_json", "mtk-core/serde", "mtk-cull/serde"]
 

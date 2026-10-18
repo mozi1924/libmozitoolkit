@@ -660,7 +660,6 @@ name = "mtk-bench"
 version = "0.1.0"
 dependencies = [
  "glam",
- "libmtk",
  "mtk-core",
  "mtk-cull",
  "mtk-model",
@@ -684,7 +683,6 @@ dependencies = [
  "clap",
  "glam",
  "image",
- "libmtk",
  "mtk-core",
  "mtk-cull",
  "mtk-material",

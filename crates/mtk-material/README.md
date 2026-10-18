@@ -155,7 +155,7 @@ pub struct MeshMultiUvRemapResult {
 ### 2.5 材质物理属性目录与并行批处理 (`properties/`)
 ```rust
 /// 物理属性四元组: [发光强度 (0..15), 薄壁半透 (0/1), 介质透射 (0/1), 贴纸阈值 (0.55/0.95)]
-pub type MaterialProps = [f32; 4];
+pub type MaterialProps = [f32; 4]; // 见 mtk_material::properties::MaterialProps
 
 /// Rayon 多线程全网格并行批处理属性生成
 pub fn compute_mesh_material_props(

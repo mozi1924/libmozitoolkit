@@ -86,16 +86,8 @@ impl HeaderFlags {
         Self(Self::FLAG_LITTLE_ENDIAN | Self::FLAG_TOC_ZSTD | Self::FLAG_SELF_CONTAINED)
     }
 
-    pub fn is_little_endian(&self) -> bool {
-        (self.0 & Self::FLAG_LITTLE_ENDIAN) != 0
-    }
-
     pub fn is_toc_zstd(&self) -> bool {
         (self.0 & Self::FLAG_TOC_ZSTD) != 0
-    }
-
-    pub fn is_self_contained(&self) -> bool {
-        (self.0 & Self::FLAG_SELF_CONTAINED) != 0
     }
 }
 

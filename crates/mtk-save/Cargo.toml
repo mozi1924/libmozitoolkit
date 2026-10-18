@@ -17,8 +17,7 @@ mtk-core = { workspace = true }
 mtk-voxel = { workspace = true }
 
 [features]
-default = ["std"]
-std = []
+default = []
 serde = ["dep:serde", "dep:serde_json", "mtk-core/serde", "mtk-voxel/serde"]
 
 [dev-dependencies]

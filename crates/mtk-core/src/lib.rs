@@ -1,8 +1,6 @@
 #![forbid(unsafe_code)]
-#![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
-
 pub mod attributes;
 pub mod constants;
 pub mod direction;
@@ -30,7 +28,7 @@ pub use extrude::{
     RandomExtrudeMeshOutput,
 };
 pub use geometry::{
-    derive_quad_face_tangents, mc_local_to_centered_z_up, mc_world_to_z_up, Aabb2d, Aabb3d, Quad,
+    derive_quad_face_tangents, mc_local_to_centered_z_up, mc_world_to_z_up, Aabb2d, Quad,
 };
 pub use mesh::{analyze_hard_edges, MeshData};
 pub use polygon::FlatPolygonMesh;

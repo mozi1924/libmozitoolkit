@@ -25,7 +25,6 @@ pub enum SyncLifecycle {
     Disconnected,
     Connecting,
     Negotiating,
-    Verifying,
     ReceivingBaseline,
     ValidatingHash,
     ReplayingStaged,
@@ -431,7 +430,6 @@ pub fn handle_packet(
 
             let decision_str = match decision {
                 SyncDecision::VerifiedSkipRebuild => "VERIFIED_SKIP_REBUILD",
-                SyncDecision::ReplayDeltas => "REPLAY_DELTAS",
                 SyncDecision::FullBaselineRequired => "FULL_BASELINE_REQUIRED",
                 SyncDecision::Rejected => "REJECTED",
             };
@@ -469,18 +467,6 @@ pub fn handle_packet(
                         total: 100,
                         message: "Waiting for Baseline stream...".to_string(),
                     });
-                }
-                SyncDecision::ReplayDeltas => {
-                    // Legacy decision: we cannot replay without a local manifest.
-                    // Ask the server for a fresh baseline instead of stalling.
-                    state.lifecycle = SyncLifecycle::ReplayingStaged;
-                    send_resync_request(
-                        state,
-                        cmd_sender,
-                        event_sender,
-                        ResyncReason::StateHashMismatch,
-                        "Local manifest unavailable; requesting a fresh baseline...",
-                    );
                 }
                 SyncDecision::Rejected => {
                     state.assembler = None;

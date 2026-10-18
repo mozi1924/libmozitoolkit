@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
-use libmtk::core::IVec3;
-use libmtk::{FaceCuller, MesherConfig, PaddedVoxelArray, SectionMesher, SectionStorage};
+use mtk_core::IVec3;
+use mtk_cull::FaceCuller;
+use mtk_voxel::{MesherConfig, PaddedVoxelArray, SectionMesher, SectionStorage};
 use std::time::Instant;
 
 fn main() {

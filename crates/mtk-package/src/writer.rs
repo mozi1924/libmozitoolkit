@@ -40,14 +40,6 @@ impl ChunkWriteOptions {
             zstd_level: 3,
         }
     }
-
-    /// Higher Zstd compression (level 7).
-    pub fn zstd_high() -> Self {
-        Self {
-            compression: CompressionType::Zstd,
-            zstd_level: 7,
-        }
-    }
 }
 
 /// Streaming writer for MTK binary package files.

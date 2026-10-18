@@ -7,12 +7,6 @@ pub const PROTOCOL_MAGIC: [u8; 2] = [0x4D, 0x54];
 /// Canonical protocol version number (Version 3.1, Protocol v3).
 pub const PROTOCOL_VERSION: u8 = 0x03;
 
-/// Checks whether the given protocol version byte is supported.
-#[inline]
-pub fn is_supported_protocol_version(version: u8) -> bool {
-    version == PROTOCOL_VERSION
-}
-
 /// Standard 4-byte header size: Magic(2) + Version(1) + Opcode(1).
 pub const HEADER_SIZE: usize = 4;
 
@@ -93,7 +87,6 @@ impl Opcode {
 #[repr(u8)]
 pub enum SyncDecision {
     VerifiedSkipRebuild = 0x00,
-    ReplayDeltas = 0x01,
     FullBaselineRequired = 0x02,
     Rejected = 0xFF,
 }
@@ -102,8 +95,9 @@ impl SyncDecision {
     pub fn from_u8(val: u8) -> Option<Self> {
         match val {
             0x00 => Some(SyncDecision::VerifiedSkipRebuild),
-            0x01 => Some(SyncDecision::ReplayDeltas),
-            0x02 => Some(SyncDecision::FullBaselineRequired),
+            // 0x01 (legacy REPLAY_DELTAS) cannot be honored without a local manifest;
+            // treat it as a request for a fresh full baseline.
+            0x01 | 0x02 => Some(SyncDecision::FullBaselineRequired),
             0xFF => Some(SyncDecision::Rejected),
             _ => None,
         }

@@ -1,5 +1,14 @@
 # mtk-sync
 
+> ⚠️ **协议章节已过期（2026-10-18 审计）**
+>
+> 本文档第 3、4、5 章描述的是**已废弃的 v2 协议**（`MC` magic / `PROTOCOL_VERSION = 0x02` /
+> `FullSnapshot`、`SectionManifest` 等 Packet 变体），这些类型在代码中已不存在。
+> 现行实现为 **v3**（`MT` magic / `PROTOCOL_VERSION = 0x03`），唯一的协议事实源是
+> [`src/protocol/packet.rs`](src/protocol/packet.rs) 与 [`src/protocol/constants.rs`](src/protocol/constants.rs)；
+> 对外契约以 `MoziToolKit/docs/live_sync/live_sync_protocol.md`（RFC v3.1）为准。
+> 本文件待随 v2.1 一并重写。
+
 [![Crate](https://img.shields.io/badge/crate-mtk--sync-blue.svg)](Cargo.toml)
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)

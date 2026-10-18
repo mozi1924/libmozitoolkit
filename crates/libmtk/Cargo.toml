@@ -26,17 +26,7 @@ rayon = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
 [features]
-default = ["std", "parallel", "sync", "save"]
-std = [
-    "mtk-core/std",
-    "mtk-cull/std",
-    "mtk-model/std",
-    "mtk-voxel/std",
-    "mtk-resource/std",
-    "mtk-texture/std",
-    "mtk-material/std",
-    "dep:bincode",
-]
+default = ["parallel", "sync", "save", "dep:bincode"]
 parallel = [
     "mtk-core/parallel",
     "mtk-model/parallel",

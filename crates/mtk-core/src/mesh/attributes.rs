@@ -66,13 +66,6 @@ impl MeshData {
             }
         }
 
-        // Modern canonical attributes
-        self.add_custom_attribute(MeshAttribute::new(
-            ATTR_SOURCE_TEXTURE,
-            AttributeDomain::Face,
-            AttributeData::String(textures.clone()),
-        ));
-        // Backwards-compatible alias for existing shaders/scripts
         self.add_custom_attribute(MeshAttribute::new(
             ATTR_SOURCE_TEXTURE_KEY,
             AttributeDomain::Face,

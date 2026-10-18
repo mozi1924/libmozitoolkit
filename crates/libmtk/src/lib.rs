@@ -1,27 +1,37 @@
 #![forbid(unsafe_code)]
 //! # libmtk
 //!
-//! **libmtk** is the high-performance, host-agnostic, pure Rust core engine for MoziToolKit 2.0.
+//! **Application layer** of the libmozitoolkit core engine. This crate owns exactly two
+//! responsibilities:
 //!
-//! It provides:
-//! - Core geometry buffers and Minecraft 6-direction primitives (`mtk_core`)
-//! - Block occlusion states and 2D rectangle difference clipping (`mtk_cull`)
-//! - BlockState string parsing and Block Model JSON data structures (`mtk_model`)
-
-pub use mtk_core as core;
-pub use mtk_core::constants;
-pub use mtk_cull as cull;
-pub use mtk_material as material;
-pub use mtk_model as model;
-pub use mtk_resource as resource;
-#[cfg(feature = "save")]
-pub use mtk_save as save;
-pub use mtk_texture as texture;
-pub use mtk_voxel as voxel;
+//! - [`prebake`]: end-to-end headless asset precompilation into a single `.mtkcache` container
+//!   (atlas stitching, biome resolver extraction, model database baking, manifest).
+//! - [`pipeline`]: the unified mesh processing pipeline (material resolution + UV remapping).
+//!
+//! Domain primitives (`MeshData`, `BakedModel`, `FaceCuller`, `SectionMesher`, ...) live in the
+//! individual `mtk-*` crates. This crate deliberately does **not** re-export them: bindings and
+//! tools depend on the domain crate matching the layer they use, so the dependency graph stays
+//! honest. See `docs/ARCHITECTURE.md` for the layering contract.
 
 use thiserror::Error;
 
-/// Unified top-level error type for all libmtk operations.
+pub mod pipeline;
+pub mod prebake;
+
+pub use pipeline::{
+    process_mesh, MeshPipelineConfig, MeshProcessStats, ProcessMeshOutput, ResolvedMaterialInfo,
+};
+pub use prebake::{
+    fingerprint_str_to_bytes16, prebake_all_models, prebake_all_models_with_progress,
+    precompile_all_assets, precompile_all_assets_with_progress, resolve_active_cache_package,
+    AssetCacheReader, CacheManifest, PrecompileConfig, PrecompileResult,
+    ASSET_CACHE_FORMAT_VERSION,
+};
+
+/// Unified error type for all `libmtk` application-layer operations.
+///
+/// The Python/C bindings do not consume this type directly — each binding maps the domain error
+/// to its own host-native exception at the boundary.
 #[derive(Debug, Error)]
 pub enum MtkError {
     #[error("Model error: {0}")]
@@ -58,95 +68,3 @@ pub enum MtkError {
     #[error("Thread pool error: {0}")]
     ThreadPool(String),
 }
-
-pub use mtk_core::extrude::{
-    cellular_noise_3d, generate_extrude_heights, perlin_noise_3d, repair_extruded_side_uv,
-    repair_extruded_side_uv_advanced, ExtrudeNoiseType, ExtrudeUvMode,
-};
-pub use mtk_core::extrude_mesh::{
-    process_flat_mesh_extrude_repair, process_mesh_extrude_repair, process_random_extrude_mesh,
-    ExtrudeMeshInput, ExtrudeMeshOutput, FlatPolygonMesh, MeshExtrudeRepairConfig,
-    RandomExtrudeMeshInput, RandomExtrudeMeshOutput,
-};
-pub use mtk_core::geometry::{mc_local_to_centered_z_up, mc_world_to_z_up, Aabb2d, Aabb3d, Quad};
-pub use mtk_core::subdivide::{
-    adaptive_pixel_split_mesh, calculate_face_target_grid, interpolate_bilinear_2d,
-    interpolate_bilinear_3d, interpolate_bilinear_4d, weld_mesh_vertices,
-};
-pub use mtk_core::uv::{
-    calculate_uv_area, calculate_uv_area_2d, get_uv_bounds, get_uv_center, is_uv_collapsed,
-    is_uv_collapsed_2d,
-};
-pub use mtk_cull::mesh_cull::{cull_mesh_faces, MeshCullConfig, MeshCullResult};
-pub use mtk_material::{
-    clean_identifier, decode_grid_atlas_uv, is_quad_uv_diamond, remap_atlas_to_local,
-    remap_grid_atlas_uv_to_local, remap_local_to_atlas, remap_mesh_multi_uvs_parallel,
-    remap_mesh_uvs_parallel, remap_sprite_to_sprite, straighten_diamond_quad_uv, GridAtlasSpec,
-    MaterialResolver, MeshMultiUvRemapResult, MeshRemapResult, SourceUvSpace,
-};
-pub use mtk_resource::{
-    coordinate_random, extract_block_name, get_face_tangents, AnimationFrame, AnimationMetadata,
-    AtlasDefinition, AtlasSource, BlockMatch, ConnectLogic, CtmMethod, CtmRule, CtmSolver,
-    CtmSymmetry, DirectoryPack, DiscoveredSprite, MemoryPack, PbrCompanions, ResourceLocation,
-    ResourcePack, ResourcePackStack, TextureMetadata, CTM_47_LOOKUP, OVERLAY_17_LOOKUP,
-};
-pub use mtk_texture::{
-    AtlasAddressMap, AtlasBuilder, AtlasBuilderConfig, AtlasChunkMeta, AtlasSpriteLocation,
-    BakedAtlas, BakedAtlasChunk, DecodedSprite, RgbaBuffer, SpriteKind, Stitcher,
-};
-pub mod pipeline;
-pub use pipeline::{
-    process_mesh, MeshPipelineConfig, MeshProcessStats, ProcessMeshOutput, ResolvedMaterialInfo,
-};
-
-pub mod prebake;
-pub use mtk_cull::engine::{
-    compute_block_cull_meta, derive_parametric_face_shapes, get_visible_face_directions,
-    is_non_full_or_partial_block, parse_block_name_and_props, FaceCuller,
-};
-pub use mtk_cull::geometry::rect_ops::{
-    extract_face_occlusion_from_boxes, extract_quad_face_occlusion_rect,
-    is_face_completely_occluded, is_fully_occluded, subtract_rect, subtract_rect_multi,
-};
-pub use mtk_cull::rules::should_skip_rendering;
-pub use mtk_cull::types::{
-    BlockCullMeta, CullCategory, GlassCullMode, LeavesCullMode, EMPTY_FACE_RECT, FULL_FACE_RECT,
-};
-pub use mtk_model::baker::{BakedModel, BakedModelDatabase, ModelBaker};
-pub use mtk_model::parser::blockstate::BlockState;
-pub use mtk_model::parser::model_json::BlockModelJson;
-pub use mtk_model::parser::obj::{mesh_to_obj_string, ModObjLoader, WavefrontObjParser};
-pub use mtk_voxel::biome::{get_biome_meta, get_colormap_uv, get_smoothed_biome_data};
-pub use mtk_voxel::fluid::{
-    calculate_fluid_corner_heights, calculate_fluid_flow_vector, FluidType,
-};
-pub use mtk_voxel::mesher::ao::{
-    ao_level_to_brightness, calculate_face_ao, should_flip_quad_diagonal,
-};
-pub use mtk_voxel::mesher::delta_mesher::DeltaMesher;
-pub use mtk_voxel::mesher::SectionMesher;
-pub use mtk_voxel::source::{ingest_from_source, VoxelReader, VoxelSource, VoxelWriter};
-pub use mtk_voxel::storage::crc::{crc32, get_empty_section_crc, EMPTY_SECTION_CRC};
-pub use mtk_voxel::storage::{PaddedVoxelArray, SectionStorage};
-pub use mtk_voxel::types::{CoordinateSystem, MesherConfig, WorldMeshBuildResult};
-pub use mtk_voxel::world::VoxelStorage;
-pub use mtk_voxel::VoxelWorld;
-pub use prebake::{
-    fingerprint_str_to_bytes16, prebake_all_models, prebake_all_models_with_progress,
-    precompile_all_assets, precompile_all_assets_with_progress, AssetCacheReader, CacheManifest,
-    PrecompileConfig, PrecompileResult, ASSET_CACHE_FORMAT_VERSION,
-};
-
-#[cfg(feature = "sync")]
-pub use mtk_sync as sync;
-#[cfg(feature = "sync")]
-pub use mtk_sync::protocol;
-#[cfg(feature = "sync")]
-pub use mtk_sync::protocol::{
-    compute_canonical_state_hash, decode_packet, encode_packet, DeltaChangeEntry, Opcode, Packet,
-    ProtocolError, SyncDecision,
-};
-#[cfg(feature = "sync")]
-pub use mtk_sync::{LiveSyncSession, SyncClient, SyncEvent};
-
-pub use prebake::resolve_active_cache_package;

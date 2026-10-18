@@ -2,7 +2,6 @@ use glam::Vec2;
 use mtk_core::direction::Direction;
 use mtk_material::MaterialResolver;
 use mtk_model::baker::baked_model::{BakedFace, BakedModel};
-use std::sync::Arc;
 
 use crate::mesher::heuristic::get_unit_cube_texture_candidates;
 use crate::mesher::tint::compute_face_tint;
@@ -503,14 +502,4 @@ pub fn build_palette_meshing_data<'a>(
             }
         })
         .collect()
-}
-
-/// Backwards-compatible helper to pre-resolve palette meshing data from optional BakedModels.
-pub fn build_palette_meshing_data_from_models(
-    padded: &PaddedVoxelArray,
-    palette_models: &[Option<Arc<BakedModel>>],
-    config: &MesherConfig,
-) -> Vec<PaletteMeshingData> {
-    let sources: Vec<ModelSource> = palette_models.iter().map(|m| m.as_deref().into()).collect();
-    build_palette_meshing_data(padded, &sources, config)
 }

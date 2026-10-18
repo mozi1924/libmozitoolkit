@@ -402,13 +402,3 @@ impl PyVoxelStorage {
         )
     }
 }
-
-#[pyfunction]
-#[pyo3(signature = (states=None, stack=None, path=None))]
-pub fn create_debug_world_storage(
-    states: Option<Vec<String>>,
-    stack: Option<&crate::resource::PyResourcePackStack>,
-    path: Option<&str>,
-) -> PyResult<PyVoxelStorage> {
-    PyVoxelStorage::create_debug_world(states, stack, path)
-}

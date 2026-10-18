@@ -85,12 +85,6 @@ impl JavaRandom {
         }
         val
     }
-
-    /// Generates a pseudo-random float in `[0.0, 1.0)`.
-    #[inline]
-    pub fn next_float(&mut self) -> f32 {
-        self.next(24) as f32 / ((1u32 << 24) as f32)
-    }
 }
 
 /// Offset category corresponding to `BlockBehaviour$OffsetType`.

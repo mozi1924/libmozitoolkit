@@ -1,7 +1,7 @@
 use libmtk::{
-    precompile_all_assets, AssetCacheReader, MemoryPack, PrecompileConfig, ResourcePackStack,
-    ASSET_CACHE_FORMAT_VERSION,
+    precompile_all_assets, AssetCacheReader, PrecompileConfig, ASSET_CACHE_FORMAT_VERSION,
 };
+use mtk_resource::{MemoryPack, ResourcePackStack};
 use std::fs;
 use std::path::Path;
 

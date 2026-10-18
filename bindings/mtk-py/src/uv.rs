@@ -1,7 +1,7 @@
 //! Python bindings for UV geometric algorithms.
 
 use glam::Vec2;
-use libmtk::core::uv;
+use mtk_core::uv;
 use pyo3::prelude::*;
 
 #[inline]
@@ -325,15 +325,15 @@ pub fn repair_extruded_side_uv(
     adjacent_uv_strip: Option<Vec<(f32, f32)>>,
 ) -> Vec<(f32, f32)> {
     let m = match mode.to_uppercase().as_str() {
-        "INWARD" => libmtk::core::extrude::ExtrudeUvMode::Inward,
-        "OUTWARD" => libmtk::core::extrude::ExtrudeUvMode::Outward,
-        _ => libmtk::core::extrude::ExtrudeUvMode::Smart,
+        "INWARD" => mtk_core::extrude::ExtrudeUvMode::Inward,
+        "OUTWARD" => mtk_core::extrude::ExtrudeUvMode::Outward,
+        _ => mtk_core::extrude::ExtrudeUvMode::Smart,
     };
 
     let bounds = if let Some((min_u, min_v, max_u, max_v)) = top_uv_bounds {
-        libmtk::core::Aabb2d::new(Vec2::new(min_u, min_v), Vec2::new(max_u, max_v))
+        mtk_core::Aabb2d::new(Vec2::new(min_u, min_v), Vec2::new(max_u, max_v))
     } else {
-        libmtk::core::Aabb2d::new(
+        mtk_core::Aabb2d::new(
             Vec2::new(uv_base_a.0.min(uv_base_b.0), uv_base_a.1.min(uv_base_b.1)),
             Vec2::new(uv_base_a.0.max(uv_base_b.0), uv_base_a.1.max(uv_base_b.1)),
         )
@@ -352,7 +352,7 @@ pub fn repair_extruded_side_uv(
         }
     });
 
-    let res = libmtk::core::extrude::repair_extruded_side_uv(
+    let res = mtk_core::extrude::repair_extruded_side_uv(
         [uv_base_a.0, uv_base_a.1],
         [uv_base_b.0, uv_base_b.1],
         [top_normal.0, top_normal.1, top_normal.2],
@@ -393,14 +393,14 @@ pub fn generate_random_extrude_heights(
     discrete_steps: Option<u32>,
 ) -> Vec<f32> {
     let n_type = match noise_type.to_uppercase().as_str() {
-        "PERLIN" => libmtk::core::extrude::ExtrudeNoiseType::Perlin,
-        "CELL" | "CELLULAR" | "VORONOI" => libmtk::core::extrude::ExtrudeNoiseType::Cellular,
-        _ => libmtk::core::extrude::ExtrudeNoiseType::UniformRandom,
+        "PERLIN" => mtk_core::extrude::ExtrudeNoiseType::Perlin,
+        "CELL" | "CELLULAR" | "VORONOI" => mtk_core::extrude::ExtrudeNoiseType::Cellular,
+        _ => mtk_core::extrude::ExtrudeNoiseType::UniformRandom,
     };
 
     let pts: Vec<[f32; 3]> = centers.iter().map(|&(x, y, z)| [x, y, z]).collect();
 
-    libmtk::core::extrude::generate_extrude_heights(
+    mtk_core::extrude::generate_extrude_heights(
         &pts,
         n_type,
         min_height,

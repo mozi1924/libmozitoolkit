@@ -4,7 +4,7 @@ use glam::Vec3;
 use mtk_core::mesh::MeshData;
 
 use super::model::{BakedModel, ModelMeshOptions};
-use crate::culling::clip_face_excluding_hidden_volume;
+use mtk_cull::clip_face_excluding_hidden_volume;
 
 impl BakedModel {
     /// Converts the baked model geometry into a platform-agnostic, contiguous `MeshData` buffer.
@@ -93,7 +93,7 @@ impl BakedModel {
                         &other_bounds,
                     )
                 } else {
-                    vec![crate::culling::ClippedQuadPiece {
+                    vec![mtk_cull::ClippedQuadPiece {
                         vertices: face.vertices,
                         uvs: face.uvs,
                     }]
@@ -269,11 +269,5 @@ impl BakedModel {
             tolerance: 1e-3,
         };
         self.to_mesh_with_options(&options)
-    }
-
-    /// Converts the baked model into standard Wavefront OBJ text.
-    pub fn to_obj_string(&self, object_name: &str, exclude_hidden_volume: bool) -> String {
-        let (mesh, textures) = self.to_mesh_with_textures(exclude_hidden_volume);
-        crate::parser::obj::mesh_to_obj_string(&mesh, object_name, &textures)
     }
 }

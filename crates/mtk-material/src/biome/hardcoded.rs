@@ -326,26 +326,6 @@ pub fn is_grass(stem: &str) -> bool {
         || s.contains("potted_fern")
 }
 
-/// Returns true if the stem represents foliage-tinted leaves or vines.
-pub fn is_foliage(stem: &str) -> bool {
-    let clean = stem.trim().to_ascii_lowercase();
-    let unname = clean.strip_prefix("minecraft:").unwrap_or(&clean);
-    let s = unname.strip_prefix("block/").unwrap_or(unname);
-
-    if is_explicit_none_tint(s) || is_dry_foliage(s) || is_grass(s) {
-        return false;
-    }
-
-    s.contains("oak_leaves")
-        || s.contains("jungle_leaves")
-        || s.contains("acacia_leaves")
-        || s.contains("dark_oak_leaves")
-        || s.contains("mangrove_leaves")
-        || s.contains("vine")
-        || s.contains("leaves")
-        || s.contains("leaf")
-}
-
 /// Returns true if the stem represents water.
 pub fn is_water(stem: &str) -> bool {
     let clean = stem.trim().to_ascii_lowercase();

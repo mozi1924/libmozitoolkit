@@ -27,19 +27,6 @@ impl LightLevel {
             sky: if sky > 15 { 15 } else { sky },
         }
     }
-
-    #[inline]
-    pub const fn pack_u8(self) -> u8 {
-        (self.block & 0x0F) | ((self.sky & 0x0F) << 4)
-    }
-
-    #[inline]
-    pub const fn unpack_u8(packed: u8) -> Self {
-        Self {
-            block: packed & 0x0F,
-            sky: (packed >> 4) & 0x0F,
-        }
-    }
 }
 
 /// Standard geometric attribute domain corresponding to modern DCC & USD standards.
@@ -184,9 +171,7 @@ impl MeshAttribute {
 
 /// Canonical built-in mesh attribute names (libmtk Spec v1).
 pub mod constants {
-    /// Canonical source texture identifier (Domain: Face, Type: String).
-    pub const ATTR_SOURCE_TEXTURE: &str = "mtk_source_texture";
-    /// Backwards-compatible alias for source texture key.
+    /// Canonical source texture key (Domain: Face, Type: String).
     pub const ATTR_SOURCE_TEXTURE_KEY: &str = "mtk_source_texture_key";
     /// Source provenance file or model origin path.
     pub const ATTR_SOURCE_ORIGIN: &str = "mtk_source_origin";
@@ -224,15 +209,13 @@ pub mod constants {
     pub const ATTR_COLORMAP_UV: &str = "mtk_colormap_uv";
 
     /// Minecraft absolute world coordinates (Domain: Face/Point, Type: Int32 x 3 or Float3).
-    pub const ATTR_BLOCK_POS: &str = "mtk_block_pos";
     pub const ATTR_BLOCK_X: &str = "mtk_block_x";
     pub const ATTR_BLOCK_Y: &str = "mtk_block_y";
     pub const ATTR_BLOCK_Z: &str = "mtk_block_z";
 
-    /// Canonical 6-way face normal direction (Domain: Face, Type: UInt8/Int32: 0=Down, 1=Up, 2=North, 3=South, 4=West, 5=East).
+    /// Canonical 6-way face normal direction (Domain: Face, Type: UInt8/Int32:
+    /// 0=East, 1=West, 2=Up, 3=Down, 4=South, 5=North — matches `Direction`).
     pub const ATTR_FACE_DIR: &str = "mtk_face_dir";
-    /// Light level (Domain: Face/Point, Type: UInt8 or Float2 [block_light, sky_light]).
-    pub const ATTR_LIGHT_LEVEL: &str = "mtk_light_level";
     /// Whether the face is opaque (Domain: Face, Type: Bool).
     pub const ATTR_IS_OPAQUE: &str = "mtk_is_opaque";
 }
@@ -315,38 +298,6 @@ impl FaceAttributes {
             material_slot,
             ..Default::default()
         }
-    }
-
-    /// Sets emission strength.
-    pub fn with_emission(mut self, emission: f32) -> Self {
-        self.emission = emission;
-        self.material_props[0] = emission;
-        self
-    }
-
-    /// Sets UV affine transform.
-    pub fn with_uv_transform(
-        mut self,
-        scale_u: f32,
-        scale_v: f32,
-        offset_u: f32,
-        offset_v: f32,
-    ) -> Self {
-        self.uv_transform = [scale_u, scale_v, offset_u, offset_v];
-        self
-    }
-
-    /// Sets biome tint parameters.
-    pub fn with_biome_tint(
-        mut self,
-        color: [f32; 4],
-        data: [f32; 4],
-        colormap_uv: [f32; 3],
-    ) -> Self {
-        self.biome_tint_color = color;
-        self.biome_tint_data = data;
-        self.colormap_uv = colormap_uv;
-        self
     }
 }
 

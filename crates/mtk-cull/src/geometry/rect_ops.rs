@@ -72,32 +72,6 @@ pub fn subtract_rect(source: &Aabb2d, occluder: &Aabb2d) -> Vec<Aabb2d> {
     result
 }
 
-/// Iteratively subtracts multiple occluder rectangles from a source rectangle.
-pub fn subtract_rect_multi(source: &Aabb2d, occluders: &[Aabb2d]) -> Vec<Aabb2d> {
-    let mut current_pieces = alloc::vec![*source];
-
-    for occ in occluders {
-        if current_pieces.is_empty() {
-            break;
-        }
-        let mut next_pieces = Vec::new();
-        for piece in &current_pieces {
-            let sub = subtract_rect(piece, occ);
-            next_pieces.extend(sub);
-        }
-        current_pieces = next_pieces;
-    }
-
-    current_pieces
-}
-
-/// Checks if a single source rectangle is completely covered by a sequence of occluders.
-#[inline]
-pub fn is_fully_occluded(source: &Aabb2d, occluders: &[Aabb2d]) -> bool {
-    let remaining = subtract_rect_multi(source, occluders);
-    remaining.is_empty()
-}
-
 /// Checks if all rectangles in `target_rects` are completely covered by `neighbor_occluders`.
 ///
 /// Returns `true` if target is 100% occluded (should be culled), `false` if any part remains visible.
@@ -228,59 +202,6 @@ pub fn extract_quad_face_occlusion_rect(
     None
 }
 
-/// Derive 2D face occlusion rectangles on an outer boundary plane from 3D axis-aligned cuboids `[min_pos, max_pos]`.
-pub fn extract_face_occlusion_from_boxes(
-    elements_boxes: &[([f32; 3], [f32; 3])],
-    direction: Direction,
-) -> Vec<Aabb2d> {
-    let mut rects = Vec::new();
-
-    for (mins, maxs) in elements_boxes {
-        let x0 = mins[0];
-        let y0 = mins[1];
-        let z0 = mins[2];
-        let x1 = maxs[0];
-        let y1 = maxs[1];
-        let z1 = maxs[2];
-
-        match direction {
-            Direction::East => {
-                if (x1 - 1.0).abs() <= EPS {
-                    rects.push(Aabb2d::from_min_max(z0, y0, z1, y1));
-                }
-            }
-            Direction::West => {
-                if x0.abs() <= EPS {
-                    rects.push(Aabb2d::from_min_max(z0, y0, z1, y1));
-                }
-            }
-            Direction::Up => {
-                if (y1 - 1.0).abs() <= EPS {
-                    rects.push(Aabb2d::from_min_max(x0, z0, x1, z1));
-                }
-            }
-            Direction::Down => {
-                if y0.abs() <= EPS {
-                    rects.push(Aabb2d::from_min_max(x0, z0, x1, z1));
-                }
-            }
-            Direction::South => {
-                if (z1 - 1.0).abs() <= EPS {
-                    rects.push(Aabb2d::from_min_max(x0, y0, x1, y1));
-                }
-            }
-            Direction::North => {
-                if z0.abs() <= EPS {
-                    rects.push(Aabb2d::from_min_max(x0, y0, x1, y1));
-                }
-            }
-        }
-    }
-
-    rects.retain(|r| !is_empty_rect(r, EPS));
-    rects
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -300,7 +221,6 @@ mod tests {
         let o = Aabb2d::from_min_max(0.0, 0.0, 1.0, 1.0);
         let res = subtract_rect(&s, &o);
         assert!(res.is_empty());
-        assert!(is_fully_occluded(&s, &[o]));
     }
 
     #[test]

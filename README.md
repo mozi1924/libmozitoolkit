@@ -16,7 +16,7 @@
 | Crate / Binding | 优先级 | 职责与功能 | 专属技术文档与 API |
 | :--- | :---: | :--- | :--- |
 | **[`mtk-core`](crates/mtk-core)** | 核心 | 基础几何基元、紧凑网格缓冲容器 (`MeshData`)、Minecraft 标准 6 向拓扑、自适应像素网格切分 (`subdivide`) 与智能挤出/UV 修复 (`extrude`) | [📖 `crates/mtk-core/README.md`](crates/mtk-core/README.md) |
-| **[`mtk-cull`](crates/mtk-cull)** | 核心 | 6 向邻域遮挡状态机、原版剔除规则、2D 矩形差集切分与外部网格叠面消重 (`MeshSanitizer`) | [📖 `crates/mtk-cull/README.md`](crates/mtk-cull/README.md) |
+| **[`mtk-cull`](crates/mtk-cull)** | 核心 | 6 向邻域遮挡状态机、原版剔除规则、2D 矩形差集切分与外部网格叠面剔除 (`cull_mesh_faces`) | [📖 `crates/mtk-cull/README.md`](crates/mtk-cull/README.md) |
 | **[`mtk-model`](crates/mtk-model)** | 核心 | 无头 BlockState 状态机解析与对齐 1.21+ 规范的 Model JSON 模型烘焙、OBJ 导出/加载 | [📖 `crates/mtk-model/README.md`](crates/mtk-model/README.md) |
 | **[`mtk-voxel`](crates/mtk-voxel)** | 核心 | 纯体素核心：16x16x16 Chunk Section 体素存储、流体曲面计算、平滑环境光遮蔽 (AO)、网格化器 (Mesher)、差量网格构建与统一体素源抽象接口 (`VoxelSource`) | [📖 `crates/mtk-voxel/README.md`](crates/mtk-voxel/README.md) |
 | **[`mtk-sync`](crates/mtk-sync)** | 核心 | 实时网络协同：原生 WebSocket 客户端、小端序二进制协议编解码、增量同步与 Live Sync 会话生命周期管理 | [📖 `crates/mtk-sync/README.md`](crates/mtk-sync/README.md) |
@@ -25,7 +25,7 @@
 | **[`mtk-material`](crates/mtk-material)** | 核心 | 66 种原版生物群系调色板与线性色彩数学引擎 (SSOT)、`BiomeResolver` 模型扫描与预编译映射、多线程并行 UV 重映射与外部别名解算 | [📖 `crates/mtk-material/README.md`](crates/mtk-material/README.md) |
 | **[`mtk-save`](crates/mtk-save)** | 核心 | 现代 Minecraft 存档加载核心：基于内置零拷贝 NBT 解码、Anvil `.mca` 区域文件直接寻址、384 高度世界 3D 生物群系与方块状态解包、按需空间切片流式数据源 (`VoxelSource`) | [📖 `crates/mtk-save/README.md`](crates/mtk-save/README.md) |
 | **[`mtk-package`](crates/mtk-package)** | 核心 | 统一二进制包与场景交换容器编解码器：64 字节头部校验、分块 TOC 索引、`memmap2` 零拷贝解析与分块 Zstd 压缩 | [📖 `crates/mtk-package/README.md`](crates/mtk-package/README.md) |
-| **[`libmtk`](crates/libmtk)** | 核心 | 统一顶层门面 Crate，聚合各子模块并提供端到端高阶资产预编译管线 (`precompile`) 与统一错误处理 (`MtkError`) | [📖 `crates/libmtk/README.md`](crates/libmtk/README.md) |
+| **[`libmtk`](crates/libmtk)** | 应用层 | 应用编排 Crate：端到端资产预编译管线 (`prebake`) 与网格处理管线 (`pipeline`)。**不再重导出领域类型**，下游按需直连 `mtk-*` | [📖 `crates/libmtk/README.md`](crates/libmtk/README.md) |
 | **[`mtk-py`](bindings/mtk-py)** | **P0 (当前重点)** | 基于 PyO3 的统一 Python 扩展模块 (`libmtk_py`)，提供通用 Buffer Protocol 内存视图与默认内嵌的 Blender 硬件级直接内存直写层 (`feature = "blender"`) | [📖 `bindings/mtk-py/README.md`](bindings/mtk-py/README.md) |
 | **[`mtk-cli`](crates/mtk-cli)** | **P1 (工具链)** | 独立命令行工具 (`mtk`)，支持图集烘焙 (`atlas`)、模型烘焙/导出 (`model` / `export`)、CTM 测试 (`ctm`)、规则校验 (`verify`) 与性能基准 (`bench`) | [📖 `crates/mtk-cli/README.md`](crates/mtk-cli/README.md) |
 | **[`mtk-bench`](crates/mtk-bench)** | **P1 (基准压测)** | 4000 区块与网格面剔除基准性能压测套件 | [📖 `crates/mtk-bench/README.md`](crates/mtk-bench/README.md) |

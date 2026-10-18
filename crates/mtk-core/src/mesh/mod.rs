@@ -191,11 +191,6 @@ impl MeshData {
         self.custom_attributes.get(name)
     }
 
-    /// Gets a mutable reference to a custom attribute by name.
-    pub fn get_custom_attribute_mut(&mut self, name: &str) -> Option<&mut MeshAttribute> {
-        self.custom_attributes.get_mut(name)
-    }
-
     /// Removes a custom attribute by name, returning it if present.
     pub fn remove_custom_attribute(&mut self, name: &str) -> Option<MeshAttribute> {
         self.custom_attributes.remove(name)
@@ -316,12 +311,6 @@ impl MeshData {
     #[inline]
     pub fn uvs_flat(&self) -> &[f32] {
         bytemuck::cast_slice(&self.uvs)
-    }
-
-    /// Returns a flat contiguous slice of vertex colors `[r0, g0, b0, a0, ...]` if present.
-    #[inline]
-    pub fn colors_flat(&self) -> Option<&[f32]> {
-        self.colors.as_ref().map(|cols| bytemuck::cast_slice(cols))
     }
 
     /// Returns a sorted list of unique material slot IDs present across all faces in this mesh.
@@ -468,7 +457,6 @@ mod tests {
         assert_eq!(mesh.positions_flat(), &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
         assert_eq!(mesh.normals_flat(), &[0.0, 1.0, 0.0, 0.0, 0.0, 1.0]);
         assert_eq!(mesh.uvs_flat(), &[0.1, 0.2, 0.3, 0.4]);
-        assert_eq!(mesh.colors_flat().unwrap(), &[1.0, 0.0, 0.0, 1.0]);
     }
 
     #[test]

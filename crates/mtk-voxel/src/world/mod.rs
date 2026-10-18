@@ -447,30 +447,6 @@ impl VoxelWorld {
         Ok(rebuilt)
     }
 
-    /// Rebuilds a single section (e.g. on repair request or targeted update).
-    pub fn rebuild_single_section(&mut self, sec_coord: IVec3) -> MeshData {
-        self.sync_selection_bounds();
-
-        let padded = self.storage.get_section_padded_array(sec_coord);
-        let db_opt = self.model_db.as_deref();
-        let model_lookup = |state: &str| Self::model_source_for_state(db_opt, state);
-
-        let mesh = SectionMesher::mesh_section_with_source(
-            &padded,
-            &self.culler,
-            model_lookup,
-            &self.config,
-        );
-        if mesh.is_empty() {
-            self.section_mesh_cache.remove(&sec_coord);
-        } else {
-            self.section_mesh_cache.insert(sec_coord, mesh.clone());
-        }
-
-        self.assemble_world_mesh(false);
-        mesh
-    }
-
     /// Returns a reference to the assembled unified world mesh, if available.
     pub fn get_world_mesh(&self) -> Option<&MeshData> {
         self.world_mesh.as_ref()

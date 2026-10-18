@@ -5,7 +5,7 @@
 [![Rayon](https://img.shields.io/badge/Rayon-Parallel-red.svg)](https://github.com/rayon-rs/rayon)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
-**`mtk-texture`** 是 `libmozitoolkit` (`libmtk`) 体系中的无头图像处理、2D 空间二叉装箱图集生成器 (Stitcher)、多通道 PBR 伴随贴图对齐与 Standalone 独立材质库导出核心。遵循 **Host-Agnostic（宿主无关）** 原则，为上层材质映射 (`mtk-material`)、端到端预编译 (`libmtk`) 与 DCC 宿主提供极速像素处理、静态/动态双图集装箱与边缘抗渗色保护。
+**`mtk-texture`** 是 `libmozitoolkit` (`libmtk`) 体系中的无头图像处理、2D 空间二叉装箱图集生成器 (Stitcher)、多通道 PBR 伴随贴图对齐与双图集（静态 / 动画）烘焙核心。遵循 **Host-Agnostic（宿主无关）** 原则，为上层材质映射 (`mtk-material`)、端到端预编译 (`libmtk`) 与 DCC 宿主提供极速像素处理、静态/动态双图集装箱与边缘抗渗色保护。
 
 ---
 

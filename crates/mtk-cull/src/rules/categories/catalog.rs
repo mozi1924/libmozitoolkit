@@ -14,20 +14,6 @@ pub const AIR_NAMES: &[&str] = &[
     "minecraft:structure_void",
 ];
 
-/// Known block names for inherently waterlogged blocks (always submerged in water).
-pub const INHERENTLY_WATERLOGGED_NAMES: &[&str] = &[
-    "kelp",
-    "minecraft:kelp",
-    "kelp_plant",
-    "minecraft:kelp_plant",
-    "seagrass",
-    "minecraft:seagrass",
-    "tall_seagrass",
-    "minecraft:tall_seagrass",
-    "bubble_column",
-    "minecraft:bubble_column",
-];
-
 /// Known block names for fluid categories.
 pub const FLUID_NAMES: &[&str] = &[
     "water",
