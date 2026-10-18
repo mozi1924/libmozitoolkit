@@ -108,12 +108,14 @@
       且 DNA 需要手动 `mesh.update()`；DNA 继续用于拓扑/位置/法线/UV/顶点色/点云。
 
 ### 📋 后续
-- [x] **P1 外部网格材质提取（部分）**：Blender 侧 `foreach_get` + NumPy 索引；
-- [ ] **P1 外部网格 palette-native remap（剩余）**：Rust palette + u32 indices，避免 `Vec<String>`。
-- [ ] **P2 `mtk-sync` 事件合并**：`poll_latest_world_mesh` / 代际栅栏下沉。
-- [ ] **P2 `mtk-package::CacheResolver`**：`.mtkcache` 指纹/路径选择下沉。
-- [ ] **P2 `bindings/mtk-ffi`**：为 C4D / C++ 宿主导出 material route、persisted-state 与
-      mesh buffer 新接口。
+- [x] **P1 外部网格材质提取**：Blender 侧 `foreach_get` + NumPy 索引；
+  Rust `remap_mesh_multi_uvs_paletted_with_options`（palette + u32 indices）与零拷贝 id/metric buffer；
+  500k faces replace 2.65 s → ~0.95 s。
+- [ ] **P1 1M faces 进一步优化**：palette-native biome / source-key 展开优化，目标 < 1.2 s。
+- [x] **P2 `mtk-sync` 事件合并**：`poll_events_coalesced` + 最新 world mesh generation。
+- [x] **P2 资产缓存解析**：`libmtk::resolve_active_cache_package` + PyO3。
+- [x] **P2 `bindings/mtk-ffi` 首批**：material route / persisted-state / biome recolor C-ABI；
+- [ ] **P2 `bindings/mtk-ffi` 后续**：按 C4D 实际约定补 opaque session/cache handle 与头文件示例。
 
 ---
 

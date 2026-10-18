@@ -118,6 +118,12 @@ pub fn process_mesh(
 
 ---
 
+### 3.1 缓存包解析
+
+`libmtk::prebake::resolve_active_cache_package(cache_dir, fingerprint)` 提供宿主无关的
+`.mtkcache` 选择策略：direct-name 优先、package header fingerprint 校验、mtime 最新回退。
+Blender 与 C4D 均应通过该函数定位 active cache。
+
 ## 4. 快速上手示例 (Quick Start)
 
 在 `Cargo.toml` 中添加依赖：

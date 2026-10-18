@@ -2,11 +2,15 @@
 
 use std::collections::HashMap;
 
-use mtk_material::{
-    clean_identifier, remap_grid_atlas_uv_to_local, remap_mesh_multi_uvs_parallel_with_options,
-    remap_mesh_uvs_parallel, reroute_mesh_animation, resolve_mesh_material_routes, BiomeResolver,
-    MaterialResolver,
+use crate::buffer::{
+    create_owned_f32_memoryview, create_owned_i32_memoryview, create_owned_u32_memoryview,
 };
+use mtk_material::{
+    clean_identifier, remap_grid_atlas_uv_to_local, remap_mesh_multi_uvs_paletted_with_options,
+    remap_mesh_multi_uvs_parallel_with_options, remap_mesh_uvs_parallel, reroute_mesh_animation,
+    resolve_mesh_material_routes, BiomeResolver, MaterialResolver,
+};
+use pyo3::buffer::PyBuffer;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
@@ -14,6 +18,31 @@ use crate::resource::PyResourcePackStack;
 use crate::texture::PyBakedAtlas;
 
 use super::atlas::PyGridAtlasSpec;
+
+enum BorrowedU32Buffer {
+    Py(PyBuffer<u32>),
+    Owned(Vec<u32>),
+}
+
+impl BorrowedU32Buffer {
+    fn extract(obj: &Bound<'_, PyAny>) -> PyResult<Self> {
+        if let Ok(buf) = PyBuffer::<u32>::get(obj) {
+            if buf.is_c_contiguous() {
+                return Ok(Self::Py(buf));
+            }
+        }
+        Ok(Self::Owned(obj.extract::<Vec<u32>>()?))
+    }
+
+    fn as_slice(&self) -> &[u32] {
+        match self {
+            Self::Py(buf) => unsafe {
+                std::slice::from_raw_parts(buf.buf_ptr() as *const u32, buf.item_count())
+            },
+            Self::Owned(vec) => vec.as_slice(),
+        }
+    }
+}
 
 #[pyclass(name = "MaterialResolver")]
 pub struct PyMaterialResolver;
@@ -277,6 +306,134 @@ impl PyMaterialResolver {
         dict.set_item("face_anim_frame_size", result.face_anim_frame_size)?;
         dict.set_item("unmapped_faces", result.unmapped_faces)?;
         dict.set_item("uv_unmapped_faces", result.uv_unmapped_faces)?;
+        Ok(dict.into())
+    }
+
+    /// Palette-native multi-UV remap. Returns zero-copy buffers for per-face ids and metrics.
+    #[staticmethod]
+    #[pyo3(signature = (
+        uvs,
+        face_material_palette,
+        face_material_indices,
+        face_loop_ranges,
+        atlas,
+        aliases=None,
+        grid_atlas_spec=None,
+        existing_key_palette=None,
+        existing_key_indices=None,
+        enable_animated_textures=false
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    pub fn remap_mesh_multi_uvs_paletted(
+        py: Python<'_>,
+        uvs: Vec<f32>,
+        face_material_palette: Vec<String>,
+        face_material_indices: &Bound<'_, PyAny>,
+        face_loop_ranges: Vec<(u32, u32)>,
+        atlas: &PyBakedAtlas,
+        aliases: Option<HashMap<String, Vec<String>>>,
+        grid_atlas_spec: Option<&PyGridAtlasSpec>,
+        existing_key_palette: Option<Vec<String>>,
+        existing_key_indices: Option<&Bound<'_, PyAny>>,
+        enable_animated_textures: bool,
+    ) -> PyResult<PyObject> {
+        let loop_count = uvs.len() / 2;
+        let mut uv_pairs: Vec<[f32; 2]> = Vec::with_capacity(loop_count);
+        for i in 0..loop_count {
+            uv_pairs.push([uvs[i * 2], uvs[i * 2 + 1]]);
+        }
+
+        let material_indices = BorrowedU32Buffer::extract(face_material_indices)?;
+        let existing_indices = existing_key_indices
+            .map(BorrowedU32Buffer::extract)
+            .transpose()?;
+        let result = remap_mesh_multi_uvs_paletted_with_options(
+            &uv_pairs,
+            &face_material_palette,
+            material_indices.as_slice(),
+            &face_loop_ranges,
+            &atlas.inner.address_map,
+            aliases.as_ref(),
+            grid_atlas_spec.map(|s| &s.inner),
+            existing_key_palette.as_deref(),
+            existing_indices.as_ref().map(|b| b.as_slice()),
+            enable_animated_textures,
+        );
+
+        let mesh = result.mesh;
+        let mut flat_atlas_uvs = Vec::with_capacity(mesh.atlas_uvs.len() * 2);
+        for p in &mesh.atlas_uvs {
+            flat_atlas_uvs.push(p[0]);
+            flat_atlas_uvs.push(p[1]);
+        }
+        let mut flat_local_uvs = Vec::with_capacity(mesh.local_uvs.len() * 2);
+        for p in &mesh.local_uvs {
+            flat_local_uvs.push(p[0]);
+            flat_local_uvs.push(p[1]);
+        }
+        let mut flat_transforms = Vec::with_capacity(mesh.face_uv_transforms.len() * 4);
+        for t in &mesh.face_uv_transforms {
+            flat_transforms.extend_from_slice(t);
+        }
+        let mut flat_anim_timing = Vec::with_capacity(mesh.face_anim_timing.len() * 3);
+        for t in &mesh.face_anim_timing {
+            flat_anim_timing.extend_from_slice(t);
+        }
+        let mut flat_anim_size = Vec::with_capacity(mesh.face_anim_frame_size.len() * 3);
+        for s in &mesh.face_anim_frame_size {
+            flat_anim_size.extend_from_slice(s);
+        }
+
+        let dict = PyDict::new(py);
+        dict.set_item(
+            "atlas_uvs",
+            create_owned_f32_memoryview(py, flat_atlas_uvs)?,
+        )?;
+        dict.set_item(
+            "local_uvs",
+            create_owned_f32_memoryview(py, flat_local_uvs)?,
+        )?;
+        dict.set_item(
+            "face_chunk_ids",
+            create_owned_i32_memoryview(
+                py,
+                mesh.face_chunk_ids.iter().map(|v| *v as i32).collect(),
+            )?,
+        )?;
+        dict.set_item(
+            "face_texture_ids",
+            create_owned_i32_memoryview(
+                py,
+                mesh.face_texture_ids.iter().map(|v| *v as i32).collect(),
+            )?,
+        )?;
+        dict.set_item(
+            "face_uv_transforms",
+            create_owned_f32_memoryview(py, flat_transforms)?,
+        )?;
+        dict.set_item(
+            "face_uv_rotations",
+            create_owned_f32_memoryview(py, mesh.face_uv_rotations.clone())?,
+        )?;
+        dict.set_item("face_uv_modes", mesh.face_uv_modes)?;
+        dict.set_item("face_is_overlay", mesh.face_is_overlay)?;
+        dict.set_item("face_is_animated", mesh.face_is_animated)?;
+        dict.set_item(
+            "face_anim_timing",
+            create_owned_f32_memoryview(py, flat_anim_timing)?,
+        )?;
+        dict.set_item(
+            "face_anim_frame_size",
+            create_owned_f32_memoryview(py, flat_anim_size)?,
+        )?;
+        dict.set_item("source_key_palette", result.source_key_palette)?;
+        dict.set_item(
+            "face_source_key_indices",
+            create_owned_u32_memoryview(py, result.face_source_key_indices.clone())?,
+        )?;
+        dict.set_item("unmapped_faces", mesh.unmapped_faces)?;
+        dict.set_item("face_count", mesh.face_count)?;
+        dict.set_item("loop_count", mesh.loop_count)?;
         Ok(dict.into())
     }
 }

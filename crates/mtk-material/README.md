@@ -185,6 +185,7 @@ pub fn compute_mesh_material_props(
 | `compute_mesh_biome_attributes(texture_keys, biome, multi_biomes, resolver)` | Rayon 并行计算全网格染色面属性数组。 |
 | `compute_mesh_biome_attributes_per_face(texture_keys, face_biomes, resolver)` | Rayon 并行按逐面生物群系数组计算染色面属性与特异群系路由。 |
 | `reapply_uniform_biome_tint_flat(base_tt, packed, old_colors, colors, flags)` | 即时统一群系重着色：并行输出扁平 tint data/color/colormap UV，不重新解析贴图键。 |
+| `compute_mesh_biome_attributes_paletted_flat(palette, indices, ...)` | palette-native 全量群系属性计算，避免逐面 `String`。 |
 | `reapply_uniform_biome_tint(...)` | 同上，返回 array-of-structs 形式，便于非 Python 宿主。 |
 
 ### 3.2 材质与 UV 重映射
@@ -200,6 +201,7 @@ pub fn compute_mesh_material_props(
 | `extract_animation_metrics(sprite) -> ([frames, frametime, interpolate], [w, h, 0])` | 统一提取动画调度器所需元数据；静态 sprite 返回安全默认值。 |
 | `remap_mesh_multi_uvs_parallel(...) -> MeshMultiUvRemapResult` | 批量并行生成图集 UV、局部 UV 与着色器路由模式；保持静态 Frame 0 兼容行为。 |
 | `remap_mesh_multi_uvs_parallel_with_options(..., enable_animated_textures)` | 动画感知版本：动画面路由到 `anim` chunk，并返回逐面动画元数据。 |
+| `remap_mesh_multi_uvs_paletted_with_options(...)` | palette + u32 indices 版本；返回 source-key palette/indices 与零拷贝 id/metric buffer。 |
 | `resolve_mesh_material_routes(keys, aliases, address_map, enable_animated)` | 只解析逐面 chunk/texture/动画路由，不触碰 UV。 |
 | `reroute_mesh_animation(uvs, ranges, keys, old_chunk_ids, atlas, aliases, enable_animated)` | 将已有 Atlas UV 从旧 sprite 反解并投影到新 sprite，支持静态↔动画幂等切换。 |
 

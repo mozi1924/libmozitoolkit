@@ -104,7 +104,8 @@ Python 模块名：`libmtk_py`
 
 ### 2.6 实时网络协同 (`sync` & `protocol`)
 - **`LiveSyncSession` (`PyLiveSyncSession`)**：原生 WebSocket 实时协同客户端。
-  - `start(...)`, `start_with_persisted_state(..., state_json=None, auth_token=None)`, `stop()`, `poll_events()`
+  - `start(...)`, `start_with_persisted_state(..., state_json=None, auth_token=None)`, `stop()`
+  - `poll_events(coalesce_meshes=False)`：`True` 时只保留最新 `WORLD_MESH_READY` generation
   - `export_persisted_state_json(user_modified=false)`：导出 UUID/epoch/sequence/bounds/hash 的不透明 JSON
   - `client_generation`, `current_sequence`, `current_epoch`, `state_hash`, `server_uuid`
   - `clear_cache()`, `set_config(config)`, `hot_reload(config=None, model_db=None)`, `request_resync()`
@@ -125,9 +126,11 @@ Python 模块名：`libmtk_py`
   返回三个零拷贝 memoryview，供 `foreach_set` 直接写入。
 - **材质物理属性**：`compute_flat_material_props_memoryview(keys)` 返回零拷贝 f32 memoryview。
   - `remap_mesh_uvs(...)` / `remap_mesh_multi_uvs(..., enable_animated_textures=false)`
+  - `remap_mesh_multi_uvs_paletted(..., palette, face_indices, ...)`：palette-native、零拷贝 id/metric buffer
   - `resolve_mesh_routes(face_texture_keys, atlas, aliases=None, enable_animated_textures=false)`
   - `reroute_mesh_animation(uvs, face_loop_ranges, face_texture_keys, face_old_chunk_ids, atlas, aliases=None, enable_animated_textures=false)`
 - **`GridAtlasSpec` (`PyGridAtlasSpec`)**：网格图集元数据规范。
+- **缓存解析**：`resolve_active_cache_package(cache_dir, fingerprint=None)` 返回 active `.mtkcache` 路径。
 - **色彩数学与常量**：`compute_biome_tint_attributes`, `compute_mesh_biome_attributes_from_storage`, `get_swamp_grass_color`, `blend_biome_colors`, `sample_colormap_pixel`, `srgb_to_linear`, `linear_to_srgb`, `TINT_TYPE_NONE..DRY_FOLIAGE`
 
 ### 2.9 模型烘焙 (`model`)

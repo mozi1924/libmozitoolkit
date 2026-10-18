@@ -31,7 +31,8 @@ pub use ctm::PyCtmSolver;
 pub use cull::PyFaceCuller;
 pub use material::{
     blend_biome_colors, classify_tint_category, compute_biome_tint_attributes,
-    compute_flat_material_props_memoryview, compute_mesh_biome_attributes_from_storage,
+    compute_biome_tint_attributes_paletted, compute_flat_material_props_memoryview,
+    compute_flat_material_props_paletted_memoryview, compute_mesh_biome_attributes_from_storage,
     get_all_biomes, get_biome_meta, reapply_uniform_biome_tint, sample_colormap_pixel,
     PyBiomeResolver, PyGridAtlasSpec, PyMaterialResolver,
 };
@@ -45,7 +46,7 @@ pub use protocol::{
 };
 pub use resource::{
     create_test_cache_package, get_cache_manifest, is_valid_cache_package, precompile_all_assets,
-    PyAssetCache, PyPrecompileResult, PyResourcePackStack,
+    resolve_active_cache_package, PyAssetCache, PyPrecompileResult, PyResourcePackStack,
 };
 pub use save::PyLevelData;
 pub use sync::PyLiveSyncSession;
@@ -162,6 +163,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyAssetCache>()?;
     m.add_function(wrap_pyfunction!(precompile_all_assets, m)?)?;
     m.add_function(wrap_pyfunction!(is_valid_cache_package, m)?)?;
+    m.add_function(wrap_pyfunction!(resolve_active_cache_package, m)?)?;
     m.add_function(wrap_pyfunction!(get_cache_manifest, m)?)?;
     m.add_function(wrap_pyfunction!(create_test_cache_package, m)?)?;
     m.add_function(wrap_pyfunction!(texture::sample_uv_alpha_f32, m)?)?;
@@ -180,6 +182,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMaterialResolver>()?;
     m.add_class::<PyBiomeResolver>()?;
     m.add_function(wrap_pyfunction!(compute_biome_tint_attributes, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_biome_tint_attributes_paletted, m)?)?;
     m.add_function(wrap_pyfunction!(
         compute_mesh_biome_attributes_from_storage,
         m
@@ -198,6 +201,10 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(material::compute_mesh_material_props, m)?)?;
     m.add_function(wrap_pyfunction!(material::compute_flat_material_props, m)?)?;
     m.add_function(wrap_pyfunction!(compute_flat_material_props_memoryview, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        compute_flat_material_props_paletted_memoryview,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(material::get_material_props, m)?)?;
     m.add_function(wrap_pyfunction!(material::get_block_emission_strength, m)?)?;
     m.add_function(wrap_pyfunction!(material::is_thin_wall_block, m)?)?;
@@ -387,7 +394,7 @@ mod tests {
 
             // Test session
             let session = PyLiveSyncSession::new(None, None, None, true);
-            let events = session.poll_events(py).unwrap();
+            let events = session.poll_events(py, false).unwrap();
             assert_eq!(events.len(), 0);
         });
     }

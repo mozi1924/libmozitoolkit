@@ -148,3 +148,5 @@ pub use mtk_sync::protocol::{
 };
 #[cfg(feature = "sync")]
 pub use mtk_sync::{LiveSyncSession, SyncClient, SyncEvent};
+
+pub use prebake::resolve_active_cache_package;

@@ -14,6 +14,7 @@ enum BufferStorage {
     Bytes(Vec<u8>),
     F32(Vec<f32>),
     I32(Vec<i32>),
+    U32(Vec<u32>),
 }
 
 /// A lightweight Python buffer protocol adapter that provides a zero-copy view of
@@ -142,6 +143,35 @@ pub fn create_owned_f32_memoryview<'py>(
             len,
             readonly: true,
             _storage: BufferStorage::F32(vec),
+        },
+    )?;
+    unsafe {
+        let py_mv_ptr = ffi::PyMemoryView_FromObject(owner.as_ptr());
+        if py_mv_ptr.is_null() {
+            return Err(PyErr::fetch(py));
+        }
+        Ok(Bound::from_owned_ptr(py, py_mv_ptr).downcast_into::<PyMemoryView>()?)
+    }
+}
+
+/// Creates a memoryview directly over an owned `Vec<u32>` without reallocating or unsafe alignment casting.
+pub fn create_owned_u32_memoryview<'py>(
+    py: Python<'py>,
+    vec: Vec<u32>,
+) -> PyResult<Bound<'py, PyMemoryView>> {
+    let len = vec.len() * std::mem::size_of::<u32>();
+    if len == 0 {
+        let empty = pyo3::types::PyBytes::new(py, &[]);
+        return PyMemoryView::from(&empty);
+    }
+    let ptr = vec.as_ptr() as usize;
+    let owner = Bound::new(
+        py,
+        PyBufferOwner {
+            ptr,
+            len,
+            readonly: true,
+            _storage: BufferStorage::U32(vec),
         },
     )?;
     unsafe {

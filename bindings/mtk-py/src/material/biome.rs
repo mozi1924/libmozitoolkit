@@ -58,6 +58,31 @@ impl BorrowedF32Buffer {
     }
 }
 
+enum BorrowedU32Buffer {
+    Py(PyBuffer<u32>),
+    Owned(Vec<u32>),
+}
+
+impl BorrowedU32Buffer {
+    fn extract(obj: &Bound<'_, PyAny>) -> PyResult<Self> {
+        if let Ok(buf) = PyBuffer::<u32>::get(obj) {
+            if buf.is_c_contiguous() {
+                return Ok(Self::Py(buf));
+            }
+        }
+        Ok(Self::Owned(obj.extract::<Vec<u32>>()?))
+    }
+
+    fn as_slice(&self) -> &[u32] {
+        match self {
+            Self::Py(buf) => unsafe {
+                std::slice::from_raw_parts(buf.buf_ptr() as *const u32, buf.item_count())
+            },
+            Self::Owned(vec) => vec.as_slice(),
+        }
+    }
+}
+
 /// Retrieve canonical metadata and colors for a single biome.
 #[pyfunction]
 #[pyo3(signature = (biome_name))]
@@ -353,6 +378,65 @@ pub fn reapply_uniform_biome_tint<'py>(
     Ok((packed_mv, colors_mv, uvs_mv))
 }
 
+/// Palette-native full biome attribute computation, returning three zero-copy memoryviews.
+#[pyfunction]
+#[pyo3(signature = (
+    palette,
+    face_indices,
+    grass_color,
+    foliage_color,
+    dry_foliage_color,
+    water_color,
+    colormap_uv,
+    has_custom_grass=false,
+    has_custom_foliage=false,
+    has_custom_dry_foliage=false,
+    resolver=None
+))]
+#[allow(clippy::too_many_arguments)]
+pub fn compute_biome_tint_attributes_paletted<'py>(
+    py: Python<'py>,
+    palette: Vec<String>,
+    face_indices: &Bound<'_, PyAny>,
+    grass_color: [f32; 4],
+    foliage_color: [f32; 4],
+    dry_foliage_color: [f32; 4],
+    water_color: [f32; 4],
+    colormap_uv: [f32; 2],
+    has_custom_grass: bool,
+    has_custom_foliage: bool,
+    has_custom_dry_foliage: bool,
+    resolver: Option<&PyBiomeResolver>,
+) -> PyResult<(
+    Bound<'py, PyMemoryView>,
+    Bound<'py, PyMemoryView>,
+    Bound<'py, PyMemoryView>,
+)> {
+    let indices = BorrowedU32Buffer::extract(face_indices)?;
+    let default_resolver = mtk_material::BiomeResolver::new();
+    let res_ref = resolver.map(|r| &r.inner).unwrap_or(&default_resolver);
+    let result = mtk_material::compute_mesh_biome_attributes_paletted_flat(
+        &palette,
+        indices.as_slice(),
+        mtk_material::BiomeColorSet {
+            grass: grass_color,
+            foliage: foliage_color,
+            dry_foliage: dry_foliage_color,
+            water: water_color,
+            colormap_uv,
+        },
+        has_custom_grass,
+        has_custom_foliage,
+        has_custom_dry_foliage,
+        res_ref,
+    );
+    Ok((
+        create_owned_f32_memoryview(py, result.packed_tint_data)?,
+        create_owned_f32_memoryview(py, result.tint_colors)?,
+        create_owned_f32_memoryview(py, result.colormap_uvs)?,
+    ))
+}
+
 /// Compute 3D coordinate-aware biome tinting attributes using a VoxelStorage container.
 #[pyfunction]
 #[pyo3(signature = (
@@ -559,6 +643,28 @@ pub fn compute_flat_material_props_memoryview<'py>(
         }
         flat
     });
+    create_owned_f32_memoryview(py, flat)
+}
+
+/// Compute flat material properties for a palette + per-face indices as a zero-copy memoryview.
+#[pyfunction]
+#[pyo3(signature = (palette, face_indices, block_names=None))]
+pub fn compute_flat_material_props_paletted_memoryview<'py>(
+    py: Python<'py>,
+    palette: Vec<String>,
+    face_indices: &Bound<'_, PyAny>,
+    block_names: Option<Vec<String>>,
+) -> PyResult<Bound<'py, PyMemoryView>> {
+    let indices = BorrowedU32Buffer::extract(face_indices)?;
+    let props = mtk_material::compute_mesh_material_props_paletted(
+        &palette,
+        indices.as_slice(),
+        block_names.as_deref(),
+    );
+    let mut flat = Vec::with_capacity(props.len() * 4);
+    for p in props {
+        flat.extend_from_slice(&p);
+    }
     create_owned_f32_memoryview(py, flat)
 }
 

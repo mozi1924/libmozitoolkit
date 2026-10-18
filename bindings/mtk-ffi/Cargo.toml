@@ -13,6 +13,10 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
 mtk-core = { workspace = true }
+mtk-material = { workspace = true }
+mtk-sync = { workspace = true }
+mtk-texture = { workspace = true }
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

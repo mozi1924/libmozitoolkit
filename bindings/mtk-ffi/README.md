@@ -56,6 +56,10 @@ typedef struct MtkMeshView {
 #### `MtkMeshBuffer`
 不透明堆容器（Opaque Pointer），持有 Rust 原生 `MeshData`。
 
+#### `MtkMaterialRoute`
+单面图集路由 POD：`chunk_id`、`texture_id`、`is_animated`、`anim_timing[3]`、
+`anim_frame_size[3]`、`mapped`。用于 C4D / C++ 宿主直接消费 Rust 解析结果。
+
 ---
 
 ### 2.2 核心 C 函数清单
@@ -68,6 +72,9 @@ typedef struct MtkMeshView {
 | `int32_t mtk_mesh_buffer_append_unit_cube_face(MtkMeshBuffer *buffer, uint8_t direction_id, uint16_t material_slot)` | 追加指定朝向的原版单位立方体面（0:Down, 1:Up, 2:North, 3:South, 4:West, 5:East），成功返回 0，失败返回 -1 |
 | `MtkMeshView mtk_mesh_buffer_get_view(MtkMeshBuffer *buffer)` | 获取当前网格缓冲区的只读指针视图 |
 | `const char* mtk_version(void)` | 返回以 null 结尾的静态版本号字符串 |
+| `int32_t mtk_resolve_material_routes(atlas_json, keys_json, enable_animated_textures, out_routes, capacity)` | 从图集 JSON + 贴图键 JSON 解析逐面路由，返回写入数量或负错误码 |
+| `int32_t mtk_sync_state_is_reconnect_candidate(state_json)` | 解析 Live Sync 持久化状态 JSON；1=可快速重连，0=需全量，负值=JSON 错误 |
+| `int32_t mtk_biome_reapply_uniform_tint(...)` | 扁平 C 缓冲的即时群系重着色；返回 0 或负错误码 |
 
 ---
 

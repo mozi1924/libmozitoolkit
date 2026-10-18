@@ -48,3 +48,63 @@ pub fn compute_mesh_material_props(
         }
     })
 }
+
+/// Evaluate packed material properties for palette + per-face indices.
+///
+/// The palette entries are resolved once, so a mesh with a handful of unique
+/// textures does not perform a registry lookup per face. `block_names` is
+/// optional and, when supplied, is still resolved per face.
+pub fn compute_mesh_material_props_paletted(
+    palette: &[String],
+    face_indices: &[u32],
+    block_names: Option<&[String]>,
+) -> Vec<[f32; 4]> {
+    with_global_registry(|reg| {
+        let palette_props: Vec<[f32; 4]> = palette
+            .iter()
+            .map(|key| reg.get_material_props("", Some(key)))
+            .collect();
+
+        #[cfg(feature = "parallel")]
+        {
+            (0..face_indices.len())
+                .into_par_iter()
+                .map(|i| {
+                    let key = face_indices
+                        .get(i)
+                        .and_then(|idx| palette.get(*idx as usize))
+                        .map(|s| s.as_str())
+                        .unwrap_or("");
+                    match block_names.and_then(|names| names.get(i)) {
+                        Some(block) => reg.get_material_props(block, Some(key)),
+                        None => face_indices
+                            .get(i)
+                            .and_then(|idx| palette_props.get(*idx as usize).copied())
+                            .unwrap_or([0.0; 4]),
+                    }
+                })
+                .collect()
+        }
+
+        #[cfg(not(feature = "parallel"))]
+        {
+            let mut out = Vec::with_capacity(face_indices.len());
+            for i in 0..face_indices.len() {
+                let key = face_indices
+                    .get(i)
+                    .and_then(|idx| palette.get(*idx as usize))
+                    .map(|s| s.as_str())
+                    .unwrap_or("");
+                let props = match block_names.and_then(|names| names.get(i)) {
+                    Some(block) => reg.get_material_props(block, Some(key)),
+                    None => face_indices
+                        .get(i)
+                        .and_then(|idx| palette_props.get(*idx as usize).copied())
+                        .unwrap_or([0.0; 4]),
+                };
+                out.push(props);
+            }
+            out
+        }
+    })
+}

@@ -725,6 +725,10 @@ name = "mtk-ffi"
 version = "0.1.0"
 dependencies = [
  "mtk-core",
+ "mtk-material",
+ "mtk-sync",
+ "mtk-texture",
+ "serde_json",
 ]
 
 [[package]]

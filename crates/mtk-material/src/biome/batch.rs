@@ -529,3 +529,94 @@ pub fn reapply_uniform_biome_tint(
         colormap_uvs,
     }
 }
+
+/// Palette-native full biome attribute computation.
+///
+/// Resolves tint metadata once per unique palette entry, then writes flat
+/// `packed_tint_data` / `tint_colors` / `colormap_uvs` for every face. This is
+/// the palette counterpart of `compute_mesh_biome_attributes_custom` and avoids
+/// materializing one `String` per face.
+pub fn compute_mesh_biome_attributes_paletted_flat(
+    palette: &[String],
+    face_indices: &[u32],
+    colors: BiomeColorSet,
+    has_custom_grass: bool,
+    has_custom_foliage: bool,
+    has_custom_dry_foliage: bool,
+    resolver: &BiomeResolver,
+) -> BiomeTintFlatBuffers {
+    let face_count = face_indices.len();
+    if face_count == 0 {
+        return BiomeTintFlatBuffers::default();
+    }
+
+    let palette_infos: Vec<_> = palette
+        .iter()
+        .map(|key| resolver.get_tint_info(key, None, None))
+        .collect();
+    let uv = [colors.colormap_uv[0], colors.colormap_uv[1], 0.0f32];
+
+    let mut packed_out = vec![0.0f32; face_count * 4];
+    let mut colors_out = vec![0.0f32; face_count * 4];
+    let mut uvs_out = vec![0.0f32; face_count * 3];
+
+    let compute = |i: usize| -> ([f32; 4], [f32; 4], [f32; 3]) {
+        let info = face_indices
+            .get(i)
+            .and_then(|idx| palette_infos.get(*idx as usize))
+            .cloned()
+            .unwrap_or_default();
+
+        let has_custom = match info.tint_type {
+            TINT_TYPE_GRASS => has_custom_grass,
+            TINT_TYPE_FOLIAGE => has_custom_foliage,
+            TINT_TYPE_DRY_FOLIAGE => has_custom_dry_foliage,
+            _ => false,
+        };
+        let target_tt = if info.is_hardcoded || has_custom {
+            TINT_TYPE_HARDCODED
+        } else {
+            info.tint_type
+        };
+        let packed = [
+            info.base_tint_weight,
+            info.overlay_tint_weight,
+            info.tint_weight,
+            target_tt as f32,
+        ];
+        let color = match info.tint_type {
+            TINT_TYPE_GRASS => colors.grass,
+            TINT_TYPE_FOLIAGE => colors.foliage,
+            TINT_TYPE_DRY_FOLIAGE => colors.dry_foliage,
+            TINT_TYPE_WATER => colors.water,
+            TINT_TYPE_HARDCODED => info.hardcoded_color.unwrap_or([1.0, 1.0, 1.0, 1.0]),
+            _ => {
+                if info.is_hardcoded {
+                    info.hardcoded_color.unwrap_or([1.0, 1.0, 1.0, 1.0])
+                } else {
+                    [1.0, 1.0, 1.0, 1.0]
+                }
+            }
+        };
+        (packed, color, uv)
+    };
+
+    #[cfg(feature = "parallel")]
+    let results: Vec<([f32; 4], [f32; 4], [f32; 3])> =
+        (0..face_count).into_par_iter().map(compute).collect();
+
+    #[cfg(not(feature = "parallel"))]
+    let results: Vec<([f32; 4], [f32; 4], [f32; 3])> = (0..face_count).map(compute).collect();
+
+    for (i, (packed, color, uv)) in results.into_iter().enumerate() {
+        packed_out[i * 4..i * 4 + 4].copy_from_slice(&packed);
+        colors_out[i * 4..i * 4 + 4].copy_from_slice(&color);
+        uvs_out[i * 3..i * 3 + 3].copy_from_slice(&uv);
+    }
+
+    BiomeTintFlatBuffers {
+        packed_tint_data: packed_out,
+        tint_colors: colors_out,
+        colormap_uvs: uvs_out,
+    }
+}

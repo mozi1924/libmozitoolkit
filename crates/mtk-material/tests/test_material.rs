@@ -495,3 +495,74 @@ fn test_resolve_routes_and_reroute_animation() {
         assert!((actual[1] - expected[1]).abs() < 1e-6);
     }
 }
+
+#[test]
+fn test_paletted_multi_uv_remap_and_source_key_palette() {
+    use mtk_material::remap_mesh_multi_uvs_paletted_with_options;
+
+    let atlas = animated_water_atlas();
+    let palette = vec!["water_still".to_string()];
+    let indices = vec![0u32, 0u32];
+    let ranges = vec![(0, 4), (4, 4)];
+    let uvs = vec![
+        [0.0, 0.0],
+        [1.0, 0.0],
+        [1.0, 1.0],
+        [0.0, 1.0],
+        [0.0, 0.0],
+        [1.0, 0.0],
+        [1.0, 1.0],
+        [0.0, 1.0],
+    ];
+
+    let result = remap_mesh_multi_uvs_paletted_with_options(
+        &uvs, &palette, &indices, &ranges, &atlas, None, None, None, None, true,
+    );
+    assert_eq!(result.mesh.face_count, 2);
+    assert_eq!(result.mesh.face_chunk_ids, vec![1, 1]);
+    assert!(result.mesh.face_is_animated.iter().all(|v| *v));
+    assert_eq!(
+        result.source_key_palette,
+        vec!["minecraft:block/water_still".to_string()]
+    );
+    assert_eq!(result.face_source_key_indices, vec![0, 0]);
+}
+
+#[test]
+fn test_paletted_source_key_prefers_base_over_overlay() {
+    use mtk_material::remap_mesh_multi_uvs_paletted_with_options;
+
+    let mut atlas = AtlasAddressMap::new();
+    for key in [
+        "minecraft:block/grass_block_side",
+        "minecraft:block/grass_block_side_overlay",
+    ] {
+        atlas.sprites.insert(
+            ResourceLocation::parse(key).unwrap(),
+            AtlasSpriteLocation {
+                chunk_id: 0,
+                texture_id: 1147,
+                frame_0_uv_bounds: [0.0, 0.0, 1.0, 1.0],
+                ..Default::default()
+            },
+        );
+    }
+
+    let uvs = vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
+    let result = remap_mesh_multi_uvs_paletted_with_options(
+        &uvs,
+        &["minecraft:block/grass_block_side".to_string()],
+        &[0u32],
+        &[(0, 4)],
+        &atlas,
+        None,
+        None,
+        None,
+        None,
+        false,
+    );
+    assert_eq!(
+        result.source_key_palette,
+        vec!["minecraft:block/grass_block_side".to_string()]
+    );
+}

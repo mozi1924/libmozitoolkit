@@ -208,6 +208,8 @@ pub struct LiveSyncSession {
 - `is_connected() -> bool`：查询当前是否已建立有效网络连接。
 - `status() -> String`：获取当前连接状态文本（`"CONNECTED"`、`"CONNECTING..."`、`"DISCONNECTED"` 等）。
 - `poll_events() -> Vec<SyncEvent>`：非阻塞提取当前已就绪的所有高阶事件。
+- `poll_events_coalesced() -> Vec<SyncEvent>`：只保留最新 `WorldMeshReady` generation，
+  避免主线程被中间网格淹没。
 - `export_persisted_state_json(user_modified) -> String`：导出宿主可持久化的不透明状态 JSON
   （UUID / epoch / sequence / bounds / dimension / state_hash）。
 - `start_with_persisted_state_json(url, auto, max, state_json, auth_token)`：从持久化 JSON

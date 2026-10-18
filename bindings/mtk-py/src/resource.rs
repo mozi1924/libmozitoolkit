@@ -455,3 +455,11 @@ pub fn create_test_cache_package(
         .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
     Ok(p.to_string_lossy().to_string())
 }
+
+/// Resolve the active `.mtkcache` package for a cache directory + optional stack fingerprint.
+#[pyfunction]
+#[pyo3(signature = (cache_dir, fingerprint=None))]
+pub fn resolve_active_cache_package(cache_dir: &str, fingerprint: Option<&str>) -> Option<String> {
+    libmtk::resolve_active_cache_package(cache_dir, fingerprint)
+        .map(|path| path.to_string_lossy().into_owned())
+}

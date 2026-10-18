@@ -9,7 +9,9 @@ pub mod registry;
 pub mod thin_wall;
 pub mod transmissive;
 
-pub use batch::{compute_mesh_material_props, get_material_props};
+pub use batch::{
+    compute_mesh_material_props, compute_mesh_material_props_paletted, get_material_props,
+};
 pub use emission::get_block_emission_strength;
 pub use registry::{
     clean_name, load_material_properties_json_replace, register_material_properties_json,

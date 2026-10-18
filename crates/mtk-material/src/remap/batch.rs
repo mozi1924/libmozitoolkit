@@ -11,7 +11,9 @@ use crate::remap::{
 use crate::resolver::{
     decode_grid_atlas_uv, extract_animation_metrics, resolve_routed_sprite, MaterialResolver,
 };
-use crate::types::{GridAtlasSpec, MeshMultiUvRemapResult, MeshRemapResult};
+use crate::types::{
+    GridAtlasSpec, MeshMultiUvRemapResult, MeshPalettedUvRemapResult, MeshRemapResult,
+};
 
 #[inline]
 fn is_contiguous_partition(ranges: &[(u32, u32)], total_len: usize) -> bool {
@@ -359,6 +361,36 @@ pub fn remap_mesh_multi_uvs_parallel(
     )
 }
 
+/// Material name source for per-face remapping: direct strings or a palette + indices.
+#[derive(Clone, Copy)]
+enum FaceMaterialSource<'a> {
+    Strings(&'a [String]),
+    Palette {
+        palette: &'a [String],
+        indices: &'a [u32],
+    },
+}
+
+impl<'a> FaceMaterialSource<'a> {
+    fn len(&self) -> usize {
+        match self {
+            Self::Strings(values) => values.len(),
+            Self::Palette { indices, .. } => indices.len(),
+        }
+    }
+
+    fn get(&self, index: usize) -> &'a str {
+        match self {
+            Self::Strings(values) => values.get(index).map(|s| s.as_str()).unwrap_or(""),
+            Self::Palette { palette, indices } => indices
+                .get(index)
+                .and_then(|idx| palette.get(*idx as usize))
+                .map(|s| s.as_str())
+                .unwrap_or(""),
+        }
+    }
+}
+
 /// Animation-aware variant of [`remap_mesh_multi_uvs_parallel`].
 ///
 /// When `enable_animated_textures` is true, multi-frame sprites are routed to
@@ -374,7 +406,136 @@ pub fn remap_mesh_multi_uvs_parallel_with_options(
     grid_atlas_spec: Option<&GridAtlasSpec>,
     enable_animated_textures: bool,
 ) -> MeshMultiUvRemapResult {
-    let face_count = face_materials.len();
+    remap_mesh_multi_uvs_impl(
+        source_uvs,
+        FaceMaterialSource::Strings(face_materials),
+        face_loop_ranges,
+        address_map,
+        aliases,
+        grid_atlas_spec,
+        enable_animated_textures,
+    )
+}
+
+/// Palette-native variant of [`remap_mesh_multi_uvs_parallel_with_options`].
+///
+/// Avoids constructing a `Vec<String>` with one entry per face. Also resolves the
+/// per-face source-texture keys into a compact palette + u32 index array, with an
+/// optional legacy provenance palette used as fallback for unmapped faces.
+#[allow(clippy::too_many_arguments)]
+pub fn remap_mesh_multi_uvs_paletted_with_options(
+    source_uvs: &[[f32; 2]],
+    face_material_palette: &[String],
+    face_material_indices: &[u32],
+    face_loop_ranges: &[(u32, u32)],
+    address_map: &AtlasAddressMap,
+    aliases: Option<&HashMap<String, Vec<String>>>,
+    grid_atlas_spec: Option<&GridAtlasSpec>,
+    existing_key_palette: Option<&[String]>,
+    existing_key_indices: Option<&[u32]>,
+    enable_animated_textures: bool,
+) -> MeshPalettedUvRemapResult {
+    let materials = FaceMaterialSource::Palette {
+        palette: face_material_palette,
+        indices: face_material_indices,
+    };
+    let mesh = remap_mesh_multi_uvs_impl(
+        source_uvs,
+        materials,
+        face_loop_ranges,
+        address_map,
+        aliases,
+        grid_atlas_spec,
+        enable_animated_textures,
+    );
+    let (source_key_palette, face_source_key_indices) = build_source_key_palette(
+        &mesh.face_texture_ids,
+        address_map,
+        existing_key_palette,
+        existing_key_indices,
+    );
+    MeshPalettedUvRemapResult {
+        mesh,
+        source_key_palette,
+        face_source_key_indices,
+    }
+}
+
+fn intern_source_key(
+    key: &str,
+    palette: &mut Vec<String>,
+    lookup: &mut HashMap<String, u32>,
+) -> u32 {
+    if let Some(idx) = lookup.get(key) {
+        return *idx;
+    }
+    let idx = palette.len() as u32;
+    palette.push(key.to_string());
+    lookup.insert(key.to_string(), idx);
+    idx
+}
+
+fn build_source_key_palette(
+    face_texture_ids: &[u32],
+    address_map: &AtlasAddressMap,
+    existing_key_palette: Option<&[String]>,
+    existing_key_indices: Option<&[u32]>,
+) -> (Vec<String>, Vec<u32>) {
+    let mut owned_id_to_key: HashMap<u32, String> = HashMap::new();
+    let mut register = |texture_id: u32, key: &str| {
+        let key_string = key.to_string();
+        match owned_id_to_key.get(&texture_id) {
+            None => {
+                owned_id_to_key.insert(texture_id, key_string);
+            }
+            Some(current) => {
+                let current_is_overlay = current.contains("overlay");
+                let new_is_overlay = key_string.contains("overlay");
+                if (current_is_overlay && !new_is_overlay)
+                    || (current_is_overlay == new_is_overlay && key_string.len() < current.len())
+                {
+                    owned_id_to_key.insert(texture_id, key_string);
+                }
+            }
+        }
+    };
+    for (key, sprite) in &address_map.sprites {
+        register(sprite.texture_id, &key.as_string());
+    }
+    for (key, sprite) in &address_map.anim_sprites {
+        register(sprite.texture_id, &key.as_string());
+    }
+
+    let mut palette: Vec<String> = Vec::new();
+    let mut lookup: HashMap<String, u32> = HashMap::new();
+    let mut indices: Vec<u32> = Vec::with_capacity(face_texture_ids.len());
+
+    for (i, texture_id) in face_texture_ids.iter().enumerate() {
+        let atlas_key = owned_id_to_key.get(texture_id).map(|s| s.as_str());
+        let legacy_key = existing_key_indices
+            .and_then(|idx| idx.get(i))
+            .and_then(|idx| existing_key_palette.and_then(|p| p.get(*idx as usize)))
+            .map(|s| s.as_str())
+            .filter(|s| !s.is_empty() && *s != "mozi:fallback");
+
+        let key = atlas_key.or(legacy_key).unwrap_or("mozi:fallback");
+        indices.push(intern_source_key(key, &mut palette, &mut lookup));
+    }
+
+    (palette, indices)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn remap_mesh_multi_uvs_impl(
+    source_uvs: &[[f32; 2]],
+    materials: FaceMaterialSource<'_>,
+    face_loop_ranges: &[(u32, u32)],
+    address_map: &AtlasAddressMap,
+    aliases: Option<&HashMap<String, Vec<String>>>,
+    grid_atlas_spec: Option<&GridAtlasSpec>,
+    enable_animated_textures: bool,
+) -> MeshMultiUvRemapResult {
+    let face_count = materials.len();
     let total_uv_len = source_uvs.len();
 
     if face_count != face_loop_ranges.len() {
@@ -423,14 +584,14 @@ pub fn remap_mesh_multi_uvs_parallel_with_options(
         }
 
         #[cfg(feature = "parallel")]
-        let res: Vec<FaceOut> = face_materials
-            .par_iter()
+        let res: Vec<FaceOut> = (0..face_count)
+            .into_par_iter()
             .zip(src_chunks.into_par_iter())
             .zip(atlas_chunks.into_par_iter())
             .zip(local_chunks.into_par_iter())
-            .map(|(((mat, src), atlas_dst), local_dst)| {
+            .map(|(((i, src), atlas_dst), local_dst)| {
                 remap_single_face_multi_uvs(
-                    mat,
+                    materials.get(i),
                     src,
                     atlas_dst,
                     local_dst,
@@ -443,14 +604,14 @@ pub fn remap_mesh_multi_uvs_parallel_with_options(
             .collect();
 
         #[cfg(not(feature = "parallel"))]
-        let res: Vec<FaceOut> = face_materials
-            .iter()
+        let res: Vec<FaceOut> = (0..face_count)
+            .into_iter()
             .zip(src_chunks.into_iter())
             .zip(atlas_chunks.into_iter())
             .zip(local_chunks.into_iter())
-            .map(|(((mat, src), atlas_dst), local_dst)| {
+            .map(|(((i, src), atlas_dst), local_dst)| {
                 remap_single_face_multi_uvs(
-                    mat,
+                    materials.get(i),
                     src,
                     atlas_dst,
                     local_dst,
@@ -475,7 +636,7 @@ pub fn remap_mesh_multi_uvs_parallel_with_options(
                 results.push(default_face_out(false));
                 continue;
             }
-            let mat_name = &face_materials[face_idx];
+            let mat_name = materials.get(face_idx);
             let src = &source_uvs[start_idx..end_idx];
             let mut a_tmp = vec![[0.0, 0.0]; count as usize];
             let mut l_tmp = vec![[0.0, 0.0]; count as usize];

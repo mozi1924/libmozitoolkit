@@ -135,6 +135,17 @@ pub struct MeshMultiUvRemapResult {
     pub unmapped_faces: usize,
 }
 
+/// Paletted remap result: mesh UV data plus compact source-texture provenance.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MeshPalettedUvRemapResult {
+    /// Underlying per-face UV/material routing result.
+    pub mesh: MeshMultiUvRemapResult,
+    /// Unique source texture keys (atlas keys + valid legacy provenance fallbacks).
+    pub source_key_palette: Vec<String>,
+    /// Per-face index into `source_key_palette`.
+    pub face_source_key_indices: Vec<u32>,
+}
+
 /// Resolved atlas routing for a single face, independent of UV remapping.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MeshMaterialRoute {

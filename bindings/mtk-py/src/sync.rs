@@ -202,8 +202,19 @@ impl PyLiveSyncSession {
     }
 
     /// Polls all pending synchronization events from the background Rust engine (non-blocking).
-    pub fn poll_events<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-        let events = self.inner.poll_events();
+    ///
+    /// `coalesce_meshes=True` keeps only the newest `WORLD_MESH_READY` generation.
+    #[pyo3(signature = (coalesce_meshes=false))]
+    pub fn poll_events<'py>(
+        &self,
+        py: Python<'py>,
+        coalesce_meshes: bool,
+    ) -> PyResult<Bound<'py, PyList>> {
+        let events = if coalesce_meshes {
+            self.inner.poll_events_coalesced()
+        } else {
+            self.inner.poll_events()
+        };
         let list = PyList::empty(py);
 
         for evt in events {

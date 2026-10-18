@@ -347,10 +347,82 @@ impl LiveSyncSession {
         }
         events
     }
+
+    /// Polls events and collapses multiple `WorldMeshReady` payloads to the newest generation.
+    ///
+    /// Hosts that cannot render every intermediate mesh (Blender main-thread timers,
+    /// C4D message pumps) should use this to avoid queue choke and wasted DNA copies.
+    /// Non-mesh events keep their arrival order; the newest mesh is appended last.
+    pub fn poll_events_coalesced(&self) -> Vec<SyncEvent> {
+        let events = self.poll_events();
+        let mut latest_mesh: Option<(u64, MeshData)> = None;
+        let mut out = Vec::with_capacity(events.len());
+        for event in events {
+            match event {
+                SyncEvent::WorldMeshReady { mesh, generation } => {
+                    let should_replace = latest_mesh
+                        .as_ref()
+                        .map(|(current, _)| generation >= *current)
+                        .unwrap_or(true);
+                    if should_replace {
+                        latest_mesh = Some((generation, mesh));
+                    }
+                }
+                other => out.push(other),
+            }
+        }
+        if let Some((generation, mesh)) = latest_mesh {
+            out.push(SyncEvent::WorldMeshReady { mesh, generation });
+        }
+        out
+    }
 }
 
 impl Drop for LiveSyncSession {
     fn drop(&mut self) {
         self.stop();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn poll_events_coalesced_keeps_newest_world_mesh() {
+        let session = LiveSyncSession::new(None, None, None, true);
+        session
+            .event_sender
+            .send(SyncEvent::StatusChange("CONNECTED".to_string()))
+            .unwrap();
+        session
+            .event_sender
+            .send(SyncEvent::WorldMeshReady {
+                mesh: MeshData::new(),
+                generation: 1,
+            })
+            .unwrap();
+        session
+            .event_sender
+            .send(SyncEvent::WorldMeshReady {
+                mesh: MeshData::new(),
+                generation: 3,
+            })
+            .unwrap();
+        session
+            .event_sender
+            .send(SyncEvent::WorldMeshReady {
+                mesh: MeshData::new(),
+                generation: 2,
+            })
+            .unwrap();
+
+        let events = session.poll_events_coalesced();
+        assert_eq!(events.len(), 2, "status + one coalesced mesh expected");
+        assert!(matches!(events[0], SyncEvent::StatusChange(_)));
+        match &events[1] {
+            SyncEvent::WorldMeshReady { generation, .. } => assert_eq!(*generation, 3),
+            other => panic!("expected newest world mesh, got {other:?}"),
+        }
     }
 }
