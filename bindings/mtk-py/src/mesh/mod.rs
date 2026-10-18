@@ -448,6 +448,37 @@ impl PyMeshData {
         attributes::get_string_attribute(self, name)
     }
 
+    /// Build a compact `(palette, u32 indices)` view of `mtk_source_texture_key`.
+    ///
+    /// Hosts can inject palette-based provenance without materializing one Python
+    /// string per face; the returned memoryview is a zero-copy view over an owned
+    /// Rust buffer (`np.frombuffer(indices, dtype=np.uint32)` on the Python side).
+    pub fn source_texture_palette_indices<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Vec<String>, Bound<'py, PyMemoryView>)> {
+        let mut palette: Vec<String> = Vec::new();
+        let mut lookup: HashMap<&str, u32> = HashMap::new();
+        let mut indices: Vec<u32> = Vec::new();
+
+        if let Some(attr) = self.inner.get_custom_attribute("mtk_source_texture_key") {
+            if let mtk_core::attributes::AttributeData::String(ref values) = attr.data {
+                indices.reserve(values.len());
+                for value in values {
+                    let next = palette.len() as u32;
+                    let idx = *lookup.entry(value.as_str()).or_insert_with(|| {
+                        palette.push(value.clone());
+                        next
+                    });
+                    indices.push(idx);
+                }
+            }
+        }
+
+        let memoryview = crate::buffer::create_owned_u32_memoryview(py, indices)?;
+        Ok((palette, memoryview))
+    }
+
     /// Check if a custom attribute exists.
     pub fn has_attribute(&self, name: &str) -> bool {
         attributes::has_attribute(self, name)

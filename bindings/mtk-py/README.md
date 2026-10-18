@@ -49,6 +49,7 @@ Python 模块名：`libmtk_py`
   - 顶层 `libmtk_py.blender` 兼容别名与 `BlenderDirectMesh` 类已于 2026-10 API 收敛中移除，唯一入口为 `libmtk_py.unstable.blender_dna`。
   - 扁平列表提取：`get_flat_positions()`, `get_flat_normals()`, `get_flat_uvs()`, `get_flat_secondary_uvs()`, `get_indices()`, `get_face_materials()`, `get_face_tints()`
   - 顶点与面自定义属性：`add_string_attribute(name, domain, values)`, `add_attribute_from_buffer(name, domain, data_type, buffer)`, `get_attribute_data(name)`, `has_attribute(name)`, `list_attributes()`
+  - 来源贴图调色板：`source_texture_palette_indices() -> (palette, u32 memoryview)`，把逐面 `mtk_source_texture_key` 压缩成 palette + 索引，供 Live Sync 等跳过逐面字符串的宿主保留完整 provenance。
 - **`AttributeDomain`**：属性域枚举，支持 `"point"` (顶点) 与 `"face"` (面)。
 - **`process_mesh(mesh, material_names, atlas=None, aliases=None, generate_secondary_uv=True, grid_atlas_spec=None)`**：统一高阶网格处理流水线，多线程并行执行材质状态求解、图集 UV 重映射、次级 [0, 1] PBR UV 生成与自定义属性标记。
 - **`analyze_mesh_hard_edges(positions, edge_verts, face_loop_starts, face_loop_totals, loop_verts, sharp_angle_rad, explicit_sharp_edges=None) -> PyBytes`**：基于二面角与边界的高性能硬边/锐边拓扑分析算子，支持零拷贝 Buffer Protocol。
