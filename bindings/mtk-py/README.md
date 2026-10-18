@@ -98,9 +98,9 @@ Python 模块名：`libmtk_py`
   - `rebuild_all() -> MeshData`, `rebuild_dirty() -> Dict`, `clear_cache()`, `hot_reload(config=None, model_db=None)`, `num_threads` (getter/setter)
 - **`MesherConfig` (`PyMesherConfig`)**：网格化配置（AO 开关、流体曲面、坐标系转换、线程数、顶点焊接）。
 - **`SectionMesher` (`PySectionMesher`)**：
-  - `mesh_world(py, storage, config=None, culler=None, resolver=None) -> MeshData`
-  - `mesh_sections_split(py, storage, config=None, ...) -> Dict[Tuple[int,int,int], MeshData]`
-  - `rebuild_dirty_sections(py, storage, config=None, ...) -> Dict[Tuple[int,int,int], MeshData]`
+  - `mesh_world(storage, config=None, culler=None, model_db=None) -> MeshData`
+  - `mesh_sections_split(storage, config=None, culler=None, model_db=None) -> Dict[Tuple[int,int,int], MeshData]`
+  - `rebuild_dirty_sections(storage, config=None, culler=None, model_db=None) -> Dict[Tuple[int,int,int], MeshData]`
 
 ### 2.6 实时网络协同 (`sync` & `protocol`)
 - **`LiveSyncSession` (`PyLiveSyncSession`)**：原生 WebSocket 实时协同客户端。
@@ -110,12 +110,13 @@ Python 模块名：`libmtk_py`
   - `client_generation`, `current_sequence`, `current_epoch`, `state_hash`, `server_uuid`
   - `clear_cache()`, `set_config(config)`, `hot_reload(config=None, model_db=None)`, `request_resync()`
   - `STREAM_PROGRESS.percent` 已由 Rust 归一化为 0..100；`HANDSHAKE.decision_code` 为 RFC v3.1 原始值
-- **二进制协议编解码**：`decode_packet(bytes)`, `encode_full_sync_request(...)`, `encode_repair_requests(...)`, `encode_sync_config(...)`
+- **二进制协议编解码**：`decode_packet(bytes)`, `compute_canonical_state_hash(...)`,
+  `encode_welcome(...)`, `encode_baseline_begin/chunk/end(...)`, `encode_delta_op(...)`,
+  `encode_palette_update(...)`
 
 ### 2.7 资源包预烘焙与图集 (`resource` & `texture`)
 - **`ResourcePackStack` (`PyResourcePackStack`)**：虚拟文件系统 (VFS) 资源包层叠加载器。
 - **`AtlasBuilder` / `BakedAtlas`**：多类别 PBR 空间装箱与烘焙图集容器。
-- **`StandaloneBuilder` / `StandaloneResult`**：独立 PBR 材质资产生成器。
 - **`precompile_all_assets(jar_path, output_dir, ...)`**：端到端一键无头预烘焙管线。
 - **像素分析**：`sample_uv_alpha_f32`, `batch_analyze_transparent_faces_f32`, `batch_analyze_transparent_faces_u8`
 
