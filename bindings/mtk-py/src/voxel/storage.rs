@@ -192,15 +192,6 @@ impl PyVoxelStorage {
         self.inner.dirty_sections.len()
     }
 
-    /// Returns the list of dirty section coordinate tuples `(sx, sy, sz)`.
-    pub fn get_dirty_sections<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
-        let list = PyList::empty(py);
-        for coord in &self.inner.dirty_sections {
-            let _ = list.append((coord.x, coord.y, coord.z));
-        }
-        list
-    }
-
     /// Clears all dirty section markers.
     pub fn clear_dirty_sections(&mut self) {
         self.inner.dirty_sections.clear();

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use mtk_material::{decode_grid_atlas_uv, GridAtlasSpec};
+use mtk_material::GridAtlasSpec;
 use pyo3::prelude::*;
 
 /// Python interface for Grid Atlas Specification.
@@ -61,23 +61,5 @@ impl PyGridAtlasSpec {
     #[getter]
     pub fn image_height(&self) -> u32 {
         self.inner.image_height
-    }
-
-    /// Set candidate texture names for a given swatch ID.
-    pub fn set_swatch_candidates(&mut self, swatch_id: usize, candidates: Vec<String>) {
-        self.inner
-            .swatch_to_candidates
-            .insert(swatch_id, candidates);
-    }
-
-    /// Check if a material name matches this grid atlas specification.
-    pub fn matches_name(&self, name: &str) -> bool {
-        self.inner.matches_atlas_name(name)
-    }
-
-    /// Decode UV on this grid atlas to candidate names and local UVs.
-    pub fn decode_uv(&self, u: f32, v: f32) -> (Option<Vec<String>>, (f32, f32)) {
-        let (cands, local) = decode_grid_atlas_uv(u, v, &self.inner);
-        (cands.cloned(), (local[0], local[1]))
     }
 }

@@ -3,12 +3,12 @@
 //! Exposes layered resource pack loading and asset discovery to Python.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict};
+use pyo3::types::PyDict;
 use std::path::Path;
 
 #[cfg(feature = "zip")]
 use mtk_resource::ZipPack;
-use mtk_resource::{DirectoryPack, ResourceLocation, ResourcePackStack};
+use mtk_resource::{DirectoryPack, ResourcePackStack};
 
 /// Python wrapper for layered Minecraft resource packs (`ResourcePackStack`).
 #[pyclass(name = "ResourcePackStack")]
@@ -75,20 +75,6 @@ impl PyResourcePackStack {
     /// Computes a deterministic fingerprint string for the active resource pack stack configuration.
     pub fn compute_stack_fingerprint(&self) -> String {
         self.inner.compute_stack_fingerprint()
-    }
-
-    /// Loads raw PNG bytes for a given resource location string (e.g. `"minecraft:block/stone"`).
-    pub fn open_texture_bytes<'py>(
-        &self,
-        py: Python<'py>,
-        location: &str,
-    ) -> PyResult<Option<Bound<'py, PyBytes>>> {
-        let loc = ResourceLocation::parse(location)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-        Ok(self
-            .inner
-            .open_texture_raw(&loc)
-            .map(|bytes| PyBytes::new(py, &bytes)))
     }
 
     /// Builds an indexed `CtmSolver` containing all active CTM rules loaded in this stack.
@@ -230,30 +216,6 @@ impl PyAssetCache {
             .load_biome_resolver()
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         Ok(crate::material::PyBiomeResolver { inner: resolver })
-    }
-
-    /// Extracts all atlas textures (`atlas/textures/*`) into the target directory.
-    pub fn extract_atlas_textures(&self, output_dir: &str) -> PyResult<Vec<String>> {
-        let paths = self
-            .inner
-            .extract_all_atlas_textures(output_dir)
-            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-        Ok(paths
-            .into_iter()
-            .map(|p| p.to_string_lossy().to_string())
-            .collect())
-    }
-
-    /// Extracts all colormap textures into the target directory.
-    pub fn extract_colormaps(&self, output_dir: &str) -> PyResult<Vec<String>> {
-        let paths = self
-            .inner
-            .extract_all_colormaps(output_dir)
-            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-        Ok(paths
-            .into_iter()
-            .map(|p| p.to_string_lossy().to_string())
-            .collect())
     }
 
     /// Extracts a single texture chunk to the specified destination path.

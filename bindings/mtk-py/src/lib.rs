@@ -20,8 +20,6 @@ pub mod texture;
 pub mod uv;
 pub mod voxel;
 
-#[cfg(feature = "blender")]
-pub mod blender;
 pub mod buffer;
 pub mod unstable;
 
@@ -258,15 +256,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // 11. Metadata
     m.add_function(wrap_pyfunction!(version, m)?)?;
 
-    // 12. Dedicated Blender Direct Memory Accelerator (Feature gated, enabled by default)
-    #[cfg(feature = "blender")]
-    {
-        m.add_class::<mesh::PyBlenderDirectMesh>()?;
-        let py = m.py();
-        blender::register_submodule(py, m)?;
-    }
-
-    // 13. Unstable and experimental APIs
+    // 12. Unstable and experimental APIs (includes the Blender DNA accelerator)
     {
         let py = m.py();
         unstable::register_submodule(py, m)?;
@@ -446,9 +436,7 @@ mod tests {
                     .unwrap(),
                 2
             );
-            let bound_out = Bound::new(py, out_mesh).unwrap();
-            let sec_uvs = PyMeshData::secondary_uvs_memoryview(&bound_out).unwrap();
-            assert!(sec_uvs.is_some());
+            assert!(out_mesh.inner.secondary_uvs.is_some());
         });
     }
 

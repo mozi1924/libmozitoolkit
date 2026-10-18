@@ -277,7 +277,6 @@ pub fn register_submodule(py: Python<'_>, parent_module: &Bound<'_, PyModule>) -
         &sub
     )?)?;
     sub.add_function(wrap_pyfunction!(copy_point_cloud_to_ptrs, &sub)?)?;
-    sub.add_class::<crate::mesh::PyBlenderDirectMesh>()?;
 
     parent_module.add_submodule(&sub)?;
     Ok(())

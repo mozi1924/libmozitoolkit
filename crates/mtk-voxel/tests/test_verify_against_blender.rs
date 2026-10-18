@@ -80,6 +80,8 @@ struct BlenderGroundTruth {
     mesh_tests: Vec<MeshTestCase>,
 }
 
+use mtk_voxel::mesher::shading::ModelSource;
+
 #[test]
 fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
     let fixture_path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -306,7 +308,8 @@ fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
         }
 
         let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
-        let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &unwelded_config);
+        let mesh =
+            SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &unwelded_config);
 
         println!(
             " • {:<28} -> Faces: {} (Blender: {}) | Vertices: {} (Blender: {})",
@@ -331,7 +334,8 @@ fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
         );
 
         // Also verify welded mesh produces 8 vertices for single_cube_mesh
-        let welded_mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &welded_config);
+        let welded_mesh =
+            SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &welded_config);
         if tc.name == "single_cube_mesh" {
             assert_eq!(
                 welded_mesh.vertex_count(),

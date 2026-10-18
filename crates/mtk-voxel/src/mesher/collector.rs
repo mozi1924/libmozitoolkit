@@ -13,7 +13,6 @@ pub struct FaceAttributesCollector {
     pub material_slots: Vec<i32>,
     pub atlas_chunk_ids: Vec<i32>,
     pub atlas_texture_ids: Vec<u32>,
-    pub uv_tiling_transforms: Vec<[f32; 4]>,
     pub uv_transforms: Vec<[f32; 4]>,
     pub uv_rotations: Vec<f32>,
     pub uv_modes: Vec<u8>,
@@ -37,7 +36,6 @@ impl FaceAttributesCollector {
             material_slots: Vec::with_capacity(capacity),
             atlas_chunk_ids: Vec::with_capacity(capacity),
             atlas_texture_ids: Vec::with_capacity(capacity),
-            uv_tiling_transforms: Vec::with_capacity(capacity),
             uv_transforms: Vec::with_capacity(capacity),
             uv_rotations: Vec::with_capacity(capacity),
             uv_modes: Vec::with_capacity(capacity),
@@ -63,7 +61,7 @@ impl FaceAttributesCollector {
         material_slot: i32,
         atlas_chunk_id: i32,
         atlas_texture_id: u32,
-        uv_tiling_transform: [f32; 4],
+        uv_transform: [f32; 4],
         uv_rotation: f32,
         uv_mode: u8,
         tint_data: [f32; 4],
@@ -80,8 +78,7 @@ impl FaceAttributesCollector {
         self.material_slots.push(material_slot);
         self.atlas_chunk_ids.push(atlas_chunk_id);
         self.atlas_texture_ids.push(atlas_texture_id);
-        self.uv_tiling_transforms.push(uv_tiling_transform);
-        self.uv_transforms.push(uv_tiling_transform);
+        self.uv_transforms.push(uv_transform);
         self.uv_rotations.push(uv_rotation);
         self.uv_modes.push(uv_mode);
         self.biome_tint_data.push(tint_data);
@@ -117,11 +114,6 @@ impl FaceAttributesCollector {
             "mtk_atlas_texture_id",
             AttributeDomain::Face,
             AttributeData::UInt32(self.atlas_texture_ids),
-        ));
-        mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_uv_tiling_transform",
-            AttributeDomain::Face,
-            AttributeData::Float4(self.uv_tiling_transforms),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
             "mtk_uv_transform",

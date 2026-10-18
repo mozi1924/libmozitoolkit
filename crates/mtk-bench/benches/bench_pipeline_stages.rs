@@ -3,6 +3,7 @@ use std::time::Instant;
 
 use mtk_core::mesh::MeshData;
 use mtk_cull::FaceCuller;
+use mtk_voxel::mesher::shading::ModelSource;
 use mtk_voxel::{MesherConfig, PaddedVoxelArray, SectionMesher, VoxelStorage, VoxelWorld};
 
 fn main() {
@@ -114,9 +115,15 @@ fn main() {
 
     // Stage 2: Section Meshing (parallel)
     let t_s2 = Instant::now();
-    let section_meshes =
-        SectionMesher::mesh_sections_parallel(&padded_arrays, &culler, |_st| None, &config, None)
-            .unwrap();
+    let section_meshes = SectionMesher::mesh_sections_parallel_with_source_and_progress(
+        &padded_arrays,
+        &culler,
+        |_st| ModelSource::None,
+        &config,
+        None,
+        None,
+    )
+    .unwrap();
     let d_s2 = t_s2.elapsed();
     println!(
         " 2. Section Meshing (Culling + AO + Shading + Grid Pool): {:.2} ms",

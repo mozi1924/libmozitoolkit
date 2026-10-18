@@ -1,5 +1,6 @@
 use glam::IVec3;
 use mtk_cull::FaceCuller;
+use mtk_voxel::mesher::shading::ModelSource;
 use mtk_voxel::mesher::SectionMesher;
 use mtk_voxel::types::MesherConfig;
 use mtk_voxel::world::VoxelStorage;
@@ -17,7 +18,7 @@ fn test_solid_cube_culling_in_mesher() {
     let culler = FaceCuller::default();
     let config = MesherConfig::default();
 
-    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
 
     // Two touching cubes have 2 * 6 - 2 = 10 visible faces = 20 triangles
     assert_eq!(mesh.face_count(), 10);
@@ -28,7 +29,8 @@ fn test_solid_cube_culling_in_mesher() {
         weld_vertices: false,
         ..Default::default()
     };
-    let unwelded_mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &unwelded_config);
+    let unwelded_mesh =
+        SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &unwelded_config);
     assert_eq!(unwelded_mesh.vertex_count(), 40);
 }
 
@@ -44,7 +46,7 @@ fn test_fluid_and_solid_meshing() {
     let culler = FaceCuller::default();
     let config = MesherConfig::default();
 
-    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
 
     // The water block on top of stone should generate visible fluid faces,
     // and the bottom of water against solid stone should be occluded!
@@ -66,9 +68,15 @@ fn test_parallel_batch_mesher() {
     let culler = FaceCuller::default();
     let config = MesherConfig::default();
 
-    let results =
-        SectionMesher::mesh_sections_parallel(&[p0, p1], &culler, |_| None, &config, Some(2))
-            .expect("Parallel meshing should succeed");
+    let results = SectionMesher::mesh_sections_parallel_with_source_and_progress(
+        &[p0, p1],
+        &culler,
+        |_| mtk_voxel::mesher::shading::ModelSource::None,
+        &config,
+        Some(2),
+        None,
+    )
+    .expect("Parallel meshing should succeed");
 
     assert_eq!(results.len(), 2);
     assert_eq!(results[0].0, IVec3::new(0, 0, 0));
@@ -87,7 +95,7 @@ fn test_mesher_custom_attributes() {
     let culler = FaceCuller::default();
     let config = MesherConfig::default();
 
-    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
     assert_eq!(mesh.face_count(), 6);
 
     let expected_attrs = [
@@ -95,7 +103,6 @@ fn test_mesher_custom_attributes() {
         "mtk_material_slot",
         "mtk_atlas_chunk_id",
         "mtk_atlas_texture_id",
-        "mtk_uv_tiling_transform",
         "mtk_uv_transform",
         "mtk_uv_rotation",
         "mtk_uv_mode",
@@ -211,9 +218,9 @@ fn test_grass_block_meshing_no_duplicate_overlay_faces() {
         &culler,
         |name| {
             if name.contains("grass_block") {
-                Some(grass_model.clone())
+                ModelSource::from(Some(grass_model.clone()))
             } else {
-                None
+                ModelSource::None
             }
         },
         &config,
@@ -328,7 +335,7 @@ fn test_biome_transition_smoothing() {
     // Mesh the section and verify mtk_colormap_uv and mtk_biome_tint_color
     let culler = FaceCuller::default();
     let config = MesherConfig::default();
-    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
 
     let cm_attr = mesh
         .get_custom_attribute("mtk_colormap_uv")
@@ -444,7 +451,7 @@ fn test_waterlogged_isolated_block_meshing() {
     let culler = FaceCuller::default();
     let config = MesherConfig::default();
 
-    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
 
     // Both isolated kelp and isolated waterlogged slab MUST emit water geometry
     // into the mesh even without pre-baked element models!
@@ -512,9 +519,9 @@ fn test_waterlogged_isolated_block_with_baked_model() {
         &culler,
         |state| {
             if state.contains("oak_slab") {
-                Some(slab_arc.clone())
+                ModelSource::from(Some(slab_arc.clone()))
             } else {
-                None
+                ModelSource::None
             }
         },
         &config,
@@ -599,12 +606,8 @@ fn test_alternate_blocks_variant_sampling() {
         ..Default::default()
     };
 
-    let mesh = SectionMesher::mesh_section_with_source(
-        &padded,
-        &culler,
-        |_| ModelSource::Variant(&group),
-        &config,
-    );
+    let mesh =
+        SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::Variant(&group), &config);
 
     let tex_attr = mesh
         .get_custom_attribute("mtk_source_texture_key")
@@ -628,7 +631,7 @@ fn test_alternate_blocks_variant_sampling() {
         enable_alternate_blocks: false,
         ..Default::default()
     };
-    let mesh_disabled = SectionMesher::mesh_section_with_source(
+    let mesh_disabled = SectionMesher::mesh_section(
         &padded,
         &culler,
         |_| ModelSource::Variant(&group),
@@ -665,7 +668,8 @@ fn test_plant_position_offsets() {
         enable_random_offsets: true,
         ..Default::default()
     };
-    let mesh_enabled = SectionMesher::mesh_section(&padded, &culler, |_| None, &config_enabled);
+    let mesh_enabled =
+        SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config_enabled);
 
     // Poppy at (3, 5, 7) and (3, 6, 7):
     let offset_3_7 = mtk_core::random::get_block_offset(mtk_core::random::OffsetType::XZ, 3, 5, 7);
@@ -699,7 +703,8 @@ fn test_plant_position_offsets() {
         enable_random_offsets: false,
         ..Default::default()
     };
-    let mesh_disabled = SectionMesher::mesh_section(&padded, &culler, |_| None, &config_disabled);
+    let mesh_disabled =
+        SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config_disabled);
 
     // All vertex fractional coordinates must be exact integers (0.0 or 1.0 relative to block pos)
     for pos in &mesh_disabled.positions {
@@ -741,7 +746,7 @@ fn test_submerged_seagrass_and_kelp_seamless_meshing() {
         ..Default::default()
     };
 
-    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
 
     // Seagrass at (1, 1, 1) must emit water geometry merged with water above and adjacent.
     // The mutual face between seagrass (1, 1, 1) and water above (1, 2, 1) must be CULLED.
@@ -801,7 +806,7 @@ fn test_3d_caves_and_cliffs_biome_tinting() {
 
     let culler = FaceCuller::default();
     let config = MesherConfig::default();
-    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
     assert!(mesh.face_count() > 0);
 }
 
@@ -995,21 +1000,21 @@ fn test_cache_driven_animated_texture_routing_block_models() {
     let padded = storage.get_section_padded_array(IVec3::new(0, 0, 0));
     let culler = FaceCuller::default();
 
-    let model_resolver = |state: &str| -> Option<Arc<BakedModel>> {
+    let model_resolver = |state: &str| -> ModelSource<'_> {
         if state.contains("kelp") {
-            Some(model_kelp.clone())
+            ModelSource::from(Some(model_kelp.clone()))
         } else if state.contains("nether_portal") {
-            Some(model_portal.clone())
+            ModelSource::from(Some(model_portal.clone()))
         } else if state.contains("magma") {
-            Some(model_magma.clone())
+            ModelSource::from(Some(model_magma.clone()))
         } else if state.contains("command_block") {
-            Some(model_cmd.clone())
+            ModelSource::from(Some(model_cmd.clone()))
         } else if state.contains("fire") {
-            Some(model_fire.clone())
+            ModelSource::from(Some(model_fire.clone()))
         } else if state.contains("stone") {
-            Some(model_stone.clone())
+            ModelSource::from(Some(model_stone.clone()))
         } else {
-            None
+            ModelSource::None
         }
     };
 

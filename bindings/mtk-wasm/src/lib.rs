@@ -14,6 +14,7 @@ use mtk_core::geometry::Quad;
 use mtk_core::mesh::MeshData;
 use mtk_cull::types::{GlassCullMode, LeavesCullMode};
 use mtk_cull::FaceCuller;
+use mtk_voxel::mesher::shading::ModelSource;
 use mtk_voxel::mesher::SectionMesher;
 use mtk_voxel::storage::VoxelStorage;
 use mtk_voxel::types::MesherConfig;
@@ -386,12 +387,13 @@ impl WasmSectionMesher {
             .map(|coord| storage.inner.get_section_padded_array(coord))
             .collect();
 
-        let results = SectionMesher::mesh_sections_parallel(
+        let results = SectionMesher::mesh_sections_parallel_with_source_and_progress(
             &padded_sections,
             cul,
-            |_| None,
+            |_| ModelSource::None,
             cfg,
             num_threads,
+            None,
         )
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
 

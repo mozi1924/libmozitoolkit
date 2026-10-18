@@ -5,9 +5,9 @@
 //! Exposes Atlas generation, sprite stitching, and UV mapping tables to Python.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict, PyMemoryView};
+use pyo3::types::{PyDict, PyMemoryView};
 
-use mtk_resource::{AtlasCategory, ResourceLocation};
+use mtk_resource::AtlasCategory;
 use mtk_texture::{AtlasBuilder, AtlasBuilderConfig, BakedAtlas};
 
 use crate::resource::PyResourcePackStack;
@@ -32,11 +32,6 @@ impl PyBakedAtlas {
                 address_map,
             },
         })
-    }
-
-    /// Number of baked texture sheets / chunks.
-    pub fn get_chunk_count(&self) -> usize {
-        self.inner.chunk_count()
     }
 
     /// Returns chunk metadata dictionary by chunk ID:
@@ -112,29 +107,6 @@ impl PyBakedAtlas {
         }
     }
 
-    /// Read-only memoryview of Albedo RGBA pixel bytes (`width * height * 4`).
-    /// `flip_v`: If True (default True for Blender convention), flips rows vertically.
-    #[pyo3(signature = (index, flip_v=true))]
-    pub fn get_chunk_albedo_memoryview<'py>(
-        &self,
-        py: Python<'py>,
-        index: usize,
-        flip_v: bool,
-    ) -> PyResult<Bound<'py, PyMemoryView>> {
-        if let Some(chunk) = self.inner.chunks.get(index) {
-            let bytes = if flip_v {
-                PyBytes::new(py, &chunk.albedo.to_flipped_v().pixels)
-            } else {
-                PyBytes::new(py, &chunk.albedo.pixels)
-            };
-            PyMemoryView::from(&bytes)
-        } else {
-            Err(pyo3::exceptions::PyIndexError::new_err(
-                "Chunk index out of bounds",
-            ))
-        }
-    }
-
     /// Read-only memoryview of Albedo normalized float32 pixels (`width * height * 4`).
     /// `flip_v`: If True (default True for Blender convention), flips rows vertically.
     #[pyo3(signature = (index, flip_v=true))]
@@ -147,32 +119,6 @@ impl PyBakedAtlas {
         if let Some(chunk) = self.inner.chunks.get(index) {
             let f32_buf = chunk.albedo.to_f32_buffer(flip_v);
             crate::buffer::create_owned_f32_memoryview(py, f32_buf)
-        } else {
-            Err(pyo3::exceptions::PyIndexError::new_err(
-                "Chunk index out of bounds",
-            ))
-        }
-    }
-
-    /// Read-only memoryview of Normal companion RGBA pixel bytes (if present).
-    #[pyo3(signature = (index, flip_v=true))]
-    pub fn get_chunk_normal_memoryview<'py>(
-        &self,
-        py: Python<'py>,
-        index: usize,
-        flip_v: bool,
-    ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
-        if let Some(chunk) = self.inner.chunks.get(index) {
-            if let Some(ref n) = chunk.normal {
-                let bytes = if flip_v {
-                    PyBytes::new(py, &n.to_flipped_v().pixels)
-                } else {
-                    PyBytes::new(py, &n.pixels)
-                };
-                Ok(Some(PyMemoryView::from(&bytes)?))
-            } else {
-                Ok(None)
-            }
         } else {
             Err(pyo3::exceptions::PyIndexError::new_err(
                 "Chunk index out of bounds",
@@ -204,32 +150,6 @@ impl PyBakedAtlas {
         }
     }
 
-    /// Read-only memoryview of Specular companion RGBA pixel bytes (if present).
-    #[pyo3(signature = (index, flip_v=true))]
-    pub fn get_chunk_specular_memoryview<'py>(
-        &self,
-        py: Python<'py>,
-        index: usize,
-        flip_v: bool,
-    ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
-        if let Some(chunk) = self.inner.chunks.get(index) {
-            if let Some(ref s) = chunk.specular {
-                let bytes = if flip_v {
-                    PyBytes::new(py, &s.to_flipped_v().pixels)
-                } else {
-                    PyBytes::new(py, &s.pixels)
-                };
-                Ok(Some(PyMemoryView::from(&bytes)?))
-            } else {
-                Ok(None)
-            }
-        } else {
-            Err(pyo3::exceptions::PyIndexError::new_err(
-                "Chunk index out of bounds",
-            ))
-        }
-    }
-
     /// Read-only memoryview of Specular companion normalized float32 pixels (if present).
     #[pyo3(signature = (index, flip_v=true))]
     pub fn get_chunk_specular_f32<'py>(
@@ -244,32 +164,6 @@ impl PyBakedAtlas {
                 Ok(Some(crate::buffer::create_owned_f32_memoryview(
                     py, f32_buf,
                 )?))
-            } else {
-                Ok(None)
-            }
-        } else {
-            Err(pyo3::exceptions::PyIndexError::new_err(
-                "Chunk index out of bounds",
-            ))
-        }
-    }
-
-    /// Read-only memoryview of Overlay companion RGBA pixel bytes (if present).
-    #[pyo3(signature = (index, flip_v=true))]
-    pub fn get_chunk_overlay_memoryview<'py>(
-        &self,
-        py: Python<'py>,
-        index: usize,
-        flip_v: bool,
-    ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
-        if let Some(chunk) = self.inner.chunks.get(index) {
-            if let Some(ref o) = chunk.overlay {
-                let bytes = if flip_v {
-                    PyBytes::new(py, &o.to_flipped_v().pixels)
-                } else {
-                    PyBytes::new(py, &o.pixels)
-                };
-                Ok(Some(PyMemoryView::from(&bytes)?))
             } else {
                 Ok(None)
             }
@@ -310,146 +204,6 @@ impl PyBakedAtlas {
             .address_map
             .to_json()
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
-    }
-
-    /// Returns encoded PNG bytes of the chunk's Albedo atlas.
-    pub fn get_chunk_albedo_png_bytes<'py>(
-        &self,
-        py: Python<'py>,
-        index: usize,
-    ) -> PyResult<Bound<'py, PyBytes>> {
-        if let Some(chunk) = self.inner.chunks.get(index) {
-            let png_bytes = chunk
-                .albedo
-                .to_png_bytes()
-                .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-            Ok(PyBytes::new(py, &png_bytes))
-        } else {
-            Err(pyo3::exceptions::PyIndexError::new_err(
-                "Chunk index out of bounds",
-            ))
-        }
-    }
-
-    /// Returns encoded PNG bytes of the chunk's Normal companion atlas (if present).
-    pub fn get_chunk_normal_png_bytes<'py>(
-        &self,
-        py: Python<'py>,
-        index: usize,
-    ) -> PyResult<Option<Bound<'py, PyBytes>>> {
-        if let Some(chunk) = self.inner.chunks.get(index) {
-            if let Some(ref n) = chunk.normal {
-                let png_bytes = n
-                    .to_png_bytes()
-                    .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-                Ok(Some(PyBytes::new(py, &png_bytes)))
-            } else {
-                Ok(None)
-            }
-        } else {
-            Err(pyo3::exceptions::PyIndexError::new_err(
-                "Chunk index out of bounds",
-            ))
-        }
-    }
-
-    /// Returns encoded PNG bytes of the chunk's Specular companion atlas (if present).
-    pub fn get_chunk_specular_png_bytes<'py>(
-        &self,
-        py: Python<'py>,
-        index: usize,
-    ) -> PyResult<Option<Bound<'py, PyBytes>>> {
-        if let Some(chunk) = self.inner.chunks.get(index) {
-            if let Some(ref s) = chunk.specular {
-                let png_bytes = s
-                    .to_png_bytes()
-                    .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-                Ok(Some(PyBytes::new(py, &png_bytes)))
-            } else {
-                Ok(None)
-            }
-        } else {
-            Err(pyo3::exceptions::PyIndexError::new_err(
-                "Chunk index out of bounds",
-            ))
-        }
-    }
-
-    /// Queries the baked UV coordinates and metadata for a given texture resource identifier.
-    ///
-    /// Returns dictionary with keys: `chunk_id`, `uv_bounds`, `frame_0_uv_bounds`, `local_uv_bounds`, `is_animated`, `sprite_kind`, `frame_count`.
-    pub fn lookup_sprite<'py>(
-        &self,
-        py: Python<'py>,
-        location: &str,
-    ) -> PyResult<Option<Bound<'py, PyDict>>> {
-        let loc = ResourceLocation::parse(location)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-
-        if let Some(meta) = self.inner.address_map.lookup(&loc) {
-            let dict = PyDict::new(py);
-            dict.set_item("chunk_id", meta.chunk_id)?;
-            dict.set_item("uv_bounds", meta.uv_bounds)?;
-            dict.set_item("frame_0_uv_bounds", meta.frame_0_uv_bounds)?;
-            dict.set_item("local_uv_bounds", meta.local_uv_bounds)?;
-            dict.set_item("is_animated", meta.is_animated)?;
-            dict.set_item("frame_count", meta.frame_count)?;
-            dict.set_item("has_normal", meta.has_normal)?;
-            dict.set_item("has_specular", meta.has_specular)?;
-            Ok(Some(dict))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Queries the static Frame 0 sprite coordinates (100% coverage across all textures).
-    pub fn lookup_static_sprite<'py>(
-        &self,
-        py: Python<'py>,
-        location: &str,
-    ) -> PyResult<Option<Bound<'py, PyDict>>> {
-        let loc = ResourceLocation::parse(location)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-
-        if let Some(meta) = self.inner.address_map.lookup_static(&loc) {
-            let dict = PyDict::new(py);
-            dict.set_item("chunk_id", meta.chunk_id)?;
-            dict.set_item("uv_bounds", meta.uv_bounds)?;
-            dict.set_item("frame_0_uv_bounds", meta.frame_0_uv_bounds)?;
-            dict.set_item("local_uv_bounds", meta.local_uv_bounds)?;
-            dict.set_item("is_animated", meta.is_animated)?;
-            dict.set_item("frame_count", meta.frame_count)?;
-            dict.set_item("has_normal", meta.has_normal)?;
-            dict.set_item("has_specular", meta.has_specular)?;
-            Ok(Some(dict))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Queries the dedicated animated strip sprite coordinates (multi-frame textures only).
-    pub fn lookup_animated_sprite<'py>(
-        &self,
-        py: Python<'py>,
-        location: &str,
-    ) -> PyResult<Option<Bound<'py, PyDict>>> {
-        let loc = ResourceLocation::parse(location)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-
-        if let Some(meta) = self.inner.address_map.lookup_animated(&loc) {
-            let dict = PyDict::new(py);
-            dict.set_item("chunk_id", meta.chunk_id)?;
-            dict.set_item("uv_bounds", meta.uv_bounds)?;
-            dict.set_item("frame_0_uv_bounds", meta.frame_0_uv_bounds)?;
-            dict.set_item("local_uv_bounds", meta.local_uv_bounds)?;
-            dict.set_item("is_animated", meta.is_animated)?;
-            dict.set_item("frame_count", meta.frame_count)?;
-            dict.set_item("has_normal", meta.has_normal)?;
-            dict.set_item("has_specular", meta.has_specular)?;
-            Ok(Some(dict))
-        } else {
-            Ok(None)
-        }
     }
 
     fn __repr__(&self) -> String {

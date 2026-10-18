@@ -302,21 +302,6 @@ impl PyVoxelPointCloud {
         crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
     }
 
-    /// Read-only memoryview of composite light levels (`uint8` per point).
-    pub fn light_levels_memoryview<'py>(
-        slf: &Bound<'py, Self>,
-    ) -> PyResult<Bound<'py, PyMemoryView>> {
-        let py = slf.py();
-        let inner = &slf.borrow().inner;
-        if inner.light_levels.is_empty() {
-            let bytes = PyBytes::new(py, &[]);
-            return PyMemoryView::from(&bytes);
-        }
-        let ptr = inner.light_levels.as_ptr();
-        let len = inner.light_levels.len();
-        crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
-    }
-
     /// Returns the list of canonical Minecraft blockstate strings.
     pub fn get_block_states<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
         let list = PyList::empty(py);
@@ -331,20 +316,6 @@ impl PyVoxelPointCloud {
         let list = PyList::empty(py);
         for b in &self.inner.biomes {
             let _ = list.append(b);
-        }
-        list
-    }
-
-    /// Returns a list of all block coordinates as `(x, y, z)` tuples.
-    pub fn get_block_positions<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
-        let list = PyList::empty(py);
-        for i in 0..self.inner.len() {
-            let item = (
-                self.inner.block_x[i],
-                self.inner.block_y[i],
-                self.inner.block_z[i],
-            );
-            let _ = list.append(item);
         }
         list
     }
@@ -367,75 +338,7 @@ impl PyVoxelPointCloud {
         dst_ptr: usize,
         max_bytes: Option<usize>,
     ) -> PyResult<usize> {
-        crate::blender::direct_copy_point_cloud_positions_to_ptr(self, dst_ptr, max_bytes)
-    }
-
-    /// Copies discrete integer block X coordinates directly into a destination pointer (`int32` per point).
-    #[cfg(feature = "blender")]
-    #[pyo3(signature = (dst_ptr, max_bytes=None))]
-    pub fn direct_copy_block_x_to_ptr(
-        &self,
-        dst_ptr: usize,
-        max_bytes: Option<usize>,
-    ) -> PyResult<usize> {
-        crate::blender::direct_copy_point_cloud_block_x_to_ptr(self, dst_ptr, max_bytes)
-    }
-
-    /// Copies discrete integer block Y coordinates directly into a destination pointer (`int32` per point).
-    #[cfg(feature = "blender")]
-    #[pyo3(signature = (dst_ptr, max_bytes=None))]
-    pub fn direct_copy_block_y_to_ptr(
-        &self,
-        dst_ptr: usize,
-        max_bytes: Option<usize>,
-    ) -> PyResult<usize> {
-        crate::blender::direct_copy_point_cloud_block_y_to_ptr(self, dst_ptr, max_bytes)
-    }
-
-    /// Copies discrete integer block Z coordinates directly into a destination pointer (`int32` per point).
-    #[cfg(feature = "blender")]
-    #[pyo3(signature = (dst_ptr, max_bytes=None))]
-    pub fn direct_copy_block_z_to_ptr(
-        &self,
-        dst_ptr: usize,
-        max_bytes: Option<usize>,
-    ) -> PyResult<usize> {
-        crate::blender::direct_copy_point_cloud_block_z_to_ptr(self, dst_ptr, max_bytes)
-    }
-
-    /// Converts block states into a palette and copies int32 palette indices into a destination pointer.
-    /// Returns `(palette, bytes_written)`.
-    #[cfg(feature = "blender")]
-    #[pyo3(signature = (dst_ptr, max_bytes=None))]
-    pub fn direct_copy_state_indices_to_ptr(
-        &self,
-        dst_ptr: usize,
-        max_bytes: Option<usize>,
-    ) -> PyResult<(Vec<String>, usize)> {
-        crate::blender::direct_copy_point_cloud_state_indices_to_ptr(self, dst_ptr, max_bytes)
-    }
-
-    /// Converts biomes into a palette and copies int32 palette indices into a destination pointer.
-    /// Returns `(biome_palette, bytes_written)`.
-    #[cfg(feature = "blender")]
-    #[pyo3(signature = (dst_ptr, max_bytes=None))]
-    pub fn direct_copy_biome_indices_to_ptr(
-        &self,
-        dst_ptr: usize,
-        max_bytes: Option<usize>,
-    ) -> PyResult<(Vec<String>, usize)> {
-        crate::blender::direct_copy_point_cloud_biome_indices_to_ptr(self, dst_ptr, max_bytes)
-    }
-
-    /// Copies light levels directly into a destination pointer (`uint8` per point).
-    #[cfg(feature = "blender")]
-    #[pyo3(signature = (dst_ptr, max_bytes=None))]
-    pub fn direct_copy_light_levels_to_ptr(
-        &self,
-        dst_ptr: usize,
-        max_bytes: Option<usize>,
-    ) -> PyResult<usize> {
-        crate::blender::direct_copy_point_cloud_light_levels_to_ptr(self, dst_ptr, max_bytes)
+        crate::unstable::blender_dna::copy_point_cloud_positions_to_ptr(self, dst_ptr, max_bytes)
     }
 
     /// Batch copies all available voxel point cloud attributes directly into destination pointers in a single call.
@@ -452,7 +355,7 @@ impl PyVoxelPointCloud {
         biome_idx_ptr: Option<usize>,
         light_ptr: Option<usize>,
     ) -> PyResult<(Option<Vec<String>>, Option<Vec<String>>)> {
-        crate::blender::direct_copy_point_cloud_to_ptrs(
+        crate::unstable::blender_dna::copy_point_cloud_to_ptrs(
             self,
             pos_ptr,
             block_x_ptr,

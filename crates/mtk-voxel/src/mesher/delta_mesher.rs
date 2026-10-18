@@ -1,9 +1,6 @@
-use std::sync::Arc;
-
 use glam::IVec3;
 use mtk_core::mesh::MeshData;
 use mtk_cull::FaceCuller;
-use mtk_model::baker::baked_model::BakedModel;
 
 use crate::mesher::shading::ModelSource;
 use crate::mesher::SectionMesher;
@@ -14,24 +11,6 @@ use crate::world::VoxelStorage;
 pub struct DeltaMesher;
 
 impl DeltaMesher {
-    /// Re-meshes all currently dirty sections in `world` and clears their dirty state using a simple BakedModel lookup.
-    pub fn rebuild_dirty_sections<F>(
-        world: &mut VoxelStorage,
-        culler: &FaceCuller,
-        mut model_provider: F,
-        config: &MesherConfig,
-    ) -> Vec<(IVec3, MeshData)>
-    where
-        F: FnMut(&str) -> Option<Arc<BakedModel>>,
-    {
-        Self::rebuild_dirty_sections_with_source(
-            world,
-            culler,
-            |st| model_provider(st).into(),
-            config,
-        )
-    }
-
     /// Re-meshes all currently dirty sections in `world` and clears their dirty state using a unified ModelSource lookup.
     pub fn rebuild_dirty_sections_with_source<'a, F>(
         world: &mut VoxelStorage,
@@ -52,12 +31,8 @@ impl DeltaMesher {
         for coord in dirty_coords {
             let padded = world.get_section_padded_array(coord);
             if !padded.is_empty {
-                let mesh = SectionMesher::mesh_section_with_source(
-                    &padded,
-                    culler,
-                    &mut model_provider,
-                    config,
-                );
+                let mesh =
+                    SectionMesher::mesh_section(&padded, culler, &mut model_provider, config);
                 results.push((coord, mesh));
             } else {
                 results.push((coord, MeshData::new()));
@@ -82,7 +57,12 @@ mod tests {
         let culler = FaceCuller::default();
         let config = MesherConfig::default();
 
-        let meshes = DeltaMesher::rebuild_dirty_sections(&mut world, &culler, |_| None, &config);
+        let meshes = DeltaMesher::rebuild_dirty_sections_with_source(
+            &mut world,
+            &culler,
+            |_| ModelSource::None,
+            &config,
+        );
         assert_eq!(meshes.len(), 1);
         assert!(!meshes[0].1.is_empty());
         assert!(world.dirty_sections.is_empty());

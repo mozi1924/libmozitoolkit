@@ -5,6 +5,8 @@ use mtk_voxel::source::ingest_from_source;
 use mtk_voxel::storage::{VoxelPointCloud, VoxelStorage};
 use mtk_voxel::types::{CoordinateSystem, MesherConfig};
 
+use mtk_voxel::mesher::shading::ModelSource;
+
 #[test]
 fn test_point_cloud_extraction_no_culling_and_roundtrip() {
     let mut world = VoxelStorage::new();
@@ -145,7 +147,8 @@ fn test_user_carving_via_point_cloud_deletion() {
     // 2. Initial meshing of the solid cube:
     // Outer boundary has 4*4 = 16 faces per direction * 6 directions = 96 quads (192 triangles)
     let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
-    let initial_mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+    let initial_mesh =
+        SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
     let initial_quad_count = initial_mesh.quad_count();
     assert_eq!(
         initial_quad_count, 96,
@@ -190,7 +193,8 @@ fn test_user_carving_via_point_cloud_deletion() {
     );
 
     let carved_padded = carved_world.get_section_padded_array(IVec3::new(0, 0, 0));
-    let carved_mesh = SectionMesher::mesh_section(&carved_padded, &culler, |_| None, &config);
+    let carved_mesh =
+        SectionMesher::mesh_section(&carved_padded, &culler, |_| ModelSource::None, &config);
 
     // 6. Verify that carving out the 2x2x2 cavity exposed new internal cavity faces!
     // Internal cavity has 2*2 = 4 faces per direction * 6 directions = 24 new inner quads.

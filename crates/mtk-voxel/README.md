@@ -303,6 +303,7 @@ pub const BIOME_KERNEL_R2: &[(i32, i32, f32)] = &[
 ```rust
 use glam::IVec3;
 use mtk_cull::FaceCuller;
+use mtk_voxel::mesher::shading::ModelSource;
 use mtk_voxel::mesher::SectionMesher;
 use mtk_voxel::storage::VoxelStorage;
 use mtk_voxel::types::{CoordinateSystem, MesherConfig};
@@ -331,7 +332,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 4. 提取垫片数据并执行网格化
     let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
-    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
 
     println!("生成的顶点数: {}", mesh.positions.len());
     println!("生成的三角形索引数: {}", mesh.indices.len());

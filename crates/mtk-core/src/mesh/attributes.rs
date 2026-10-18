@@ -91,12 +91,6 @@ impl MeshData {
             AttributeDomain::Face,
             AttributeData::Float4(uv_transforms.clone()),
         ));
-        // Legacy alias mtk_uv_tiling_transform
-        self.add_custom_attribute(MeshAttribute::new(
-            "mtk_uv_tiling_transform",
-            AttributeDomain::Face,
-            AttributeData::Float4(uv_transforms),
-        ));
         self.add_custom_attribute(MeshAttribute::new(
             ATTR_UV_ROTATION,
             AttributeDomain::Face,

@@ -44,9 +44,9 @@ Python 模块名：`libmtk_py`
 - **`MeshData` (`PyMeshData`)**：连续内存紧凑几何网格缓冲容器。
   - 属性：`vertex_count`, `triangle_count`, `face_count`, `is_empty`
   - 构造与修改：`MeshData()`, `MeshData.with_capacity(verts, indices, faces)`, `append_mesh(other)`, `append_unit_cube_face(dir, slot, tint)`, `clear()`
-  - 内存视图（标准零拷贝通道，推荐）：`positions_memoryview()`, `normals_memoryview()`, `uvs_memoryview()`, `secondary_uvs_memoryview()`, `indices_memoryview()`, `quad_indices_memoryview()`, `loop_uvs_memoryview()`, `loop_starts_memoryview()`, `loop_totals_memoryview()`, `face_materials_memoryview()`, `tint_indices_memoryview()`, `flags_memoryview()`
+  - 内存视图（标准零拷贝通道，推荐）：`positions_memoryview()`, `normals_memoryview()`, `uvs_memoryview()`, `indices_memoryview()`, `quad_indices_memoryview()`, `loop_uvs_memoryview()`, `loop_starts_memoryview()`, `loop_totals_memoryview()`, `face_materials_memoryview()`, `tint_indices_memoryview()`, `flags_memoryview()`
   - 非稳定底层 DNA 直写子模块（`libmtk_py.unstable.blender_dna`，由底层 `mtk-blender-dna` crate 驱动）：`copy_positions_to_ptr(mesh, ptr, max_bytes=None)`, `copy_normals_to_ptr(...)`, `copy_indices_to_ptr(...)`, `copy_quad_indices_to_ptr(...)`, `copy_loop_uvs_to_ptr(...)`, `copy_loop_starts_to_ptr(...)`, `copy_loop_totals_to_ptr(...)`, `copy_face_materials_to_ptr(...)`, `copy_colors_to_ptr(...)`, `copy_buffer_to_ptr(buf, ptr, max_bytes=None)`，均内建指针非空与内存越界溢出防御守卫。
-  - 兼容别名层：`libmtk_py.blender` 以及 `MeshData.direct_copy_*` 作为过渡兼容 API 依然保留，底层统一转调 `mtk-blender-dna`。
+  - 顶层 `libmtk_py.blender` 兼容别名与 `BlenderDirectMesh` 类已于 2026-10 API 收敛中移除，唯一入口为 `libmtk_py.unstable.blender_dna`。
   - 扁平列表提取：`get_flat_positions()`, `get_flat_normals()`, `get_flat_uvs()`, `get_flat_secondary_uvs()`, `get_indices()`, `get_face_materials()`, `get_face_tints()`
   - 顶点与面自定义属性：`add_string_attribute(name, domain, values)`, `add_attribute_from_buffer(name, domain, data_type, buffer)`, `get_attribute_data(name)`, `has_attribute(name)`, `list_attributes()`
 - **`AttributeDomain`**：属性域枚举，支持 `"point"` (顶点) 与 `"face"` (面)。
@@ -84,11 +84,11 @@ Python 模块名：`libmtk_py`
   - `to_storage() -> VoxelStorage`, `from_arrays(...)`
   - `direct_copy_to_ptrs(...)`, `direct_copy_positions_to_ptr(...)`, `direct_copy_state_indices_to_ptr(...)`：硬件加速 DNA 裸指针零拷贝写入
   - `build_state_palette_indices() -> (palette, indices)`, `build_biome_palette_indices() -> (palette, indices)`
-  - `positions_memoryview()`, `block_x_memoryview()`, `block_y_memoryview()`, `block_z_memoryview()`, `light_levels_memoryview()`
-  - `get_block_states()`, `get_biomes()`, `get_block_positions()`
+  - `positions_memoryview()`, `block_x_memoryview()`, `block_y_memoryview()`, `block_z_memoryview()`
+  - `get_block_states()`, `get_biomes()`
 - **`VoxelStorage` (`PyVoxelStorage`)**：16x16x16 稀疏 Chunk Section 体素容器，带脏标记追踪。
   - `to_point_cloud(config=None) -> VoxelPointCloud`, `from_point_cloud(cloud) -> VoxelStorage`, `load_from_point_cloud(cloud)`
-  - `create_debug_world()` / `create_debug_world_storage()`：一键加载内置嵌入的原版调试世界快照（529 sections, 32,539 blocks）。
+  - `create_debug_world()`：一键加载内置嵌入的原版调试世界快照（529 sections, 32,539 blocks）。
   - `set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)`, `set_block(x, y, z, state, tint)`, `get_block(x, y, z)`
   - `dirty_section_count()`, `clear_dirty_sections()`
 - **`VoxelWorld` (`PyVoxelWorld`)**：统一 3D 场景引擎，支持增量区块缓存与全量世界网格管理。
@@ -125,7 +125,7 @@ Python 模块名：`libmtk_py`
 - **即时 Biome 重着色**：`reapply_uniform_biome_tint(base_tt, packed, old_colors, colors..., flags...)`
   返回三个零拷贝 memoryview，供 `foreach_set` 直接写入。
 - **材质物理属性**：`compute_flat_material_props_memoryview(keys)` 返回零拷贝 f32 memoryview。
-  - `remap_mesh_uvs(...)` / `remap_mesh_multi_uvs(..., enable_animated_textures=false)`
+  - `remap_mesh_multi_uvs(..., enable_animated_textures=false)` / `remap_mesh_multi_uvs_paletted(...)`
   - `remap_mesh_multi_uvs_paletted(..., palette, face_indices, ...)`：palette-native、零拷贝 id/metric buffer
   - `resolve_mesh_routes(face_texture_keys, atlas, aliases=None, enable_animated_textures=false)`
   - `reroute_mesh_animation(uvs, face_loop_ranges, face_texture_keys, face_old_chunk_ids, atlas, aliases=None, enable_animated_textures=false)`
@@ -138,10 +138,7 @@ Python 模块名：`libmtk_py`
   - `bake_all(stack, atlas=None)`：并行烘焙所有 BlockState 模型并返回 `BakedModelDatabase`。
   - `bake_blockstate(stack, state_str, clip_hidden=true)`：烘焙单个 BlockState 几何网格与贴图列表。
 - **`BakedModelDatabase` (`PyBakedModelDatabase`)**：预编译方块几何模型库。
-  - `variant_group_count()`, `has_variant_group(state_str)`, `variant_count(state_str)`：变体分支群组查询。
-  - `select_variant_index(state_str, x, y, z)`：按 3D 坐标种子确定性确定变体索引（对齐原版 Java LCG）。
-  - `bake_and_register_variant_group(stack, state_str, atlas=None)`：按需解析 BlockState JSON 烘焙全部旋转分支并自动重映射图集。
-  - `get_mesh(state_str, clip_hidden=true)`, `to_bincode_bytes()`, `from_bincode_bytes(bytes)`, `remap_to_atlas(atlas)`
+  - `get_mesh(state_str, clip_hidden=true)`, `remap_to_atlas(atlas)`, `get_states()`
 
 ---
 

@@ -3,6 +3,8 @@ use mtk_voxel::fluid::{
     MAX_FLUID_HEIGHT,
 };
 
+use mtk_voxel::mesher::shading::ModelSource;
+
 #[test]
 fn test_fluid_base_heights() {
     assert_eq!(get_fluid_base_height("minecraft:water"), MAX_FLUID_HEIGHT);
@@ -102,7 +104,8 @@ fn test_fluid_side_and_top_texture_keys_with_atlas() {
     still_world.set_block(4, 4, 4, "minecraft:water[level=0]", None);
 
     let padded_still = still_world.get_section_padded_array(IVec3::new(0, 0, 0));
-    let still_mesh = SectionMesher::mesh_section(&padded_still, &culler, |_| None, &config);
+    let still_mesh =
+        SectionMesher::mesh_section(&padded_still, &culler, |_| ModelSource::None, &config);
 
     assert_eq!(still_mesh.face_count(), 6);
 
@@ -144,7 +147,8 @@ fn test_fluid_side_and_top_texture_keys_with_atlas() {
     flow_world.set_block(4, 4, 4, "minecraft:water[level=1]", None);
 
     let padded_flow = flow_world.get_section_padded_array(IVec3::new(0, 0, 0));
-    let flow_mesh = SectionMesher::mesh_section(&padded_flow, &culler, |_| None, &config);
+    let flow_mesh =
+        SectionMesher::mesh_section(&padded_flow, &culler, |_| ModelSource::None, &config);
 
     assert_eq!(flow_mesh.face_count(), 6);
 
@@ -258,7 +262,8 @@ fn test_animated_texture_routing_dual_channel() {
         enable_animated_textures: true,
         ..Default::default()
     };
-    let mesh_anim = SectionMesher::mesh_section(&padded, &culler, |_| None, &config_anim);
+    let mesh_anim =
+        SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config_anim);
     let chunk_attr_anim = mesh_anim
         .get_custom_attribute("mtk_atlas_chunk_id")
         .expect("Must have atlas chunk IDs");
@@ -280,7 +285,8 @@ fn test_animated_texture_routing_dual_channel() {
         enable_animated_textures: false,
         ..Default::default()
     };
-    let mesh_static = SectionMesher::mesh_section(&padded, &culler, |_| None, &config_static);
+    let mesh_static =
+        SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config_static);
     let chunk_attr_static = mesh_static
         .get_custom_attribute("mtk_atlas_chunk_id")
         .expect("Must have atlas chunk IDs");

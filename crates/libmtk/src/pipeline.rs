@@ -178,11 +178,6 @@ pub fn process_mesh(
             AttributeData::Float4(remap_result.face_uv_transforms.clone()),
         ));
         output_mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_uv_tiling_transform",
-            AttributeDomain::Face,
-            AttributeData::Float4(remap_result.face_uv_transforms),
-        ));
-        output_mesh.add_custom_attribute(MeshAttribute::new(
             ATTR_UV_MODE,
             AttributeDomain::Face,
             AttributeData::UInt8(remap_result.face_uv_modes),

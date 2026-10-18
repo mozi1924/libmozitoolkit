@@ -59,29 +59,14 @@ impl PyMesherConfig {
         }
     }
 
-    /// Sets or clears the Atlas address mapping table for UV remapping and material slotting.
-    pub fn set_atlas(&mut self, atlas: Option<&PyBakedAtlas>) {
-        self.inner.atlas_address_map = atlas.map(|a| Arc::new(a.inner.address_map.clone()));
-    }
-
     /// Checks if an Atlas address map is configured.
     pub fn has_atlas(&self) -> bool {
         self.inner.atlas_address_map.is_some()
     }
 
-    /// Sets or clears the BiomeResolver for face tint calculations.
-    pub fn set_biome_resolver(&mut self, resolver: Option<&PyBiomeResolver>) {
-        self.inner.biome_resolver = resolver.map(|r| Arc::new(r.inner.clone()));
-    }
-
     /// Checks if a BiomeResolver is configured.
     pub fn has_biome_resolver(&self) -> bool {
         self.inner.biome_resolver.is_some()
-    }
-
-    /// Sets or clears custom texture alias mapping.
-    pub fn set_custom_aliases(&mut self, aliases: Option<HashMap<String, Vec<String>>>) {
-        self.inner.custom_aliases = aliases.map(Arc::new);
     }
 
     /// Sets or clears the CTM solver for connected textures.
@@ -99,19 +84,9 @@ impl PyMesherConfig {
         self.inner.enable_ao
     }
 
-    #[setter]
-    pub fn set_enable_ao(&mut self, val: bool) {
-        self.inner.enable_ao = val;
-    }
-
     #[getter]
     pub fn mesh_fluids(&self) -> bool {
         self.inner.mesh_fluids
-    }
-
-    #[setter]
-    pub fn set_mesh_fluids(&mut self, val: bool) {
-        self.inner.mesh_fluids = val;
     }
 
     #[getter]
@@ -119,19 +94,9 @@ impl PyMesherConfig {
         self.inner.origin_centered
     }
 
-    #[setter]
-    pub fn set_origin_centered(&mut self, val: bool) {
-        self.inner.origin_centered = val;
-    }
-
     #[getter]
     pub fn weld_vertices(&self) -> bool {
         self.inner.weld_vertices
-    }
-
-    #[setter]
-    pub fn set_weld_vertices(&mut self, val: bool) {
-        self.inner.weld_vertices = val;
     }
 
     #[getter]
@@ -139,19 +104,9 @@ impl PyMesherConfig {
         self.inner.enable_alternate_blocks
     }
 
-    #[setter]
-    pub fn set_enable_alternate_blocks(&mut self, val: bool) {
-        self.inner.enable_alternate_blocks = val;
-    }
-
     #[getter]
     pub fn enable_random_offsets(&self) -> bool {
         self.inner.enable_random_offsets
-    }
-
-    #[setter]
-    pub fn set_enable_random_offsets(&mut self, val: bool) {
-        self.inner.enable_random_offsets = val;
     }
 
     #[getter]
@@ -188,15 +143,6 @@ impl PyMesherConfig {
             self.inner.coordinate_system,
             CoordinateSystem::ZUpRightHanded
         )
-    }
-
-    #[setter]
-    pub fn set_z_up_coordinates(&mut self, val: bool) {
-        self.inner.coordinate_system = if val {
-            CoordinateSystem::ZUpRightHanded
-        } else {
-            CoordinateSystem::Minecraft
-        };
     }
 
     #[getter]

@@ -32,13 +32,29 @@
   `mtk-save`（AnvilWorldSource）、`mtk-resource`、`libmtk`、`ARCHITECTURE.md`、`API_REFERENCE.md`；
   `mtk-sync/README.md` 增加 v2 协议作废横幅。
 
-### 📋 待办（B 档）
-- [ ] `mtk-material` 删除 v1 `remap_mesh_uvs_parallel` 全链（与其 Python 入口），统一到 `*_multi_uvs*_with_options`。
-- [ ] `SectionMesher` 的 5 个 `mesh_sections*` 变体收敛为 1 个 + 1 个 progress 版。
-- [ ] `PyMesherConfig` 17 个 `set_*` / `#[setter]`（与构造 kwargs 重复）删除，保留只读 getter。
-- [ ] 贴图属性双名（`mtk_source_texture_key` / `mtk_uv_transform`）跨仓统一。
-- [ ] `mtk-py` 的 legacy `blender` 子模块（`src/blender.rs`，186 行镜像）删除并改指 `unstable::blender_dna`。
-- [ ] `mtk-py` 129 个零引用方法清理（`VoxelStorage` 20 / `MesherConfig` 17 / `MeshData` 14 / `BakedAtlas` 12 ...）。
+### ✅ B 档已完成（2026-10-18 第二轮）
+- [x] **`mtk-material` remap v1 全链删除**：`remap_mesh_uvs_parallel` + 其独立 helper + `MeshRemapResult`
+  + Python `MaterialResolver.remap_mesh_uvs`，统一到 `remap_mesh_multi_uvs_parallel_with_options`。
+- [x] **`SectionMesher` 入口收敛**：删除 `mesh_sections_parallel` / `mesh_sections_parallel_with_source`
+  与闭包版 `mesh_section` 适配器，只保留 `mesh_section`（统一 `ModelSource`）与
+  `mesh_sections_parallel_with_source_and_progress`；`DeltaMesher::rebuild_dirty_sections` 一并删除。
+- [x] **`PyMesherConfig` 去重**：删除 10 个与构造 kwargs 重复的 `set_*` / `#[setter]`。
+- [x] **legacy `blender` 子模块删除**：`bindings/mtk-py/src/blender.rs`（186 行镜像）与
+  `BlenderDirectMesh` 类移除，全部直写入口统一为 `libmtk_py.unstable.blender_dna`；
+  MoziToolKit `bridge/engine.py` 的 `mtk.blender` fallback 同步删除。
+- [x] **`mtk-py` 零引用方法清理（47 个）**：`BakedAtlas` 11、`VoxelPointCloud` 8、`MeshData` 8、
+  `BakedModelDatabase` 7、`LevelData` 3、`GridAtlasSpec` 3、`AssetCache` 2、`resource`/`voxel` 各 1 等。
+
+### ✅ B 档补充完成（B6：贴图属性去重）
+- [x] `mtk_uv_tiling_transform` 全链删除：`mtk-voxel::collector` 的重复 Vec 与写入、`mtk-core::populate_standard_face_attributes`
+  的兼容别名、`libmtk::pipeline` 的重复写入；mesher 每面少存一份 Float4。
+- [x] MoziToolKit 侧统一到 `mtk_uv_transform`（着色器 `ShaderNodeAttribute`、pipeline 注入、常量与测试）。
+- [x] 新增 `utils/materials/migrations.py`：插件注册与 `load_post` 时把旧 `.blend` 里 `mtk_uv_tiling_transform`
+  的着色器节点就地改名（幂等，已用临时材质验证）。
+
+### 📋 待办（B 档剩余）
+- [ ] `MeshData.direct_copy_*` 这组 method 级 DNA 直写（MoziToolKit `bridge/mesh/dna.py` 仅作为 `elif` 兜底）可整体删除，改为只走 `unstable.blender_dna`。
+- [ ] `mtk-py` 剩余的类方法（`VoxelStorage` 约 19 个、`VoxelWorld` 8 个、`AssetCache` 5 个、`BiomeResolver` 6 个）待逐类确认后清理。
 
 ### 📋 待决策（C 档）
 - [ ] `mtk-ffi`（9 个导出、无 `mtk.h` 产物、零消费者）与 `mtk-wasm`（已落后于 mtk-py）的存废。

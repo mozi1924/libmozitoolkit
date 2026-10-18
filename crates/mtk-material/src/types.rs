@@ -76,21 +76,6 @@ impl GridAtlasSpec {
     }
 }
 
-/// Summary result of a batch mesh UV remapping operation.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct MeshRemapResult {
-    /// Number of faces processed.
-    pub face_count: usize,
-    /// Number of UV loops remapped.
-    pub loop_count: usize,
-    /// Target Atlas Chunk ID for each face.
-    pub face_chunk_ids: Vec<u16>,
-    /// Target Texture ID for each face.
-    pub face_texture_ids: Vec<u32>,
-    /// Number of faces with unresolved textures.
-    pub unmapped_faces: usize,
-}
-
 /// Summary result of a multi-UV batch mesh remapping operation (Atlas UV + Local UV).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MeshMultiUvRemapResult {

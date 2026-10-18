@@ -280,7 +280,7 @@ pub enum SyncEvent {
    - 同时向前端分发 `StreamProgress` 汇报接收进度。
 2. **阶段 2：协同构建 (Build Phase)**
    - 服务端下发 `StreamEnd`；
-   - 此时所有相关体素切片已完整就绪在内存中，调度器调动 Rayon 多线程线程池对所有非空区块并行调用 `SectionMesher::mesh_sections_parallel` 进行完整 18×18×18 垫片邻域遮挡判定与空间顶点焊接；
+   - 此时所有相关体素切片已完整就绪在内存中，调度器调动 Rayon 多线程线程池对所有非空区块并行调用 `SectionMesher::mesh_sections_parallel_with_source_and_progress` 进行完整 18×18×18 垫片邻域遮挡判定与空间顶点焊接；
    - 构建完成后一次性发射 `WorldMeshReady` 或批量 `SectionMeshReady`。
 
 ---

@@ -43,21 +43,6 @@ impl PyLevelData {
     }
 
     #[getter]
-    pub fn spawn_x(&self) -> i32 {
-        self.inner.spawn.x
-    }
-
-    #[getter]
-    pub fn spawn_y(&self) -> i32 {
-        self.inner.spawn.y
-    }
-
-    #[getter]
-    pub fn spawn_z(&self) -> i32 {
-        self.inner.spawn.z
-    }
-
-    #[getter]
     pub fn spawn(&self) -> (i32, i32, i32) {
         (self.inner.spawn.x, self.inner.spawn.y, self.inner.spawn.z)
     }

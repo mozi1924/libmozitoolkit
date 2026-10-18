@@ -66,12 +66,13 @@ impl PySectionMesher {
                         }
                     })?;
 
-                let results = SectionMesher::mesh_sections_parallel_with_source(
+                let results = SectionMesher::mesh_sections_parallel_with_source_and_progress(
                     &padded_sections,
                     cul,
                     model_lookup,
                     &cfg,
                     num_threads,
+                    None,
                 )
                 .map_err(|e| e.to_string())?;
 
@@ -141,12 +142,13 @@ impl PySectionMesher {
                             }
                         })?;
 
-                    SectionMesher::mesh_sections_parallel_with_source(
+                    SectionMesher::mesh_sections_parallel_with_source_and_progress(
                         &padded_sections,
                         cul,
                         model_lookup,
                         &cfg,
                         num_threads,
+                        None,
                     )
                     .map_err(|e| e.to_string())
                 },

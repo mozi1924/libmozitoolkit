@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 use mtk_core::IVec3;
 use mtk_cull::FaceCuller;
+use mtk_voxel::mesher::shading::ModelSource;
 use mtk_voxel::{MesherConfig, PaddedVoxelArray, SectionMesher, SectionStorage};
 use std::time::Instant;
 
@@ -75,7 +76,7 @@ fn main() {
     let mut total_verts_single = 0usize;
 
     for sec in &sections {
-        let mesh = SectionMesher::mesh_section(sec, &culler, |_st| None, &config);
+        let mesh = SectionMesher::mesh_section(sec, &culler, |_st| ModelSource::None, &config);
         total_tris_single += mesh.triangle_count();
         total_verts_single += mesh.vertex_count();
     }
@@ -110,12 +111,13 @@ fn main() {
 
     for threads in [2, 4, available_cores] {
         let t_par_start = Instant::now();
-        let results = SectionMesher::mesh_sections_parallel(
+        let results = SectionMesher::mesh_sections_parallel_with_source_and_progress(
             &sections,
             &culler,
-            |_st| None,
+            |_st| ModelSource::None,
             &config,
             Some(threads),
+            None,
         )
         .unwrap();
         let t_par = t_par_start.elapsed();

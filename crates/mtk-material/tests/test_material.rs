@@ -1,6 +1,6 @@
 use mtk_material::{
     clean_identifier, decode_grid_atlas_uv, remap_local_to_atlas, remap_mesh_multi_uvs_parallel,
-    remap_mesh_uvs_parallel, GridAtlasSpec, MaterialResolver,
+    GridAtlasSpec, MaterialResolver,
 };
 use mtk_resource::ResourceLocation;
 use mtk_texture::{AtlasAddressMap, AtlasSpriteLocation, SpriteKind};
@@ -140,7 +140,7 @@ fn test_parallel_batch_mesh_remap() {
     custom_aliases.insert("muddy_ground".to_string(), vec!["block/dirt".to_string()]);
 
     // 2 quads (8 loops)
-    let mut uvs = vec![
+    let uvs = vec![
         [0.0, 0.0],
         [1.0, 0.0],
         [1.0, 1.0],
@@ -153,26 +153,6 @@ fn test_parallel_batch_mesh_remap() {
     let face_materials = vec!["muddy_ground".to_string(), "dirt".to_string()];
     let face_loop_ranges = vec![(0, 4), (4, 4)];
 
-    let result = remap_mesh_uvs_parallel(
-        &mut uvs,
-        &face_materials,
-        &face_loop_ranges,
-        &address_map,
-        Some(&custom_aliases),
-        None,
-    );
-
-    assert_eq!(result.face_count, 2);
-    assert_eq!(result.unmapped_faces, 0);
-    assert_eq!(result.face_chunk_ids, vec![1, 1]);
-    assert_eq!(result.face_texture_ids, vec![10, 10]);
-
-    // First vertex [0, 0] should project to [0.5, 0.5]
-    assert_eq!(uvs[0], [0.5, 0.5]);
-    // Third vertex [1, 1] should project to [1.0, 1.0]
-    assert_eq!(uvs[2], [1.0, 1.0]);
-
-    // Test Multi-UV remapper
     let multi_res = remap_mesh_multi_uvs_parallel(
         &uvs,
         &face_materials,

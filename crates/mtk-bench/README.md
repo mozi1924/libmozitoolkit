@@ -76,7 +76,7 @@ cargo bench -p mtk-bench --bench bench_4000_chunks
 | **`bench_4000_chunks` (单核)** | 1 Core | 4,096 Sections (16.7M Voxels) | **~15,000+ sections/sec** | **~65 µs / section** |
 | **`bench_4000_chunks` (8核)** | 8 Cores | 4,096 Sections (16.7M Voxels) | **~95,000+ sections/sec** | **~10 µs / section** |
 
-> **多核加速比**：在 8 核心配置下，`SectionMesher::mesh_sections_parallel` 可达成 **~6.5x+ 线性加速比**。
+> **多核加速比**：在 8 核心配置下，`SectionMesher::mesh_sections_parallel_with_source_and_progress` 可达成 **~6.5x+ 线性加速比**。
 
 ---
 

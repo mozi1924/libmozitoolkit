@@ -5,7 +5,6 @@
 
 pub mod attributes;
 #[cfg(feature = "blender")]
-pub mod blender_direct;
 pub mod memoryview;
 pub mod topology;
 
@@ -23,7 +22,6 @@ use mtk_core::mesh::MeshData;
 
 pub use crate::attributes::PyAttributeDomain;
 #[cfg(feature = "blender")]
-pub use blender_direct::PyBlenderDirectMesh;
 
 /// Python-facing wrapper around contiguous `MeshData`.
 #[pyclass(name = "MeshData")]
@@ -260,28 +258,6 @@ impl PyMeshData {
         }
     }
 
-    /// Culls duplicate overlapping faces and contacting interior coplanar faces from this mesh.
-    ///
-    /// Eliminates DCC viewport and render-time Z-fighting artifacts while preserving custom attributes.
-    #[pyo3(signature = (tolerance=1e-3, cull_opposite=true, cull_duplicates=true))]
-    pub fn cull_faces(
-        &self,
-        tolerance: f32,
-        cull_opposite: bool,
-        cull_duplicates: bool,
-    ) -> PyMeshData {
-        if self.inner.is_empty() {
-            return PyMeshData::new();
-        }
-        let config = mtk_cull::MeshCullConfig {
-            tolerance,
-            cull_coplanar_opposite: cull_opposite,
-            cull_duplicates,
-        };
-        let res = mtk_cull::cull_mesh_faces(&self.inner, &config);
-        PyMeshData { inner: res.mesh }
-    }
-
     // -------------------------------------------------------------------------
     // Zero-Copy MemoryView Delegates (implemented in memoryview.rs)
     // -------------------------------------------------------------------------
@@ -299,13 +275,6 @@ impl PyMeshData {
     /// Read-only memoryview of vertex UV coordinates as raw bytes (`float32 * 2` per vertex).
     pub fn uvs_memoryview<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyMemoryView>> {
         memoryview::uvs_memoryview(slf)
-    }
-
-    /// Read-only memoryview of secondary normalized [0, 1] vertex UVs (if generated).
-    pub fn secondary_uvs_memoryview<'py>(
-        slf: &Bound<'py, Self>,
-    ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
-        memoryview::secondary_uvs_memoryview(slf)
     }
 
     /// Flattened secondary vertex UVs `[u0, v0, u1, v1, ...]`.
@@ -354,13 +323,6 @@ impl PyMeshData {
         memoryview::face_materials_memoryview(slf)
     }
 
-    /// Read-only memoryview of face tint indices (`int16` per face).
-    pub fn face_tint_indices_memoryview<'py>(
-        slf: &Bound<'py, Self>,
-    ) -> PyResult<Bound<'py, PyMemoryView>> {
-        memoryview::face_tint_indices_memoryview(slf)
-    }
-
     /// Read-only memoryview of vertex RGBA colors (`float32 * 4` per vertex) if present.
     pub fn colors_memoryview<'py>(
         slf: &Bound<'py, Self>,
@@ -382,13 +344,6 @@ impl PyMeshData {
     // Dedicated Blender Direct Memory Transfer Delegates (enabled by default)
     // -------------------------------------------------------------------------
 
-    /// Returns the dedicated Blender Direct Memory injection sub-interface.
-    #[cfg(feature = "blender")]
-    #[getter]
-    pub fn blender_direct(slf: Py<Self>) -> PyBlenderDirectMesh {
-        PyBlenderDirectMesh { mesh: slf }
-    }
-
     /// Copies vertex positions directly into the destination host pointer (`float32 * 3` per vertex).
     #[cfg(feature = "blender")]
     #[pyo3(signature = (dst_ptr, max_bytes=None))]
@@ -397,7 +352,7 @@ impl PyMeshData {
         dst_ptr: usize,
         max_bytes: Option<usize>,
     ) -> PyResult<usize> {
-        crate::blender::direct_copy_positions_to_ptr(self, dst_ptr, max_bytes)
+        crate::unstable::blender_dna::copy_positions_to_ptr(self, dst_ptr, max_bytes)
     }
 
     /// Copies vertex normals directly into the destination host pointer (`float32 * 3` per vertex).
@@ -408,7 +363,7 @@ impl PyMeshData {
         dst_ptr: usize,
         max_bytes: Option<usize>,
     ) -> PyResult<usize> {
-        crate::blender::direct_copy_normals_to_ptr(self, dst_ptr, max_bytes)
+        crate::unstable::blender_dna::copy_normals_to_ptr(self, dst_ptr, max_bytes)
     }
 
     /// Copies triangle indices directly into the destination host pointer (`uint32` per index).
@@ -419,7 +374,7 @@ impl PyMeshData {
         dst_ptr: usize,
         max_bytes: Option<usize>,
     ) -> PyResult<usize> {
-        crate::blender::direct_copy_indices_to_ptr(self, dst_ptr, max_bytes)
+        crate::unstable::blender_dna::copy_indices_to_ptr(self, dst_ptr, max_bytes)
     }
 
     /// Copies reconstructed quad indices directly into the destination host pointer (`uint32` per index).
@@ -430,7 +385,7 @@ impl PyMeshData {
         dst_ptr: usize,
         max_bytes: Option<usize>,
     ) -> PyResult<usize> {
-        crate::blender::direct_copy_quad_indices_to_ptr(self, dst_ptr, max_bytes)
+        crate::unstable::blender_dna::copy_quad_indices_to_ptr(self, dst_ptr, max_bytes)
     }
 
     /// Copies expanded per-loop UVs directly into the destination host pointer (`float32 * 2` per loop).
@@ -441,40 +396,7 @@ impl PyMeshData {
         dst_ptr: usize,
         max_bytes: Option<usize>,
     ) -> PyResult<usize> {
-        crate::blender::direct_copy_loop_uvs_to_ptr(self, dst_ptr, max_bytes)
-    }
-
-    /// Copies polygon loop start offsets directly into the destination host pointer (`int32` per polygon).
-    #[cfg(feature = "blender")]
-    #[pyo3(signature = (dst_ptr, max_bytes=None))]
-    pub fn direct_copy_loop_starts_to_ptr(
-        &self,
-        dst_ptr: usize,
-        max_bytes: Option<usize>,
-    ) -> PyResult<usize> {
-        crate::blender::direct_copy_loop_starts_to_ptr(self, dst_ptr, max_bytes)
-    }
-
-    /// Copies polygon loop totals directly into the destination host pointer (`int32` per polygon).
-    #[cfg(feature = "blender")]
-    #[pyo3(signature = (dst_ptr, max_bytes=None))]
-    pub fn direct_copy_loop_totals_to_ptr(
-        &self,
-        dst_ptr: usize,
-        max_bytes: Option<usize>,
-    ) -> PyResult<usize> {
-        crate::blender::direct_copy_loop_totals_to_ptr(self, dst_ptr, max_bytes)
-    }
-
-    /// Copies face material slots converted to 32-bit integers directly into the destination host pointer.
-    #[cfg(feature = "blender")]
-    #[pyo3(signature = (dst_ptr, max_bytes=None))]
-    pub fn direct_copy_face_materials_to_ptr(
-        &self,
-        dst_ptr: usize,
-        max_bytes: Option<usize>,
-    ) -> PyResult<usize> {
-        crate::blender::direct_copy_face_materials_to_ptr(self, dst_ptr, max_bytes)
+        crate::unstable::blender_dna::copy_loop_uvs_to_ptr(self, dst_ptr, max_bytes)
     }
 
     /// Copies vertex RGBA colors directly into the destination host pointer (`float32 * 4` per vertex).
@@ -485,7 +407,7 @@ impl PyMeshData {
         dst_ptr: usize,
         max_bytes: Option<usize>,
     ) -> PyResult<usize> {
-        crate::blender::direct_copy_colors_to_ptr(self, dst_ptr, max_bytes)
+        crate::unstable::blender_dna::copy_colors_to_ptr(self, dst_ptr, max_bytes)
     }
 
     // -------------------------------------------------------------------------
@@ -529,11 +451,6 @@ impl PyMeshData {
     /// Check if a custom attribute exists.
     pub fn has_attribute(&self, name: &str) -> bool {
         attributes::has_attribute(self, name)
-    }
-
-    /// Remove a custom attribute by name.
-    pub fn remove_attribute(&mut self, name: &str) -> bool {
-        attributes::remove_attribute(self, name)
     }
 
     /// List all custom attribute names.
@@ -589,11 +506,6 @@ impl PyMeshData {
     /// Material slot per face.
     pub fn get_face_materials<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
         attributes::get_face_materials(self, py)
-    }
-
-    /// Tint index per face.
-    pub fn get_face_tint_indices<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-        attributes::get_face_tint_indices(self, py)
     }
 
     fn __repr__(&self) -> String {

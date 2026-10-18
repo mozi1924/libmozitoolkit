@@ -489,12 +489,7 @@ fn assert_mesh_tint_equal(expected: &VoxelStorage, actual: &VoxelStorage) {
     for coord in coords {
         let mesh_of = |storage: &VoxelStorage| {
             let padded = storage.get_section_padded_array(coord);
-            SectionMesher::mesh_section_with_source(
-                &padded,
-                &culler,
-                |_| ModelSource::None,
-                &config,
-            )
+            SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config)
         };
         let a = tint_attributes(&mesh_of(expected));
         let b = tint_attributes(&mesh_of(actual));

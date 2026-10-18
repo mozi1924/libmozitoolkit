@@ -7,6 +7,8 @@ use mtk_voxel::storage::VoxelStorage;
 use mtk_voxel::types::MesherConfig;
 use std::sync::Arc;
 
+use mtk_voxel::mesher::shading::ModelSource;
+
 #[test]
 fn test_ctm_horizontal_meshing_with_atlas() {
     let mut world = VoxelStorage::new();
@@ -78,7 +80,7 @@ tiles=0-3
         ..Default::default()
     };
 
-    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
 
     assert!(!mesh.positions.is_empty());
     assert_eq!(mesh.positions.len(), 16); // 2 connected cubes welded vertices
@@ -115,7 +117,7 @@ tiles=0-46
         ..Default::default()
     };
 
-    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
     assert!(!mesh.positions.is_empty());
 }
 
@@ -148,7 +150,7 @@ tiles=0-3
         ..Default::default()
     };
 
-    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| None, &config);
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
     assert!(!mesh.positions.is_empty());
 
     // Verify mtk_source_texture_key attribute contains resolved optifine/ctm textures

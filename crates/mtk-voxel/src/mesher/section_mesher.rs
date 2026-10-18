@@ -9,7 +9,6 @@ use mtk_core::random::{
 };
 use mtk_cull::types::BlockCullMeta;
 use mtk_cull::FaceCuller;
-use mtk_model::baker::baked_model::BakedModel;
 use mtk_model::baker::is_block_emissive;
 use mtk_model::parser::blockstate::BlockState;
 use std::sync::Arc;
@@ -30,21 +29,8 @@ use super::shading::{
 pub struct SectionMesher;
 
 impl SectionMesher {
-    /// Meshes a single `PaddedVoxelArray` into a complete `MeshData` buffer using a simple BakedModel lookup.
-    pub fn mesh_section<F>(
-        padded: &PaddedVoxelArray,
-        culler: &FaceCuller,
-        mut get_baked_model: F,
-        config: &MesherConfig,
-    ) -> MeshData
-    where
-        F: FnMut(&str) -> Option<Arc<BakedModel>>,
-    {
-        Self::mesh_section_with_source(padded, culler, |st| get_baked_model(st).into(), config)
-    }
-
     /// Meshes a single `PaddedVoxelArray` into a complete `MeshData` buffer using a unified `ModelSource` lookup.
-    pub fn mesh_section_with_source<'a, F>(
+    pub fn mesh_section<'a, F>(
         padded: &PaddedVoxelArray,
         culler: &FaceCuller,
         mut get_model_source: F,
@@ -512,12 +498,7 @@ impl SectionMesher {
             let results = sections
                 .par_iter()
                 .map(|sec| {
-                    let mesh = Self::mesh_section_with_source(
-                        sec,
-                        culler,
-                        |st| model_provider(st),
-                        config,
-                    );
+                    let mesh = Self::mesh_section(sec, culler, |st| model_provider(st), config);
                     throttler.inc();
                     (sec.coord, mesh)
                 })
@@ -530,59 +511,13 @@ impl SectionMesher {
             let results = sections
                 .iter()
                 .map(|sec| {
-                    let mesh = Self::mesh_section_with_source(
-                        sec,
-                        culler,
-                        |st| model_provider(st),
-                        config,
-                    );
+                    let mesh = Self::mesh_section(sec, culler, |st| model_provider(st), config);
                     throttler.inc();
                     (sec.coord, mesh)
                 })
                 .collect();
             Ok(results)
         }
-    }
-
-    /// Meshes a batch of `PaddedVoxelArray`s with optional explicit thread pool count.
-    pub fn mesh_sections_parallel<F>(
-        sections: &[PaddedVoxelArray],
-        culler: &FaceCuller,
-        model_provider: F,
-        config: &MesherConfig,
-        num_threads: Option<usize>,
-    ) -> Result<Vec<(IVec3, MeshData)>, VoxelError>
-    where
-        F: Fn(&str) -> Option<Arc<BakedModel>> + Sync + Send,
-    {
-        Self::mesh_sections_parallel_with_source(
-            sections,
-            culler,
-            |st| model_provider(st).into(),
-            config,
-            num_threads,
-        )
-    }
-
-    /// Meshes a batch of `PaddedVoxelArray`s with optional explicit thread pool count using a unified `ModelSource` provider.
-    pub fn mesh_sections_parallel_with_source<'a, F>(
-        sections: &[PaddedVoxelArray],
-        culler: &FaceCuller,
-        model_provider: F,
-        config: &MesherConfig,
-        num_threads: Option<usize>,
-    ) -> Result<Vec<(IVec3, MeshData)>, VoxelError>
-    where
-        F: Fn(&str) -> ModelSource<'a> + Sync + Send,
-    {
-        Self::mesh_sections_parallel_with_source_and_progress(
-            sections,
-            culler,
-            model_provider,
-            config,
-            num_threads,
-            None,
-        )
     }
 
     /// Meshes a batch of `PaddedVoxelArray`s with optional thread pool count and progress feedback.
