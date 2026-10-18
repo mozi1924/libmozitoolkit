@@ -115,6 +115,7 @@
 - [x] **P2 `mtk-sync` 事件合并**：`poll_events_coalesced` + 最新 world mesh generation。
 - [x] **P2 资产缓存解析**：`libmtk::resolve_active_cache_package` + PyO3。
 - [x] **P2 `bindings/mtk-ffi` 首批**：material route / persisted-state / biome recolor C-ABI；
+- [x] **代码/文档清理**：修正失效 API 文档链接；保留稳定的 C-ABI，不删除已发布 Rust API。
 - [ ] **P2 `bindings/mtk-ffi` 后续**：按 C4D 实际约定补 opaque session/cache handle 与头文件示例。
 
 ---
