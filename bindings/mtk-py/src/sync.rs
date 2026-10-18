@@ -103,6 +103,10 @@ impl PyLiveSyncSession {
         auth_token: Option<&str>,
         cached_dimension: Option<&str>,
     ) -> PyResult<()> {
+        // The token must ride on the HELLO even when there is no cached state:
+        // `start_with_hello` builds the default HELLO from this value.
+        self.inner.set_auth_token(auth_token.unwrap_or(""));
+
         let initial_hello = if cached_uuid.is_some() || cached_state_hash != 0 {
             let mut uuid_arr = [0u8; 16];
             if let Some(b) = cached_uuid {
@@ -127,7 +131,9 @@ impl PyLiveSyncSession {
                 cached_min: c_min,
                 cached_size: c_sz,
                 cached_state_hash,
-                auth_token: auth_token.unwrap_or("").to_string(),
+                // Filled in by `LiveSyncSession::start_with_hello` from the trimmed
+                // session token so both HELLO paths normalize identically.
+                auth_token: String::new(),
                 cached_dimension: cached_dimension
                     .unwrap_or("minecraft:overworld")
                     .to_string(),
@@ -328,6 +334,11 @@ impl PyLiveSyncSession {
         state_json: Option<&str>,
         auth_token: Option<&str>,
     ) -> PyResult<()> {
+        // Persisted state may not be a reconnect candidate (or the host may
+        // disable the fast path); the session still needs the token for the
+        // default HELLO it falls back to.
+        self.inner.set_auth_token(auth_token.unwrap_or(""));
+
         self.inner
             .start_with_persisted_state_json(
                 url,

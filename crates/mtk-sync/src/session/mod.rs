@@ -21,9 +21,12 @@ use crate::protocol::*;
 
 pub mod assembler;
 pub mod dispatcher;
+mod hello;
 #[cfg(feature = "serde")]
 pub mod persisted;
 pub mod staging;
+
+use hello::{default_hello, with_auth_token};
 
 pub use assembler::*;
 pub use dispatcher::*;
@@ -47,6 +50,8 @@ pub struct LiveSyncSession {
     generation: Arc<AtomicU64>,
     state: Arc<Mutex<SessionState>>,
     cmd_sender: Option<Sender<ClientCommand>>,
+    /// Shared secret sent in every HELLO (RFC v3.1 §4.1, trimmed).
+    auth_token: String,
 }
 
 impl LiveSyncSession {
@@ -72,7 +77,22 @@ impl LiveSyncSession {
             generation: Arc::new(AtomicU64::new(1)),
             state: Arc::new(Mutex::new(SessionState::new())),
             cmd_sender: None,
+            auth_token: String::new(),
         }
+    }
+
+    /// Sets the shared secret attached to every HELLO handshake (RFC v3.1 §4.1).
+    ///
+    /// The token is trimmed to match the Yefira configuration parser. An empty
+    /// token is valid for loopback-only servers; token-protected servers reject
+    /// the connection with `REJECTED("Authentication failed")`.
+    pub fn set_auth_token(&mut self, token: impl Into<String>) {
+        self.auth_token = token.into().trim().to_string();
+    }
+
+    /// Returns the currently configured HELLO auth token (trimmed).
+    pub fn auth_token(&self) -> &str {
+        &self.auth_token
     }
 
     /// Sets or replaces the baked model database.
@@ -258,6 +278,15 @@ impl LiveSyncSession {
     ) -> Result<(), String> {
         self.stop();
 
+        // RFC v3.1 §4.1: every HELLO must carry the shared auth token. Hosts with no
+        // persisted session state pass `None`, which used to produce a zero-token
+        // HELLO; token-protected servers then rejected the client with
+        // "Authentication failed" even though both sides held the same secret.
+        let initial_hello = Some(match initial_hello {
+            Some(hello) => with_auth_token(hello, &self.auth_token),
+            None => default_hello(&self.auth_token),
+        });
+
         // Drop any mesh/progress events left over from the previous connection so a
         // reconnecting host cannot apply a stale world mesh to the new session.
         while self.event_receiver.try_recv().is_ok() {}
@@ -424,5 +453,15 @@ mod tests {
             SyncEvent::WorldMeshReady { generation, .. } => assert_eq!(*generation, 3),
             other => panic!("expected newest world mesh, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn auth_token_is_trimmed_like_the_server_config() {
+        let mut session = LiveSyncSession::new(None, None, None, true);
+        session.set_auth_token("  padded-secret \n");
+        assert_eq!(session.auth_token(), "padded-secret");
+
+        session.set_auth_token("   ");
+        assert_eq!(session.auth_token(), "");
     }
 }

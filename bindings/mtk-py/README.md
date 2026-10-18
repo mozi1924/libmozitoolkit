@@ -105,7 +105,9 @@ Python 模块名：`libmtk_py`
 
 ### 2.6 实时网络协同 (`sync` & `protocol`)
 - **`LiveSyncSession` (`PyLiveSyncSession`)**：原生 WebSocket 实时协同客户端。
-  - `start(...)`, `start_with_persisted_state(..., state_json=None, auth_token=None)`, `stop()`
+  - `start(..., auth_token=None)`, `start_with_persisted_state(..., state_json=None, auth_token=None)`, `stop()`
+  - `auth_token` 会随默认 HELLO 与缓存 HELLO 发送（RFC v3.1 §4.1；Python 侧先 `strip()`；
+    两端令牌会各自 trim 后比较），启用 Yefira `authToken` 时必须传入。
   - `poll_events(coalesce_meshes=False)`：`True` 时只保留最新 `WORLD_MESH_READY` generation
   - `export_persisted_state_json(user_modified=false)`：导出 UUID/epoch/sequence/bounds/hash 的不透明 JSON
   - `client_generation`, `current_sequence`, `current_epoch`, `state_hash`, `server_uuid`

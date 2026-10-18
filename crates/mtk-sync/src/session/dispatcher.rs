@@ -177,7 +177,11 @@ pub fn event_worker_loop(
                         state.lifecycle = SyncLifecycle::Negotiating;
                         state.last_progress_at = Instant::now();
                     }
-                    // Send initial HELLO packet
+                    // Send initial HELLO packet.
+                    // `LiveSyncSession::start_with_hello` always supplies a HELLO
+                    // carrying the session auth token; this tokenless fallback is
+                    // only reachable for hosts driving the raw worker loop, which
+                    // must build their own HELLO when a token is required.
                     let hello_pkt = initial_hello.clone().unwrap_or(Packet::Hello {
                         min_version: PROTOCOL_VERSION as u16,
                         max_version: PROTOCOL_VERSION as u16,

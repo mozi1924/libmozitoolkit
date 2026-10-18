@@ -211,6 +211,8 @@ pub struct LiveSyncSession {
 
 #### 关键方法
 - `new(config, culler, model_db, unified_mesh) -> Self`：创建会话实例。
+- `set_auth_token(token)`：设置随每个 HELLO 发送的共享密钥（RFC v3.1 §4.1，自动 `trim`）。
+  非空时优先于宿主自建 HELLO 中的令牌；默认 HELLO 与缓存 HELLO 都会携带它。
 - `start(url, auto_reconnect, max_reconnect_attempts) -> Result<(), String>`：连接 Minecraft 服务端并启动后台 I/O 与网格化守护线程。
 - `stop()`：优雅且强制终止网络连接（触发底层 TCP `shutdown(Shutdown::Both)` 瞬间释放端口）与后台 Worker 线程。
 - `is_active() -> bool`：查询后台会话线程是否处于活跃状态。
@@ -222,7 +224,8 @@ pub struct LiveSyncSession {
 - `export_persisted_state_json(user_modified) -> String`：导出宿主可持久化的不透明状态 JSON
   （UUID / epoch / sequence / bounds / dimension / state_hash）。
 - `start_with_persisted_state_json(url, auto, max, state_json, auth_token)`：从持久化 JSON
-  构造缓存 HELLO；`user_modified = true` 或状态无效时自动回退全量基线。
+  构造缓存 HELLO；`user_modified = true` 或状态无效时自动回退全量基线（回退的默认 HELLO
+  同样携带 `auth_token`）。
 - `normalize_stream_progress(stage, current, total) -> f32`：把 download/meshing 两阶段
   统一归一化为单调 0..100 百分比。
 - `get_world_mesh() -> MeshData`：主动并行网格化当前 `VoxelWorld` 内的所有区块并合并为焊接后的全局网格。
