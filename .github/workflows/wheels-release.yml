@@ -50,7 +50,7 @@ jobs:
           - os: windows-11-arm
             target: aarch64-pc-windows-msvc
             platform_id: windows-arm64
-          - os: macos-13
+          - os: macos-14
             target: x86_64-apple-darwin
             platform_id: macos-x64
           - os: macos-14
