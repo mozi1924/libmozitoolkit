@@ -74,22 +74,23 @@ impl SectionMesher {
             })
             .collect();
 
-        // Pre-resolve palette emissive states
-        let palette_emissive: Vec<bool> = padded
-            .palette
-            .iter()
-            .zip(palette_sources.iter())
-            .map(|(st, source)| {
+        // Pre-resolve palette emissive states and emission levels from a single parse.
+        let mut palette_emissive: Vec<bool> = Vec::with_capacity(padded.palette.len());
+        let mut palette_emission: Vec<f32> = Vec::with_capacity(padded.palette.len());
+        {
+            let default_state = BlockState::default();
+            for (st, source) in padded.palette.iter().zip(palette_sources.iter()) {
                 if let Some(model) = source.primary_model() {
-                    model.is_emissive
+                    palette_emissive.push(model.is_emissive);
+                    palette_emission.push(model.emissive_level);
                 } else {
-                    BlockState::parse(st)
-                        .as_ref()
-                        .map(is_block_emissive)
-                        .unwrap_or(false)
+                    let parsed = BlockState::parse(st);
+                    let state = parsed.as_ref().unwrap_or(&default_state);
+                    palette_emissive.push(is_block_emissive(state));
+                    palette_emission.push(mtk_model::baker::get_block_emissive_level(state));
                 }
-            })
-            .collect();
+            }
+        }
 
         // Pre-resolve palette plant offset types outside hot loop
         let palette_offsets: Vec<OffsetType> = if config.enable_random_offsets {
@@ -103,7 +104,8 @@ impl SectionMesher {
         };
 
         // Pre-resolve palette meshing data outside hot loop
-        let palette_meshing_data = build_palette_meshing_data(padded, &palette_sources, config);
+        let palette_meshing_data =
+            build_palette_meshing_data(padded, &palette_sources, &palette_emission, config);
 
         let world_offset_x = (padded.coord.x * 16) as f32;
         let world_offset_y = (padded.coord.y * 16) as f32;
