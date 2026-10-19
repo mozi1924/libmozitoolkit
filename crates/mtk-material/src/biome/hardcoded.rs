@@ -481,23 +481,27 @@ pub fn classify_tint_category(
 /// Determine the unit-cube face tint index for a given block and direction.
 /// Returns 0 for tinted faces, -1 for untinted faces.
 pub fn get_unit_cube_tint_index(clean_block: &str, dir: Direction) -> i16 {
+    get_unit_cube_tint_indices(clean_block)[dir.to_index()]
+}
+
+/// Precompute the six per-direction unit-cube tint indices in a single
+/// classification pass (indexed by `Direction::to_index`).
+///
+/// Mirrors [`get_unit_cube_tint_index`] exactly, but classifies the block only
+/// once instead of once per face direction.
+pub fn get_unit_cube_tint_indices(clean_block: &str) -> [i16; 6] {
     let clean = clean_block.trim().to_ascii_lowercase();
     let unname = clean.strip_prefix("minecraft:").unwrap_or(&clean);
     let s = unname.strip_prefix("block/").unwrap_or(unname);
     let base = s.split_once('[').map(|(b, _)| b).unwrap_or(s);
 
     if base == "grass_block" || base == "grass" {
-        if dir == Direction::Up {
-            0
-        } else {
-            -1
-        }
+        let mut out = [-1i16; 6];
+        out[Direction::Up.to_index()] = 0;
+        out
+    } else if classify_tint_category("", Some(base), Some(0)) != "none" {
+        [0i16; 6]
     } else {
-        let cat = classify_tint_category("", Some(base), Some(0));
-        if cat != "none" {
-            0
-        } else {
-            -1
-        }
+        [-1i16; 6]
     }
 }

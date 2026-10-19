@@ -279,25 +279,29 @@ fn resolve_model_buckets(
 }
 
 /// Pre-resolves palette meshing data (Atlas UVs, material slots, tint) outside the meshing hot loop.
+///
+/// `palette_emission` carries the pre-computed emission level for each palette entry
+/// (from the baked model, or from a single `BlockState` parse), so the state string is
+/// not parsed a second time here.
 pub fn build_palette_meshing_data<'a>(
     padded: &PaddedVoxelArray,
     palette_sources: &[ModelSource<'a>],
+    palette_emission: &[f32],
     config: &MesherConfig,
 ) -> Vec<PaletteMeshingData> {
+    // Material properties only depend on the resolved texture key, and the same key is
+    // resolved for every face direction of a unit cube (and across many block states).
+    // Cache per build pass to avoid 6 registry scans per palette entry.
+    let props_cache: std::cell::RefCell<std::collections::HashMap<String, [f32; 4]>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+
     padded
         .palette
         .iter()
         .zip(palette_sources.iter())
-        .map(|(state_str, source)| {
+        .zip(palette_emission.iter())
+        .map(|((state_str, source), &emission)| {
             let clean_block = mtk_resource::extract_block_name(state_str);
-            let emission = if let Some(baked) = source.primary_model() {
-                baked.emissive_level
-            } else {
-                mtk_model::baker::get_block_emissive_level(
-                    &mtk_model::parser::blockstate::BlockState::parse(state_str)
-                        .unwrap_or_default(),
-                )
-            };
 
             match source {
                 ModelSource::Single(baked) => {
@@ -362,6 +366,9 @@ pub fn build_palette_meshing_data<'a>(
                         .unwrap_or(clean_block);
 
                     let mut faces: [Option<PreResolvedFace>; 6] = Default::default();
+                    // Classify the block once for all six directions instead of
+                    // re-running the (allocation-heavy) tint classifier per face.
+                    let tint_indices = mtk_material::get_unit_cube_tint_indices(clean_sub);
                     for dir in Direction::ALL {
                         let (
                             final_tex_key,
@@ -462,15 +469,25 @@ pub fn build_palette_meshing_data<'a>(
                             )
                         };
 
-                        let tint_idx = mtk_material::get_unit_cube_tint_index(clean_sub, dir);
+                        let tint_idx = tint_indices[dir.to_index()];
                         let (tint_data, tint_color, colormap_uv) = compute_face_tint(
                             &final_tex_key,
                             state_str,
                             tint_idx,
                             config.biome_resolver.as_deref(),
                         );
-                        let material_props =
-                            mtk_material::get_material_props("", Some(&final_tex_key));
+                        let material_props = {
+                            let mut cache = props_cache.borrow_mut();
+                            match cache.get(&final_tex_key) {
+                                Some(&props) => props,
+                                None => {
+                                    let props =
+                                        mtk_material::get_material_props("", Some(&final_tex_key));
+                                    cache.insert(final_tex_key.clone(), props);
+                                    props
+                                }
+                            }
+                        };
 
                         faces[dir.to_index()] = Some(PreResolvedFace {
                             source_texture_key: final_tex_key.to_string(),

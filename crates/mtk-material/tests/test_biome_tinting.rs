@@ -328,3 +328,55 @@ fn test_reapply_uniform_biome_tint_preserves_hardcoded_and_custom_override() {
     assert_eq!(custom.packed_tint_data[2][3], TINT_TYPE_FOLIAGE as f32);
     assert_eq!(custom.tint_colors[3], colors.water);
 }
+
+#[test]
+fn unit_cube_tint_indices_match_per_direction_api() {
+    use mtk_core::direction::Direction;
+    use mtk_material::biome::{get_unit_cube_tint_index, get_unit_cube_tint_indices};
+
+    let mut corpus: Vec<String> = Vec::new();
+    for &(name, _) in mtk_material::BLOCK_TINT_REGISTRY {
+        corpus.push(format!("minecraft:{name}"));
+        corpus.push(format!("minecraft:{name}[waterlogged=false]"));
+    }
+    for &(name, _) in mtk_material::HARDCODED_BLOCK_TINTS {
+        corpus.push(format!("minecraft:{name}"));
+    }
+    corpus.extend(
+        [
+            "minecraft:stone",
+            "minecraft:dirt",
+            "minecraft:grass_block[snowy=false]",
+            "minecraft:grass_block[snowy=true]",
+            "minecraft:grass",
+            "minecraft:oak_stairs[facing=north,half=bottom,shape=straight]",
+            "minecraft:oak_slab[type=double]",
+            "minecraft:water[level=0]",
+            "minecraft:lava[level=3]",
+            "minecraft:glass",
+            "mod:custom_block",
+            "minecraft:unknown_plant",
+        ]
+        .map(str::to_string),
+    );
+
+    for state in &corpus {
+        let indices = get_unit_cube_tint_indices(state);
+        for dir in Direction::ALL {
+            assert_eq!(
+                indices[dir.to_index()],
+                get_unit_cube_tint_index(state, dir),
+                "per-direction tint index mismatch for {state}"
+            );
+        }
+    }
+
+    // Spot-check the documented semantics.
+    let grass = get_unit_cube_tint_indices("minecraft:grass_block[snowy=false]");
+    assert_eq!(grass[Direction::Up.to_index()], 0);
+    assert_eq!(grass[Direction::Down.to_index()], -1);
+    assert_eq!(grass[Direction::North.to_index()], -1);
+
+    assert_eq!(get_unit_cube_tint_indices("minecraft:oak_leaves"), [0; 6]);
+    assert_eq!(get_unit_cube_tint_indices("minecraft:stone"), [-1; 6]);
+}

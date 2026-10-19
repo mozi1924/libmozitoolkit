@@ -28,5 +28,9 @@ harness = false
 name = "bench_pipeline_stages"
 harness = false
 
+[[bench]]
+name = "bench_debug_world"
+harness = false
+
 [lints]
 workspace = true

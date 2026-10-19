@@ -9,7 +9,8 @@ pub fn compute_face_tint(
     tint_index: i16,
     biome_resolver: Option<&mtk_material::BiomeResolver>,
 ) -> ([f32; 4], [f32; 4], [f32; 3]) {
-    let default_pal = mtk_material::biome::get_biome_palette("plains");
+    // Hot path: the default palette is a static entry, no lookup/allocation needed.
+    let default_pal = mtk_material::biome::default_biome_palette();
     let default_uv = default_pal.colormap_uv();
     let colormap_uv_3 = [default_uv[0], default_uv[1], 0.0];
 

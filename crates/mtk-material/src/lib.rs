@@ -23,9 +23,10 @@ pub use properties::{
 pub use biome::{
     blend_biome_colors, classify_tint_category, compute_mesh_biome_attributes,
     compute_mesh_biome_attributes_custom, compute_mesh_biome_attributes_paletted_flat,
-    compute_mesh_biome_attributes_per_face, get_biome_palette, get_colormap_uv, get_hardcoded_tint,
-    get_hardcoded_tint_hex, get_swamp_grass_color, get_unit_cube_tint_index, hex_to_linear_rgba,
-    hex_to_srgb, linear_to_srgb, reapply_uniform_biome_tint, reapply_uniform_biome_tint_flat,
+    compute_mesh_biome_attributes_per_face, default_biome_palette, get_biome_palette,
+    get_colormap_uv, get_hardcoded_tint, get_hardcoded_tint_hex, get_swamp_grass_color,
+    get_unit_cube_tint_index, get_unit_cube_tint_indices, hex_to_linear_rgba, hex_to_srgb,
+    linear_to_srgb, reapply_uniform_biome_tint, reapply_uniform_biome_tint_flat,
     sample_colormap_pixel, srgb_to_linear, BiomeColorSet, BiomePalette, BiomeResolver,
     BiomeTintFlatBuffers, CustomBiomeSettings, MeshBiomeAttributesResult, TintInfo,
     BLOCK_TINT_REGISTRY, CANONICAL_BIOMES, HARDCODED_BLOCK_TINTS, TINT_TYPE_DRY_FOLIAGE,

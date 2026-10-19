@@ -98,6 +98,27 @@ impl AttributeData {
         self.len() == 0
     }
 
+    /// Creates an empty attribute of the same variant, pre-allocated for `capacity` elements.
+    ///
+    /// Used by mesh merging to size destination buffers once instead of growing them
+    /// repeatedly while concatenating many section meshes.
+    pub fn empty_with_capacity(&self, capacity: usize) -> Self {
+        match self {
+            Self::Float(_) => Self::Float(Vec::with_capacity(capacity)),
+            Self::Float2(_) => Self::Float2(Vec::with_capacity(capacity)),
+            Self::Float3(_) => Self::Float3(Vec::with_capacity(capacity)),
+            Self::Float4(_) => Self::Float4(Vec::with_capacity(capacity)),
+            Self::Int8(_) => Self::Int8(Vec::with_capacity(capacity)),
+            Self::Int16(_) => Self::Int16(Vec::with_capacity(capacity)),
+            Self::Int32(_) => Self::Int32(Vec::with_capacity(capacity)),
+            Self::UInt8(_) => Self::UInt8(Vec::with_capacity(capacity)),
+            Self::UInt16(_) => Self::UInt16(Vec::with_capacity(capacity)),
+            Self::UInt32(_) => Self::UInt32(Vec::with_capacity(capacity)),
+            Self::String(_) => Self::String(Vec::with_capacity(capacity)),
+            Self::Bool(_) => Self::Bool(Vec::with_capacity(capacity)),
+        }
+    }
+
     /// Returns a string identifier of the data type.
     pub fn type_name(&self) -> &'static str {
         match self {

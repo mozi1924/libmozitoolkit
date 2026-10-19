@@ -1,5 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use std::sync::OnceLock;
 
 use mtk_cull::FaceCuller;
 use mtk_voxel::mesher::delta_mesher::DeltaMesher;
@@ -10,6 +11,17 @@ use crate::cull::PyFaceCuller;
 use crate::mesh::PyMeshData;
 use crate::model::PyBakedModelDatabase;
 use crate::voxel::{PyMesherConfig, PyVoxelStorage};
+
+/// Shared default culler.
+///
+/// `FaceCuller` owns an `Arc<RwLock<HashMap<..>>>` metadata cache keyed only by
+/// blockstate string and the (fixed) leaves/glass cull modes, so reusing one
+/// instance across calls avoids re-deriving cull metadata for every unique state
+/// on each world rebuild. Only used when the caller passes no explicit culler.
+fn default_culler() -> &'static FaceCuller {
+    static SHARED: OnceLock<FaceCuller> = OnceLock::new();
+    SHARED.get_or_init(FaceCuller::default)
+}
 
 /// Python wrapper for Section and World Mesher generator.
 #[pyclass(name = "SectionMesher")]
@@ -32,8 +44,10 @@ impl PySectionMesher {
         cfg.ensure_selection_bounds(&storage.inner);
         let num_threads = config.and_then(|c| c.num_threads);
 
-        let default_culler = FaceCuller::default();
-        let cul = culler.map(|c| &c.inner).unwrap_or(&default_culler);
+        let cul: &FaceCuller = match culler {
+            Some(c) => &c.inner,
+            None => default_culler(),
+        };
 
         let non_empty = storage.inner.get_all_non_empty_sections();
         if non_empty.is_empty() {
@@ -105,8 +119,10 @@ impl PySectionMesher {
         cfg.ensure_selection_bounds(&storage.inner);
         let num_threads = config.and_then(|c| c.num_threads);
 
-        let default_culler = FaceCuller::default();
-        let cul = culler.map(|c| &c.inner).unwrap_or(&default_culler);
+        let cul: &FaceCuller = match culler {
+            Some(c) => &c.inner,
+            None => default_culler(),
+        };
 
         let non_empty = storage.inner.get_all_non_empty_sections();
         let dict = PyDict::new(py);
@@ -180,8 +196,10 @@ impl PySectionMesher {
         let mut cfg = config.map(|c| c.inner.clone()).unwrap_or(default_config);
         cfg.ensure_selection_bounds(&storage.inner);
 
-        let default_culler = FaceCuller::default();
-        let cul = culler.map(|c| &c.inner).unwrap_or(&default_culler);
+        let cul: &FaceCuller = match culler {
+            Some(c) => &c.inner,
+            None => default_culler(),
+        };
 
         let model_db_opt = model_db.map(|db| db.inner.clone());
         let results = py.allow_threads(|| {
