@@ -6,7 +6,38 @@
 use std::collections::HashMap;
 
 use super::MeshData;
-use crate::attributes::{AttributeData, MeshAttribute};
+use crate::attributes::{AttributeData, AttributeDomain, MeshAttribute};
+
+/// Pre-seeds the merged attribute map with empty buffers sized for the final face count.
+///
+/// Without this, each `extend_from_slice` during the per-section loop grows the
+/// destination vectors incrementally (allocating and copying repeatedly).
+fn seed_custom_attributes(
+    target: &mut HashMap<String, MeshAttribute>,
+    meshes: &[&MeshData],
+    total_faces: usize,
+) {
+    for &m in meshes {
+        for (name, attr) in &m.custom_attributes {
+            if target.contains_key(name) {
+                continue;
+            }
+            let capacity = if attr.domain == AttributeDomain::Face {
+                total_faces
+            } else {
+                attr.len()
+            };
+            target.insert(
+                name.clone(),
+                MeshAttribute::new(
+                    name.clone(),
+                    attr.domain,
+                    attr.data.empty_with_capacity(capacity),
+                ),
+            );
+        }
+    }
+}
 
 impl MeshData {
     /// Helper to merge custom attributes from `other` into `target`.
@@ -124,6 +155,10 @@ impl MeshData {
             custom_attributes: HashMap::new(),
         };
 
+        if has_custom_attrs {
+            seed_custom_attributes(&mut merged.custom_attributes, meshes, total_faces);
+        }
+
         for &m in meshes {
             let base_idx = merged.positions.len() as u32;
             merged.positions.extend_from_slice(&m.positions);
@@ -237,6 +272,10 @@ impl MeshData {
             face_tint_indices: Vec::with_capacity(total_faces),
             custom_attributes: HashMap::new(),
         };
+
+        if has_custom_attrs {
+            seed_custom_attributes(&mut merged.custom_attributes, meshes, total_faces);
+        }
 
         let inv_dist = 1.0 / tolerance;
         // Spatial hash map mapping discrete grid position [i32; 3] to global vertex index in merged.positions.
