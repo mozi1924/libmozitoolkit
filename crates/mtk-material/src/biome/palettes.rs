@@ -104,18 +104,36 @@ impl BiomePalette {
 
 pub use super::canonical_data::CANONICAL_BIOMES;
 
+/// Index of the canonical `plains` palette inside [`CANONICAL_BIOMES`].
+const PLAINS_BIOME_INDEX: usize = 40;
+
+/// Returns the canonical `plains` palette, used as the default tint color source.
+///
+/// Prefer this over `get_biome_palette("plains")` on hot paths: it performs no
+/// string normalization and no allocation.
+#[inline]
+pub fn default_biome_palette() -> &'static BiomePalette {
+    debug_assert_eq!(CANONICAL_BIOMES[PLAINS_BIOME_INDEX].id, "plains");
+    &CANONICAL_BIOMES[PLAINS_BIOME_INDEX]
+}
+
 /// Look up a canonical BiomePalette by name or ID (case-insensitive).
+///
+/// Allocation-free: comparisons are ASCII case-insensitive instead of
+/// lowercasing every canonical name on each call.
 pub fn get_biome_palette(name_or_id: &str) -> &'static BiomePalette {
-    let clean = name_or_id.trim().to_ascii_lowercase();
-    let unnamespaced = clean.strip_prefix("minecraft:").unwrap_or(&clean);
+    let clean = name_or_id.trim();
+    let unnamespaced = match clean.split_once(':') {
+        Some((ns, rest)) if ns.eq_ignore_ascii_case("minecraft") => rest,
+        _ => clean,
+    };
 
     for b in CANONICAL_BIOMES {
-        if b.id == unnamespaced || b.name.to_ascii_lowercase() == unnamespaced {
+        if b.id.eq_ignore_ascii_case(unnamespaced) || b.name.eq_ignore_ascii_case(unnamespaced) {
             return b;
         }
     }
-    // Default PLAINS
-    &CANONICAL_BIOMES[40]
+    default_biome_palette()
 }
 
 /// Blend multiple biome colors weighted together.
@@ -186,5 +204,43 @@ pub fn sample_colormap_pixel(
         ]
     } else {
         [1.0, 1.0, 1.0]
+    }
+}
+
+#[cfg(test)]
+mod palette_lookup_tests {
+    use super::*;
+
+    #[test]
+    fn plains_index_matches_canonical_table() {
+        assert_eq!(CANONICAL_BIOMES[PLAINS_BIOME_INDEX].id, "plains");
+        assert_eq!(default_biome_palette().id, "plains");
+    }
+
+    #[test]
+    fn lookup_is_case_and_namespace_insensitive() {
+        for expected in ["plains", "minecraft:plains", "Minecraft:PLAINS", " Plains "] {
+            assert_eq!(get_biome_palette(expected).id, "plains", "{expected}");
+        }
+        // Display names (with spaces and capitals) still resolve.
+        assert_eq!(get_biome_palette("Bamboo Jungle").id, "bamboo_jungle");
+        assert_eq!(get_biome_palette("bamboo_jungle").id, "bamboo_jungle");
+        // Unknown ids fall back to plains.
+        assert_eq!(get_biome_palette("definitely_not_a_biome").id, "plains");
+        assert_eq!(get_biome_palette("").id, "plains");
+    }
+
+    #[test]
+    fn every_canonical_biome_resolves_to_itself() {
+        for b in CANONICAL_BIOMES {
+            assert_eq!(get_biome_palette(b.id).id, b.id);
+            // Display names are not unique (`sparce_jungle` / `sparse_jungle` share
+            // "Sparse Jungle"), so only require the resolved display name to match.
+            assert_eq!(
+                get_biome_palette(b.name).name.to_ascii_lowercase(),
+                b.name.to_ascii_lowercase()
+            );
+            assert_eq!(get_biome_palette(&format!("minecraft:{}", b.id)).id, b.id);
+        }
     }
 }
