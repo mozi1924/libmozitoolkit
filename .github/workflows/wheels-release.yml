@@ -39,11 +39,14 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             platform_id: linux-x64
-            manylinux: auto
+            # Pinned so wheel filenames stay stable across runner upgrades.
+            # `auto` changes tag when the runner image changes (2_17 → 2_28 → 2_34),
+            # which leaves stale duplicates on the release.
+            manylinux: "2_28"
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             platform_id: linux-arm64
-            manylinux: auto
+            manylinux: "2_28"
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             platform_id: windows-x64
@@ -70,13 +73,21 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      # Generic Cargo cache: downloads registry, git deps and compiled artifacts.
+      # Works for host builds (macOS/Windows) and for maturin-action's manylinux
+      # Docker builds because the workspace `target/` directory is bind-mounted.
+      - name: Cache Cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.platform_id }}
+          workspaces: ". -> target"
+
       - name: Build wheel via maturin-action
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux || 'off' }}
           args: --release --out dist -m bindings/mtk-py/Cargo.toml
-          sccache: 'true'
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
@@ -84,6 +95,7 @@ jobs:
           name: libmtk-wheel-${{ matrix.platform_id }}
           path: dist/*.whl
           if-no-files-found: error
+          retention-days: 3
 
   publish-wheels:
     name: Publish Wheels to Release
@@ -101,17 +113,13 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Inspect and Verify Wheels
+      - name: Verify wheel matrix
         run: |
           set -euo pipefail
-          echo "=== Downloaded Wheels ==="
           ls -lh dist/
-          wheel_count=$(ls -1 dist/*.whl | wc -l)
-          echo "Total wheels found: $wheel_count"
-          if [ "$wheel_count" -lt 6 ]; then
-            echo "::error::Expected at least 6 platform wheels, but found $wheel_count"
-            exit 1
-          fi
+          # Per-platform check (not just a file count): exactly one abi3 wheel
+          # for each of the six supported targets.
+          python3 tools/verify_wheels.py dist
 
       - name: Generate Checksums
         run: |
@@ -147,6 +155,33 @@ jobs:
           echo "tag=$TARGET_TAG" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
           echo "Target Release Tag: $TARGET_TAG (Pre-release: $IS_PRERELEASE)"
+
+      - name: Prune stale wheel assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release_meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release '$TAG' does not exist yet; nothing to prune."
+            exit 0
+          fi
+
+          # Keep only the wheels from this run. `gh release upload --clobber`
+          # overwrites same-named assets but never removes renamed ones, so old
+          # manylinux tags (or dropped platforms) would accumulate forever and
+          # could be picked up by consumers.
+          mapfile -t existing < <(
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --json assets --jq '.assets[].name' | grep -E '\.whl$' || true
+          )
+          for name in "${existing[@]}"; do
+            if [ ! -f "dist/$name" ]; then
+              echo "Removing stale asset: $name"
+              gh release delete-asset "$TAG" "$name" --repo "$GITHUB_REPOSITORY" --yes
+            fi
+          done
+          echo "Checked ${#existing[@]} existing wheel asset(s)."
 
       - name: Publish to GitHub Release
         env:
