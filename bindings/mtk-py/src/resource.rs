@@ -389,9 +389,12 @@ pub fn create_test_cache_package(
 ) -> PyResult<String> {
     let p = std::path::Path::new(path);
     let fp_bytes = libmtk::fingerprint_str_to_bytes16(fingerprint);
-    let mut writer =
-        mtk_package::MtkPackageWriter::create(p, mtk_package::PackageProfile::AssetCache, fp_bytes)
-            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+    let mut writer = mtk_package::MtkPackageFileWriter::create(
+        p,
+        mtk_package::PackageProfile::AssetCache,
+        fp_bytes,
+    )
+    .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
 
     let manifest = libmtk::CacheManifest {
         format_version: libmtk::ASSET_CACHE_FORMAT_VERSION,
