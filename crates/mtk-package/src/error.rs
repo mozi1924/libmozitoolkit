@@ -57,4 +57,7 @@ pub enum PackageError {
 
     #[error("Invalid TOC format: {0}")]
     InvalidToc(String),
+
+    #[error("Package writer has already been finalized")]
+    WriterClosed,
 }

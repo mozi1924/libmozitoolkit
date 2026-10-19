@@ -1,6 +1,6 @@
 use mtk_package::{
-    ChunkWriteOptions, MtkPackageReader, MtkPackageWriter, PackageError, PackageHeader,
-    PackageProfile, TableOfContents, HEADER_SIZE,
+    ChunkWriteOptions, MtkPackageFileWriter, MtkPackageReader, MtkPackageWriter, PackageError,
+    PackageHeader, PackageProfile, TableOfContents, HEADER_SIZE,
 };
 use std::io::Cursor;
 
@@ -102,7 +102,7 @@ fn test_package_file_and_header_only() {
 
     let fingerprint = [0x55; 16];
     let mut writer =
-        MtkPackageWriter::create(&file_path, PackageProfile::AssetCache, fingerprint).unwrap();
+        MtkPackageFileWriter::create(&file_path, PackageProfile::AssetCache, fingerprint).unwrap();
 
     writer
         .add_str_chunk(
@@ -158,4 +158,96 @@ fn test_forged_toc_offsets_rejected() {
         Err(PackageError::OutOfBounds { .. }) => {}
         other => panic!("Expected OutOfBounds, got {:?}", other.is_ok()),
     }
+}
+
+fn temp_package_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    std::fs::read_dir(dir)
+        .unwrap()
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "tmp"))
+        .collect()
+}
+
+/// A rebuild must never truncate the package that is currently being read.
+/// The replacement is staged in a sibling file and published with a rename,
+/// which is atomic on POSIX and avoids `ERROR_USER_MAPPED_FILE` on Windows.
+#[test]
+fn test_file_writer_publishes_atomically() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let file_path = temp_dir.path().join("atomic.mtkcache");
+
+    let mut writer =
+        MtkPackageFileWriter::create(&file_path, PackageProfile::AssetCache, [0x11; 16]).unwrap();
+    writer
+        .add_str_chunk(*b"BIOM", "version", "v1", &ChunkWriteOptions::raw())
+        .unwrap();
+    writer.finish().unwrap();
+
+    // A reader opened before the rebuild keeps a valid snapshot of v1.
+    let before = MtkPackageReader::open_file(&file_path).unwrap();
+    assert_eq!(before.read_chunk_str("version").unwrap(), "v1");
+
+    let mut writer =
+        MtkPackageFileWriter::create(&file_path, PackageProfile::AssetCache, [0x22; 16]).unwrap();
+    writer
+        .add_str_chunk(*b"BIOM", "version", "v2", &ChunkWriteOptions::raw())
+        .unwrap();
+
+    // While v2 is being staged the published package is still v1.
+    assert_eq!(
+        MtkPackageReader::open_file(&file_path)
+            .unwrap()
+            .read_chunk_str("version")
+            .unwrap(),
+        "v1"
+    );
+    assert_eq!(temp_package_files(temp_dir.path()).len(), 1);
+
+    // Windows cannot replace a destination that still has an open mapped view.
+    drop(before);
+
+    writer.finish().unwrap();
+    assert!(temp_package_files(temp_dir.path()).is_empty());
+    assert_eq!(
+        MtkPackageReader::open_file(&file_path)
+            .unwrap()
+            .read_chunk_str("version")
+            .unwrap(),
+        "v2"
+    );
+}
+
+/// Dropping a writer without finishing (e.g. a failed rebuild) removes the
+/// temporary file and leaves the previously published package intact.
+#[test]
+fn test_dropped_file_writer_keeps_previous_package() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let file_path = temp_dir.path().join("keep.mtkcache");
+
+    let mut writer =
+        MtkPackageFileWriter::create(&file_path, PackageProfile::AssetCache, [0x33; 16]).unwrap();
+    writer
+        .add_str_chunk(*b"BIOM", "version", "v1", &ChunkWriteOptions::raw())
+        .unwrap();
+    writer.finish().unwrap();
+
+    {
+        let mut abandoned =
+            MtkPackageFileWriter::create(&file_path, PackageProfile::AssetCache, [0x44; 16])
+                .unwrap();
+        abandoned
+            .add_str_chunk(*b"BIOM", "version", "v2", &ChunkWriteOptions::raw())
+            .unwrap();
+        // Dropped without `finish()`.
+    }
+
+    assert!(temp_package_files(temp_dir.path()).is_empty());
+    assert_eq!(
+        MtkPackageReader::open_file(&file_path)
+            .unwrap()
+            .read_chunk_str("version")
+            .unwrap(),
+        "v1"
+    );
 }

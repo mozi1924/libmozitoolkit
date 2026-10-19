@@ -17,4 +17,4 @@ pub use header::{
 };
 pub use reader::MtkPackageReader;
 pub use toc::{ChunkEntry, TableOfContents};
-pub use writer::{ChunkWriteOptions, MtkPackageWriter};
+pub use writer::{ChunkWriteOptions, MtkPackageFileWriter, MtkPackageWriter};

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use mtk_core::progress::{ProgressCallback, ProgressReport, ProgressThrottler};
 use mtk_material::BiomeResolver;
-use mtk_package::{ChunkWriteOptions, MtkPackageWriter, PackageProfile};
+use mtk_package::{ChunkWriteOptions, MtkPackageFileWriter, PackageProfile};
 use mtk_resource::{AtlasCategory, ResourcePackStack};
 use mtk_texture::{AtlasBuilder, AtlasBuilderConfig};
 
@@ -96,7 +96,8 @@ fn precompile_all_assets_inner(
     };
 
     let fp_bytes = fingerprint_str_to_bytes16(&fingerprint);
-    let mut writer = MtkPackageWriter::create(&package_path, PackageProfile::AssetCache, fp_bytes)?;
+    let mut writer =
+        MtkPackageFileWriter::create(&package_path, PackageProfile::AssetCache, fp_bytes)?;
 
     // 0. Biome Tinting & Colormaps
     if let Some(cb) = progress_callback {
