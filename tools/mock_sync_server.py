@@ -34,6 +34,13 @@ import time
 import zlib
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+# Tests spawn this server with piped stdout. On Windows the default pipe encoding
+# is the legacy ANSI code page, which cannot encode the status emoji, so force
+# UTF-8 to keep the subprocess alive.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 # ---------------------------------------------------------------------------
 # Protocol Constants (1:1 with mtk-sync/src/protocol/constants.rs)
 # ---------------------------------------------------------------------------

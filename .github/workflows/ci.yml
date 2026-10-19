@@ -64,6 +64,22 @@ jobs:
       - name: cargo test --workspace
         run: cargo test --workspace --no-fail-fast
 
+  test-windows:
+    name: Test (Windows workspace)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # PyO3's `auto-initialize` test dependency links against a real Python.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # Asset-dependent tests resolve vendored `mtk-testkit` fixtures and skip
+      # gracefully when the real Minecraft pack is unavailable.
+      - name: cargo test --workspace
+        run: cargo test --workspace --no-fail-fast
+
   wasm:
     name: WASM compatibility
     runs-on: ubuntu-latest

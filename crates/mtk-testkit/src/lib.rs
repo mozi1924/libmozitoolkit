@@ -97,6 +97,13 @@ pub fn has_real_assets() -> bool {
     real_assets_root().is_some()
 }
 
+/// Best-effort user home directory (`HOME` on Unix, `USERPROFILE` on Windows).
+fn home_dir() -> Option<PathBuf> {
+    ["HOME", "USERPROFILE"]
+        .iter()
+        .find_map(|key| std::env::var_os(key).map(PathBuf::from))
+}
+
 /// Minecraft client jar used for end-to-end resource-pack baking tests.
 pub fn fabric_jar() -> Option<PathBuf> {
     let workspace = workspace_root();
@@ -104,8 +111,8 @@ pub fn fabric_jar() -> Option<PathBuf> {
         workspace.join("../26.2-Fabric.jar"),
         workspace.join("../fabric.jar"),
     ];
-    if let Some(home) = std::env::var_os("HOME") {
-        candidates.push(PathBuf::from(home).join("26.2-Fabric.jar"));
+    if let Some(home) = home_dir() {
+        candidates.push(home.join("26.2-Fabric.jar"));
     }
 
     env_existing(&["MTK_TEST_JAR", "MC_JAR"]).or_else(|| first_existing(candidates))
@@ -115,8 +122,8 @@ pub fn fabric_jar() -> Option<PathBuf> {
 pub fn resource_pack_zip() -> Option<PathBuf> {
     let workspace = workspace_root();
     let mut candidates = vec![workspace.join("../SPBR-21.zip")];
-    if let Some(home) = std::env::var_os("HOME") {
-        candidates.push(PathBuf::from(home).join("Downloads").join("SPBR-21.zip"));
+    if let Some(home) = home_dir() {
+        candidates.push(home.join("Downloads").join("SPBR-21.zip"));
     }
 
     env_existing(&["MTK_TEST_RESOURCE_PACK", "MTK_TEST_RESOURCEPACK"])

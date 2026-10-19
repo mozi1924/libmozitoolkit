@@ -20,6 +20,12 @@ import argparse
 from pathlib import Path
 import sys
 
+# Windows pipes default to the legacy ANSI code page, which cannot encode the
+# checkmark in the summary line.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 DEFAULT_PLATFORMS = (
     "linux-x64",
     "linux-arm64",
