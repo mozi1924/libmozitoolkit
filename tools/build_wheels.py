@@ -114,6 +114,16 @@ def build_wheels(
     return built_wheels
 
 
+TARGET_ALIASES = {
+    "linux-x64": "x86_64-unknown-linux-gnu",
+    "linux-arm64": "aarch64-unknown-linux-gnu",
+    "windows-x64": "x86_64-pc-windows-msvc",
+    "windows-arm64": "aarch64-pc-windows-msvc",
+    "macos-x64": "x86_64-apple-darwin",
+    "macos-arm64": "aarch64-apple-darwin",
+}
+
+
 def main():
     parser = argparse.ArgumentParser(description="Build libmtk_py Python wheels")
     parser.add_argument(
@@ -127,7 +137,7 @@ def main():
         "--target",
         type=str,
         default=None,
-        help="Target platform triple (e.g. aarch64-apple-darwin, x86_64-unknown-linux-gnu)",
+        help="Target platform triple (or alias: linux-x64, linux-arm64, windows-x64, windows-arm64, macos-x64, macos-arm64)",
     )
     parser.add_argument(
         "--debug",
@@ -142,6 +152,9 @@ def main():
 
     args = parser.parse_args()
 
+    target_triple = TARGET_ALIASES.get(args.target, args.target) if args.target else None
+
+
     repo_root = Path(__file__).resolve().parent.parent
     mozi_wheels_dir = repo_root.parent / "MoziToolKit" / "wheels"
 
@@ -152,7 +165,7 @@ def main():
     built = build_wheels(
         out_dir=out_path,
         release=not args.debug,
-        target=args.target,
+        target=target_triple,
     )
 
     if args.copy_to_mozitoolkit and out_path != mozi_wheels_dir:

@@ -1,0 +1,175 @@
+name: Build & Release Wheels
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type (auto, rolling, or official)'
+        required: true
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - rolling
+          - official
+      tag_name:
+        description: 'Custom tag name (optional, only for official release)'
+        required: false
+        default: ''
+
+concurrency:
+  group: wheels-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-wheels:
+    name: Wheel (${{ matrix.platform_id }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            platform_id: linux-x64
+            manylinux: auto
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            platform_id: linux-arm64
+            manylinux: auto
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform_id: windows-x64
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            platform_id: windows-arm64
+          - os: macos-13
+            target: x86_64-apple-darwin
+            platform_id: macos-x64
+          - os: macos-14
+            target: aarch64-apple-darwin
+            platform_id: macos-arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build wheel via maturin-action
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux || 'off' }}
+          args: --release --out dist -m bindings/mtk-py/Cargo.toml
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libmtk-wheel-${{ matrix.platform_id }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  publish-wheels:
+    name: Publish Wheels to Release
+    needs: build-wheels
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: libmtk-wheel-*
+          path: dist
+          merge-multiple: true
+
+      - name: Inspect and Verify Wheels
+        run: |
+          set -euo pipefail
+          echo "=== Downloaded Wheels ==="
+          ls -lh dist/
+          wheel_count=$(ls -1 dist/*.whl | wc -l)
+          echo "Total wheels found: $wheel_count"
+          if [ "$wheel_count" -lt 6 ]; then
+            echo "::error::Expected at least 6 platform wheels, but found $wheel_count"
+            exit 1
+          fi
+
+      - name: Generate Checksums
+        run: |
+          cd dist
+          sha256sum *.whl > SHA256SUMS.txt
+          echo "=== SHA256SUMS.txt ==="
+          cat SHA256SUMS.txt
+
+      - name: Determine Release Target
+        id: release_meta
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ inputs.release_type }}" = "official" ] || ([ "${{ inputs.release_type }}" = "auto" ] && [ -n "${{ inputs.tag_name }}" ]); then
+              TARGET_TAG="${{ inputs.tag_name }}"
+              if [ -z "$TARGET_TAG" ]; then
+                echo "::error::tag_name is required for official release"
+                exit 1
+              fi
+              IS_PRERELEASE="false"
+            else
+              TARGET_TAG="ci-latest"
+              IS_PRERELEASE="true"
+            fi
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            TARGET_TAG="${{ github.ref_name }}"
+            IS_PRERELEASE="false"
+          else
+            TARGET_TAG="ci-latest"
+            IS_PRERELEASE="true"
+          fi
+
+          echo "tag=$TARGET_TAG" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "Target Release Tag: $TARGET_TAG (Pre-release: $IS_PRERELEASE)"
+
+      - name: Publish to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release_meta.outputs.tag }}
+          IS_PRERELEASE: ${{ steps.release_meta.outputs.is_prerelease }}
+        run: |
+          set -euo pipefail
+          if [ "$TAG" = "ci-latest" ]; then
+            gh release view ci-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+              gh release create ci-latest --repo "$GITHUB_REPOSITORY" --prerelease \
+                --title "CI rolling wheels (ci-latest)" \
+                --notes "Automated abi3 wheels for all 6 platforms built from main. Updated continuously."
+            gh release upload ci-latest dist/* --repo "$GITHUB_REPOSITORY" --clobber
+            echo "Successfully updated rolling release ci-latest."
+          else
+            if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "Release $TAG exists, uploading assets..."
+              gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+            else
+              echo "Creating new release $TAG..."
+              gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" \
+                --title "libmozitoolkit $TAG" \
+                --generate-notes
+            fi
+            echo "Successfully published official release $TAG."
+          fi
