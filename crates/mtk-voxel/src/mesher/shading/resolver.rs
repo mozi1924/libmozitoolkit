@@ -268,6 +268,9 @@ pub fn sample_biome_tint(
     default_tint_color: [f32; 4],
     default_colormap_uv: [f32; 3],
 ) -> ([f32; 4], [f32; 4], [f32; 3]) {
+    if tint_data[2] <= 0.0 {
+        return (tint_data, default_tint_color, default_colormap_uv);
+    }
     if let Some(biome_cols) = biome_data {
         let col_idx = if biome_cols.len() == 1024 {
             let qy = (ly >> 2) & 3;
