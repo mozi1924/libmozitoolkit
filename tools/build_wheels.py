@@ -13,6 +13,12 @@ import shutil
 import subprocess
 import sys
 
+# Windows consoles/pipes default to the legacy ANSI code page, which cannot
+# encode the emoji progress output. Force UTF-8 so build logs never crash.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 
 def find_maturin_executable() -> list[str]:
     """Finds a working maturin executable or python -m maturin invocation."""
