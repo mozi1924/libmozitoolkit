@@ -176,8 +176,7 @@ pub fn load_and_mesh_minecraft_save(
     let mdb = model_db.map(|db| db.inner.clone());
     let threads = num_threads.or_else(|| config.and_then(|c| c.num_threads));
 
-    let mut world =
-        VoxelWorld::from_storage_with_threads(storage.clone(), cfg, cul, mdb, true, threads);
+    let mut world = VoxelWorld::from_storage_with_threads(storage.clone(), cfg, cul, mdb, threads);
 
     let mesh = py
         .allow_threads(|| world.rebuild_all_with_progress(progress_ref).cloned())

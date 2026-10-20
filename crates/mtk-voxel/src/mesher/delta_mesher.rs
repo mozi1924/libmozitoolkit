@@ -4,8 +4,8 @@ use mtk_cull::FaceCuller;
 
 use crate::mesher::shading::ModelSource;
 use crate::mesher::SectionMesher;
+use crate::storage::VoxelStorage;
 use crate::types::MesherConfig;
-use crate::world::VoxelStorage;
 
 /// Incrementally rebuilds meshes only for dirty sections in a `VoxelStorage`.
 pub struct DeltaMesher;

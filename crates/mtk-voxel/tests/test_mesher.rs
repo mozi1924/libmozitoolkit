@@ -2,8 +2,8 @@ use glam::IVec3;
 use mtk_cull::FaceCuller;
 use mtk_voxel::mesher::shading::ModelSource;
 use mtk_voxel::mesher::SectionMesher;
+use mtk_voxel::storage::VoxelStorage;
 use mtk_voxel::types::MesherConfig;
-use mtk_voxel::world::VoxelStorage;
 
 #[test]
 fn test_solid_cube_culling_in_mesher() {

@@ -82,23 +82,21 @@ fn test_database_compact_serialization_and_zstd() {
 }
 
 #[test]
-fn test_backward_compatibility_with_uncompressed_legacy_format() {
+fn test_rejects_uncompressed_pre_v3_payload() {
     let mut db = BakedModelDatabase::new();
     let oak = create_sample_cube("minecraft:oak_planks", "minecraft:block/oak_planks");
     db.insert("minecraft:oak_planks".to_string(), oak);
 
-    // Simulate raw uncompressed bincode bytes (no zstd wrapper)
     let uncompressed_bytes = bincode::serialize(&db).expect("serialize should succeed");
-    // Ensure it does not have zstd magic header
     assert_ne!(&uncompressed_bytes[..4], &[0x28, 0xb5, 0x2f, 0xfd]);
 
-    // from_bincode must seamlessly load uncompressed bytes
-    let loaded = BakedModelDatabase::from_bincode(&uncompressed_bytes)
-        .expect("from_bincode should handle uncompressed legacy format");
-
-    assert_eq!(loaded.models.len(), 1);
-    assert!(loaded.models.contains_key("minecraft:oak_planks"));
-    assert_eq!(loaded.variant_groups.len(), 1);
+    let err = BakedModelDatabase::from_bincode(&uncompressed_bytes)
+        .expect_err("pre-v3 uncompressed payload must be rejected");
+    let message = err.to_string();
+    assert!(
+        message.contains("asset cache format < 3"),
+        "error must explain the version boundary, got: {message}"
+    );
 }
 
 #[test]
@@ -109,6 +107,13 @@ fn test_real_cache_benchmark_if_available() {
     };
 
     let raw_file_bytes = fs::read(&real_cache_path).expect("Failed to read real models.bin");
+    if raw_file_bytes.len() < 4 || raw_file_bytes[..4] != [0x28, 0xb5, 0x2f, 0xfd] {
+        let err = BakedModelDatabase::from_bincode(&raw_file_bytes)
+            .expect_err("pre-v3 models.bin must be rejected");
+        assert!(err.to_string().contains("asset cache format < 3"));
+        eprintln!("Skipping benchmark: $MTK_TEST_MODELS_CACHE is a pre-v3 uncompressed cache");
+        return;
+    }
     let old_size = raw_file_bytes.len();
     println!(
         "\n[Benchmark] Original models.bin size: {:.2} MB ({} bytes)",

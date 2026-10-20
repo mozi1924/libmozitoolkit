@@ -245,27 +245,20 @@ mod tests {
             assert_eq!(storage.dirty_section_count(), 1);
 
             let config = PyMesherConfig::default();
-            let mut world =
-                PyVoxelWorld::from_storage(&storage, Some(&config), None, None, true, None);
+            let mut world = PyVoxelWorld::from_storage(&storage, Some(&config), None, None, None);
             let mesh = world.rebuild_all(py, None).unwrap();
             assert!(!mesh.is_empty());
             assert_eq!(mesh.vertex_count(), 8); // 8 vertices for welded unit cube
 
             let mut unwelded_config = PyMesherConfig::default();
             unwelded_config.inner.weld_vertices = false;
-            let mut unwelded_world = PyVoxelWorld::from_storage(
-                &storage,
-                Some(&unwelded_config),
-                None,
-                None,
-                true,
-                None,
-            );
+            let mut unwelded_world =
+                PyVoxelWorld::from_storage(&storage, Some(&unwelded_config), None, None, None);
             let unwelded_mesh = unwelded_world.rebuild_all(py, None).unwrap();
             assert_eq!(unwelded_mesh.vertex_count(), 24); // 6 faces * 4 verts for isolated unwelded block
 
             let mut dirty_world =
-                PyVoxelWorld::from_storage(&storage, Some(&config), None, None, true, None);
+                PyVoxelWorld::from_storage(&storage, Some(&config), None, None, None);
             let rebuilt = dirty_world.rebuild_dirty(py).unwrap();
             assert_eq!(rebuilt.len(), 1);
         });
@@ -306,7 +299,7 @@ mod tests {
             );
 
             // Test session
-            let session = PyLiveSyncSession::new(None, None, None, true);
+            let session = PyLiveSyncSession::new(None, None, None);
             let events = session.poll_events(py, false).unwrap();
             assert_eq!(events.len(), 0);
         });

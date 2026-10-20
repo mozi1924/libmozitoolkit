@@ -93,7 +93,7 @@ fn send_baseline(
 
 #[test]
 fn test_unaligned_selection_with_multi_biomes_validates_state_hash() {
-    let session = LiveSyncSession::new(None, None, None, true);
+    let session = LiveSyncSession::new(None, None, None);
 
     // Deliberately NOT 16-aligned on X (4 % 16 != 0).
     let min_pos = IVec3::new(4, 0, 0);
@@ -127,7 +127,7 @@ fn test_unaligned_selection_with_multi_biomes_validates_state_hash() {
 
 #[test]
 fn test_superseded_baseline_frames_are_ignored() {
-    let session = LiveSyncSession::new(None, None, None, true);
+    let session = LiveSyncSession::new(None, None, None);
 
     let min_pos = IVec3::new(0, 0, 0);
     let size = IVec3::new(8, 1, 1);
@@ -236,7 +236,7 @@ fn test_superseded_baseline_frames_are_ignored() {
 /// 2D (256) and 3D (1024) smoothing modes and leak the wrong tint.
 #[test]
 fn test_partial_section_biomes_are_filled_from_nearest_sample() {
-    let session = LiveSyncSession::new(None, None, None, true);
+    let session = LiveSyncSession::new(None, None, None);
 
     // 8x1x1 selection starting at x=4: section (0,0,0) quart cells 1 and 2 are sampled,
     // cells 0 and 3 are not. Palette is built in scan order: [plains, desert].

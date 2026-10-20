@@ -55,15 +55,14 @@ pub struct LiveSyncSession {
 }
 
 impl LiveSyncSession {
-    /// Creates a new `LiveSyncSession`. Always configures `unified_mesh = true`.
+    /// Creates a new `LiveSyncSession` with an always-unified world mesh.
     pub fn new(
         config: Option<MesherConfig>,
         culler: Option<FaceCuller>,
         model_db: Option<Arc<BakedModelDatabase>>,
-        _unified_mesh: bool,
     ) -> Self {
         let (event_sender, event_receiver) = crossbeam_channel::unbounded::<SyncEvent>();
-        let world = VoxelWorld::new(config, culler, model_db, true);
+        let world = VoxelWorld::new(config, culler, model_db);
 
         Self {
             world: Arc::new(RwLock::new(world)),
@@ -101,14 +100,6 @@ impl LiveSyncSession {
             .write()
             .unwrap_or_else(|e| e.into_inner())
             .set_model_db(model_db);
-    }
-
-    /// Sets whether to output unified world mesh (enforced true in 2.0).
-    pub fn set_unified_mesh(&mut self, _unified_mesh: bool) {
-        self.world
-            .write()
-            .unwrap_or_else(|e| e.into_inner())
-            .set_unified_mesh(true);
     }
 
     /// Clears the cached section meshes and unified world mesh on the underlying VoxelWorld.
@@ -282,10 +273,10 @@ impl LiveSyncSession {
         // persisted session state pass `None`, which used to produce a zero-token
         // HELLO; token-protected servers then rejected the client with
         // "Authentication failed" even though both sides held the same secret.
-        let initial_hello = Some(match initial_hello {
+        let initial_hello = match initial_hello {
             Some(hello) => with_auth_token(hello, &self.auth_token),
             None => default_hello(&self.auth_token),
-        });
+        };
 
         // Drop any mesh/progress events left over from the previous connection so a
         // reconnecting host cannot apply a stale world mesh to the new session.
@@ -419,7 +410,7 @@ mod tests {
 
     #[test]
     fn poll_events_coalesced_keeps_newest_world_mesh() {
-        let session = LiveSyncSession::new(None, None, None, true);
+        let session = LiveSyncSession::new(None, None, None);
         session
             .event_sender
             .send(SyncEvent::StatusChange("CONNECTED".to_string()))
@@ -457,7 +448,7 @@ mod tests {
 
     #[test]
     fn auth_token_is_trimmed_like_the_server_config() {
-        let mut session = LiveSyncSession::new(None, None, None, true);
+        let mut session = LiveSyncSession::new(None, None, None);
         session.set_auth_token("  padded-secret \n");
         assert_eq!(session.auth_token(), "padded-secret");
 

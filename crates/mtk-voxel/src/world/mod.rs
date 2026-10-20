@@ -3,8 +3,8 @@
 //! Provides the authoritative high-level `VoxelWorld` container integrating
 //! sparse voxel storage, ambient occlusion, face culling, prebaked models,
 //! multi-threaded Section meshing, incremental dirty remeshing, Section mesh
-//! caching, unified world mesh assembly with vertex welding, and used material
-//! chunk tracking.
+//! caching, world mesh assembly with vertex welding, and used material chunk
+//! tracking.
 //!
 //! Fully host-agnostic and decoupled from WebSocket network synchronization.
 
@@ -19,13 +19,11 @@ use mtk_model::baker::baked_model::BakedModelDatabase;
 
 use crate::mesher::{DeltaMesher, SectionMesher};
 use crate::source::VoxelSource;
+use crate::storage::VoxelStorage;
 use crate::types::{MesherConfig, VoxelError};
 
 pub mod debug;
 pub mod sync;
-
-// Re-export storage world items for backward compatibility
-pub use crate::storage::world::*;
 
 /// Unified 3D Voxel World scene managing storage, multi-source ingestion,
 /// Section mesh caching, incremental remeshing, and unified geometry assembly.
@@ -41,8 +39,6 @@ pub struct VoxelWorld {
     pub model_db: Option<Arc<BakedModelDatabase>>,
     /// Custom thread count for Rayon parallel meshing (None for global pool).
     pub num_threads: Option<usize>,
-    /// Whether to merge all chunk sections into a single, seamless world mesh.
-    pub unified_mesh: bool,
     /// Cache of section meshes: `(sx, sy, sz) -> MeshData`.
     section_mesh_cache: HashMap<IVec3, MeshData>,
     /// Assembled unified world mesh buffer.
@@ -57,7 +53,6 @@ impl VoxelWorld {
         config: Option<MesherConfig>,
         culler: Option<FaceCuller>,
         model_db: Option<Arc<BakedModelDatabase>>,
-        unified_mesh: bool,
     ) -> Self {
         Self {
             storage: VoxelStorage::new(),
@@ -65,7 +60,6 @@ impl VoxelWorld {
             culler: culler.unwrap_or_default(),
             model_db,
             num_threads: None,
-            unified_mesh,
             section_mesh_cache: HashMap::new(),
             world_mesh: None,
             used_chunk_ids: Vec::new(),
@@ -78,9 +72,8 @@ impl VoxelWorld {
         config: Option<MesherConfig>,
         culler: Option<FaceCuller>,
         model_db: Option<Arc<BakedModelDatabase>>,
-        unified_mesh: bool,
     ) -> Self {
-        Self::from_storage_with_threads(storage, config, culler, model_db, unified_mesh, None)
+        Self::from_storage_with_threads(storage, config, culler, model_db, None)
     }
 
     /// Creates a `VoxelWorld` taking ownership of an existing `VoxelStorage` with explicit thread configuration.
@@ -89,7 +82,6 @@ impl VoxelWorld {
         config: Option<MesherConfig>,
         culler: Option<FaceCuller>,
         model_db: Option<Arc<BakedModelDatabase>>,
-        unified_mesh: bool,
         num_threads: Option<usize>,
     ) -> Self {
         Self {
@@ -98,7 +90,6 @@ impl VoxelWorld {
             culler: culler.unwrap_or_default(),
             model_db,
             num_threads,
-            unified_mesh,
             section_mesh_cache: HashMap::new(),
             world_mesh: None,
             used_chunk_ids: Vec::new(),
@@ -123,11 +114,6 @@ impl VoxelWorld {
     /// Updates mesher configuration.
     pub fn set_config(&mut self, config: MesherConfig) {
         self.config = config;
-    }
-
-    /// Toggles single unified world mesh mode vs individual section mode.
-    pub fn set_unified_mesh(&mut self, unified_mesh: bool) {
-        self.unified_mesh = unified_mesh;
     }
 
     /// Sets the active 3D selection bounding box.
@@ -301,20 +287,18 @@ impl VoxelWorld {
     /// sections are already internally welded by SectionMesher. Full spatial welding is applied on
     /// global rebuilds (`rebuild_all`).
     fn assemble_world_mesh(&mut self, full_weld: bool) {
-        if self.unified_mesh {
-            let meshes: Vec<&MeshData> = self.section_mesh_cache.values().collect();
-            let merged = if self.config.weld_vertices && full_weld {
-                MeshData::merge_welded_sections(&meshes, 1e-4)
-            } else {
-                MeshData::merge_all_refs(&meshes)
-            };
-            self.used_chunk_ids = merged
-                .used_materials()
-                .into_iter()
-                .map(|id| id as u32)
-                .collect();
-            self.world_mesh = Some(merged);
-        }
+        let meshes: Vec<&MeshData> = self.section_mesh_cache.values().collect();
+        let merged = if self.config.weld_vertices && full_weld {
+            MeshData::merge_welded_sections(&meshes, 1e-4)
+        } else {
+            MeshData::merge_all_refs(&meshes)
+        };
+        self.used_chunk_ids = merged
+            .used_materials()
+            .into_iter()
+            .map(|id| id as u32)
+            .collect();
+        self.world_mesh = Some(merged);
     }
 
     /// Resolves the model source (variant group or single model) for a blockstate.
@@ -524,6 +508,6 @@ impl VoxelWorld {
 
 impl Default for VoxelWorld {
     fn default() -> Self {
-        Self::new(None, None, None, true)
+        Self::new(None, None, None)
     }
 }

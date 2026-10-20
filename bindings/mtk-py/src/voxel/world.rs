@@ -14,30 +14,28 @@ pub struct PyVoxelWorld {
 #[pymethods]
 impl PyVoxelWorld {
     #[new]
-    #[pyo3(signature = (config=None, culler=None, model_db=None, unified_mesh=true))]
+    #[pyo3(signature = (config=None, culler=None, model_db=None))]
     pub fn new(
         config: Option<&PyMesherConfig>,
         culler: Option<&crate::cull::PyFaceCuller>,
         model_db: Option<&crate::model::PyBakedModelDatabase>,
-        unified_mesh: bool,
     ) -> Self {
         let cfg = config.map(|c| c.inner.clone());
         let cul = culler.map(|c| c.inner.clone());
         let mdb = model_db.map(|db| db.inner.clone());
         Self {
-            inner: mtk_voxel::VoxelWorld::new(cfg, cul, mdb, unified_mesh),
+            inner: mtk_voxel::VoxelWorld::new(cfg, cul, mdb),
         }
     }
 
     /// Creates a `VoxelWorld` taking initial data from an existing `VoxelStorage`.
     #[staticmethod]
-    #[pyo3(signature = (storage, config=None, culler=None, model_db=None, unified_mesh=true, num_threads=None))]
+    #[pyo3(signature = (storage, config=None, culler=None, model_db=None, num_threads=None))]
     pub fn from_storage(
         storage: &PyVoxelStorage,
         config: Option<&PyMesherConfig>,
         culler: Option<&crate::cull::PyFaceCuller>,
         model_db: Option<&crate::model::PyBakedModelDatabase>,
-        unified_mesh: bool,
         num_threads: Option<usize>,
     ) -> Self {
         let cfg = config.map(|c| c.inner.clone());
@@ -50,7 +48,6 @@ impl PyVoxelWorld {
                 cfg,
                 cul,
                 mdb,
-                unified_mesh,
                 threads,
             ),
         }
@@ -58,12 +55,11 @@ impl PyVoxelWorld {
 
     /// Loads or generates the canonical Minecraft debug world into a new `VoxelWorld`.
     #[staticmethod]
-    #[pyo3(signature = (config=None, culler=None, model_db=None, unified_mesh=true, num_threads=None, states=None, stack=None))]
+    #[pyo3(signature = (config=None, culler=None, model_db=None, num_threads=None, states=None, stack=None))]
     pub fn create_debug_world(
         config: Option<&PyMesherConfig>,
         culler: Option<&crate::cull::PyFaceCuller>,
         model_db: Option<&crate::model::PyBakedModelDatabase>,
-        unified_mesh: bool,
         num_threads: Option<usize>,
         states: Option<Vec<String>>,
         stack: Option<&crate::resource::PyResourcePackStack>,
@@ -74,31 +70,13 @@ impl PyVoxelWorld {
         let threads = num_threads.or_else(|| config.and_then(|c| c.num_threads));
 
         let world = if let Some(st) = states {
-            mtk_voxel::VoxelWorld::create_debug_world_from_states(
-                &st,
-                cfg,
-                cul,
-                mdb,
-                unified_mesh,
-                threads,
-            )
+            mtk_voxel::VoxelWorld::create_debug_world_from_states(&st, cfg, cul, mdb, threads)
         } else if let Some(s) = stack {
             mtk_voxel::VoxelWorld::create_debug_world_from_pack_stack(
-                &s.inner,
-                cfg,
-                cul,
-                mdb,
-                unified_mesh,
-                threads,
+                &s.inner, cfg, cul, mdb, threads,
             )
         } else {
-            mtk_voxel::VoxelWorld::create_debug_world_with_threads(
-                cfg,
-                cul,
-                mdb,
-                unified_mesh,
-                threads,
-            )
+            mtk_voxel::VoxelWorld::create_debug_world_with_threads(cfg, cul, mdb, threads)
         }
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
@@ -215,11 +193,6 @@ impl PyVoxelWorld {
     /// Updates or replaces the prebaked model database.
     pub fn set_model_db(&mut self, model_db: Option<&crate::model::PyBakedModelDatabase>) {
         self.inner.set_model_db(model_db.map(|db| db.inner.clone()));
-    }
-
-    /// Toggles single unified world mesh mode vs individual section mode.
-    pub fn set_unified_mesh(&mut self, unified_mesh: bool) {
-        self.inner.set_unified_mesh(unified_mesh);
     }
 
     /// Returns a copy of the underlying VoxelStorage.

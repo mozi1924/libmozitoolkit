@@ -55,7 +55,7 @@ fn default_hello_sends_configured_auth_token() {
     let (listener, url) = bind_listener();
     let server = thread::spawn(move || serve_one_hello(listener));
 
-    let mut session = LiveSyncSession::new(Some(MesherConfig::default()), None, None, true);
+    let mut session = LiveSyncSession::new(Some(MesherConfig::default()), None, None);
     session.set_auth_token("  s3cret-token  ");
     session
         .start_with_hello(&url, false, 1, None)
@@ -86,7 +86,7 @@ fn cached_hello_keeps_cache_and_receives_auth_token() {
         cached_dimension: "minecraft:the_nether".to_string(),
     };
 
-    let mut session = LiveSyncSession::new(Some(MesherConfig::default()), None, None, true);
+    let mut session = LiveSyncSession::new(Some(MesherConfig::default()), None, None);
     session.set_auth_token("cached-secret");
     session
         .start_with_hello(&url, false, 1, Some(cached_hello))

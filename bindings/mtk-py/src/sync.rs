@@ -19,29 +19,23 @@ pub struct PyLiveSyncSession {
 #[pymethods]
 impl PyLiveSyncSession {
     #[new]
-    #[pyo3(signature = (config=None, culler=None, model_db=None, unified_mesh=true))]
+    #[pyo3(signature = (config=None, culler=None, model_db=None))]
     pub fn new(
         config: Option<&PyMesherConfig>,
         culler: Option<&PyFaceCuller>,
         model_db: Option<&PyBakedModelDatabase>,
-        unified_mesh: bool,
     ) -> Self {
         let cfg = config.map(|c| c.inner.clone());
         let cul = culler.map(|c| c.inner.clone());
         let mdb = model_db.map(|db| db.inner.clone());
         Self {
-            inner: LiveSyncSession::new(cfg, cul, mdb, unified_mesh),
+            inner: LiveSyncSession::new(cfg, cul, mdb),
         }
     }
 
     /// Sets or updates the active baked model database.
     pub fn set_model_db(&mut self, model_db: Option<&PyBakedModelDatabase>) {
         self.inner.set_model_db(model_db.map(|db| db.inner.clone()));
-    }
-
-    /// Sets whether to output unified world mesh or individual section meshes.
-    pub fn set_unified_mesh(&mut self, unified_mesh: bool) {
-        self.inner.set_unified_mesh(unified_mesh);
     }
 
     /// Clears the cached section meshes and unified world mesh on the underlying VoxelWorld.

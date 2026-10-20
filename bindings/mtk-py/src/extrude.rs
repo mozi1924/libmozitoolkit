@@ -60,7 +60,7 @@ pub fn process_flat_mesh_extrude_repair(
         face_materials,
     );
 
-    let config = mtk_core::extrude_mesh::MeshExtrudeRepairConfig {
+    let config = mtk_core::extrude::MeshExtrudeRepairConfig {
         uv_mode: mode,
         repair_uv,
         add_crease,
@@ -69,7 +69,7 @@ pub fn process_flat_mesh_extrude_repair(
     };
 
     let out = py.allow_threads(|| {
-        mtk_core::extrude_mesh::process_flat_mesh_extrude_repair(
+        mtk_core::extrude::process_flat_mesh_extrude_repair(
             &flat_mesh,
             &selected_faces,
             &pixel_steps,

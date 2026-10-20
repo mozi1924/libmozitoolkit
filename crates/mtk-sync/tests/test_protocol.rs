@@ -148,3 +148,12 @@ fn test_invalid_magic_and_version() {
         Err(ProtocolError::UnsupportedVersion(0x99))
     ));
 }
+
+#[test]
+fn test_legacy_replay_deltas_decision_is_rejected() {
+    assert_eq!(SyncDecision::from_u8(0x01), None);
+    assert_eq!(
+        SyncDecision::from_u8(0x02),
+        Some(SyncDecision::FullBaselineRequired)
+    );
+}

@@ -11,8 +11,8 @@ use mtk_voxel::fluid::{
 };
 use mtk_voxel::mesher::SectionMesher;
 use mtk_voxel::storage::SectionStorage;
+use mtk_voxel::storage::VoxelStorage;
 use mtk_voxel::types::MesherConfig;
-use mtk_voxel::world::VoxelStorage;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]

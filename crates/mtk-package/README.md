@@ -1,6 +1,6 @@
 # mtk-package
 
-`mtk-package` 是 MoziToolKit 生态中纯 Rust、宿主无关的统一二进制存储包容器编解码器，用于全量资产预编译缓存 (`.mtkcache`) 与轻量场景交换包 (`.mtkscene`)。
+`mtk-package` 是 MoziToolKit 生态中纯 Rust、宿主无关的统一二进制存储包容器编解码器，用于全量资产预编译缓存 (`.mtkcache`)。
 
 ---
 

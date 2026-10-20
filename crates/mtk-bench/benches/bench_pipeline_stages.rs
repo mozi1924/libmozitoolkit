@@ -141,7 +141,7 @@ fn main() {
 
     // Stage 4: Single-pass World Merge & Boundary Seam Welding
     let t_s4 = Instant::now();
-    let _unified_mesh = MeshData::merge_welded_sections(&mesh_refs, 1e-4);
+    let _merged_mesh = MeshData::merge_welded_sections(&mesh_refs, 1e-4);
     let d_s4 = t_s4.elapsed();
     println!(
         " 4. World Merge & Seam Welding (merge_welded):    {:.2} ms",
@@ -161,7 +161,7 @@ fn main() {
 
     // Total end-to-end via VoxelWorld
     println!("\n[End-to-End VoxelWorld::rebuild_all Benchmark]");
-    let mut world = VoxelWorld::from_storage(storage, Some(config), Some(culler), None, true);
+    let mut world = VoxelWorld::from_storage(storage, Some(config), Some(culler), None);
     let t_total = Instant::now();
     let final_mesh = world.rebuild_all().unwrap();
     let d_total = t_total.elapsed();

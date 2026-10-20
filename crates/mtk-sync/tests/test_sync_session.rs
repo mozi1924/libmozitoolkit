@@ -9,17 +9,16 @@ use std::io::Write;
 
 #[test]
 fn test_sync_session_initialization() {
-    let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None, true);
+    let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None);
     let events = session.poll_events();
     assert!(events.is_empty());
-    assert!(session.world.read().unwrap().unified_mesh);
     assert_eq!(session.client_generation(), 1);
     assert_eq!(session.status(), "DISCONNECTED");
 }
 
 #[test]
 fn test_handshake_welcome_verified_skip_rebuild() {
-    let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None, true);
+    let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None);
 
     let welcome = Packet::Welcome {
         negotiated_version: 0x0003,
@@ -54,7 +53,7 @@ fn test_handshake_welcome_verified_skip_rebuild() {
 
 #[test]
 fn test_baseline_assembly_and_meshing() {
-    let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None, true);
+    let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None);
 
     let min_pos = IVec3::new(0, 0, 0);
     let size = IVec3::new(2, 2, 2);
@@ -161,7 +160,7 @@ fn test_baseline_assembly_and_meshing() {
 
 #[test]
 fn test_delta_staging_and_replay_after_baseline() {
-    let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None, true);
+    let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None);
 
     let min_pos = IVec3::new(0, 0, 0);
     let size = IVec3::new(2, 2, 2);

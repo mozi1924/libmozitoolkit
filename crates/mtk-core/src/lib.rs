@@ -5,7 +5,6 @@ pub mod attributes;
 pub mod constants;
 pub mod direction;
 pub mod extrude;
-pub use extrude as extrude_mesh;
 pub mod geometry;
 pub mod mesh;
 pub mod polygon;
