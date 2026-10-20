@@ -48,8 +48,7 @@ Python 模块名：`libmtk_py`
   - 构造与修改：`MeshData()`, `MeshData.with_capacity(verts, indices, faces)`, `MeshData.from_flat_polygons(positions, loop_vertices, loop_uvs, face_loop_starts, face_loop_totals, normals=None, face_materials=None)`（共享顶点 + 逐 loop UV）, `append_mesh(other)`, `clear()`
   - UV 布局：`uv_layout` 显式区分 `PerVertex` / `PerLoop`，不再用 `uvs.len()` 猜测；`loop_uvs_memoryview()` 自动展开为逐 loop。
   - 内存视图（标准零拷贝通道，推荐）：`positions_memoryview()`, `normals_memoryview()`, `uvs_memoryview()`, `indices_memoryview()`, `quad_indices_memoryview()`, `loop_uvs_memoryview()`, `loop_starts_memoryview()`, `loop_totals_memoryview()`, `face_materials_memoryview()`
-  - 非稳定底层 DNA 直写子模块（`libmtk_py.unstable.blender_dna`，由底层 `mtk-blender-dna` crate 驱动）：`copy_positions_to_ptr(mesh, ptr, max_bytes=None)`, `copy_normals_to_ptr(...)`, `copy_indices_to_ptr(...)`, `copy_quad_indices_to_ptr(...)`, `copy_loop_uvs_to_ptr(...)`, `copy_colors_to_ptr(...)`, point-cloud `copy_point_cloud_*_to_ptr(...)`，均内建指针非空与内存越界溢出防御守卫，均内建指针非空与内存越界溢出防御守卫。
-  - 顶层 `libmtk_py.blender` 兼容别名与 `BlenderDirectMesh` 类已于 2026-10 API 收敛中移除，唯一入口为 `libmtk_py.unstable.blender_dna`。
+  - 核心 wheel 不再包含 Blender 指针写入代码。零拷贝宿主写入由独立 `libmtk_blender_dna` wheel 提供，通过 `memoryview` 接收核心 buffer，再写入 Blender 指针；核心不需要知道适配器的存在。
   - 次级 UV / 面 tint：`get_flat_secondary_uvs()`, `face_tint_indices_memoryview()`
   - 顶点与面自定义属性：`add_string_attribute(name, domain, values)`, `add_attribute_from_buffer(name, domain, data_type, buffer)`, `get_attribute_data(name)`, `has_attribute(name)`, `attribute_names()`
   - 来源贴图调色板：`source_texture_palette_indices() -> (palette, u32 memoryview)`，把逐面 `mtk_source_texture_key` 压缩成 palette + 索引，供 Live Sync 等跳过逐面字符串的宿主保留完整 provenance。

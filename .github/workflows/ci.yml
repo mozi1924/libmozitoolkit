@@ -102,12 +102,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Build wheel
+      - name: Assert DNA leaf dependencies
+        run: |
+          cargo tree -p mtk-blender-dna
+          if cargo tree -p mtk-blender-dna | grep -Eq 'mtk-(core|voxel|material|model|texture|resource)'; then
+            echo "::error::mtk-blender-dna must not depend on core crates"
+            exit 1
+          fi
+      - name: Build wheels
         run: |
           python -m pip install --upgrade pip maturin
           maturin build --release --out dist -m bindings/mtk-py/Cargo.toml
+          maturin build --release --out dist -m bindings/mtk-blender-dna-py/Cargo.toml
       - name: Verify wheel imports
         run: |
           python -m pip install dist/*.whl
-          python -c "import libmtk_py; print('libmtk_py', libmtk_py.version())"
+          python -c "import libmtk_py; print('libmtk_py', libmtk_py.version(), 'api', libmtk_py.api_version())"
+          python -c "import libmtk_blender_dna; print('libmtk_blender_dna', libmtk_blender_dna.api_version())"
+          python -m unittest discover -s bindings/mtk-blender-dna-py/tests -q
 

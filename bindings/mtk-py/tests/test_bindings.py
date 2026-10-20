@@ -110,31 +110,6 @@ class TestLibMtkPy(unittest.TestCase):
         self.assertEqual(restored.get_state_palette(), cloud.get_state_palette())
         self.assertEqual(restored.get_biome_palette(), cloud.get_biome_palette())
 
-    def test_unstable_blender_dna_submodule(self):
-        import numpy as np
-
-        if not hasattr(libmtk_py, "unstable") or not hasattr(
-            libmtk_py.unstable, "blender_dna"
-        ):
-            self.skipTest("libmtk_py built without blender feature or unstable submodule")
-
-        dna = libmtk_py.unstable.blender_dna
-        mesh = quad_mesh()
-
-        dst_pos = np.zeros(12, dtype=np.float32)
-        copied = dna.copy_positions_to_ptr(mesh, dst_pos.ctypes.data)
-        self.assertEqual(copied, 12 * 4)
-        np.testing.assert_allclose(
-            dst_pos.reshape(-1, 3)[0], [0.0, 0.0, 0.0]
-        )
-
-        dst_uv = np.zeros(8, dtype=np.float32)
-        copied = dna.copy_loop_uvs_to_ptr(mesh, dst_uv.ctypes.data)
-        self.assertEqual(copied, 8 * 4)
-        np.testing.assert_array_equal(
-            dst_uv, [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
-        )
-
 
 if __name__ == "__main__":
     unittest.main()

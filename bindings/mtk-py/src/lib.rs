@@ -207,7 +207,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
     m.add_function(wrap_pyfunction!(api_version, m)?)?;
 
-    // 12. Unstable and experimental APIs (includes the Blender DNA accelerator)
+    // 12. Unstable and experimental APIs
     {
         let py = m.py();
         unstable::register_submodule(py, m)?;

@@ -1,0 +1,20 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "libmtk_blender_dna"
+version = "0.1.0"
+description = "Standalone Blender raw-memory adapter for libmtk"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+]
+
+[tool.maturin]
+module-name = "libmtk_blender_dna"
+features = ["pyo3/extension-module"]

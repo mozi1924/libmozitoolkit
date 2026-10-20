@@ -1,0 +1,66 @@
+import array
+import ctypes
+import unittest
+
+import libmtk_blender_dna as dna
+
+
+class TestBlenderDna(unittest.TestCase):
+    def test_api_version(self):
+        self.assertEqual(dna.api_version(), 1)
+
+    def test_copy_f32_typed_and_raw(self):
+        src = array.array("f", [1.0, 2.0, 3.0, 4.0])
+        dst = (ctypes.c_float * 4)()
+        self.assertEqual(
+            dna.copy_f32(src, ctypes.addressof(dst), 4, max_bytes=16), 16
+        )
+        self.assertEqual(list(dst), [1.0, 2.0, 3.0, 4.0])
+
+        dst_raw = (ctypes.c_float * 4)()
+        self.assertEqual(
+            dna.copy_f32(memoryview(src).cast("B"), ctypes.addressof(dst_raw), 4),
+            16,
+        )
+        self.assertEqual(list(dst_raw), [1.0, 2.0, 3.0, 4.0])
+
+    def test_copy_integer_types(self):
+        i32 = array.array("i", [-1, 0, 7])
+        dst_i32 = (ctypes.c_int32 * 3)()
+        self.assertEqual(dna.copy_i32(i32, ctypes.addressof(dst_i32), 3), 12)
+        self.assertEqual(list(dst_i32), [-1, 0, 7])
+
+        u32 = array.array("I", [0, 1, 0xFFFFFFFF])
+        dst_u32 = (ctypes.c_uint32 * 3)()
+        self.assertEqual(dna.copy_u32(u32, ctypes.addressof(dst_u32), 3), 12)
+        self.assertEqual(list(dst_u32), [0, 1, 0xFFFFFFFF])
+
+    def test_copy_u8(self):
+        src = bytes([1, 2, 255])
+        dst = (ctypes.c_uint8 * 3)()
+        self.assertEqual(dna.copy_u8(src, ctypes.addressof(dst), 3), 3)
+        self.assertEqual(list(dst), [1, 2, 255])
+
+    def test_rejects_bad_length_and_capacity(self):
+        src = array.array("f", [1.0, 2.0])
+        dst = (ctypes.c_float * 2)()
+        with self.assertRaises(ValueError):
+            dna.copy_f32(src, ctypes.addressof(dst), 3)
+        with self.assertRaises(ValueError):
+            dna.copy_f32(src, ctypes.addressof(dst), 2, max_bytes=4)
+
+    def test_rejects_null_and_misaligned_destination(self):
+        src = array.array("f", [1.0, 2.0])
+        with self.assertRaises(ValueError):
+            dna.copy_f32(src, 0, 2)
+        dst = (ctypes.c_float * 2)()
+        with self.assertRaises(ValueError):
+            dna.copy_f32(src, ctypes.addressof(dst) + 1, 2)
+
+    def test_zero_count_is_noop(self):
+        self.assertEqual(dna.copy_f32(b"", 0, 0), 0)
+        self.assertEqual(dna.copy_u8(b"", 0, 0), 0)
+
+
+if __name__ == "__main__":
+    unittest.main()

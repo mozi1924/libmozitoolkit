@@ -266,6 +266,21 @@ impl PyVoxelPointCloud {
         self.inner.biome_palette.clone()
     }
 
+    /// Read-only memoryview of per-point light levels (`uint8`).
+    pub fn light_levels_memoryview<'py>(
+        slf: &Bound<'py, Self>,
+    ) -> PyResult<Bound<'py, PyMemoryView>> {
+        let py = slf.py();
+        let inner = &slf.borrow().inner;
+        if inner.light_levels.is_empty() {
+            let bytes = PyBytes::new(py, &[]);
+            return PyMemoryView::from(&bytes);
+        }
+        let ptr = inner.light_levels.as_ptr();
+        let len = inner.light_levels.len();
+        crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
+    }
+
     /// Read-only memoryview of per-point blockstate palette indices (`int32`).
     pub fn state_indices_memoryview<'py>(
         slf: &Bound<'py, Self>,

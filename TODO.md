@@ -40,7 +40,7 @@
   `mesh_sections_parallel_with_source_and_progress`；`DeltaMesher::rebuild_dirty_sections` 一并删除。
 - [x] **`PyMesherConfig` 去重**：删除 10 个与构造 kwargs 重复的 `set_*` / `#[setter]`。
 - [x] **legacy `blender` 子模块删除**：`bindings/mtk-py/src/blender.rs`（186 行镜像）与
-  `BlenderDirectMesh` 类移除，全部直写入口统一为 `libmtk_py.unstable.blender_dna`；
+  `BlenderDirectMesh` 类移除，全部直写入口统一为独立的 `libmtk_blender_dna` 适配器；
   MoziToolKit `bridge/engine.py` 的 `mtk.blender` fallback 同步删除。
 - [x] **`mtk-py` 零引用方法清理（47 个）**：`BakedAtlas` 11、`VoxelPointCloud` 8、`MeshData` 8、
   `BakedModelDatabase` 7、`LevelData` 3、`GridAtlasSpec` 3、`AssetCache` 2、`resource`/`voxel` 各 1 等。
@@ -53,7 +53,7 @@
   的着色器节点就地改名（幂等，已用临时材质验证）。
 
 ### 📋 待办（B 档剩余）
-- [x] `MeshData.direct_copy_*` method 级 DNA 直写已删除，统一走 `unstable.blender_dna`。
+- [x] `MeshData.direct_copy_*` method 级 DNA 直写已删除，统一走独立 `libmtk_blender_dna`。
 - [ ] `mtk-py` 剩余的类方法（`VoxelStorage` 约 19 个、`VoxelWorld` 8 个、`AssetCache` 5 个、`BiomeResolver` 6 个）待逐类确认后清理。
 
 ### 📋 待决策（C 档）
@@ -127,7 +127,7 @@
 - [x] `cargo test --workspace` 全绿（全工作区数十个 Crate 测试 100% 通过）；
 - [x] `cargo clippy --workspace --all-targets -- -D warnings` 零告警通过；
 - [x] `cargo fmt --all -- --check` 代码格式化一致性校验；
-- [x] 导出稳定的 CPython 3.11+ 标准 ABI (`abi3`) 动态链接扩展（`libmtk_py` 通过 `tools/build_wheels.py` 构建验证通过）。
+- [x] 导出稳定的 CPython 3.11+ 标准 ABI (`abi3`) 动态链接扩展（`libmtk_py` 与独立 `libmtk_blender_dna` 通过 `tools/build_wheels.py` 构建验证通过）。
 
 ---
 

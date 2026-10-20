@@ -1,0 +1,22 @@
+[package]
+name = "mtk-blender-dna-py"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Standalone PyO3 wheel for raw host-memory copies into Blender DNA buffers."
+
+[lib]
+name = "libmtk_blender_dna"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+mtk-blender-dna = { workspace = true }
+pyo3 = { workspace = true, features = ["abi3-py311"] }
+
+[features]
+extension-module = ["pyo3/extension-module"]
+
+[lints]
+workspace = true
