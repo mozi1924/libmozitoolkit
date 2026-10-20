@@ -22,7 +22,7 @@ pub enum SyncEvent {
         epoch: u64,
         sequence: u64,
         decision: String,
-        /// Raw RFC v3.1 decision code (0x00 VERIFIED_SKIP_REBUILD, 0x01 REPLAY_DELTAS,
+        /// Raw RFC v3.1 decision code (0x00 VERIFIED_SKIP_REBUILD, 0x01 reserved,
         /// 0x02 FULL_BASELINE_REQUIRED, 0xFF REJECTED).
         decision_code: u8,
         dimension: String,
