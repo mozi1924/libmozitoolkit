@@ -1,12 +1,11 @@
 #![forbid(unsafe_code)]
 //! # libmtk
 //!
-//! **Application layer** of the libmozitoolkit core engine. This crate owns exactly two
-//! responsibilities:
+//! **Application layer** of the libmozitoolkit core engine. This crate owns the
+//! headless asset precompilation pipeline:
 //!
 //! - [`prebake`]: end-to-end headless asset precompilation into a single `.mtkcache` container
 //!   (atlas stitching, biome resolver extraction, model database baking, manifest).
-//! - [`pipeline`]: the unified mesh processing pipeline (material resolution + UV remapping).
 //!
 //! Domain primitives (`MeshData`, `BakedModel`, `FaceCuller`, `SectionMesher`, ...) live in the
 //! individual `mtk-*` crates. This crate deliberately does **not** re-export them: bindings and
@@ -15,12 +14,8 @@
 
 use thiserror::Error;
 
-pub mod pipeline;
 pub mod prebake;
 
-pub use pipeline::{
-    process_mesh, MeshPipelineConfig, MeshProcessStats, ProcessMeshOutput, ResolvedMaterialInfo,
-};
 pub use prebake::{
     fingerprint_str_to_bytes16, prebake_all_models, prebake_all_models_with_progress,
     precompile_all_assets, precompile_all_assets_with_progress, resolve_active_cache_package,

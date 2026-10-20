@@ -1,6 +1,6 @@
 use mtk_material::{
-    clean_identifier, decode_grid_atlas_uv, remap_local_to_atlas, remap_mesh_multi_uvs_parallel,
-    GridAtlasSpec, MaterialResolver,
+    clean_identifier, decode_grid_atlas_uv, remap_local_to_atlas,
+    remap_mesh_multi_uvs_parallel_with_options, GridAtlasSpec, MaterialResolver,
 };
 use mtk_resource::ResourceLocation;
 use mtk_texture::{AtlasAddressMap, AtlasSpriteLocation, SpriteKind};
@@ -153,13 +153,14 @@ fn test_parallel_batch_mesh_remap() {
     let face_materials = vec!["muddy_ground".to_string(), "dirt".to_string()];
     let face_loop_ranges = vec![(0, 4), (4, 4)];
 
-    let multi_res = remap_mesh_multi_uvs_parallel(
+    let multi_res = remap_mesh_multi_uvs_parallel_with_options(
         &uvs,
         &face_materials,
         &face_loop_ranges,
         &address_map,
         Some(&custom_aliases),
         None,
+        false,
     );
     assert_eq!(multi_res.face_count, 2);
     assert_eq!(multi_res.local_uvs.len(), 8);

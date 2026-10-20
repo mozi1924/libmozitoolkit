@@ -475,42 +475,6 @@ pub fn classify_tint_category(
     mtk_material::classify_tint_category(clean_stem, block_name, tint_index)
 }
 
-/// Compute packed material properties `[emission, thin_wall, transmission, sticker_threshold]`
-/// for a list of face texture keys in parallel Rayon in Rust.
-#[pyfunction]
-#[pyo3(signature = (face_texture_keys, block_names=None))]
-pub fn compute_mesh_material_props(
-    py: Python<'_>,
-    face_texture_keys: Vec<String>,
-    block_names: Option<Vec<String>>,
-) -> PyResult<Vec<[f32; 4]>> {
-    let res = py.allow_threads(|| {
-        mtk_material::compute_mesh_material_props(&face_texture_keys, block_names.as_deref())
-    });
-    Ok(res)
-}
-
-/// Compute flat packed material properties (float array of length len * 4)
-/// for zero-copy memoryview / foreach_set injection into Blender Mesh.
-#[pyfunction]
-#[pyo3(signature = (face_texture_keys, block_names=None))]
-pub fn compute_flat_material_props(
-    py: Python<'_>,
-    face_texture_keys: Vec<String>,
-    block_names: Option<Vec<String>>,
-) -> PyResult<Vec<f32>> {
-    let res = py.allow_threads(|| {
-        let props =
-            mtk_material::compute_mesh_material_props(&face_texture_keys, block_names.as_deref());
-        let mut flat = Vec::with_capacity(props.len() * 4);
-        for p in props {
-            flat.extend_from_slice(&p);
-        }
-        flat
-    });
-    Ok(res)
-}
-
 /// Compute flat packed material properties as a zero-copy memoryview.
 #[pyfunction]
 #[pyo3(signature = (face_texture_keys, block_names=None))]

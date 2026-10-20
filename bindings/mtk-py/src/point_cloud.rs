@@ -330,43 +330,6 @@ impl PyVoxelPointCloud {
         self.inner.build_biome_palette_indices()
     }
 
-    /// Copies 3D positions directly into a destination memory pointer (`float32 * 3` per point).
-    #[cfg(feature = "blender")]
-    #[pyo3(signature = (dst_ptr, max_bytes=None))]
-    pub fn direct_copy_positions_to_ptr(
-        &self,
-        dst_ptr: usize,
-        max_bytes: Option<usize>,
-    ) -> PyResult<usize> {
-        crate::unstable::blender_dna::copy_point_cloud_positions_to_ptr(self, dst_ptr, max_bytes)
-    }
-
-    /// Batch copies all available voxel point cloud attributes directly into destination pointers in a single call.
-    /// Returns `(Option<state_palette>, Option<biome_palette>)`.
-    #[cfg(feature = "blender")]
-    #[pyo3(signature = (pos_ptr=None, block_x_ptr=None, block_y_ptr=None, block_z_ptr=None, state_idx_ptr=None, biome_idx_ptr=None, light_ptr=None))]
-    pub fn direct_copy_to_ptrs(
-        &self,
-        pos_ptr: Option<usize>,
-        block_x_ptr: Option<usize>,
-        block_y_ptr: Option<usize>,
-        block_z_ptr: Option<usize>,
-        state_idx_ptr: Option<usize>,
-        biome_idx_ptr: Option<usize>,
-        light_ptr: Option<usize>,
-    ) -> PyResult<(Option<Vec<String>>, Option<Vec<String>>)> {
-        crate::unstable::blender_dna::copy_point_cloud_to_ptrs(
-            self,
-            pos_ptr,
-            block_x_ptr,
-            block_y_ptr,
-            block_z_ptr,
-            state_idx_ptr,
-            biome_idx_ptr,
-            light_ptr,
-        )
-    }
-
     fn __repr__(&self) -> String {
         format!("<VoxelPointCloud len={}>", self.inner.len())
     }

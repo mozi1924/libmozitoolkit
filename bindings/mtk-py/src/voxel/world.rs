@@ -177,11 +177,6 @@ impl PyVoxelWorld {
         self.inner.used_chunk_ids().to_vec()
     }
 
-    /// Compacts material indices on the world mesh into contiguous 0..N-1 and returns original chunk mapping.
-    pub fn compact_world_mesh_materials(&mut self) -> Vec<u16> {
-        self.inner.compact_world_mesh_materials()
-    }
-
     /// Sets the active 3D selection bounding box.
     pub fn set_bounds(
         &mut self,
@@ -212,51 +207,6 @@ impl PyVoxelWorld {
         self.inner.set_block(x, y, z, state, biome)
     }
 
-    /// Ingests a full snapshot packet.
-    #[pyo3(signature = (min_x, min_y, min_z, size_x, size_y, size_z, palette, grid_indices, biome_palette=None, biome_indices=None))]
-    pub fn set_full_snapshot(
-        &mut self,
-        min_x: i32,
-        min_y: i32,
-        min_z: i32,
-        size_x: i32,
-        size_y: i32,
-        size_z: i32,
-        palette: Vec<String>,
-        grid_indices: Vec<u16>,
-        biome_palette: Option<Vec<String>>,
-        biome_indices: Option<Vec<u16>>,
-    ) {
-        self.inner.set_full_snapshot(
-            min_x,
-            min_y,
-            min_z,
-            size_x,
-            size_y,
-            size_z,
-            &palette,
-            &grid_indices,
-            biome_palette.as_deref(),
-            biome_indices.as_deref(),
-        );
-    }
-
-    /// Applies a batch of block delta modifications.
-    pub fn apply_delta_update(
-        &mut self,
-        min_x: i32,
-        min_y: i32,
-        min_z: i32,
-        changes: Vec<(i32, i32, i32, String)>,
-    ) -> Vec<(i32, i32, i32, String, String)> {
-        let borrowed: Vec<(i32, i32, i32, &str)> = changes
-            .iter()
-            .map(|(x, y, z, s)| (*x, *y, *z, s.as_str()))
-            .collect();
-        self.inner
-            .apply_delta_update(min_x, min_y, min_z, &borrowed)
-    }
-
     /// Updates mesher configuration.
     pub fn set_config(&mut self, config: &PyMesherConfig) {
         self.inner.set_config(config.inner.clone());
@@ -284,11 +234,6 @@ impl PyVoxelWorld {
         crate::point_cloud::PyVoxelPointCloud {
             inner: self.inner.to_point_cloud(),
         }
-    }
-
-    /// Reconstructs world storage from a point cloud and clears cached meshes.
-    pub fn load_from_point_cloud(&mut self, point_cloud: &crate::point_cloud::PyVoxelPointCloud) {
-        self.inner.load_from_point_cloud(&point_cloud.inner);
     }
 
     /// Syncs world storage with updated storage (e.g. from carved point cloud)

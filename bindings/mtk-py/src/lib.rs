@@ -8,7 +8,6 @@ pub mod cull;
 pub mod extrude;
 pub mod material;
 pub mod mesh;
-pub mod mesher;
 pub mod model;
 pub mod point_cloud;
 pub mod protocol;
@@ -34,7 +33,6 @@ pub use material::{
     PyMaterialResolver,
 };
 pub use mesh::{PyAttributeDomain, PyMeshData};
-pub use mesher::PySectionMesher;
 pub use model::{PyBakedModelDatabase, PyModelBaker};
 pub use point_cloud::PyVoxelPointCloud;
 pub use protocol::{
@@ -50,59 +48,6 @@ pub use sync::PyLiveSyncSession;
 pub use texture::{PyAtlasBuilder, PyBakedAtlas};
 pub use voxel::{PyMesherConfig, PyVoxelStorage, PyVoxelWorld};
 
-/// Unified high-performance mesh processing pipeline entrypoint.
-///
-/// Takes input raw mesh, material names, optional baked atlas, and optional grid atlas spec.
-/// Computes multi-threaded status resolution, UV remapping, secondary [0, 1] PBR UVs,
-/// and returns the transformed MeshData along with structured material assignments.
-#[pyfunction]
-#[pyo3(signature = (mesh, material_names, atlas=None, aliases=None, generate_secondary_uv=true, grid_atlas_spec=None))]
-pub fn process_mesh<'py>(
-    py: Python<'py>,
-    mesh: &PyMeshData,
-    material_names: Vec<String>,
-    atlas: Option<&PyBakedAtlas>,
-    aliases: Option<std::collections::HashMap<String, Vec<String>>>,
-    generate_secondary_uv: bool,
-    grid_atlas_spec: Option<&PyGridAtlasSpec>,
-) -> PyResult<(
-    PyMeshData,
-    Bound<'py, pyo3::types::PyList>,
-    Bound<'py, pyo3::types::PyDict>,
-)> {
-    let cfg = libmtk::MeshPipelineConfig {
-        custom_aliases: aliases,
-        generate_secondary_uv,
-        grid_atlas_spec: grid_atlas_spec.map(|s| s.inner.clone()),
-    };
-
-    let addr_map = atlas.map(|a| &a.inner.address_map);
-    let output =
-        py.allow_threads(|| libmtk::process_mesh(&mesh.inner, &material_names, addr_map, &cfg));
-
-    // Build material metadata list
-    let mat_list = pyo3::types::PyList::empty(py);
-    for mat in output.materials {
-        let dict = pyo3::types::PyDict::new(py);
-        dict.set_item("raw_name", mat.raw_name)?;
-        dict.set_item("canonical_name", mat.canonical_name)?;
-        dict.set_item("atlas_chunk_id", mat.atlas_chunk_id)?;
-        dict.set_item("is_animated", mat.is_animated)?;
-        mat_list.append(dict)?;
-    }
-
-    // Build stats dictionary
-    let stats_dict = pyo3::types::PyDict::new(py);
-    stats_dict.set_item("input_vertices", output.stats.input_vertices)?;
-    stats_dict.set_item("input_faces", output.stats.input_faces)?;
-    stats_dict.set_item("output_vertices", output.stats.output_vertices)?;
-    stats_dict.set_item("output_faces", output.stats.output_faces)?;
-    stats_dict.set_item("resolved_slots", output.stats.resolved_slots)?;
-    stats_dict.set_item("unmapped_slots", output.stats.unmapped_slots)?;
-
-    Ok((PyMeshData { inner: output.mesh }, mat_list, stats_dict))
-}
-
 /// Returns libmtk version string.
 #[pyfunction]
 pub fn version() -> &'static str {
@@ -116,7 +61,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyAttributeDomain>()?;
     m.add_class::<PyMeshData>()?;
     m.add_class::<buffer::PyBufferOwner>()?;
-    m.add_function(wrap_pyfunction!(process_mesh, m)?)?;
     m.add_function(wrap_pyfunction!(subdivide::calculate_face_target_grid, m)?)?;
     m.add_function(wrap_pyfunction!(
         subdivide::calculate_pixel_grid_cut_factors,
@@ -137,7 +81,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyVoxelPointCloud>()?;
 
     // 4. Meshing Generator
-    m.add_class::<PySectionMesher>()?;
 
     // 5. Live Sync & Protocol
     m.add_class::<PyLiveSyncSession>()?;
@@ -185,8 +128,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(material::get_colormap_uv, m)?)?;
     m.add_function(wrap_pyfunction!(material::get_hardcoded_tint, m)?)?;
     m.add_function(wrap_pyfunction!(material::get_hardcoded_tint_hex, m)?)?;
-    m.add_function(wrap_pyfunction!(material::compute_mesh_material_props, m)?)?;
-    m.add_function(wrap_pyfunction!(material::compute_flat_material_props, m)?)?;
     m.add_function(wrap_pyfunction!(compute_flat_material_props_memoryview, m)?)?;
     m.add_function(wrap_pyfunction!(
         compute_flat_material_props_paletted_memoryview,
@@ -241,12 +182,10 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(uv::get_fluid_side_uvs, m)?)?;
     m.add_function(wrap_pyfunction!(uv::repair_extruded_side_uv, m)?)?;
     m.add_function(wrap_pyfunction!(uv::generate_random_extrude_heights, m)?)?;
-    m.add_function(wrap_pyfunction!(extrude::process_mesh_extrude_repair, m)?)?;
     m.add_function(wrap_pyfunction!(
         extrude::process_flat_mesh_extrude_repair,
         m
     )?)?;
-    m.add_function(wrap_pyfunction!(extrude::process_random_extrude_mesh, m)?)?;
 
     // 10. Minecraft Save Loader
     m.add_class::<save::PyLevelData>()?;
@@ -296,7 +235,7 @@ mod tests {
     }
 
     #[test]
-    fn test_python_voxel_storage_and_mesher() {
+    fn test_python_voxel_storage_and_world_mesher() {
         pyo3::prepare_freethreaded_python();
         Python::with_gil(|py| {
             let mut storage = PyVoxelStorage::new();
@@ -306,33 +245,29 @@ mod tests {
             assert_eq!(storage.dirty_section_count(), 1);
 
             let config = PyMesherConfig::default();
-            let mesh =
-                PySectionMesher::mesh_world(py, &storage, Some(&config), None, None).unwrap();
+            let mut world =
+                PyVoxelWorld::from_storage(&storage, Some(&config), None, None, true, None);
+            let mesh = world.rebuild_all(py, None).unwrap();
             assert!(!mesh.is_empty());
             assert_eq!(mesh.vertex_count(), 8); // 8 vertices for welded unit cube
 
             let mut unwelded_config = PyMesherConfig::default();
             unwelded_config.inner.weld_vertices = false;
-            let unwelded_mesh =
-                PySectionMesher::mesh_world(py, &storage, Some(&unwelded_config), None, None)
-                    .unwrap();
+            let mut unwelded_world = PyVoxelWorld::from_storage(
+                &storage,
+                Some(&unwelded_config),
+                None,
+                None,
+                true,
+                None,
+            );
+            let unwelded_mesh = unwelded_world.rebuild_all(py, None).unwrap();
             assert_eq!(unwelded_mesh.vertex_count(), 24); // 6 faces * 4 verts for isolated unwelded block
 
-            let dict =
-                PySectionMesher::mesh_sections_split(py, &storage, Some(&config), None, None)
-                    .unwrap();
-            assert_eq!(dict.len(), 1);
-
-            let rebuilt = PySectionMesher::rebuild_dirty_sections(
-                py,
-                &mut storage,
-                Some(&config),
-                None,
-                None,
-            )
-            .unwrap();
+            let mut dirty_world =
+                PyVoxelWorld::from_storage(&storage, Some(&config), None, None, true, None);
+            let rebuilt = dirty_world.rebuild_dirty(py).unwrap();
             assert_eq!(rebuilt.len(), 1);
-            assert_eq!(storage.dirty_section_count(), 0);
         });
     }
 
@@ -374,69 +309,6 @@ mod tests {
             let session = PyLiveSyncSession::new(None, None, None, true);
             let events = session.poll_events(py, false).unwrap();
             assert_eq!(events.len(), 0);
-        });
-    }
-
-    #[test]
-    fn test_python_process_mesh_end_to_end() {
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
-            let positions = vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0];
-            let uvs = vec![0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0];
-            let indices = vec![0, 1, 2, 0, 2, 3];
-            let mesh = PyMeshData::from_raw_buffers(positions, uvs, indices, None, None).unwrap();
-            assert_eq!(mesh.vertex_count(), 4);
-            assert_eq!(mesh.face_count(), 2);
-
-            let mapping_json = r#"{
-                "version": 1,
-                "chunks": [
-                    {
-                        "chunk_id": 0,
-                        "category": "blocks",
-                        "is_animated": false,
-                        "category_chunk_index": 1,
-                        "width": 1024,
-                        "height": 1024,
-                        "has_normal": false,
-                        "has_specular": false,
-                        "has_overlay": false
-                    }
-                ],
-                "sprites": {
-                    "minecraft:block/stone": {
-                        "chunk_id": 0,
-                        "texture_id": 0,
-                        "uv_bounds": [0.0, 0.0, 0.5, 0.5],
-                        "frame_0_uv_bounds": [0.0, 0.0, 0.5, 0.5],
-                        "local_uv_bounds": [0.0, 0.0, 1.0, 1.0],
-                        "pixel_rect": [0, 0, 16, 16],
-                        "frame_size": [16, 16],
-                        "is_animated": false,
-                        "frame_count": 1,
-                        "has_normal": false,
-                        "has_specular": false
-                    }
-                }
-            }"#;
-            let atlas = PyBakedAtlas::from_mapping_json(mapping_json).unwrap();
-            let mat_names = vec!["Tile_Stone".to_string(), "Tile_Stone".to_string()];
-
-            let (out_mesh, mats, stats) =
-                process_mesh(py, &mesh, mat_names, Some(&atlas), None, true, None).unwrap();
-
-            assert_eq!(out_mesh.vertex_count(), 4);
-            assert_eq!(mats.len(), 2);
-            assert_eq!(
-                stats
-                    .get_item("resolved_slots")
-                    .unwrap()
-                    .unwrap()
-                    .extract::<usize>()
-                    .unwrap(),
-                2
-            );
-            assert!(out_mesh.inner.secondary_uvs.is_some());
         });
     }
 

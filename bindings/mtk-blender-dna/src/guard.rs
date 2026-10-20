@@ -41,44 +41,6 @@ pub fn validate_aligned_pointer_and_bounds(
     Ok(())
 }
 
-/// Copies raw contiguous buffer bytes directly into a destination memory pointer with bounds checking.
-pub fn copy_buffer_to_ptr(
-    src_bytes: &[u8],
-    dst_ptr: usize,
-    max_bytes: Option<usize>,
-) -> DnaResult<usize> {
-    let len = src_bytes.len();
-    if len == 0 {
-        return Ok(0);
-    }
-    validate_pointer_and_bounds(dst_ptr, len, max_bytes)?;
-    unsafe {
-        std::ptr::copy_nonoverlapping(src_bytes.as_ptr(), dst_ptr as *mut u8, len);
-    }
-    Ok(len)
-}
-
-/// Copies raw pointer bytes directly into a destination memory pointer with bounds checking.
-///
-/// # Safety
-/// Caller must ensure `src_ptr` points to at least `len` valid, readable bytes.
-pub unsafe fn copy_raw_ptr_to_ptr(
-    src_ptr: *const u8,
-    len: usize,
-    dst_ptr: usize,
-    max_bytes: Option<usize>,
-) -> DnaResult<usize> {
-    if len == 0 {
-        return Ok(0);
-    }
-    if src_ptr.is_null() {
-        return Err(DnaError::NullPointer);
-    }
-    validate_pointer_and_bounds(dst_ptr, len, max_bytes)?;
-    std::ptr::copy_nonoverlapping(src_ptr, dst_ptr as *mut u8, len);
-    Ok(len)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -98,20 +60,6 @@ mod tests {
         );
         assert!(validate_pointer_and_bounds(0x1000, 20, Some(20)).is_ok());
         assert!(validate_pointer_and_bounds(0x1000, 20, None).is_ok());
-    }
-
-    #[test]
-    fn test_copy_buffer_to_ptr() {
-        let src = [1u8, 2, 3, 4, 5];
-        let mut dst = [0u8; 5];
-        let dst_ptr = dst.as_mut_ptr() as usize;
-
-        let copied = copy_buffer_to_ptr(&src, dst_ptr, Some(5)).unwrap();
-        assert_eq!(copied, 5);
-        assert_eq!(dst, [1, 2, 3, 4, 5]);
-
-        // Overflow test
-        assert!(copy_buffer_to_ptr(&src, dst_ptr, Some(3)).is_err());
     }
 
     #[test]

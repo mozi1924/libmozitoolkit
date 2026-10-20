@@ -175,31 +175,6 @@ fn remap_single_face_multi_uvs(
     }
 }
 
-/// Parallel batch remapper producing both Atlas UVs (chunk-mapped) and Local UVs ([0..1] normalized),
-/// along with per-face UV mode routing flags and overlay detection.
-///
-/// Legacy entry point preserving the static Frame-0 policy. Prefer
-/// [`remap_mesh_multi_uvs_parallel_with_options`] when the host exposes an
-/// animated-texture preference.
-pub fn remap_mesh_multi_uvs_parallel(
-    source_uvs: &[[f32; 2]],
-    face_materials: &[String],
-    face_loop_ranges: &[(u32, u32)],
-    address_map: &AtlasAddressMap,
-    aliases: Option<&HashMap<String, Vec<String>>>,
-    grid_atlas_spec: Option<&GridAtlasSpec>,
-) -> MeshMultiUvRemapResult {
-    remap_mesh_multi_uvs_parallel_with_options(
-        source_uvs,
-        face_materials,
-        face_loop_ranges,
-        address_map,
-        aliases,
-        grid_atlas_spec,
-        false,
-    )
-}
-
 /// Material name source for per-face remapping: direct strings or a palette + indices.
 #[derive(Clone, Copy)]
 enum FaceMaterialSource<'a> {

@@ -3,7 +3,6 @@
 //! Exposes unstable, hardware-accelerated direct memory and DNA pointer manipulation
 //! utilities for Blender integration.
 
-use pyo3::buffer::PyBuffer;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -13,28 +12,6 @@ use crate::point_cloud::PyVoxelPointCloud;
 #[inline]
 pub(crate) fn map_dna_err(err: mtk_blender_dna::DnaError) -> PyErr {
     PyValueError::new_err(err.to_string())
-}
-
-/// Copies raw contiguous buffer bytes directly into a destination memory pointer with bounds checking.
-#[pyfunction]
-#[pyo3(signature = (src_buffer, dst_ptr, max_bytes=None))]
-pub fn copy_buffer_to_ptr(
-    src_buffer: &Bound<'_, PyAny>,
-    dst_ptr: usize,
-    max_bytes: Option<usize>,
-) -> PyResult<usize> {
-    let py_buf: PyBuffer<u8> = PyBuffer::get(src_buffer)?;
-    if !py_buf.is_c_contiguous() {
-        return Err(PyValueError::new_err("Source buffer must be C-contiguous"));
-    }
-    let len = py_buf.len_bytes();
-    if len == 0 {
-        return Ok(0);
-    }
-    unsafe {
-        mtk_blender_dna::copy_raw_ptr_to_ptr(py_buf.buf_ptr() as *const u8, len, dst_ptr, max_bytes)
-            .map_err(map_dna_err)
-    }
 }
 
 /// Directly copies vertex positions into a contiguous destination pointer as raw float32 values (`len * 3`).
@@ -90,40 +67,6 @@ pub fn copy_loop_uvs_to_ptr(
     max_bytes: Option<usize>,
 ) -> PyResult<usize> {
     mtk_blender_dna::copy_loop_uvs_to_ptr(&mesh.inner, dst_ptr, max_bytes).map_err(map_dna_err)
-}
-
-/// Directly copies face material slots converted to 32-bit integers into the destination pointer.
-#[pyfunction]
-#[pyo3(signature = (mesh, dst_ptr, max_bytes=None))]
-pub fn copy_face_materials_to_ptr(
-    mesh: &PyMeshData,
-    dst_ptr: usize,
-    max_bytes: Option<usize>,
-) -> PyResult<usize> {
-    mtk_blender_dna::copy_face_materials_to_ptr(&mesh.inner, dst_ptr, max_bytes)
-        .map_err(map_dna_err)
-}
-
-/// Directly copies polygon loop start offsets into the destination pointer as 32-bit integers.
-#[pyfunction]
-#[pyo3(signature = (mesh, dst_ptr, max_bytes=None))]
-pub fn copy_loop_starts_to_ptr(
-    mesh: &PyMeshData,
-    dst_ptr: usize,
-    max_bytes: Option<usize>,
-) -> PyResult<usize> {
-    mtk_blender_dna::copy_loop_starts_to_ptr(&mesh.inner, dst_ptr, max_bytes).map_err(map_dna_err)
-}
-
-/// Directly copies polygon loop totals into the destination pointer as 32-bit integers.
-#[pyfunction]
-#[pyo3(signature = (mesh, dst_ptr, max_bytes=None))]
-pub fn copy_loop_totals_to_ptr(
-    mesh: &PyMeshData,
-    dst_ptr: usize,
-    max_bytes: Option<usize>,
-) -> PyResult<usize> {
-    mtk_blender_dna::copy_loop_totals_to_ptr(&mesh.inner, dst_ptr, max_bytes).map_err(map_dna_err)
 }
 
 /// Directly copies vertex RGBA colors into the destination pointer as raw float32 values (`len * 4`).
@@ -250,15 +193,11 @@ pub fn copy_point_cloud_to_ptrs(
 /// Registers the `blender_dna` module on `parent_module`.
 pub fn register_submodule(py: Python<'_>, parent_module: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(py, "blender_dna")?;
-    sub.add_function(wrap_pyfunction!(copy_buffer_to_ptr, &sub)?)?;
     sub.add_function(wrap_pyfunction!(copy_positions_to_ptr, &sub)?)?;
     sub.add_function(wrap_pyfunction!(copy_normals_to_ptr, &sub)?)?;
     sub.add_function(wrap_pyfunction!(copy_indices_to_ptr, &sub)?)?;
     sub.add_function(wrap_pyfunction!(copy_quad_indices_to_ptr, &sub)?)?;
     sub.add_function(wrap_pyfunction!(copy_loop_uvs_to_ptr, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(copy_face_materials_to_ptr, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(copy_loop_starts_to_ptr, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(copy_loop_totals_to_ptr, &sub)?)?;
     sub.add_function(wrap_pyfunction!(copy_colors_to_ptr, &sub)?)?;
     sub.add_function(wrap_pyfunction!(copy_point_cloud_positions_to_ptr, &sub)?)?;
     sub.add_function(wrap_pyfunction!(copy_point_cloud_block_x_to_ptr, &sub)?)?;
