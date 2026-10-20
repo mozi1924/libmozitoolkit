@@ -1,6 +1,6 @@
 //! Direct memory copy adapters for `mtk_core::mesh::MeshData`.
 
-use mtk_core::mesh::MeshData;
+use mtk_core::mesh::{MeshData, UvLayout};
 
 use crate::error::DnaResult;
 use crate::guard::validate_aligned_pointer_and_bounds;
@@ -122,26 +122,20 @@ pub fn copy_loop_uvs_to_ptr(
     dst_ptr: usize,
     max_bytes: Option<usize>,
 ) -> DnaResult<usize> {
-    let is_quad = mesh.is_quad_topology();
-    let total_loops = mesh.loop_count();
-
-    if total_loops == 0 {
-        return Ok(0);
-    }
-
-    let byte_size = total_loops * 2 * std::mem::size_of::<f32>();
-    validate_aligned_pointer_and_bounds(
-        dst_ptr,
-        byte_size,
-        std::mem::align_of::<f32>(),
-        max_bytes,
-    )?;
-
-    if mesh.uvs.len() == total_loops {
-        let uvs_flat = mesh.uvs_flat();
+    if mesh.uv_layout == UvLayout::PerLoop {
+        if mesh.uvs.is_empty() {
+            return Ok(0);
+        }
+        let byte_size = mesh.uvs.len() * 2 * std::mem::size_of::<f32>();
+        validate_aligned_pointer_and_bounds(
+            dst_ptr,
+            byte_size,
+            std::mem::align_of::<f32>(),
+            max_bytes,
+        )?;
         unsafe {
             std::ptr::copy_nonoverlapping(
-                uvs_flat.as_ptr() as *const u8,
+                mesh.uvs.as_ptr() as *const u8,
                 dst_ptr as *mut u8,
                 byte_size,
             );
@@ -149,35 +143,25 @@ pub fn copy_loop_uvs_to_ptr(
         return Ok(byte_size);
     }
 
+    let loops = mesh.loop_uvs_expanded();
+    if loops.is_empty() {
+        return Ok(0);
+    }
+    let byte_size = loops.len() * 2 * std::mem::size_of::<f32>();
+    validate_aligned_pointer_and_bounds(
+        dst_ptr,
+        byte_size,
+        std::mem::align_of::<f32>(),
+        max_bytes,
+    )?;
     let dst = dst_ptr as *mut f32;
-    let mut offset = 0usize;
-    if is_quad {
-        let quads_owned;
-        let quads: &[u32] = if let Some(ref quads) = mesh.quad_indices {
-            quads.as_slice()
-        } else {
-            quads_owned = mesh.reconstruct_quad_indices();
-            quads_owned.as_slice()
-        };
-        for &v_idx in quads {
-            let uv = mesh.uvs.get(v_idx as usize).copied().unwrap_or([0.0, 0.0]);
-            unsafe {
-                *dst.add(offset) = uv[0];
-                *dst.add(offset + 1) = uv[1];
-            }
-            offset += 2;
-        }
-    } else {
-        for &v_idx in &mesh.indices {
-            let uv = mesh.uvs.get(v_idx as usize).copied().unwrap_or([0.0, 0.0]);
-            unsafe {
-                *dst.add(offset) = uv[0];
-                *dst.add(offset + 1) = uv[1];
-            }
-            offset += 2;
+    for (i, uv) in loops.iter().enumerate() {
+        unsafe {
+            *dst.add(i * 2) = uv[0];
+            *dst.add(i * 2 + 1) = uv[1];
         }
     }
-    Ok(offset * std::mem::size_of::<f32>())
+    Ok(byte_size)
 }
 
 /// Directly copies vertex RGBA colors into the destination pointer as raw float32 values (`len * 4`).

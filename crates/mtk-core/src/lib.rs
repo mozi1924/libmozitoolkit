@@ -29,7 +29,7 @@ pub use extrude::{
 pub use geometry::{
     derive_quad_face_tangents, mc_local_to_centered_z_up, mc_world_to_z_up, Aabb2d, Quad,
 };
-pub use mesh::{analyze_hard_edges, MeshData};
+pub use mesh::{analyze_hard_edges, MeshData, UvLayout};
 pub use polygon::FlatPolygonMesh;
 pub use progress::{ProgressCallback, ProgressReport, ProgressThrottler};
 pub use random::{
@@ -37,7 +37,7 @@ pub use random::{
 };
 pub use subdivide::{
     adaptive_pixel_split_mesh, calculate_face_target_grid, interpolate_bilinear_2d,
-    interpolate_bilinear_3d, interpolate_bilinear_4d, weld_mesh_vertices,
+    interpolate_bilinear_3d, interpolate_bilinear_4d,
 };
 
 // Re-export glam types for convenience

@@ -43,8 +43,8 @@ fn test_point_cloud_extraction_no_culling_and_roundtrip() {
     let mut found_center = false;
     for i in 0..cloud.len() {
         if cloud.block_x[i] == 1 && cloud.block_y[i] == 1 && cloud.block_z[i] == 1 {
-            assert_eq!(cloud.block_states[i], "minecraft:stone");
-            assert_eq!(cloud.biomes[i], "minecraft:desert");
+            assert_eq!(cloud.state_at(i).unwrap(), "minecraft:stone");
+            assert_eq!(cloud.biome_at(i).unwrap(), "minecraft:desert");
             found_center = true;
             break;
         }
@@ -120,10 +120,10 @@ fn test_point_cloud_mesh_data_conversion() {
     assert_eq!(restored_cloud.block_y[0], 2);
     assert_eq!(restored_cloud.block_z[0], 3);
     assert_eq!(
-        restored_cloud.block_states[0],
+        restored_cloud.state_at(0).unwrap(),
         "minecraft:oak_stairs[facing=east]"
     );
-    assert_eq!(restored_cloud.biomes[0], "minecraft:forest");
+    assert_eq!(restored_cloud.biome_at(0).unwrap(), "minecraft:forest");
     assert_eq!(restored_cloud.light_levels[0], 15);
 }
 
@@ -176,8 +176,8 @@ fn test_user_carving_via_point_cloud_deletion() {
                     original_cloud.positions[i * 3 + 2],
                 ],
                 [bx, by, bz],
-                original_cloud.block_states[i].clone(),
-                original_cloud.biomes[i].clone(),
+                original_cloud.state_at(i).unwrap().to_string(),
+                original_cloud.biome_at(i).unwrap().to_string(),
                 original_cloud.light_levels[i],
             );
         }
@@ -303,14 +303,16 @@ fn test_point_cloud_palette_indices_building() {
         0,
     );
 
-    let (state_pal, state_indices) = cloud.build_state_palette_indices();
+    let state_pal = cloud.state_palette.clone();
+    let state_indices = cloud.state_indices.clone();
     assert_eq!(
         state_pal,
         vec!["minecraft:stone".to_string(), "minecraft:dirt".to_string()]
     );
     assert_eq!(state_indices, vec![0, 1, 0, 0]);
 
-    let (biome_pal, biome_indices) = cloud.build_biome_palette_indices();
+    let biome_pal = cloud.biome_palette.clone();
+    let biome_indices = cloud.biome_indices.clone();
     assert_eq!(
         biome_pal,
         vec![
@@ -349,5 +351,5 @@ fn test_point_cloud_explicit_bounds_clipping() {
     assert_eq!(cloud.block_x[0], 2);
     assert_eq!(cloud.block_y[0], 2);
     assert_eq!(cloud.block_z[0], 2);
-    assert_eq!(cloud.block_states[0], "minecraft:stone");
+    assert_eq!(cloud.state_at(0).unwrap(), "minecraft:stone");
 }

@@ -149,15 +149,17 @@ pub struct VoxelPointCloud {
     pub block_x: Vec<i32>,       // 绝对离散整数世界坐标
     pub block_y: Vec<i32>,
     pub block_z: Vec<i32>,
-    pub block_states: Vec<String>, // 原版规范方块状态字符串
-    pub biomes: Vec<String>,       // 生物群系标识符
-    pub light_levels: Vec<u8>,     // 复合光照等级
+    pub state_palette: Vec<String>, // 唯一方块状态调色板
+    pub state_indices: Vec<i32>,    // 逐点调色板索引
+    pub biome_palette: Vec<String>, // 唯一生物群系调色板
+    pub biome_indices: Vec<i32>,    // 逐点调色板索引
+    pub light_levels: Vec<u8>,      // 复合光照等级
 }
 ```
 - `to_point_cloud(config) -> VoxelPointCloud`：全量提取所有非空体素（**绝对不参与任何面遮挡剔除**，内部实心方块 100% 完整保留）。
 - `from_point_cloud(cloud) -> VoxelStorage`：从点云无损重建 `VoxelStorage`，支持用户手动删除局部点后自动生成空腔和露出内表面。
 - `to_mesh_data() / from_mesh_data()`：与标准纯点 `MeshData`（无多边形面）互转，无缝桥接 DCC 属性。
-- `build_state_palette_indices() / build_biome_palette_indices()`：在 Rust 端高速提取唯一调色板和每个点的紧凑 `i32` 索引数组，用于零拷贝灌入与高效传输。
+- `state_palette` / `state_indices` 与 `biome_palette` / `biome_indices`：点云直接存储调色板与逐点 `i32` 索引，不再为每个点分配 `String`。
 
 ---
 

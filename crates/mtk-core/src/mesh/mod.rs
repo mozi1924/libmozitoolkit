@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::attributes::{FaceAttributes, MaterialSlotId, MeshAttribute, TintIndex};
 use crate::geometry::Quad;
+use crate::polygon::FlatPolygonMesh;
 
 pub mod attributes;
 pub mod merge;
@@ -17,6 +18,19 @@ pub mod topology;
 pub mod weld;
 
 pub use topology::analyze_hard_edges;
+
+/// Explicit interpretation of the `uvs` buffer.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum UvLayout {
+    /// No UVs are present.
+    #[default]
+    None,
+    /// One UV pair per vertex, indexed by `indices`.
+    PerVertex,
+    /// One UV pair per polygon loop, in loop order.
+    PerLoop,
+}
 
 /// Flat, contiguous mesh data buffer designed for zero-copy or direct buffer transfers
 /// into graphics APIs (OpenGL/WebGPU/Vulkan) or 3D host engines (Blender, Bevy, Three.js).
@@ -29,8 +43,10 @@ pub struct MeshData {
     pub normals: Vec<[f32; 3]>,
     /// Triangle face indices (every 3 consecutive u32 form a triangle).
     pub indices: Vec<u32>,
-    /// Primary UV coordinates `[u, v]`.
+    /// Primary UV coordinates `[u, v]`; interpretation is defined by `uv_layout`.
     pub uvs: Vec<[f32; 2]>,
+    /// Explicit layout of the `uvs` buffer.
+    pub uv_layout: UvLayout,
     /// Secondary UV coordinates (e.g. for atlas tiling or colormap sampling).
     pub secondary_uvs: Option<Vec<[f32; 2]>>,
     /// Vertex RGBA colors `[r, g, b, a]` in linear color space.
@@ -58,6 +74,7 @@ impl MeshData {
             normals: Vec::with_capacity(num_vertices),
             indices: Vec::with_capacity(num_indices),
             uvs: Vec::with_capacity(num_vertices),
+            uv_layout: UvLayout::None,
             secondary_uvs: None,
             colors: None,
             face_materials: Vec::with_capacity(num_faces),
@@ -65,6 +82,125 @@ impl MeshData {
             quad_indices: None,
             custom_attributes: HashMap::new(),
         }
+    }
+
+    /// Builds a `MeshData` from a shared-vertex polygon mesh with per-loop UVs.
+    ///
+    /// All-quad and all-triangle inputs retain their exact topology. Mixed or n-gon
+    /// inputs are fan-triangulated while preserving per-loop UV seams.
+    pub fn from_flat_polygons(
+        flat: &FlatPolygonMesh,
+        normals: Option<&[[f32; 3]]>,
+    ) -> Result<Self, String> {
+        let vertex_count = flat.positions.len();
+        let face_count = flat.face_loop_starts.len();
+        if flat.face_loop_totals.len() != face_count {
+            return Err("face_loop_starts and face_loop_totals must have equal length".to_string());
+        }
+        if flat.loop_vertices.len() != flat.loop_uvs.len() {
+            return Err("loop_vertices and loop_uvs must have equal length".to_string());
+        }
+        if !flat.face_materials.is_empty() && flat.face_materials.len() != face_count {
+            return Err(format!(
+                "face_materials length ({}) must match face count ({})",
+                flat.face_materials.len(),
+                face_count
+            ));
+        }
+        for &idx in &flat.loop_vertices {
+            if idx as usize >= vertex_count {
+                return Err(format!(
+                    "loop vertex index {} out of bounds for vertex count {}",
+                    idx, vertex_count
+                ));
+            }
+        }
+        for (face, (&start, &total)) in flat
+            .face_loop_starts
+            .iter()
+            .zip(flat.face_loop_totals.iter())
+            .enumerate()
+        {
+            if total < 3 {
+                return Err(format!("face {} has fewer than 3 loops", face));
+            }
+            let end = start as usize + total as usize;
+            if end > flat.loop_vertices.len() {
+                return Err(format!("face {} loop range exceeds loop buffer", face));
+            }
+        }
+
+        let mut mesh = Self::with_capacity(vertex_count, 0, face_count);
+        mesh.positions = flat.positions.clone();
+        mesh.normals = match normals {
+            Some(values) if values.len() == vertex_count => values.to_vec(),
+            _ => vec![[0.0, 1.0, 0.0]; vertex_count],
+        };
+        mesh.uv_layout = UvLayout::PerLoop;
+
+        let face_materials: Vec<u16> = if flat.face_materials.is_empty() {
+            vec![0; face_count]
+        } else {
+            flat.face_materials
+                .iter()
+                .map(|&slot| {
+                    u16::try_from(slot).map_err(|_| {
+                        format!("face material slot {slot} exceeds u16 material limit")
+                    })
+                })
+                .collect::<Result<_, _>>()?
+        };
+
+        let all_quads = face_count > 0 && flat.face_loop_totals.iter().all(|&total| total == 4);
+        let all_tris = face_count > 0 && flat.face_loop_totals.iter().all(|&total| total == 3);
+
+        if all_quads {
+            mesh.uvs = flat.loop_uvs.clone();
+            mesh.quad_indices = Some(flat.loop_vertices.clone());
+            mesh.face_materials = face_materials.clone();
+            mesh.indices.reserve(face_count * 6);
+            for face in 0..face_count {
+                let base = face * 4;
+                let v0 = flat.loop_vertices[base];
+                let v1 = flat.loop_vertices[base + 1];
+                let v2 = flat.loop_vertices[base + 2];
+                let v3 = flat.loop_vertices[base + 3];
+                mesh.indices.extend_from_slice(&[v0, v1, v2, v0, v2, v3]);
+            }
+        } else if all_tris {
+            mesh.uvs = flat.loop_uvs.clone();
+            mesh.indices = flat.loop_vertices.clone();
+            mesh.face_materials = face_materials.clone();
+        } else {
+            for (face, (&start, &total)) in flat
+                .face_loop_starts
+                .iter()
+                .zip(flat.face_loop_totals.iter())
+                .enumerate()
+            {
+                let start = start as usize;
+                let total = total as usize;
+                let mat = face_materials.get(face).copied().unwrap_or(0);
+                let v0 = flat.loop_vertices[start];
+                let uv0 = flat.loop_uvs[start];
+                for i in 1..total - 1 {
+                    mesh.indices.extend_from_slice(&[
+                        v0,
+                        flat.loop_vertices[start + i],
+                        flat.loop_vertices[start + i + 1],
+                    ]);
+                    mesh.uvs.extend_from_slice(&[
+                        uv0,
+                        flat.loop_uvs[start + i],
+                        flat.loop_uvs[start + i + 1],
+                    ]);
+                    mesh.face_materials.push(mat);
+                }
+            }
+        }
+
+        mesh.face_tint_indices = vec![-1; mesh.face_materials.len()];
+        Ok(mesh)
     }
 
     /// Number of vertices in the mesh buffer.
@@ -212,6 +348,7 @@ impl MeshData {
         self.normals.clear();
         self.indices.clear();
         self.uvs.clear();
+        self.uv_layout = UvLayout::None;
         if let Some(ref mut sec_uvs) = self.secondary_uvs {
             sec_uvs.clear();
         }
@@ -250,6 +387,7 @@ impl MeshData {
 
         let quads = self.quad_indices.get_or_insert_with(Vec::new);
         quads.extend_from_slice(&[base_idx, base_idx + 1, base_idx + 2, base_idx + 3]);
+        self.uv_layout = UvLayout::PerLoop;
 
         self.face_materials.push(attributes.material_slot);
         self.face_tint_indices.push(attributes.tint_index);
@@ -258,6 +396,9 @@ impl MeshData {
     /// Appends another `MeshData` into this mesh data buffer.
     pub fn append_mesh(&mut self, other: &MeshData) {
         let base_idx = self.positions.len() as u32;
+        if self.uv_layout == UvLayout::None {
+            self.uv_layout = other.uv_layout;
+        }
 
         self.positions.extend_from_slice(&other.positions);
         self.normals.extend_from_slice(&other.normals);
@@ -293,6 +434,44 @@ impl MeshData {
         }
 
         Self::extend_custom_attributes(&mut self.custom_attributes, &other.custom_attributes);
+    }
+
+    /// Expands UVs to one pair per polygon loop according to `uv_layout`.
+    pub fn loop_uvs_expanded(&self) -> Vec<[f32; 2]> {
+        if self.uv_layout == UvLayout::PerLoop {
+            return self.uvs.clone();
+        }
+        let total_loops = self.loop_count();
+        if total_loops == 0 {
+            return Vec::new();
+        }
+        let mut out = Vec::with_capacity(total_loops);
+        if self.is_quad_topology() {
+            for v_idx in self.reconstruct_quad_indices() {
+                out.push(self.uvs.get(v_idx as usize).copied().unwrap_or([0.0, 0.0]));
+            }
+        } else if !self.indices.is_empty() {
+            for &v_idx in &self.indices {
+                out.push(self.uvs.get(v_idx as usize).copied().unwrap_or([0.0, 0.0]));
+            }
+        } else {
+            out.extend_from_slice(&self.uvs);
+        }
+        out
+    }
+
+    /// Loop start offsets for the active polygon topology.
+    pub fn loop_starts(&self) -> Vec<u32> {
+        let count = self.poly_count();
+        let step = if self.is_quad_topology() { 4 } else { 3 };
+        (0..count).map(|i| (i * step) as u32).collect()
+    }
+
+    /// Loop totals for the active polygon topology.
+    pub fn loop_totals(&self) -> Vec<u32> {
+        let count = self.poly_count();
+        let step = if self.is_quad_topology() { 4 } else { 3 };
+        vec![step as u32; count]
     }
 
     /// Returns a flat contiguous slice of vertex positions `[x0, y0, z0, x1, y1, z1, ...]`.
@@ -379,6 +558,79 @@ mod tests {
 
         let uvs_flat = mesh.uvs_flat();
         assert_eq!(uvs_flat.len(), 8);
+    }
+
+    #[test]
+    fn test_from_flat_polygons_preserves_shared_vertices_and_loop_uvs() {
+        let flat = FlatPolygonMesh {
+            positions: vec![
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [1.0, 1.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [2.0, 0.0, 0.0],
+                [2.0, 1.0, 0.0],
+            ],
+            loop_vertices: vec![0, 1, 2, 3, 1, 4, 5, 2],
+            loop_uvs: vec![
+                [0.0, 0.0],
+                [1.0, 0.0],
+                [1.0, 1.0],
+                [0.0, 1.0],
+                [0.0, 0.0],
+                [1.0, 0.0],
+                [1.0, 1.0],
+                [0.0, 1.0],
+            ],
+            face_loop_starts: vec![0, 4],
+            face_loop_totals: vec![4, 4],
+            face_materials: vec![0, 1],
+        };
+
+        let mesh = MeshData::from_flat_polygons(&flat, None).unwrap();
+        assert_eq!(mesh.vertex_count(), 6);
+        assert_eq!(mesh.loop_count(), 8);
+        assert_eq!(mesh.uv_layout, UvLayout::PerLoop);
+        assert_eq!(mesh.uvs, flat.loop_uvs);
+        assert_eq!(mesh.indices, vec![0, 1, 2, 0, 2, 3, 1, 4, 5, 1, 5, 2]);
+        assert_eq!(mesh.face_materials, vec![0, 1]);
+        assert_eq!(mesh.loop_uvs_expanded(), flat.loop_uvs);
+    }
+
+    #[test]
+    fn test_weld_vertices_policy_follows_uv_layout() {
+        let mut per_loop = MeshData {
+            positions: vec![
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+            ],
+            normals: vec![[0.0, 1.0, 0.0]; 4],
+            uvs: vec![[0.0, 0.0], [1.0, 0.0], [1.0, 0.0], [0.0, 0.0]],
+            uv_layout: UvLayout::PerLoop,
+            indices: vec![0, 1, 2, 0, 2, 3],
+            quad_indices: Some(vec![0, 1, 2, 3]),
+            face_materials: vec![0],
+            ..Default::default()
+        };
+        per_loop.weld_vertices(1e-4);
+        assert_eq!(per_loop.vertex_count(), 2);
+        assert_eq!(per_loop.uvs.len(), 4, "per-loop UVs must survive welding");
+
+        let mut per_vertex = MeshData {
+            positions: vec![[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+            normals: vec![[0.0, 1.0, 0.0]; 2],
+            uvs: vec![[0.0, 0.0], [0.0, 0.0]],
+            uv_layout: UvLayout::PerVertex,
+            indices: vec![0, 1, 1],
+            face_materials: vec![0],
+            ..Default::default()
+        };
+        per_vertex.weld_vertices(1e-4);
+        assert_eq!(per_vertex.vertex_count(), 1);
+        assert_eq!(per_vertex.uvs.len(), 1);
+        assert_eq!(per_vertex.indices, vec![0, 0, 0]);
     }
 
     #[test]

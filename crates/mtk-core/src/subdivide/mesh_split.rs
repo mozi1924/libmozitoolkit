@@ -211,71 +211,9 @@ pub fn adaptive_pixel_split_mesh(
     }
 
     if weld_dist > 0.0 {
-        weld_mesh_vertices(&mut out, weld_dist);
+        out.uv_layout = crate::mesh::UvLayout::PerLoop;
+        out.weld_vertices(weld_dist);
     }
 
     out
-}
-
-/// Simple spatial vertex welding to remove duplicate boundary vertices within `weld_dist`.
-pub fn weld_mesh_vertices(mesh: &mut MeshData, weld_dist: f32) {
-    if mesh.positions.is_empty() || weld_dist <= 0.0 {
-        return;
-    }
-
-    let inv_dist = 1.0 / weld_dist;
-    let mut grid_map: std::collections::HashMap<[i32; 3], u32> = std::collections::HashMap::new();
-    let mut remap: Vec<u32> = Vec::with_capacity(mesh.positions.len());
-    let mut new_positions: Vec<[f32; 3]> = Vec::new();
-    let mut new_normals: Vec<[f32; 3]> = Vec::new();
-    let mut new_uvs: Vec<[f32; 2]> = Vec::new();
-    let mut new_sec_uvs: Option<Vec<[f32; 2]>> = mesh.secondary_uvs.as_ref().map(|_| Vec::new());
-    let mut new_colors: Option<Vec<[f32; 4]>> = mesh.colors.as_ref().map(|_| Vec::new());
-
-    for i in 0..mesh.positions.len() {
-        let p = mesh.positions[i];
-        let key = [
-            (p[0] * inv_dist).round() as i32,
-            (p[1] * inv_dist).round() as i32,
-            (p[2] * inv_dist).round() as i32,
-        ];
-
-        if let Some(&existing_idx) = grid_map.get(&key) {
-            // Check if UVs also match closely to avoid welding across UV seams
-            let existing_uv = new_uvs[existing_idx as usize];
-            let cur_uv = mesh.uvs[i];
-            let uv_diff = (existing_uv[0] - cur_uv[0])
-                .abs()
-                .max((existing_uv[1] - cur_uv[1]).abs());
-            if uv_diff < 1e-4 {
-                remap.push(existing_idx);
-                continue;
-            }
-        }
-
-        let new_idx = new_positions.len() as u32;
-        grid_map.insert(key, new_idx);
-        remap.push(new_idx);
-
-        new_positions.push(p);
-        new_normals.push(mesh.normals.get(i).copied().unwrap_or([0.0, 0.0, 1.0]));
-        new_uvs.push(mesh.uvs[i]);
-        if let (Some(sec_in), Some(sec_out)) = (&mesh.secondary_uvs, &mut new_sec_uvs) {
-            sec_out.push(sec_in.get(i).copied().unwrap_or([0.0, 0.0]));
-        }
-        if let (Some(col_in), Some(col_out)) = (&mesh.colors, &mut new_colors) {
-            col_out.push(col_in.get(i).copied().unwrap_or([1.0, 1.0, 1.0, 1.0]));
-        }
-    }
-
-    // Remap indices
-    for idx in &mut mesh.indices {
-        *idx = remap[*idx as usize];
-    }
-
-    mesh.positions = new_positions;
-    mesh.normals = new_normals;
-    mesh.uvs = new_uvs;
-    mesh.secondary_uvs = new_sec_uvs;
-    mesh.colors = new_colors;
 }

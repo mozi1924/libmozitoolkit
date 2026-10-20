@@ -127,50 +127,6 @@ pub fn get_attribute_data<'py>(
     }
 }
 
-// -------------------------------------------------------------------------
-// Flattened and list-based property helpers
-// -------------------------------------------------------------------------
-
-/// Flattened vertex positions `[x0, y0, z0, x1, y1, z1, ...]`.
-pub fn get_flat_positions<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-    PyList::new(py, mesh.inner.positions_flat())
-}
-
-/// Flattened vertex normals `[nx0, ny0, nz0, nx1, ny1, nz1, ...]`.
-pub fn get_flat_normals<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-    PyList::new(py, mesh.inner.normals_flat())
-}
-
-/// Flattened vertex UVs `[u0, v0, u1, v1, ...]`.
-pub fn get_flat_uvs<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-    PyList::new(py, mesh.inner.uvs_flat())
-}
-
-/// Triangle face indices `[i0, i1, i2, i3, i4, i5, ...]`.
-pub fn get_indices<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-    PyList::new(py, &mesh.inner.indices)
-}
-
-/// Quad polygon vertex indices `[v0, v1, v2, v3, ...]` (4 u32 per quad).
-pub fn get_quad_indices<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-    let quads = mesh.inner.reconstruct_quad_indices();
-    PyList::new(py, &quads)
-}
-
-/// Number of quad faces recorded.
-pub fn quad_count(mesh: &PyMeshData) -> usize {
-    if let Some(ref quads) = mesh.inner.quad_indices {
-        quads.len() / 4
-    } else {
-        mesh.inner.indices.len() / 6
-    }
-}
-
-/// Material slot per face.
-pub fn get_face_materials<'py>(mesh: &PyMeshData, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-    PyList::new(py, &mesh.inner.face_materials)
-}
-
 /// Tint index per face.
 pub fn get_face_tint_indices<'py>(
     mesh: &PyMeshData,

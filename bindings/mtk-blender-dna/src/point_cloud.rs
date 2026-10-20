@@ -120,11 +120,10 @@ pub fn copy_point_cloud_state_indices_to_ptr(
     dst_ptr: usize,
     max_bytes: Option<usize>,
 ) -> DnaResult<(Vec<String>, usize)> {
-    let count = cloud.block_states.len();
+    let count = cloud.state_indices.len();
     if count == 0 {
         return Ok((Vec::new(), 0));
     }
-    let (palette, indices) = cloud.build_state_palette_indices();
     let byte_size = count * std::mem::size_of::<i32>();
     validate_aligned_pointer_and_bounds(
         dst_ptr,
@@ -133,9 +132,13 @@ pub fn copy_point_cloud_state_indices_to_ptr(
         max_bytes,
     )?;
     unsafe {
-        std::ptr::copy_nonoverlapping(indices.as_ptr() as *const u8, dst_ptr as *mut u8, byte_size);
+        std::ptr::copy_nonoverlapping(
+            cloud.state_indices.as_ptr() as *const u8,
+            dst_ptr as *mut u8,
+            byte_size,
+        );
     }
-    Ok((palette, byte_size))
+    Ok((cloud.state_palette.clone(), byte_size))
 }
 
 /// Directly converts biomes into a palette and copies int32 palette indices into a destination pointer.
@@ -145,11 +148,10 @@ pub fn copy_point_cloud_biome_indices_to_ptr(
     dst_ptr: usize,
     max_bytes: Option<usize>,
 ) -> DnaResult<(Vec<String>, usize)> {
-    let count = cloud.biomes.len();
+    let count = cloud.biome_indices.len();
     if count == 0 {
         return Ok((Vec::new(), 0));
     }
-    let (palette, indices) = cloud.build_biome_palette_indices();
     let byte_size = count * std::mem::size_of::<i32>();
     validate_aligned_pointer_and_bounds(
         dst_ptr,
@@ -158,9 +160,13 @@ pub fn copy_point_cloud_biome_indices_to_ptr(
         max_bytes,
     )?;
     unsafe {
-        std::ptr::copy_nonoverlapping(indices.as_ptr() as *const u8, dst_ptr as *mut u8, byte_size);
+        std::ptr::copy_nonoverlapping(
+            cloud.biome_indices.as_ptr() as *const u8,
+            dst_ptr as *mut u8,
+            byte_size,
+        );
     }
-    Ok((palette, byte_size))
+    Ok((cloud.biome_palette.clone(), byte_size))
 }
 
 /// Directly copies light levels into a destination pointer as raw uint8 values (`len`).
@@ -252,8 +258,10 @@ mod tests {
             block_x: vec![0],
             block_y: vec![1],
             block_z: vec![2],
-            block_states: vec!["minecraft:stone".to_string()],
-            biomes: vec!["minecraft:plains".to_string()],
+            state_palette: vec!["minecraft:stone".to_string()],
+            state_indices: vec![0],
+            biome_palette: vec!["minecraft:plains".to_string()],
+            biome_indices: vec![0],
             light_levels: vec![15],
             ..Default::default()
         };
