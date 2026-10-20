@@ -1,6 +1,6 @@
-# MTK 二进制资产缓存包规范 (Package Specification)
+# MTK 二进制中间存储包与场景交换容器规范 (Package Specification)
 
-本文档是 `libmozitoolkit` (`libmtk`) 与 `MoziToolKit` 生态的通用二进制存储规范，定义了统一的 **MTK 资产缓存容器结构 (`.mtkcache`)**。
+本文档是 `libmozitoolkit` (`libmtk`) 与 `MoziToolKit` 生态的通用二进制存储规范，定义了统一的 **MTK 二进制容器结构 (`.mtkcache` / `.mtkscene`)**，涵盖**全量资产预编译缓存**与**轻量级场景中间交换**两大业务场景。
 
 ---
 
@@ -8,12 +8,16 @@
 
 ### 1.1 现实痛点
 1. **散文件膨胀与 I/O 碎片 (Loose Files Overhead)**：
-   目前全量资产预编译缓存直接展开在文件系统目录中（包含数千至数万个小尺寸 PNG 贴图、模型 JSON、映射表等）。这导致了磁盘 inode 激增、文件系统元数据查找延迟、跨磁盘/跨机复制极慢、以及缓存完整性校验成本极高。
+   全量资产预编译缓存若直接展开在文件系统目录中（包含数千至数万个小尺寸 PNG 贴图、模型 JSON、映射表等），会导致磁盘 inode 激增、文件系统元数据查找延迟、跨磁盘/跨机复制极慢、以及缓存完整性校验成本极高。
+2. **传统 3D 交换格式的“几何爆炸” (Geometry Explosion in 3D Formats)**：
+   若将 Minecraft 建筑/世界选区直接导出为传统网格格式（OBJ、USD、FBX、glTF），数十万个方块会膨胀为数百万个多边形面、海量法线与 UV 缓冲，导致文件体积迅速膨胀至数百 MB 甚至数 GB。而且一旦烘焙为网格，面剔除规则、环境光遮蔽 (AO) 样式、图集分辨率即被永久固化，接收方无法再根据 DCC 宿主或材质管线灵活调整。
 
 ### 1.2 核心哲学
 - **统一底层容器 (Unified Container Architecture)**：
-  固定文件头、分块目录表 TOC、Zstd 块压缩与 64 字节对齐。
-- **唯一业务形态**：`AssetCache` 包打包全量预烘焙图集、Standalone PBR 贴图库、全局模型数据库与生物群系映射表，用于本地毫秒级即时加载。2.0 不再提供场景交换 Profile。
+  缓存包与交换包共享完全一致的二进制底层物理结构（统一文件头、分块目录表 TOC、Zstd 块压缩、64 字节对齐）。
+- **Profile 业务分化 (Specialized Profiles)**：
+  - **`AssetCache Profile`（全量预编译缓存包，`.mtkcache`）**：打包全量预烘焙图集、Standalone PBR 贴图库、全局模型数据库与生物群系映射表，用于本地毫秒级即时加载。
+  - **`SceneInterchange Profile`（轻量场景交换包，`.mtkscene`）**：**不存全量网格**（仅存选区稀疏体素网格），**不存预烘焙图集**（仅按需打包场景用到的独立材质贴图），**按需剪枝模型**。在接收方端现场根据宿主配置实时重构网格并按需构建材质节点或现场图集。
 
 ---
 
@@ -27,11 +31,13 @@
 ├────────────────────────────────────────────────────────┤
 │ Chunk 0: META  (元数据描述，对齐至 64 字节边界)           │
 ├────────────────────────────────────────────────────────┤
-│ Chunk 1: MODL  (方块模型定义 / 烘焙模型缓存)             │
+│ Chunk 1: VOXL  (体素 Section 数据块，SceneInterchange 专属)│
 ├────────────────────────────────────────────────────────┤
-│ Chunk 2: TXTR  (独立贴图 / 纹理数据块流)                 │
+│ Chunk 2: MODL  (方块模型定义 / 烘焙模型缓存)             │
 ├────────────────────────────────────────────────────────┤
-│ ... (其余数据分块)                                      │
+│ Chunk 3: TXTR  (独立贴图 / 纹理数据块流)                 │
+├────────────────────────────────────────────────────────┤
+│ ... (其余数据分块: ATLS / BIOM 等)                      │
 ├────────────────────────────────────────────────────────┤
 │ Table of Contents (TOC，分块索引表，可独立 Zstd 压缩)    │
 └────────────────────────────────────────────────────────┘
@@ -48,8 +54,8 @@
 | `0x00` | `[u8; 4]` | `magic` | 固定魔数，ASCII `b"MTKP"` (`0x4D, 0x54, 0x4B, 0x50`) |
 | `0x04` | `u16` | `version_major` | 主版本号（格式发生非兼容性结构调整时递增，当前为 `1`） |
 | `0x06` | `u16` | `version_minor` | 次版本号（新增可选 Chunk 或向前兼容字段时递增，当前为 `0`） |
-| `0x08` | `u16` | `profile` | 包类型：仅 `0 = AssetCache` |
-| `0x0A` | `u16` | `flags` | 特性位标志：<br>• Bit 0: LittleEndian (固定为 1)<br>• Bit 1: TOC 经 Zstd 压缩<br>• Bit 2: 完全自包含 (Self-Contained)<br>• Bit 3: 保留 |
+| `0x08` | `u16` | `profile` | 包类型：`0 = AssetCache`, `1 = SceneInterchange` |
+| `0x0A` | `u16` | `flags` | 特性位标志：<br>• Bit 0: LittleEndian (固定为 1)<br>• Bit 1: TOC 经 Zstd 压缩<br>• Bit 2: 完全自包含 (Self-Contained)<br>• Bit 3..15: 保留 |
 | `0x0C` | `u8` | `compression` | 默认分块压缩算法：`0 = None`, `1 = Zstd` |
 | `0x0D` | `u8` | `checksum_type` | 校验和算法：仅 `0 = CRC32` |
 | `0x0E` | `[u8; 2]` | `reserved` | 预留对齐填充，填 `0x00` |
@@ -70,7 +76,7 @@ TOC 由 `chunk_count` 个连续的条目组成：
 
 ```rust
 pub struct ChunkEntry {
-    /// 分块类型标识 (如 b"META", b"MODL", b"TXTR", b"BIOM", b"ATLS")
+    /// 分块类型标识 (如 b"META", b"VOXL", b"MODL", b"TXTR", b"BIOM", b"ATLS")
     pub chunk_type: [u8; 4],
     /// 分块在文件中的绝对字节起始偏移 (必须 64 字节对齐)
     pub offset: u64,
@@ -101,27 +107,96 @@ pub struct ChunkEntry {
   * 依赖资源包列表与哈希指纹。
   * 场景统计信息（方块总数、不重复方块种类、依赖纹理数）。
 
-### 5.2 `MODL` - 模型定义与几何块
-* **存储内容**：
-  * 使用 **`BakedModelDatabase`**：已预烘焙的旋转变换与多边形基元，加载时免去烘焙计算。
+### 5.2 `VOXL` - 稀疏体素网格块 (`SceneInterchange` 专属)
+* **存储原则**：
+  * 专为 `.mtkscene` 设计，存放选区内有效 16×16×16 Section 数据。
+  * 采用空间希尔伯特曲线或 Morton 码排序的 Section 索引表。
+  * 每个 Section 存储方块状态运行时 Palette 及紧凑 Bit-packed 方块数据。
+  * 包含 Quart 级 Biome 调色板数组。
 
-### 5.3 `TXTR` - 独立贴图与纹理块
+### 5.3 `MODL` - 模型定义与几何块
+* **存储内容**：
+  * `AssetCache`：使用全局 **`BakedModelDatabase`**（已烘焙的完整方块模型库）。
+  * `SceneInterchange`：**Tree-shaken 按需剪枝模型库**，只保留场景体素中实际引用的方块模型定义。
+
+### 5.4 `TXTR` - 独立贴图与纹理块
 * **存储原则**：
   * 存储 Standalone PBR 独立纹理条目与原始 PNG 字节流。
   * 相同纹理严格去重。
   * 可选携带伴生 PBR 贴图（`_n.png` 法线、`_s.png` 高光光泽度）。
+  * `SceneInterchange` 中按需仅打包场景方块实际引用的纹理，避免将整个原版/材质包塞入。
 
-### 5.4 `ATLS` - 图集与映射块
-* 存储全量烘焙出的图集切片（`atlas_0.png`, `atlas_0_n.png`, `atlas_0_s.png`）。
+### 5.5 `ATLS` - 图集与映射块 (`AssetCache` 专属)
+* 存储全量预烘焙出的图集切片（`atlas_0.png`, `atlas_0_n.png`, `atlas_0_s.png`）。
 * 存储 `AtlasAddressMap` 映射表，使宿主无需重新执行装箱计算，直接根据 UV 坐标寻址。
 
-### 5.5 `BIOM` - 生物群系调色板映射块
+### 5.6 `BIOM` - 生物群系调色板映射块
 * 存储原版及自定义生物群系色阶映射表与 Colormap 贴图（`grass.png`, `foliage.png`）。
 * 用于重构网格时在 Python / DCC 端即时计算双线性插值顶点色与 Shader 调色。
 
 ---
 
-## 6. 实施规范与约束
+## 6. 两大业务 Profile 规范对照
+
+| 特性维度 | Profile A: `AssetCache` (`.mtkcache`) | Profile B: `SceneInterchange` (`.mtkscene`) |
+| :--- | :--- | :--- |
+| **应用场景** | 全量材质包预编译缓存、本地资产库 | 用户工程分享、跨机器/跨 DCC 场景交换 |
+| **体素数据 (`VOXL`)** | ❌ 无 | ✅ 仅包含选区内的稀疏体素网格 |
+| **贴图策略 (`TXTR` / `ATLS`)** | ✅ 包含完整多通道 Atlas 与 Standalone PBR | ✅ **仅包含场景引用的独立贴图 (按需)**，不存固化图集 |
+| **模型策略 (`MODL`)** | ✅ 包含全局所有方块的完整模型数据库 | ✅ **仅包含场景中实际使用的模型闭包 (剪枝)** |
+| **网格模型数据** | ❌ 不存烘焙的世界大网格 | ❌ **不存全量网格**，现场根据体素+模型实时重构 |
+| **典型文件体积** | 50 MB ~ 500 MB (取决于材质包分辨率) | **500 KB ~ 15 MB** (体积小 1~2 个数量级) |
+| **重建灵活性** | 高速直通读取 | 极高（导入端可自选 Greedy Meshing、AO、图集/独立材质） |
+
+---
+
+## 7. 现场重构管线 (Import & Reconstruct Pipeline)
+
+当接收方导入 `.mtkscene` 文件时，`libmtk` 与 `MoziToolKit` 执行以下无损重构流程：
+
+```
+                    ┌─────────────────────────┐
+                    │  Read .mtkscene (mmap)  │
+                    └────────────┬────────────┘
+                                 │
+           ┌─────────────────────┴─────────────────────┐
+           ▼                                           ▼
+┌───────────────────────┐                   ┌─────────────────────────┐
+│ Extract Voxel Storage │                   │ Extract Needed Textures │
+│  (Sparse Sections)    │                   │   & Model Definitions   │
+└──────────┬────────────┘                   └────────────┬────────────┘
+           │                                             │
+           │                                             ▼
+           │                                ┌─────────────────────────┐
+           │                                │ Build On-The-Fly Atlas  │
+           │                                │ or Standalone Shaders   │
+           │                                └────────────┬────────────┘
+           │                                             │
+           └─────────────────────┬───────────────────────┘
+                                 ▼
+                    ┌─────────────────────────┐
+                    │  Run SectionMesher      │
+                    │  (Greedy / AO / Tint)   │
+                    └────────────┬────────────┘
+                                 ▼
+                    ┌─────────────────────────┐
+                    │   Emit MeshData into    │
+                    │  Blender Scene (Zero-C) │
+                    └─────────────────────────┘
+```
+
+1. **零拷贝秒级解析**：通过 `mmap` 读取文件头与 TOC，解析元数据与依赖清单。
+2. **材质管线决策**：
+   - 若用户选择“图集模式”：在内存中现场调用 `AtlasBuilder` 将提取出的独立贴图快速拼成一张紧凑场景专属小图集，并重新计算 UV 偏移；
+   - 若用户选择“独立材质模式”：直接为各贴图构建独立的 Principled BSDF 节点树。
+3. **体素世界网格化**：
+   - 将 `VOXL` 数据喂入 `VoxelStorage`；
+   - 根据用户导入面板配置（如是否启用平滑 AO、是否开启面剔除、是否合并共面），调用 `SectionMesher` 动态生成几何网格流；
+4. **批量灌入场景**：通过 Buffer Protocol 将顶点与索引极速写入 DCC 宿主物体。
+
+---
+
+## 8. 实施规范与约束
 
 1. **宿主无关原则**：容器编解码器（Reader/Writer）必须是纯 Rust 实现，严禁依赖任何 DCC API。
 2. **对齐与零拷贝**：所有 Chunk 数据起始偏移必须 64 字节对齐，以支持无损 Direct I/O 与 `mmap`。

@@ -20,12 +20,15 @@ pub const CURRENT_VERSION_MINOR: u16 = 0;
 pub enum PackageProfile {
     /// Full precompiled asset cache (Atlas, Standalone, Models, Biomes).
     AssetCache = 0,
+    /// Lightweight scene interchange (sparse voxels, tree-shaken textures/models).
+    SceneInterchange = 1,
 }
 
 impl PackageProfile {
     pub fn from_u16(val: u16) -> Option<Self> {
         match val {
             0 => Some(Self::AssetCache),
+            1 => Some(Self::SceneInterchange),
             _ => None,
         }
     }
@@ -78,6 +81,10 @@ impl HeaderFlags {
         Self(Self::FLAG_LITTLE_ENDIAN | Self::FLAG_TOC_ZSTD | Self::FLAG_SELF_CONTAINED)
     }
 
+    pub fn default_scene_interchange() -> Self {
+        Self(Self::FLAG_LITTLE_ENDIAN | Self::FLAG_TOC_ZSTD | Self::FLAG_SELF_CONTAINED)
+    }
+
     pub fn is_toc_zstd(&self) -> bool {
         (self.0 & Self::FLAG_TOC_ZSTD) != 0
     }
@@ -111,6 +118,26 @@ impl PackageHeader {
             version_minor: CURRENT_VERSION_MINOR,
             profile: PackageProfile::AssetCache,
             flags: HeaderFlags::default_asset_cache(),
+            compression: CompressionType::Zstd,
+            checksum_type: ChecksumType::Crc32,
+            reserved: [0, 0],
+            created_at,
+            fingerprint,
+            toc_offset: 0,
+            toc_length: 0,
+            chunk_count: 0,
+            header_crc32: 0,
+        }
+    }
+
+    /// Constructs a new SceneInterchange header with standard defaults.
+    pub fn new_scene_interchange(fingerprint: [u8; 16], created_at: u64) -> Self {
+        Self {
+            magic: MAGIC_MTKP,
+            version_major: CURRENT_VERSION_MAJOR,
+            version_minor: CURRENT_VERSION_MINOR,
+            profile: PackageProfile::SceneInterchange,
+            flags: HeaderFlags::default_scene_interchange(),
             compression: CompressionType::Zstd,
             checksum_type: ChecksumType::Crc32,
             reserved: [0, 0],
@@ -257,11 +284,31 @@ mod tests {
     }
 
     #[test]
+    fn test_scene_interchange_header_roundtrip() {
+        let mut header = PackageHeader::new_scene_interchange([99u8; 16], 1728345600);
+        header.toc_offset = 2048;
+        header.toc_length = 256;
+        header.chunk_count = 3;
+
+        let bytes = header.to_bytes();
+        assert_eq!(bytes.len(), 64);
+
+        let parsed = PackageHeader::from_bytes(&bytes)
+            .expect("Failed to parse valid scene interchange header");
+        assert_eq!(parsed.magic, MAGIC_MTKP);
+        assert_eq!(parsed.profile, PackageProfile::SceneInterchange);
+        assert_eq!(parsed.fingerprint, [99u8; 16]);
+        assert_eq!(parsed.toc_offset, 2048);
+        assert_eq!(parsed.toc_length, 256);
+        assert_eq!(parsed.chunk_count, 3);
+    }
+
+    #[test]
     fn test_removed_profiles_and_algorithms_are_rejected() {
         let header = PackageHeader::new_asset_cache([7u8; 16], 42);
 
         for (offset, value, field) in [
-            (8usize, 1u8, "profile"),
+            (8usize, 2u8, "profile"),
             (12, 2, "compression"),
             (13, 1, "checksum"),
         ] {

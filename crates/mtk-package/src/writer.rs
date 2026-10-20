@@ -56,7 +56,7 @@ impl<W: Write + Seek> MtkPackageWriter<W> {
     /// Creates a new package writer from a seekable stream.
     pub fn new(
         mut writer: W,
-        _profile: PackageProfile,
+        profile: PackageProfile,
         fingerprint: [u8; 16],
     ) -> PackageResult<Self> {
         let epoch_now = std::time::SystemTime::now()
@@ -64,7 +64,12 @@ impl<W: Write + Seek> MtkPackageWriter<W> {
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
-        let header = PackageHeader::new_asset_cache(fingerprint, epoch_now);
+        let header = match profile {
+            PackageProfile::AssetCache => PackageHeader::new_asset_cache(fingerprint, epoch_now),
+            PackageProfile::SceneInterchange => {
+                PackageHeader::new_scene_interchange(fingerprint, epoch_now)
+            }
+        };
 
         // Write placeholder for 64-byte header
         let placeholder = [0u8; HEADER_SIZE];
