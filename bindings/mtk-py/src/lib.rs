@@ -43,8 +43,6 @@ pub use protocol::{
     compute_canonical_state_hash, decode_packet, encode_baseline_begin, encode_baseline_chunk,
     encode_baseline_end, encode_delta_op, encode_palette_update, encode_welcome,
 };
-#[cfg(feature = "test-utils")]
-pub use resource::create_test_cache_package;
 pub use resource::{
     get_cache_manifest, is_valid_cache_package, precompile_all_assets,
     resolve_active_cache_package, PyAssetCache, PyPrecompileResult, PyResourcePackStack,
@@ -116,8 +114,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(is_valid_cache_package, m)?)?;
     m.add_function(wrap_pyfunction!(resolve_active_cache_package, m)?)?;
     m.add_function(wrap_pyfunction!(get_cache_manifest, m)?)?;
-    #[cfg(feature = "test-utils")]
-    m.add_function(wrap_pyfunction!(create_test_cache_package, m)?)?;
     m.add_function(wrap_pyfunction!(texture::sample_uv_alpha_f32, m)?)?;
     m.add_function(wrap_pyfunction!(texture::is_face_transparent_f32, m)?)?;
     m.add_function(wrap_pyfunction!(

@@ -33,6 +33,6 @@ rustflags = ["--cfg", 'getrandom_backend="wasm_js"']
 # ==============================================================================
 [alias]
 # Builds the dev-mode Python extension module for direct symlinking into Blender
-build-py = "build --release -p mtk-py --features extension-module,test-utils"
-build-py-dev = "build -p mtk-py --features extension-module,test-utils"
+build-py = "build --release -p mtk-py --features extension-module"
+build-py-dev = "build -p mtk-py --features extension-module"
 
