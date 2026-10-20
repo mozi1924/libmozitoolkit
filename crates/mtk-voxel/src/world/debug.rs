@@ -16,9 +16,8 @@ impl VoxelWorld {
         config: Option<MesherConfig>,
         culler: Option<FaceCuller>,
         model_db: Option<Arc<BakedModelDatabase>>,
-        unified_mesh: bool,
     ) -> Result<Self, VoxelError> {
-        Self::create_debug_world_with_threads(config, culler, model_db, unified_mesh, None)
+        Self::create_debug_world_with_threads(config, culler, model_db, None)
     }
 
     /// Loads the canonical embedded Minecraft debug world into a new `VoxelWorld` with explicit thread configuration.
@@ -26,7 +25,6 @@ impl VoxelWorld {
         config: Option<MesherConfig>,
         culler: Option<FaceCuller>,
         model_db: Option<Arc<BakedModelDatabase>>,
-        unified_mesh: bool,
         num_threads: Option<usize>,
     ) -> Result<Self, VoxelError> {
         let storage = if let Some(ref db) = model_db {
@@ -43,7 +41,6 @@ impl VoxelWorld {
             config,
             culler,
             model_db,
-            unified_mesh,
             num_threads,
         ))
     }
@@ -54,7 +51,6 @@ impl VoxelWorld {
         config: Option<MesherConfig>,
         culler: Option<FaceCuller>,
         model_db: Option<Arc<BakedModelDatabase>>,
-        unified_mesh: bool,
         num_threads: Option<usize>,
     ) -> Result<Self, VoxelError> {
         let storage = VoxelStorage::create_debug_world_from_states(states)?;
@@ -63,7 +59,6 @@ impl VoxelWorld {
             config,
             culler,
             model_db,
-            unified_mesh,
             num_threads,
         ))
     }
@@ -74,7 +69,6 @@ impl VoxelWorld {
         config: Option<MesherConfig>,
         culler: Option<FaceCuller>,
         model_db: Option<Arc<BakedModelDatabase>>,
-        unified_mesh: bool,
         num_threads: Option<usize>,
     ) -> Result<Self, VoxelError> {
         let storage = VoxelStorage::create_debug_world_from_pack_stack(stack)?;
@@ -83,7 +77,6 @@ impl VoxelWorld {
             config,
             culler,
             model_db,
-            unified_mesh,
             num_threads,
         ))
     }

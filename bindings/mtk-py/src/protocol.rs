@@ -352,7 +352,7 @@ pub fn encode_welcome<'py>(
     }
     let dec = match decision {
         0 => SyncDecision::VerifiedSkipRebuild,
-        1 | 2 => SyncDecision::FullBaselineRequired,
+        2 => SyncDecision::FullBaselineRequired,
         _ => SyncDecision::Rejected,
     };
     let pkt = Packet::Welcome {

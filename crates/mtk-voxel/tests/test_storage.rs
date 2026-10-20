@@ -1,6 +1,6 @@
 use glam::IVec3;
 use mtk_voxel::storage::SectionStorage;
-use mtk_voxel::world::VoxelStorage;
+use mtk_voxel::storage::VoxelStorage;
 use mtk_voxel::{crc32, get_empty_section_crc, EMPTY_SECTION_CRC};
 
 #[test]

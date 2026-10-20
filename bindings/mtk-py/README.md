@@ -94,8 +94,8 @@ Python 模块名：`libmtk_py`
   - `dirty_section_count()`, `clear_dirty_sections()`
 - **`VoxelWorld` (`PyVoxelWorld`)**：统一 3D 场景引擎，支持增量区块缓存与全量世界网格管理。
   - `to_point_cloud() -> VoxelPointCloud`, `load_from_point_cloud(cloud)`
-  - `from_storage(storage, config=None, culler=None, model_db=None, unified_mesh=True, num_threads=None)`
-  - `create_debug_world(config=None, culler=None, model_db=None, unified_mesh=True, num_threads=None)`
+  - `from_storage(storage, config=None, culler=None, model_db=None, num_threads=None)`
+  - `create_debug_world(config=None, culler=None, model_db=None, num_threads=None)`
   - `rebuild_all() -> MeshData`, `rebuild_dirty() -> Dict`, `clear_cache()`, `hot_reload(config=None, model_db=None)`, `num_threads` (getter/setter)
 - **`MesherConfig` (`PyMesherConfig`)**：网格化配置（AO 开关、流体曲面、坐标系转换、线程数、顶点焊接）。
 - **`SectionMesher` (`PySectionMesher`)**：

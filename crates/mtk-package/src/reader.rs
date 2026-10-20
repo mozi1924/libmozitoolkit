@@ -180,7 +180,6 @@ impl MtkPackageReader {
                     source: e,
                 }
             })?,
-            CompressionType::Lz4 => raw_payload.to_vec(),
         };
 
         // Verify checksum on decompressed payload

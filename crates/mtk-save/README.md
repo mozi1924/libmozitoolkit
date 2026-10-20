@@ -44,7 +44,7 @@
 ```
 ┌────────────────────────────────────────────────────────┐
 │               Minecraft Java Save Directory            │
-│  level.dat  │  region/r.*.*.mca  │  DIM-1  │  DIM1     │
+│  level.dat  │  region/r.*.*.mca  │ dimensions/.../region │
 └───────────────────────────┬────────────────────────────┘
                             │ 寻址与流式读取
                             ▼

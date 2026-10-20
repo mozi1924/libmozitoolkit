@@ -20,15 +20,12 @@ pub const CURRENT_VERSION_MINOR: u16 = 0;
 pub enum PackageProfile {
     /// Full precompiled asset cache (Atlas, Standalone, Models, Biomes).
     AssetCache = 0,
-    /// Lightweight scene interchange (sparse voxels, tree-shaken textures/models).
-    SceneInterchange = 1,
 }
 
 impl PackageProfile {
     pub fn from_u16(val: u16) -> Option<Self> {
         match val {
             0 => Some(Self::AssetCache),
-            1 => Some(Self::SceneInterchange),
             _ => None,
         }
     }
@@ -40,7 +37,6 @@ impl PackageProfile {
 pub enum CompressionType {
     None = 0,
     Zstd = 1,
-    Lz4 = 2,
 }
 
 impl CompressionType {
@@ -48,7 +44,6 @@ impl CompressionType {
         match val {
             0 => Some(Self::None),
             1 => Some(Self::Zstd),
-            2 => Some(Self::Lz4),
             _ => None,
         }
     }
@@ -59,14 +54,12 @@ impl CompressionType {
 #[repr(u8)]
 pub enum ChecksumType {
     Crc32 = 0,
-    XxHash64 = 1,
 }
 
 impl ChecksumType {
     pub fn from_u8(val: u8) -> Option<Self> {
         match val {
             0 => Some(Self::Crc32),
-            1 => Some(Self::XxHash64),
             _ => None,
         }
     }
@@ -80,7 +73,6 @@ impl HeaderFlags {
     pub const FLAG_LITTLE_ENDIAN: u16 = 1 << 0;
     pub const FLAG_TOC_ZSTD: u16 = 1 << 1;
     pub const FLAG_SELF_CONTAINED: u16 = 1 << 2;
-    pub const FLAG_EXTERNAL_REF: u16 = 1 << 3;
 
     pub fn default_asset_cache() -> Self {
         Self(Self::FLAG_LITTLE_ENDIAN | Self::FLAG_TOC_ZSTD | Self::FLAG_SELF_CONTAINED)
@@ -262,6 +254,28 @@ mod tests {
         assert_eq!(parsed.toc_offset, 1024);
         assert_eq!(parsed.toc_length, 512);
         assert_eq!(parsed.chunk_count, 8);
+    }
+
+    #[test]
+    fn test_removed_profiles_and_algorithms_are_rejected() {
+        let header = PackageHeader::new_asset_cache([7u8; 16], 42);
+
+        for (offset, value, field) in [
+            (8usize, 1u8, "profile"),
+            (12, 2, "compression"),
+            (13, 1, "checksum"),
+        ] {
+            let mut bytes = header.to_bytes();
+            bytes[offset] = value;
+            let crc = crc32fast::hash(&bytes[0..60]);
+            bytes[60..64].copy_from_slice(&crc.to_le_bytes());
+            let err =
+                PackageHeader::from_bytes(&bytes).expect_err("removed enum value must be rejected");
+            assert!(
+                err.to_string().contains(field),
+                "error for removed {field} must name the field, got: {err}"
+            );
+        }
     }
 
     #[test]

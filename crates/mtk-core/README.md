@@ -15,7 +15,7 @@
   - [2.1 几何缓冲与基元 (`mesh`, `geometry`, `attributes`)](#21-几何缓冲与基元-mesh-geometry-attributes)
   - [2.2 6 向拓扑与坐标系 (`direction`, `geometry`)](#22-6-向拓扑与坐标系-direction-geometry)
   - [2.3 自适应像素切分 (`subdivide`)](#23-自适应像素切分-subdivide)
-  - [2.4 智能挤出与 UV 修复 (`extrude`, `extrude_mesh`)](#24-智能挤出与-uv-修复-extrude-extrude_mesh)
+  - [2.4 智能挤出与 UV 修复 (`extrude`)](#24-智能挤出与-uv-修复-extrude)
   - [2.5 确定性随机与植被偏移 (`random`)](#25-确定性随机与植被偏移-random)
 - [3. 快速上手示例 (Quick Start)](#3-快速上手示例-quick-start)
   - [示例 1：构建基础单位立方体网格](#示例-1构建基础单位立方体网格)
@@ -71,7 +71,7 @@
 | `adaptive_pixel_split_mesh` | `(mesh, face_resolutions, default_res, pixels_per_face, max_subdiv, weld_dist) -> MeshData`：全网格批量自适应像素细分，支持多边形属性双线性插值与顶点焊接。 |
 | `weld_mesh_vertices` | `(&mut MeshData, weld_dist: f32)`：基于空间哈希的原地顶点焊接去重。 |
 
-### 2.4 智能挤出与 UV 修复 (`extrude`, `extrude_mesh`)
+### 2.4 智能挤出与 UV 修复 (`extrude`)
 
 | 函数 / 枚举 | 描述 |
 | :--- | :--- |

@@ -136,7 +136,7 @@ pub enum MtkError {
 ---
 
 ### 2.6 资产预编译缓存格式规范 (`ASSET_CACHE_FORMAT_VERSION`)
-由 `libmtk::prebake` 产出的资产预编译缓存目录结构受全局版本号严格约束（当前版本：`ASSET_CACHE_FORMAT_VERSION = 1`）：
+由 `libmtk::prebake` 产出的资产预编译缓存目录结构受全局版本号严格约束（当前版本：`ASSET_CACHE_FORMAT_VERSION = 3`）：
 ```
 cache_output_dir/
 ├── cache_manifest.json     # 全局清单、时间戳、CRC 校验与版本号
@@ -191,11 +191,9 @@ cache_output_dir/
 ---
 
 ### 2.10 通用二进制包与场景交换契约 (`MTKP` / Package Specification)
-为了根除散文件磁盘 I/O 碎片，并在 Minecraft 场景交换中彻底避免传统 3D 网格的“几何爆炸”，系统定义了统一的通用二进制中间包契约：
+为了根除散文件磁盘 I/O 碎片，系统定义了统一的资产缓存二进制包契约：
 - **`Header & TOC` 架构**：固定 64 字节文件头、64 字节对齐分块、Zstd 块级压缩索引表，支持 `mmap` 零内存开销快速寻址。
-- **两大业务 Profile**：
-  1. **`AssetCache Profile` (`.mtkcache`)**：存储全量预烘焙图集与全局模型数据库。
-  2. **`SceneInterchange Profile` (`.mtkscene`)**：轻量级自包含场景交换包。仅存储稀疏体素网格（`VOXL`）、场景实际引用的独立贴图（`TXTR`，非固化图集）与剪枝方块模型（`MODL`），由接收方现场根据宿主配置实时重构网格。
+- **唯一 Profile**：`AssetCache` (`.mtkcache`) 存储全量预烘焙图集与全局模型数据库。
 - 完整规范定义参见：[**`docs/PACKAGE_SPEC.md`**](./PACKAGE_SPEC.md)。
 
 

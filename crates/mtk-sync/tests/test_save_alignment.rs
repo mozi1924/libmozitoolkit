@@ -204,7 +204,7 @@ fn replay_baseline(
     let snapshot_seq = 10u64;
     let stream = build_baseline_stream(storage, min, size, epoch, snapshot_seq, [7u8; 16]);
 
-    let session = LiveSyncSession::new(None, None, None, true);
+    let session = LiveSyncSession::new(None, None, None);
     session.process_packet_direct(Packet::Welcome {
         negotiated_version: 3,
         server_uuid: [3u8; 16],

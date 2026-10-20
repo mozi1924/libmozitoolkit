@@ -63,20 +63,18 @@ impl SaveLoader {
             dims.push("overworld".to_string());
         }
 
-        // 2. The Nether check
-        if save_dir.join("DIM-1/region").exists()
-            || save_dir
-                .join("dimensions/minecraft/the_nether/region")
-                .exists()
+        // 2. The Nether check (1.18+ dimension folder layout)
+        if save_dir
+            .join("dimensions/minecraft/the_nether/region")
+            .exists()
         {
             dims.push("the_nether".to_string());
         }
 
-        // 3. The End check
-        if save_dir.join("DIM1/region").exists()
-            || save_dir
-                .join("dimensions/minecraft/the_end/region")
-                .exists()
+        // 3. The End check (1.18+ dimension folder layout)
+        if save_dir
+            .join("dimensions/minecraft/the_end/region")
+            .exists()
         {
             dims.push("the_end".to_string());
         }
@@ -138,23 +136,15 @@ impl SaveLoader {
                 }
             }
             "nether" | "the_nether" | "minecraft:the_nether" => {
-                let p1 = save_dir.join("DIM-1/region");
-                if p1.is_dir() {
-                    return Some(p1);
-                }
-                let p2 = save_dir.join("dimensions/minecraft/the_nether/region");
-                if p2.is_dir() {
-                    return Some(p2);
+                let p = save_dir.join("dimensions/minecraft/the_nether/region");
+                if p.is_dir() {
+                    return Some(p);
                 }
             }
             "end" | "the_end" | "minecraft:the_end" => {
-                let p1 = save_dir.join("DIM1/region");
-                if p1.is_dir() {
-                    return Some(p1);
-                }
-                let p2 = save_dir.join("dimensions/minecraft/the_end/region");
-                if p2.is_dir() {
-                    return Some(p2);
+                let p = save_dir.join("dimensions/minecraft/the_end/region");
+                if p.is_dir() {
+                    return Some(p);
                 }
             }
             custom => {

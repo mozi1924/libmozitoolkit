@@ -95,9 +95,7 @@ impl SyncDecision {
     pub fn from_u8(val: u8) -> Option<Self> {
         match val {
             0x00 => Some(SyncDecision::VerifiedSkipRebuild),
-            // 0x01 (legacy REPLAY_DELTAS) cannot be honored without a local manifest;
-            // treat it as a request for a fresh full baseline.
-            0x01 | 0x02 => Some(SyncDecision::FullBaselineRequired),
+            0x02 => Some(SyncDecision::FullBaselineRequired),
             0xFF => Some(SyncDecision::Rejected),
             _ => None,
         }

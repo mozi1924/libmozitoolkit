@@ -133,11 +133,9 @@ Rust 处理内核 (libmtk)
 
 ### 4.2 二进制中间包与场景交换规范 (MTK Package Specification)
 
-为了解决全量散文件缓存的 I/O 碎片痛点，以及传统 3D 网格交换格式在 Minecraft 场景下的“几何膨胀”问题，系统定义了统一的 **MTK 二进制容器标准 (`.mtk` / `.mtkpack` / `.mtkscene`)**：
+系统定义了统一的 **MTK 二进制资产缓存容器标准 (`.mtkcache`)**：
 - **统一底层物理布局**：固定 64 字节 Header + 64 字节对齐 Chunk Payloads + 块级 Zstd 压缩 TOC；
-- **两大业务 Profile**：
-  1. **`AssetCache Profile` (`.mtkcache`)**：承载全量预烘焙图集与全局模型数据库；
-  2. **`SceneInterchange Profile` (`.mtkscene`)**：轻量场景交换格式。**不存全量网格**（仅存稀疏体素网格），**不存固化图集**（仅存场景引用的独立材质贴图），**按需剪枝模型**，由接收方现场根据宿主配置实时重构网格与生成图集。
+- **唯一 Profile**：`AssetCache` 承载全量预烘焙图集与全局模型数据库。
 
 详细物理字段、Chunk 协议与重构管线参见专属技术规范：[**`docs/PACKAGE_SPEC.md`**](./PACKAGE_SPEC.md)。
 
@@ -153,7 +151,7 @@ Rust 处理内核 (libmtk)
   - `grid.rs`: 目标细分分辨率推算与整数像素网格切割因子吸附计算
   - `mesh_split.rs`: 单面多边形切割与全网格自适应细分装配
   - `mod.rs`: 门面导出与统一测试套件
-- **`mtk-core::extrude`**（别名 `extrude_mesh`）:
+- **`mtk-core::extrude`**:
   - `types.rs`: 扁平拓扑网格与挤出修复配置
   - `repair.rs`: 侧面 UV 修复核心计算与法线重构
   - `random.rs`: 伪随机/梯度噪声挤出算子

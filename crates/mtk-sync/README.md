@@ -37,7 +37,7 @@
   - [4.3 强类型宿主事件流 (`SyncEvent`)](#43-强类型宿主事件流-syncevent)
 - [5. 核心协同机制与数据流](#5-核心协同机制与数据流)
   - [5.1 两阶段流式传输 (Two-Phase Progressive Streaming)](#51-两阶段流式传输-two-phase-progressive-streaming)
-  - [5.2 单一世界大网格模式 (`unified_mesh`)](#52-单一世界大网格模式-unified_mesh)
+  - [5.2 统一世界网格](#52-统一世界网格)
   - [5.3 增量差量更新与局部重构 (`DeltaUpdate`)](#53-增量差量更新与局部重构-deltaupdate)
   - [5.4 CRC32 清单比对与自愈修复机制](#54-crc32-清单比对与自愈修复机制)
 - [6. 快速上手示例 (Quick Start)](#6-快速上手示例-quick-start)
@@ -200,17 +200,13 @@ pub fn encode_sync_config(throttle_mode: u8, target_fps: u8, is_active: bool) ->
 
 ```rust
 pub struct LiveSyncSession {
-    pub storage: Arc<RwLock<VoxelStorage>>,
-    pub config: MesherConfig,
-    pub culler: FaceCuller,
-    pub model_db: Option<Arc<BakedModelDatabase>>, // 注入的 BlockState JSON 烘焙模型数据库
-    pub unified_mesh: bool,                        // 是否合并为单一无缝大网格
+    pub world: Arc<RwLock<VoxelWorld>>, // 会话唯一的体素世界与网格缓存
     // ... 内部客户端与线程句柄
 }
 ```
 
 #### 关键方法
-- `new(config, culler, model_db, unified_mesh) -> Self`：创建会话实例。
+- `new(config, culler, model_db) -> Self`：创建会话实例；世界网格始终为单一合并网格。
 - `set_auth_token(token)`：设置随每个 HELLO 发送的共享密钥（RFC v3.1 §4.1，自动 `trim`）。
   非空时优先于宿主自建 HELLO 中的令牌；默认 HELLO 与缓存 HELLO 都会携带它。
 - `start(url, auto_reconnect, max_reconnect_attempts) -> Result<(), String>`：连接 Minecraft 服务端并启动后台 I/O 与网格化守护线程。
@@ -254,7 +250,7 @@ pub enum SyncEvent {
     SelectionUpdated { min_pos: IVec3, size: IVec3 }, // 选区尺寸或位置发生改变
     Handshake { epoch, sequence, decision, decision_code, dimension }, // 场景元数据就绪；decision_code 为 RFC v3.1 原始值
     SectionMeshReady { coord: IVec3, mesh: MeshData }, // 单个切片网格就绪 (独立切片模式)
-    WorldMeshReady { mesh: MeshData },         // 全局合并大网格就绪 (unified_mesh 模式)
+    WorldMeshReady { mesh: MeshData },         // 全局合并大网格就绪
     StreamProgress { stage: String, current: usize, total: usize, message: String }, // 物理进度；宿主应使用 normalize_stream_progress 归一化
     StreamFinished { stream_id: u32, built_sections: usize },         // 流传输结束
     DeltaApplied { change_count: usize, affected_sections: Vec<IVec3> }, // 增量修改已应用
@@ -288,9 +284,9 @@ pub enum SyncEvent {
 
 ---
 
-### 5.2 单一世界大网格模式 (`unified_mesh`)
+### 5.2 统一世界网格
 
-当 `unified_mesh = true`（默认启用）时：
+2.0 固定输出单一世界网格：
 - 调度器维护一个全局区块网格缓存 `section_mesh_cache: HashMap<IVec3, MeshData>`；
 - 当局部切片发生变更时，自动与缓存内其它切片网格进行极速内存拼接 (`MeshData::merge_all`) 并执行全局空间顶点焊接 (`weld_spatial_vertices`)；
 - 派发 `WorldMeshReady` 事件，宿主端仅需更新单一 Object，**彻底消除相邻小 Chunk 拼接处次表面散射 (SSS) 撕裂与法线黑缝**。

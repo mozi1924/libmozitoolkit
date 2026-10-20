@@ -151,7 +151,7 @@ pub fn event_worker_loop(
     status_lock: Arc<RwLock<String>>,
     generation_atomic: Arc<AtomicU64>,
     state_lock: Arc<Mutex<SessionState>>,
-    initial_hello: Option<Packet>,
+    initial_hello: Packet,
 ) {
     let _exit_guard = WorkerExitGuard {
         running: running.clone(),
@@ -177,25 +177,8 @@ pub fn event_worker_loop(
                         state.lifecycle = SyncLifecycle::Negotiating;
                         state.last_progress_at = Instant::now();
                     }
-                    // Send initial HELLO packet.
-                    // `LiveSyncSession::start_with_hello` always supplies a HELLO
-                    // carrying the session auth token; this tokenless fallback is
-                    // only reachable for hosts driving the raw worker loop, which
-                    // must build their own HELLO when a token is required.
-                    let hello_pkt = initial_hello.clone().unwrap_or(Packet::Hello {
-                        min_version: PROTOCOL_VERSION as u16,
-                        max_version: PROTOCOL_VERSION as u16,
-                        capabilities: 0x03, // Zstd + DNA Direct Memory
-                        flags: 0,
-                        cached_world_uuid: [0u8; 16],
-                        cached_epoch: 0,
-                        cached_seq: 0,
-                        cached_min: IVec3::ZERO,
-                        cached_size: IVec3::ZERO,
-                        cached_state_hash: 0,
-                        auth_token: String::new(),
-                        cached_dimension: "minecraft:overworld".to_string(),
-                    });
+                    // Every worker start supplies a HELLO carrying the session auth token.
+                    let hello_pkt = initial_hello.clone();
                     let bytes = encode_packet(&hello_pkt);
                     let _ = cmd_sender.send(ClientCommand::Send(bytes));
                 }

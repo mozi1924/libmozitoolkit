@@ -9,7 +9,7 @@ fn test_voxel_world_lifecycle_and_used_chunks() {
         ..Default::default()
     };
 
-    let mut world = VoxelWorld::new(Some(config), None, None, true);
+    let mut world = VoxelWorld::new(Some(config), None, None);
     world.set_bounds(0, 0, 0, 16, 16, 16);
     world.set_block(0, 0, 0, "minecraft:stone", None);
     world.set_block(1, 0, 0, "minecraft:dirt", None);
@@ -41,7 +41,7 @@ fn test_voxel_world_rebuild_with_progress() {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
-    let mut world = VoxelWorld::new(None, None, None, true);
+    let mut world = VoxelWorld::new(None, None, None);
     world.set_bounds(0, 0, 0, 32, 16, 16);
     world.set_block(0, 0, 0, "minecraft:stone", None);
     world.set_block(16, 0, 0, "minecraft:stone", None);
@@ -62,7 +62,7 @@ fn test_voxel_world_rebuild_with_progress() {
 
 #[test]
 fn test_voxel_world_clear_cache_and_hot_reload() {
-    let mut world = VoxelWorld::new(None, None, None, true);
+    let mut world = VoxelWorld::new(None, None, None);
     world.set_bounds(0, 0, 0, 16, 16, 16);
     world.set_block(0, 0, 0, "minecraft:stone", None);
 
@@ -94,7 +94,7 @@ fn test_voxel_world_clear_cache_and_hot_reload() {
 
 #[test]
 fn test_voxel_world_incremental_empty_section_removes_cache() {
-    let mut world = VoxelWorld::new(None, None, None, true);
+    let mut world = VoxelWorld::new(None, None, None);
     world.set_bounds(0, 0, 0, 32, 16, 16);
     // Section 0 has 1 block, Section 1 has 1 block
     world.set_block(0, 0, 0, "minecraft:stone", None);
@@ -133,7 +133,7 @@ fn test_voxel_world_incremental_empty_section_removes_cache() {
 
 #[test]
 fn test_voxel_world_manifest_export_import() {
-    let mut world = VoxelWorld::new(None, None, None, true);
+    let mut world = VoxelWorld::new(None, None, None);
     world.set_bounds(0, 0, 0, 16, 16, 16);
     world.set_block(0, 0, 0, "minecraft:stone", None);
     world
@@ -144,7 +144,7 @@ fn test_voxel_world_manifest_export_import() {
     let meta = world.export_manifest_metadata();
     assert_eq!(meta["size_x"], 16);
 
-    let mut restored = VoxelWorld::new(None, None, None, true);
+    let mut restored = VoxelWorld::new(None, None, None);
     assert!(restored.import_manifest_metadata(&meta));
     let (min_x, _, _, sz_x, _, _) = restored.storage.get_bounds();
     assert_eq!(min_x, 0);

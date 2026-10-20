@@ -13,7 +13,7 @@ use mtk_texture::atlas::AtlasAddressMap;
 use crate::MtkError;
 
 /// Format version for compiled cache compatibility checking.
-pub const ASSET_CACHE_FORMAT_VERSION: u32 = 2;
+pub const ASSET_CACHE_FORMAT_VERSION: u32 = 3;
 
 /// Converts a string fingerprint (e.g. `"mtk_fp_1234abcd5678ef00"`) to a 16-byte array.
 pub fn fingerprint_str_to_bytes16(fp: &str) -> [u8; 16] {

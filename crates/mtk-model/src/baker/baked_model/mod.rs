@@ -3,8 +3,8 @@
 //! Provides data structures, smart BlockState variant lookup, mesh conversion,
 //! and backward-compatible serialization for baked block and OBJ models.
 
+pub mod binary;
 pub mod database;
-pub mod legacy;
 pub mod model;
 pub mod to_mesh;
 pub mod variant_group;

@@ -21,7 +21,7 @@ struct CompactDatabasePayload<'a> {
 #[derive(Deserialize)]
 struct CompactDatabaseOwnedPayload {
     models: HashMap<String, BakedModel>,
-    #[serde(default, alias = "multi_variants")]
+    #[serde(default)]
     variant_groups: HashMap<String, BakedVariantGroup>,
 }
 

@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use crate::error::{PackageError, PackageResult};
-use crate::header::{CompressionType, HeaderFlags, PackageHeader, PackageProfile, HEADER_SIZE};
+use crate::header::{CompressionType, PackageHeader, PackageProfile, HEADER_SIZE};
 use crate::toc::{ChunkEntry, TableOfContents};
 
 /// Chunk compression and serialization options.
@@ -56,7 +56,7 @@ impl<W: Write + Seek> MtkPackageWriter<W> {
     /// Creates a new package writer from a seekable stream.
     pub fn new(
         mut writer: W,
-        profile: PackageProfile,
+        _profile: PackageProfile,
         fingerprint: [u8; 16],
     ) -> PackageResult<Self> {
         let epoch_now = std::time::SystemTime::now()
@@ -64,19 +64,7 @@ impl<W: Write + Seek> MtkPackageWriter<W> {
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
-        let header = match profile {
-            PackageProfile::AssetCache => PackageHeader::new_asset_cache(fingerprint, epoch_now),
-            PackageProfile::SceneInterchange => {
-                let mut h = PackageHeader::new_asset_cache(fingerprint, epoch_now);
-                h.profile = PackageProfile::SceneInterchange;
-                h.flags = HeaderFlags(
-                    HeaderFlags::FLAG_LITTLE_ENDIAN
-                        | HeaderFlags::FLAG_TOC_ZSTD
-                        | HeaderFlags::FLAG_SELF_CONTAINED,
-                );
-                h
-            }
-        };
+        let header = PackageHeader::new_asset_cache(fingerprint, epoch_now);
 
         // Write placeholder for 64-byte header
         let placeholder = [0u8; HEADER_SIZE];
@@ -132,10 +120,6 @@ impl<W: Write + Seek> MtkPackageWriter<W> {
                 } else {
                     (compressed, CompressionType::Zstd)
                 }
-            }
-            CompressionType::Lz4 => {
-                // Future expansion: fallback to raw or error
-                (decompressed_data.to_vec(), CompressionType::None)
             }
         };
 
