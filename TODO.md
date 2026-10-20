@@ -9,7 +9,7 @@
 | 版本 | 阶段定位 | 核心主题与边界 | 状态 |
 | :--- | :--- | :--- | :--- |
 | **v2.0 正式版** | **核心计算内核** | **通用 3D/体素世界几何、双图集烘焙与材质渲染基石 (Production Core)**<br>完成 Anvil 存档解析、BlockState 烘焙、真实 3D 生物群系平滑采样、CTM 求解、**静态+动态双图集 (Dual-Atlas)** 以及直接指针零拷贝直写。 | ✅ **正式发版 (Released / Code Frozen)** |
-| **v2.1** | **次级大版本** | **高级实体、特殊渲染器、动作重定向与场景交换 (Advanced Entities & Interchange)**<br>支持 1.21.4+ 铜像 Special Renderers 模型、骨骼动画坐标系重定向数学库、实体 MCA 文件解析、填充地图解码、方块实体 NBT 与 `.mtkscene` 自包含场景包。 | 📋 **规划排期中** |
+| **v2.1** | **次级大版本** | **高级实体、特殊渲染器与动作重定向 (Advanced Entities & Animation)**<br>支持 1.21.4+ 铜像 Special Renderers 模型、骨骼动画坐标系重定向数学库、实体 MCA 文件解析、填充地图解码与方块实体 NBT。 | 📋 **规划排期中** |
 | **v2.2** | **通用面部与格式** | **面部捕捉网络流、平滑滤波与蓝图全覆盖 (Facial Stream & Blueprint Expansion)**<br>Rust 原生高性能 LiveLinkFace UDP (11111) 与 WebSocket 异步接收、OneEuroFilter 平滑滤波、ARKit 52 向量化解算；`.litematic` 蓝图解析；2D 俯视小地图切片渲染。 | 📋 **规划排期中** |
 | **v2.3+** | **万能生态扩展** | **全格式与全场景覆盖 (Multi-format & Ecosystem Expansion)**<br>基岩版 LevelDB 存储与模组世界扩展、体素反向逆向推算器 (Voxel Guesser)。 | 🔮 **远景规划** |
 
@@ -53,11 +53,11 @@
   的着色器节点就地改名（幂等，已用临时材质验证）。
 
 ### 📋 待办（B 档剩余）
-- [ ] `MeshData.direct_copy_*` 这组 method 级 DNA 直写（MoziToolKit `bridge/mesh/dna.py` 仅作为 `elif` 兜底）可整体删除，改为只走 `unstable.blender_dna`。
+- [x] `MeshData.direct_copy_*` method 级 DNA 直写已删除，统一走 `unstable.blender_dna`。
 - [ ] `mtk-py` 剩余的类方法（`VoxelStorage` 约 19 个、`VoxelWorld` 8 个、`AssetCache` 5 个、`BiomeResolver` 6 个）待逐类确认后清理。
 
 ### 📋 待决策（C 档）
-- [ ] `mtk-ffi`（9 个导出、无 `mtk.h` 产物、零消费者）与 `mtk-wasm`（已落后于 mtk-py）的存废。
+- [x] `mtk-ffi` 已删除；`mtk-wasm` 保留并继续维护。
 - [ ] `mtk-model` 的 OBJ 导入路径（仅自测使用）与 `builtin/` 公开面收缩。
 - [ ] `mtk-cull` 的方块名目录 / `parse_block_name_and_props` 迁往 `mtk-model`；`mtk-core::random` 与 `concurrency` 移出。
 
@@ -162,9 +162,9 @@
 - [ ] **P1 1M faces 进一步优化**：palette-native biome / source-key 展开优化，目标 < 1.2 s。
 - [x] **P2 `mtk-sync` 事件合并**：`poll_events_coalesced` + 最新 world mesh generation。
 - [x] **P2 资产缓存解析**：`libmtk::resolve_active_cache_package` + PyO3。
-- [x] **P2 `bindings/mtk-ffi` 首批**：material route / persisted-state / biome recolor C-ABI；
+- [x] **`bindings/mtk-ffi` 已删除**：无消费者 C-ABI 层不再维护。
 - [x] **代码/文档清理**：修正失效 API 文档链接；保留稳定的 C-ABI，不删除已发布 Rust API。
-- [ ] **P2 `bindings/mtk-ffi` 后续**：按 C4D 实际约定补 opaque session/cache handle 与头文件示例。
+
 
 ---
 

@@ -57,14 +57,7 @@
 - **模型图集 UV 预解算**：多线程全量烘焙模型，将图集 UV 坐标与 Chunk/Texture ID 预先注入 `BakedModelDatabase` 并序列化为二进制快照 (`models.bin`)；
 - **调色板与生物群系映射**：提取 `biome_mapping.json` 供运行时极速着色。
 
-### 2.2 高级网格处理管线 (`libmtk::pipeline`)
-
-提供单次调用、数据输入输出（Data-In Data-Out）的外部网格处理入口 `process_mesh`：
-- 材质名称清洗与别名规范化解析；
-- 多线程 Rayon 并行 Atlas 双 UV（Atlas + Local）重映射；
-- 生成结构化的网格统计与材质分配元数据。
-
-### 2.3 统一错误系统 (`MtkError`)
+## 2.3 统一错误系统 (`MtkError`)
 
 使用 `thiserror` 统一封装模型、体素、贴图、资源、材质、I/O 与并发线程池错误。
 
@@ -111,13 +104,6 @@ pub fn prebake_all_models_with_progress(
     progress_callback: Option<ProgressCallback>,
 ) -> Result<BakedModelDatabase, MtkError>;
 
-// 3. 高级网格处理管线
-pub fn process_mesh(
-    mesh: &MeshData,
-    material_names: &[String],
-    address_map: Option<&AtlasAddressMap>,
-    config: &MeshPipelineConfig,
-) -> ProcessMeshOutput;
 ```
 
 ---
@@ -182,48 +168,3 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
-
-### 示例 2：高级网格处理流水线
-
-```rust
-use libmtk::{process_mesh, MeshPipelineConfig};
-use mtk_core::MeshData;
-
-fn main() {
-    let input_mesh = MeshData::new();
-    let raw_materials = vec!["stone".to_string(), "grass_block_top".to_string()];
-
-    let config = MeshPipelineConfig {
-        custom_aliases: None,
-        generate_secondary_uv: true, // 为 PBR 生成第二套 [0, 1] UV
-        grid_atlas_spec: None,
-    };
-
-    let output = process_mesh(&input_mesh, &raw_materials, None, &config);
-
-    println!(
-        "Processed mesh: {} vertices, {} slots resolved",
-        output.mesh.vertex_count(),
-        output.stats.resolved_slots
-    );
-}
-```
-
----
-
-## 5. Feature 开关与依赖
-
-`libmtk` 在 `Cargo.toml` 中提供特性开关：
-
-| Feature | 默认启用 | 描述 |
-| :--- | :---: | :--- |
-| `std` | 是 | 启用标准库与各子模块的标准实现支持。 |
-| `parallel` | 是 | 启用 `rayon` 多线程并发加速（图集编码、模型烘焙、UV 重映射等）。 |
-| `sync` | 是 | 启用原生 WebSocket 实时同步客户端与网络协议编解码 (`mtk-sync`)。 |
-| `save` | 是 | 启用现代 Minecraft 存档加载与空间切片引擎 (`mtk-save`)。 |
-
----
-
-## 6. 开源协议 (License)
-
-本项目遵循 [GNU General Public License v3.0 or later (GPL-3.0-or-later)](../../LICENSE) 开源协议。

@@ -380,6 +380,7 @@ pub fn precompile_all_assets<'py>(
 }
 
 /// Helper function for unit testing: creates a minimal valid `.mtkcache` package file.
+#[cfg(feature = "test-utils")]
 #[pyfunction]
 #[pyo3(signature = (path, fingerprint, created_at=0))]
 pub fn create_test_cache_package(

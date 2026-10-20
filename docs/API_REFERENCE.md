@@ -20,11 +20,10 @@
 | **Layer 1: 实时网络协同** | **[`mtk-sync`](../crates/mtk-sync/README.md)** | 原生多线程 WebSocket 协同客户端 (`SyncClient`)、小端序二进制协议编解码、两阶段流式增量更新与单一世界大网格 (`WorldMeshReady`) 会话管理 | [查看 API 手册 ↗](../crates/mtk-sync/README.md) |
 | **Layer 1: 存档与空间切片** | **[`mtk-save`](../crates/mtk-save/README.md)** | 现代 Minecraft 存档加载核心：基于内置零拷贝 NBT、Anvil `.mca` 区域寻址、384 高度解包与按需空间切片流式数据源 (`VoxelSource`) | [查看 API 手册 ↗](../crates/mtk-save/README.md) |
 | **Layer 1: 二进制包容器** | **[`mtk-package`](../crates/mtk-package/README.md)** | 统一二进制包与场景交换容器：64 字节头部 CRC 校验、分块 Zstd 压缩 TOC、`memmap2` 零拷贝解析与逐块惰性解压 | [查看 API 手册 ↗](../crates/mtk-package/README.md) |
-| **Layer 2: 应用编排层** | **[`libmtk`](../crates/libmtk/README.md)** | 仅提供端到端全量资产预编译管线 (`precompile_all_assets`) 与网格处理管线 (`process_mesh`)，不重导出领域类型 | [查看 API 手册 ↗](../crates/libmtk/README.md) |
+| **Layer 2: 应用编排层** | **[`libmtk`](../crates/libmtk/README.md)** | 仅提供端到端全量资产预编译管线 (`precompile_all_assets`)，不重导出领域类型 | [查看 API 手册 ↗](../crates/libmtk/README.md) |
 | **Layer 3: Python 绑定** | **[`mtk-py`](../bindings/mtk-py/README.md)** | **P0 核心绑定**：PyO3 驱动的 `libmtk_py` 模块，为 MoziToolKit (Blender 4.2+ 插件) 提供零拷贝 Buffer Protocol / NumPy 视图与极速批处理算子 | [查看 API 手册 ↗](../bindings/mtk-py/README.md) |
 | **Layer 3: 独立命令行** | **[`mtk-cli`](../crates/mtk-cli/README.md)** | **P1 核心工具**：独立无头命令行终端工具 (`mtk`)，支持图集烘焙、模型导出、CTM 求解与遮挡校验 | [查看 API 手册 ↗](../crates/mtk-cli/README.md) |
 | **Layer 3: 性能基准测试** | **[`mtk-bench`](../crates/mtk-bench/README.md)** | **P1 压测套件**：4000+ 区块段多核网格化与数百万次遮挡剔除压力基准套件 | [查看 API 手册 ↗](../crates/mtk-bench/README.md) |
-| **Layer 3: 通用 C-ABI** | **[`mtk-ffi`](../bindings/mtk-ffi/README.md)** | **P2 远期预备**：纯 C-ABI 兼容动态库/静态库与 C 语言头文件 (`mtk.h`)，面向 C/C++、C# (Unity)、Godot、Maya 插件 | [查看 API 手册 ↗](../bindings/mtk-ffi/README.md) |
 | **Layer 3: WebAssembly** | **[`mtk-wasm`](../bindings/mtk-wasm/README.md)** | **P2 远期预备**：wasm-bindgen WebAssembly 绑定，暴露线性内存 TypedArray 视图，面向 WebGPU / Three.js 网页预览 | [查看 API 手册 ↗](../bindings/mtk-wasm/README.md) |
 | **Layer 3: Blender DNA 直写** | **[`mtk-blender-dna`](../bindings/mtk-blender-dna/README.md)** | **P0 DNA 适配**：Blender DNA 裸内存指针零拷贝直写适配层，严格隔离 `unsafe` 并提供带边界防护的硬件级内存灌入 | [查看 API 手册 ↗](../bindings/mtk-blender-dna/README.md) |
 

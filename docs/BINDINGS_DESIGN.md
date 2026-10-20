@@ -22,13 +22,11 @@
 | **`mtk-py`** | **P0 (当前核心)** | PyO3 + maturin + CPython ABI3 (`libmtk_py`) | **生产事实标准**：MoziToolKit (Blender 4.2+) 扩展插件的核心胶水后端 |
 | **`mtk-cli`** | **P1 (工具与验证)** | Rust 原生 CLI (`mtk`) | **核心工具链**：无头资产预编译、模型排查与测试验证 |
 | **`mtk-bench`** | **P1 (基准压测)** | 性能基准测试套件 | **质量防线**：4000+ 区块段多核网格化与遮挡剔除压测 |
-| **`mtk-ffi`** | **P2 (远期预备)** | C-ABI (`cdylib` / `staticlib` / `mtk.h`) | **生态预备**：面向 Maya、Houdini、C# (Unity)、Godot、C/C++ |
 | **`mtk-wasm`** | **P2 (远期预备)** | wasm-bindgen (`mtk_wasm`) | **生态预备**：面向 WebGPU / Three.js 网页端 3D 资产预览 |
 
 ```
 bindings/
   ├── mtk-py/    -> [P0] Python CPython 扩展模块 (PyO3 + maturin) -> libmtk_py
-  ├── mtk-ffi/   -> [P2] C-ABI 动态/静态库 (extern "C" + cbindgen) -> libmtk_ffi
   └── mtk-wasm/  -> [P2] 浏览器与 Node.js 模块 (wasm-bindgen + wasm-pack) -> mtk_wasm
 ```
 
@@ -54,14 +52,14 @@ bindings/
   - `indices_memoryview(py)`: 零拷贝返回 `[M]` u32 三角形/多边形索引。
   - `quad_indices_memoryview(py)`: 零拷贝返回 `[Q, 4]` u32 四边形顶角索引缓冲。
   - `face_materials_memoryview(py)`: 逐面材质插槽 ID。
-  - **Blender 专用加速通道隔离 (`mtk-blender`)**：所有裸指针直写接口 (`copy_*_to_ptr`) 已物理隔离至专用的 `mtk-blender` 扩展 (`libmtk_blender`)，并内建指针非空与 `max_bytes` 溢出防御守卫；通用 `mtk-py` 专注提供 100% 内存安全的标准 Buffer Protocol。
+  - **Blender 专用加速通道隔离 (`mtk-blender-dna`)**：裸指针直写接口 (`copy_*_to_ptr`) 隔离在 `mtk-blender-dna` crate 中，通过 `libmtk_py.unstable.blender_dna` 暴露，并内建指针非空与 `max_bytes` 溢出防御守卫。
   - `cull_faces(tolerance=1e-3, cull_opposite=True, cull_duplicates=True) -> PyMeshData`: 执行空间遮挡与叠面剔除，无缝保留所有自定义属性与 Quad 拓扑。
 - `PyBakedModelDatabase`:
   - `deduplicate_all() -> int`: 批量对数据库中所有烘焙模型执行 Element 面去重与内部接触面剔除，返回消除的总面数。
 - **高阶 Data-In Data-Out 算子**：
   - `process_flat_mesh_extrude_repair(...)`:
     使用扁平连续 1D 缓冲区（`positions`, `loop_vertices`, `loop_uvs`, `face_loop_starts`, `face_loop_totals`, `face_materials`）进行极致性能的批量挤出修复，彻底消除 Python 列表嵌套开销，完美适配 Blender `foreach_get` 与 NumPy 数组。
-  - `process_mesh_extrude_repair(...)`:
+  - `process_flat_mesh_extrude_repair(...)`:
     输入全网格位置、面顶点索引、循环 UV 与像素步长，由 Rust 核心并行分析面面积与法线朝向，输出修改后的稀疏 UV、同步材质与 Crease 锐边。
   - `process_random_extrude_mesh(...)`:
     单批次完成离散选区面随机挤出、3D 噪声位移（Uniform / Perlin / Cellular）、侧面拓扑缝合与自动 UV 修复。
@@ -88,78 +86,6 @@ bindings/
 
 ##### 3. 体素与实时同步 (`mtk.voxel` & `mtk.sync`)
 - `VoxelStorage`: 稀疏体素世界存储，纳秒级快照更新与选区包围盒裁剪。
-- `SectionMesher`:
-  - `mesh_world(storage, config)`: 多线程并行世界网格化（支持 `num_threads` 指定并发工作线程数）。
-  - `MesherConfig(enable_ao=True, mesh_fluids=True, z_up_coordinates=True, atlas=None, biome_resolver=None, custom_aliases=None, num_threads=None)`: 标准化 3D 几何坐标系与图集材质寻址/生物群系着色配置。
-- `LiveSyncSession`: 原生 WebSocket 后台协同管道，提供 `start(url)`、`stop()`（底层 TCP 强制关闭）、`is_active`、`is_connected`、`status` 与非阻塞 `poll_events()`。
-
-#### Blender Python 极速灌入范式示例
-
-```python
-import bpy
-import libmtk_py as mtk
-
-# 1. 创建体素容器并灌入区块数据
-storage = mtk.VoxelStorage()
-storage.set_bounds(0, 0, 0, 16, 16, 16)
-storage.set_block(0, 0, 0, "minecraft:stone")
-
-# 2. 生成标准右手 Z-Up 网格 (指定 Rayon 多线程加速)
-config = mtk.MesherConfig(enable_ao=True, mesh_fluids=True, z_up_coordinates=True, num_threads=8)
-mesh_data = mtk.SectionMesher.mesh_world(storage, config)
-
-# 3. 极速零拷贝灌入 Blender Mesh (保留 Quad 拓扑与 Loop UV)
-v_count = mesh_data.vertex_count
-q_count = mesh_data.quad_count
-if v_count > 0:
-    b_mesh = bpy.data.meshes.new(name="MtkWorld")
-    b_mesh.clear_geometry()
-    b_mesh.vertices.add(v_count)
-    b_mesh.loops.add(q_count * 4)
-    b_mesh.polygons.add(q_count)
-
-    # 纳秒级 foreach_set 零拷贝灌入 (cast 类型视图)
-    b_mesh.vertices.foreach_set("co", mesh_data.positions_memoryview().cast("f"))
-    b_mesh.loops.foreach_set("vertex_index", mesh_data.quad_indices_memoryview().cast("i"))
-    b_mesh.polygons.foreach_set("loop_start", mesh_data.loop_starts_memoryview().cast("i"))
-    b_mesh.polygons.foreach_set("loop_total", mesh_data.loop_totals_memoryview().cast("i"))
-
-    # 毫秒级 Loop UV 与材质插槽注入
-    uv_layer = b_mesh.uv_layers.new(name="UVMap")
-    uv_layer.data.foreach_set("uv", mesh_data.loop_uvs_memoryview().cast("f"))
-    b_mesh.polygons.foreach_set("material_index", mesh_data.face_materials_memoryview().cast("H"))
-
-    b_mesh.update(calc_edges=True)
-```
-
----
-
-### 2.2 通用 C-ABI 动态链接库 (`bindings/mtk-ffi`)
-
-- **技术栈**：`crate-type = ["cdylib", "staticlib"]` + `cbindgen` (自动生成 `include/mtk.h`)。
-- **C 接口结构示例**：
-  ```c
-  typedef struct {
-      const float* positions;
-      size_t vertex_count;
-      const float* normals;
-      const float* uvs;
-      const uint32_t* indices;
-      size_t index_count;
-      const uint32_t* face_materials;
-      size_t face_count;
-  } MtkMeshView;
-
-  MtkMeshHandle* mtk_mesher_build_section(...);
-  MtkMeshView mtk_mesh_get_view(MtkMeshHandle* handle);
-  void mtk_mesh_free(MtkMeshHandle* handle);
-  ```
-- **目标场景**：C/C++ 原生引擎、Golang 服务端后端、Godot (GDExtension)、Unity (C# P/Invoke)、Unreal Engine 插件。
-
----
-
-### 2.3 WebAssembly 绑定 (`bindings/mtk-wasm`)
-
 - **技术栈**：`wasm-bindgen` + `wasm-pack` (发布为 npm package / ES Module)。
 - **数据对接**：
   - 利用 `js_sys::Float32Array::view` / `js_sys::Uint32Array::view` 直接将 WASM 线性内存暴露给 JavaScript 前端。

@@ -18,8 +18,7 @@
 - [3. 构建、编译与测试指南](#3-构建编译与测试指南)
 - [4. 真实代码调用示例](#4-真实代码调用示例)
   - [示例 1：零拷贝网格创建与 Blender 数据灌入](#示例-1零拷贝网格创建与-blender-数据灌入)
-  - [示例 2：使用 `process_mesh` 执行多通道 UV 重映射](#示例-2使用-process_mesh-执行多通道-uv-重映射)
-  - [示例 3：体素世界存储与多核并行网格化 (`SectionMesher`)](#示例-3体素世界存储与多核并行网格化-sectionmesher)
+  - [示例 2：体素世界存储与多核并行网格化 (`VoxelWorld`)](#示例-2体素世界存储与多核并行网格化-voxelworld)
 - [5. Feature 开关与依赖](#5-feature-开关与依赖)
 - [6. 开源协议 (License)](#6-开源协议-license)
 
@@ -40,19 +39,21 @@
 
 Python 模块名：`libmtk_py`
 
+- `version() -> str`：原生扩展版本。
+- `api_version() -> int`：与 Blender 胶水层握手的整数 API 版本（当前 `1`）。
+
 ### 2.1 几何网格与自定义属性 (`mesh` & `attributes`)
 - **`MeshData` (`PyMeshData`)**：连续内存紧凑几何网格缓冲容器。
   - 属性：`vertex_count`, `triangle_count`, `face_count`, `is_empty`
   - 构造与修改：`MeshData()`, `MeshData.with_capacity(verts, indices, faces)`, `MeshData.from_flat_polygons(positions, loop_vertices, loop_uvs, face_loop_starts, face_loop_totals, normals=None, face_materials=None)`（共享顶点 + 逐 loop UV）, `append_mesh(other)`, `clear()`
   - UV 布局：`uv_layout` 显式区分 `PerVertex` / `PerLoop`，不再用 `uvs.len()` 猜测；`loop_uvs_memoryview()` 自动展开为逐 loop。
   - 内存视图（标准零拷贝通道，推荐）：`positions_memoryview()`, `normals_memoryview()`, `uvs_memoryview()`, `indices_memoryview()`, `quad_indices_memoryview()`, `loop_uvs_memoryview()`, `loop_starts_memoryview()`, `loop_totals_memoryview()`, `face_materials_memoryview()`
-  - 非稳定底层 DNA 直写子模块（`libmtk_py.unstable.blender_dna`，由底层 `mtk-blender-dna` crate 驱动）：`copy_positions_to_ptr(mesh, ptr, max_bytes=None)`, `copy_normals_to_ptr(...)`, `copy_indices_to_ptr(...)`, `copy_quad_indices_to_ptr(...)`, `copy_loop_uvs_to_ptr(...)`, `copy_loop_starts_to_ptr(...)`, `copy_loop_totals_to_ptr(...)`, `copy_face_materials_to_ptr(...)`, `copy_colors_to_ptr(...)`, `copy_buffer_to_ptr(buf, ptr, max_bytes=None)`，均内建指针非空与内存越界溢出防御守卫。
+  - 非稳定底层 DNA 直写子模块（`libmtk_py.unstable.blender_dna`，由底层 `mtk-blender-dna` crate 驱动）：`copy_positions_to_ptr(mesh, ptr, max_bytes=None)`, `copy_normals_to_ptr(...)`, `copy_indices_to_ptr(...)`, `copy_quad_indices_to_ptr(...)`, `copy_loop_uvs_to_ptr(...)`, `copy_colors_to_ptr(...)`, point-cloud `copy_point_cloud_*_to_ptr(...)`，均内建指针非空与内存越界溢出防御守卫，均内建指针非空与内存越界溢出防御守卫。
   - 顶层 `libmtk_py.blender` 兼容别名与 `BlenderDirectMesh` 类已于 2026-10 API 收敛中移除，唯一入口为 `libmtk_py.unstable.blender_dna`。
   - 次级 UV / 面 tint：`get_flat_secondary_uvs()`, `face_tint_indices_memoryview()`
-  - 顶点与面自定义属性：`add_string_attribute(name, domain, values)`, `add_attribute_from_buffer(name, domain, data_type, buffer)`, `get_attribute_data(name)`, `has_attribute(name)`, `list_attributes()`
+  - 顶点与面自定义属性：`add_string_attribute(name, domain, values)`, `add_attribute_from_buffer(name, domain, data_type, buffer)`, `get_attribute_data(name)`, `has_attribute(name)`, `attribute_names()`
   - 来源贴图调色板：`source_texture_palette_indices() -> (palette, u32 memoryview)`，把逐面 `mtk_source_texture_key` 压缩成 palette + 索引，供 Live Sync 等跳过逐面字符串的宿主保留完整 provenance。
 - **`AttributeDomain`**：属性域枚举，支持 `"point"` (顶点) 与 `"face"` (面)。
-- **`process_mesh(mesh, material_names, atlas=None, aliases=None, generate_secondary_uv=True, grid_atlas_spec=None)`**：统一高阶网格处理流水线，多线程并行执行材质状态求解、图集 UV 重映射、次级 [0, 1] PBR UV 生成与自定义属性标记。
 - **`analyze_mesh_hard_edges(positions, edge_verts, face_loop_starts, face_loop_totals, loop_verts, sharp_angle_rad, explicit_sharp_edges=None) -> PyBytes`**：基于二面角与边界的高性能硬边/锐边拓扑分析算子，支持零拷贝 Buffer Protocol。
 
 ### 2.2 遮挡剔除与叠面消重 (`cull`)
@@ -70,9 +71,8 @@ Python 模块名：`libmtk_py`
 
 ### 2.4 智能挤出与 UV 修复 (`extrude` & `uv`)
 - **挤出算子**：
-  - `process_mesh_extrude_repair(mesh_data, config_dict)`：智能侧面 UV 修复与四边形拓扑保持挤出。
   - `process_flat_mesh_extrude_repair(positions, uvs, indices, face_mat, ...)`：扁平数组极速挤出修复。
-  - `process_random_extrude_mesh(mesh_data, noise_config)`：基于 3D 噪声的随机高度起伏挤出。
+  - `generate_random_extrude_heights(centers, ...)`：为随机离散挤出生成高度。
 - **UV 几何数学算法**：
   - `repair_mesh_fluid_uv_inplace(positions, loop_verts, face_loop_starts, face_loop_totals, uvs, ...)`：基于网格索引拓扑的高性能原地流体 UV 斜坡批量修复。
   - `calculate_uv_area(quad_uvs)`、`get_uv_bounds(quad_uvs)`、`get_uv_center(quad_uvs)`
@@ -97,12 +97,6 @@ Python 模块名：`libmtk_py`
   - `create_debug_world(config=None, culler=None, model_db=None, num_threads=None)`
   - `rebuild_all() -> MeshData`, `rebuild_dirty() -> Dict`, `clear_cache()`, `hot_reload(config=None, model_db=None)`, `num_threads` (getter/setter)
 - **`MesherConfig` (`PyMesherConfig`)**：网格化配置（AO 开关、流体曲面、坐标系转换、线程数、顶点焊接）。
-- **`SectionMesher` (`PySectionMesher`)**：
-  - `mesh_world(storage, config=None, culler=None, model_db=None) -> MeshData`
-  - `mesh_sections_split(storage, config=None, culler=None, model_db=None) -> Dict[Tuple[int,int,int], MeshData]`
-  - `rebuild_dirty_sections(storage, config=None, culler=None, model_db=None) -> Dict[Tuple[int,int,int], MeshData]`
-
-### 2.6 实时网络协同 (`sync` & `protocol`)
 - **`LiveSyncSession` (`PyLiveSyncSession`)**：原生 WebSocket 实时协同客户端。
   - `start(..., auth_token=None)`, `start_with_persisted_state(..., state_json=None, auth_token=None)`, `stop()`
   - `auth_token` 会随默认 HELLO 与缓存 HELLO 发送（RFC v3.1 §4.1；Python 侧先 `strip()`；
@@ -210,23 +204,18 @@ mesh.add_string_attribute("mtk_source_texture", "face", ["minecraft:block/stone"
 print("Has attribute:", mesh.has_attribute("mtk_source_texture"))
 ```
 
-### 示例 3：体素世界存储与多核并行网格化 (`SectionMesher`)
+### 示例 2：体素世界存储与多核并行网格化 (`VoxelWorld`)
 ```python
 import libmtk_py
 
-# 1. 初始化稀疏体素存储
 storage = libmtk_py.VoxelStorage()
 storage.set_bounds(0, 0, 0, 16, 16, 16)
 storage.set_block(0, 0, 0, "minecraft:stone")
-storage.set_block(1, 0, 0, "minecraft:oak_stairs[facing=north,half=bottom,shape=straight]")
 
-# 2. 网格化配置与遮挡剔除器
-config = libmtk_py.MesherConfig()
-culler = libmtk_py.FaceCuller(leaves_cull_mode=0, glass_cull_mode=0)
-
-# 3. 生成紧凑几何网格
-mesh = libmtk_py.SectionMesher.mesh_world(storage, config=config, culler=culler)
-print(f"Generated Voxel Mesh: {mesh.vertex_count} vertices, {mesh.triangle_count} triangles")
+config = libmtk_py.MesherConfig(enable_ao=True, z_up_coordinates=True)
+world = libmtk_py.VoxelWorld.from_storage(storage, config)
+mesh = world.rebuild_all()
+print("Vertices:", mesh.vertex_count, "Quads:", mesh.quad_count)
 ```
 
 ---

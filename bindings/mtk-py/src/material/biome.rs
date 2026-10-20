@@ -268,6 +268,93 @@ pub fn compute_biome_tint_attributes(
     Ok(dict.into())
 }
 
+/// Palette-native biome tint computation returning flat float memoryviews.
+#[pyfunction]
+#[pyo3(signature = (
+    palette,
+    face_indices,
+    biome_name="PLAINS",
+    multi_biomes=None,
+    resolver=None,
+    custom_temp=None,
+    custom_humidity=None,
+    custom_grass=None,
+    custom_foliage=None,
+    custom_dry_foliage=None,
+    custom_water=None,
+    has_custom_grass=false,
+    has_custom_foliage=false,
+    has_custom_dry_foliage=false,
+))]
+pub fn compute_biome_tint_attributes_paletted<'py>(
+    py: Python<'py>,
+    palette: Vec<String>,
+    face_indices: &Bound<'_, PyAny>,
+    biome_name: &str,
+    multi_biomes: Option<Vec<(String, f32)>>,
+    resolver: Option<&PyBiomeResolver>,
+    custom_temp: Option<f32>,
+    custom_humidity: Option<f32>,
+    custom_grass: Option<[f32; 4]>,
+    custom_foliage: Option<[f32; 4]>,
+    custom_dry_foliage: Option<[f32; 4]>,
+    custom_water: Option<[f32; 4]>,
+    has_custom_grass: bool,
+    has_custom_foliage: bool,
+    has_custom_dry_foliage: bool,
+) -> PyResult<(
+    Bound<'py, PyMemoryView>,
+    Bound<'py, PyMemoryView>,
+    Bound<'py, PyMemoryView>,
+)> {
+    let indices = BorrowedU32Buffer::extract(face_indices)?;
+    let default_resolver = mtk_material::BiomeResolver::new();
+    let res_ref = resolver.map(|r| &r.inner).unwrap_or(&default_resolver);
+
+    let custom = if biome_name.eq_ignore_ascii_case("custom")
+        || custom_temp.is_some()
+        || custom_humidity.is_some()
+        || custom_grass.is_some()
+        || custom_foliage.is_some()
+        || custom_dry_foliage.is_some()
+        || custom_water.is_some()
+    {
+        Some(mtk_material::CustomBiomeSettings {
+            temperature: custom_temp.unwrap_or(0.8),
+            humidity: custom_humidity.unwrap_or(0.4),
+            grass_color: custom_grass,
+            foliage_color: custom_foliage,
+            dry_foliage_color: custom_dry_foliage,
+            water_color: custom_water,
+            has_custom_grass,
+            has_custom_foliage,
+            has_custom_dry_foliage,
+        })
+    } else {
+        None
+    };
+
+    let (colors, cg, cf, cdf) =
+        mtk_material::resolve_biome_color_set(biome_name, multi_biomes.as_deref(), custom.as_ref());
+    let result = py.allow_threads(|| {
+        mtk_material::compute_mesh_biome_attributes_paletted_flat(
+            &palette,
+            indices.as_slice(),
+            colors,
+            cg,
+            cf,
+            cdf,
+            res_ref,
+        )
+    });
+
+    Ok((
+        create_owned_f32_memoryview(py, result.packed_tint_data)?,
+        create_owned_f32_memoryview(py, result.tint_colors)?,
+        create_owned_f32_memoryview(py, result.colormap_uvs)?,
+    ))
+}
+
 /// Re-apply a uniform biome palette in-place-compatible flat float buffers.
 ///
 /// Inputs must be C-contiguous buffers:

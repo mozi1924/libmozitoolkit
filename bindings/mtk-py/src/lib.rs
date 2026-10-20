@@ -24,10 +24,14 @@ pub mod unstable;
 
 use pyo3::prelude::*;
 
+/// Integer API version understood by this native extension.
+pub const API_VERSION: u32 = 1;
+
 pub use ctm::PyCtmSolver;
 pub use cull::PyFaceCuller;
 pub use material::{
-    classify_tint_category, compute_biome_tint_attributes, compute_flat_material_props_memoryview,
+    build_material_palette, classify_tint_category, compute_biome_tint_attributes,
+    compute_biome_tint_attributes_paletted, compute_flat_material_props_memoryview,
     compute_flat_material_props_paletted_memoryview, compute_mesh_biome_attributes_from_storage,
     get_all_biomes, get_biome_meta, reapply_uniform_biome_tint, PyBiomeResolver, PyGridAtlasSpec,
     PyMaterialResolver,
@@ -39,8 +43,10 @@ pub use protocol::{
     compute_canonical_state_hash, decode_packet, encode_baseline_begin, encode_baseline_chunk,
     encode_baseline_end, encode_delta_op, encode_palette_update, encode_welcome,
 };
+#[cfg(feature = "test-utils")]
+pub use resource::create_test_cache_package;
 pub use resource::{
-    create_test_cache_package, get_cache_manifest, is_valid_cache_package, precompile_all_assets,
+    get_cache_manifest, is_valid_cache_package, precompile_all_assets,
     resolve_active_cache_package, PyAssetCache, PyPrecompileResult, PyResourcePackStack,
 };
 pub use save::PyLevelData;
@@ -52,6 +58,12 @@ pub use voxel::{PyMesherConfig, PyVoxelStorage, PyVoxelWorld};
 #[pyfunction]
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
+}
+
+/// Returns the integer API contract version expected by the Blender glue layer.
+#[pyfunction]
+pub fn api_version() -> u32 {
+    API_VERSION
 }
 
 /// Main entrypoint for Python module `libmtk_py`.
@@ -104,6 +116,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(is_valid_cache_package, m)?)?;
     m.add_function(wrap_pyfunction!(resolve_active_cache_package, m)?)?;
     m.add_function(wrap_pyfunction!(get_cache_manifest, m)?)?;
+    #[cfg(feature = "test-utils")]
     m.add_function(wrap_pyfunction!(create_test_cache_package, m)?)?;
     m.add_function(wrap_pyfunction!(texture::sample_uv_alpha_f32, m)?)?;
     m.add_function(wrap_pyfunction!(texture::is_face_transparent_f32, m)?)?;
@@ -116,7 +129,9 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyGridAtlasSpec>()?;
     m.add_class::<PyMaterialResolver>()?;
     m.add_class::<PyBiomeResolver>()?;
+    m.add_function(wrap_pyfunction!(build_material_palette, m)?)?;
     m.add_function(wrap_pyfunction!(compute_biome_tint_attributes, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_biome_tint_attributes_paletted, m)?)?;
     m.add_function(wrap_pyfunction!(
         compute_mesh_biome_attributes_from_storage,
         m
@@ -194,6 +209,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // 11. Metadata
     m.add_function(wrap_pyfunction!(version, m)?)?;
+    m.add_function(wrap_pyfunction!(api_version, m)?)?;
 
     // 12. Unstable and experimental APIs (includes the Blender DNA accelerator)
     {

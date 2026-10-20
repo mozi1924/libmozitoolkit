@@ -20,7 +20,6 @@ graph TD
     subgraph Layer3_Bindings["Layer 3: 胶水与跨语言绑定及工具 (Bindings, Tools & FFI)"]
         WASM["mtk-wasm (wasm-bindgen / npm)"]
         PY["mtk-py (PyO3 / maturin / Wheel)"]
-        FFI["mtk-ffi (C-ABI / cdylib / staticlib / .h)"]
         CLI["mtk-cli (独立命令行工具)"]
         BENCH["mtk-bench (性能基准测试)"]
         DNA["mtk-blender-dna (DNA 裸指针零拷贝直写)"]
@@ -99,12 +98,11 @@ graph TD
 | **`crates/mtk-material`** | 66 种原版生物群系调色板与线性色彩数学引擎 (SSOT)、`BiomeResolver` 模型扫描与预编译映射、多线程 Rayon 并行 UV 重映射与外部别名解算 | `mtk-core`, `mtk-texture`, `mtk-resource` | `BiomePalette`, `BiomeResolver`, `compute_mesh_biome_attributes`, `MaterialResolver`, `MeshMultiUvRemapResult` |
 | **`crates/mtk-save`** | 现代 Minecraft 存档加载核心：基于内置零拷贝 NBT、Anvil `.mca` 区域文件寻址、384 高度世界 3D 生物群系与方块状态解包、按 3D 边界盒空间切片加载 | `mtk-core`, `mtk-voxel` | `LevelData`, `RegionFile`, `ChunkParser`, `SaveLoader` |
 | **`crates/mtk-package`** | 统一二进制包与场景交换容器编解码器：64 字节头部校验与 CRC、分块 Zstd 压缩 TOC、`memmap2` 零拷贝解析与逐块惰性解压 | `mtk-core` | `MtkPackageWriter`, `MtkPackageReader`, `TableOfContents`, `PackageHeader`, `PackageProfile` |
-| **`crates/libmtk`** | **应用编排层**：只提供端到端资产预编译管线 (`precompile_all_assets`) 与网格处理管线 (`process_mesh`)，不重导出领域类型 | 全部 Layer 1 Crates | `prebake`, `pipeline`, `MtkError`, `CacheManifest` |
+| **`crates/libmtk`** | **应用编排层**：只提供端到端资产预编译管线 (`precompile_all_assets`)，不重导出领域类型 | 全部 Layer 1 Crates | `prebake`, `pipeline`, `MtkError`, `CacheManifest` |
 | **`crates/mtk-bench`** | 性能基准测试套件，覆盖 4000 区块大规模网格化与复杂面剔除场景 | 全部核心 Crates | 基准测试报告与性能指标 |
 | **`crates/mtk-cli`** | 独立命令行终端工具，为无头环境与 CI/CD 提供资产预编译与检查能力 | Layer 0/1 Crates | 命令行二进制 `mtk` |
 | **`crates/mtk-testkit`** | **仅测试用**（`publish = false`）资产解析器与内置 JSON fixtures：统一真包位置发现、缺省跳过策略与路径拼接 | 仅 `std` | `assets_root`, `real_assets_root`, `fabric_jar`, `model_json_path`, fixtures |
 | **`bindings/mtk-py`** | Python 动态扩展模块 (PyO3 + maturin)，提供 `MeshData`、零拷贝内存视图与极速批处理算子 | 各领域 Crate + `libmtk` | `libmtk_py` CPython 轮子 (.whl) |
-| **`bindings/mtk-ffi`** | 纯 C-ABI 动态/静态库与 C 头文件 (cbindgen)，跨语言无缝调用 | `mtk-core`, `mtk-voxel` | `libmtk_ffi.so` / `.dll` / `.dylib`, `mtk.h` |
 | **`bindings/mtk-wasm`** | WebAssembly 绑定 (wasm-bindgen)，暴露 TypedArray 视图 | `mtk-core`, `mtk-voxel`, `mtk-resource`, `mtk-cull`, `mtk-model`, `mtk-material` | `mtk_wasm.wasm` + `mtk_wasm.js` npm 包 |
 | **`bindings/mtk-blender-dna`** | Blender DNA 裸内存指针零拷贝直写适配层（严格隔离 `unsafe`，带边界防护） | `mtk-core`, `mtk-voxel` | `copy_positions_to_ptr`, `copy_indices_to_ptr`, `copy_point_cloud_positions_to_ptr` |
 
