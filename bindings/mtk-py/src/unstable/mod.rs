@@ -5,6 +5,7 @@
 
 #[cfg(feature = "blender")]
 pub mod blender_dna;
+pub mod testing;
 
 use pyo3::prelude::*;
 
@@ -17,6 +18,7 @@ pub fn register_submodule(py: Python<'_>, parent_module: &Bound<'_, PyModule>) -
         blender_dna::register_submodule(py, &unstable)?;
     }
 
+    testing::register_submodule(py, &unstable)?;
     parent_module.add_submodule(&unstable)?;
     Ok(())
 }
