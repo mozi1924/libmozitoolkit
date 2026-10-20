@@ -49,6 +49,84 @@ pub struct BiomeColorSet {
     pub colormap_uv: [f32; 2],
 }
 
+/// Resolves the four tint channels and custom flags for a biome preset.
+pub fn resolve_biome_color_set(
+    biome_name: &str,
+    multi_biomes: Option<&[(String, f32)]>,
+    custom: Option<&CustomBiomeSettings>,
+) -> (BiomeColorSet, bool, bool, bool) {
+    if let Some(settings) = custom {
+        let default_pal = get_biome_palette("plains");
+        return (
+            BiomeColorSet {
+                grass: settings
+                    .grass_color
+                    .unwrap_or_else(|| default_pal.grass_linear()),
+                foliage: settings
+                    .foliage_color
+                    .unwrap_or_else(|| default_pal.foliage_linear()),
+                dry_foliage: settings
+                    .dry_foliage_color
+                    .unwrap_or_else(|| default_pal.dry_foliage_linear()),
+                water: settings
+                    .water_color
+                    .unwrap_or_else(|| default_pal.water_linear()),
+                colormap_uv: get_colormap_uv(settings.temperature, settings.humidity),
+            },
+            settings.has_custom_grass,
+            settings.has_custom_foliage,
+            settings.has_custom_dry_foliage,
+        );
+    }
+
+    if let Some(mb) = multi_biomes.filter(|mb| !mb.is_empty()) {
+        let weights: Vec<(&str, f32)> = mb.iter().map(|(n, w)| (n.as_str(), *w)).collect();
+        let mut total_w = 0.0f32;
+        let mut sum_u = 0.0f32;
+        let mut sum_v = 0.0f32;
+        for &(b_name, wt) in &weights {
+            if wt <= 0.0 {
+                continue;
+            }
+            let pal = get_biome_palette(b_name);
+            let uv = pal.colormap_uv();
+            total_w += wt;
+            sum_u += uv[0] * wt;
+            sum_v += uv[1] * wt;
+        }
+        return (
+            BiomeColorSet {
+                grass: blend_biome_colors(&weights, "grass"),
+                foliage: blend_biome_colors(&weights, "foliage"),
+                dry_foliage: blend_biome_colors(&weights, "dry_foliage"),
+                water: blend_biome_colors(&weights, "water"),
+                colormap_uv: if total_w > 0.0 {
+                    [sum_u / total_w, sum_v / total_w]
+                } else {
+                    [0.2, 0.32]
+                },
+            },
+            false,
+            false,
+            false,
+        );
+    }
+
+    let pal = get_biome_palette(biome_name);
+    (
+        BiomeColorSet {
+            grass: pal.grass_linear(),
+            foliage: pal.foliage_linear(),
+            dry_foliage: pal.dry_foliage_linear(),
+            water: pal.water_linear(),
+            colormap_uv: pal.colormap_uv(),
+        },
+        pal.has_custom_grass,
+        pal.has_custom_foliage,
+        pal.has_custom_dry_foliage,
+    )
+}
+
 /// Result structure containing flat aligned arrays for direct Blender mesh attribute injection.
 #[derive(Debug, Clone)]
 pub struct MeshBiomeAttributesResult {

@@ -24,13 +24,12 @@
 | **[`mtk-texture`](crates/mtk-texture)** | 核心 | 矩形空间装箱 Stitcher、多类别 PBR 图集与 Companion Overlay 贴图烘焙、透明度采样与边缘外推填充 | [📖 `crates/mtk-texture/README.md`](crates/mtk-texture/README.md) |
 | **[`mtk-material`](crates/mtk-material)** | 核心 | 66 种原版生物群系调色板与线性色彩数学引擎 (SSOT)、`BiomeResolver` 模型扫描与预编译映射、多线程并行 UV 重映射与外部别名解算 | [📖 `crates/mtk-material/README.md`](crates/mtk-material/README.md) |
 | **[`mtk-save`](crates/mtk-save)** | 核心 | 现代 Minecraft 存档加载核心：基于内置零拷贝 NBT 解码、Anvil `.mca` 区域文件直接寻址、384 高度世界 3D 生物群系与方块状态解包、按需空间切片流式数据源 (`VoxelSource`) | [📖 `crates/mtk-save/README.md`](crates/mtk-save/README.md) |
-| **[`mtk-package`](crates/mtk-package)** | 核心 | 统一二进制包与场景交换容器编解码器：64 字节头部校验、分块 TOC 索引、`memmap2` 零拷贝解析与分块 Zstd 压缩 | [📖 `crates/mtk-package/README.md`](crates/mtk-package/README.md) |
-| **[`libmtk`](crates/libmtk)** | 应用层 | 应用编排 Crate：端到端资产预编译管线 (`prebake`) 与网格处理管线 (`pipeline`)。**不再重导出领域类型**，下游按需直连 `mtk-*` | [📖 `crates/libmtk/README.md`](crates/libmtk/README.md) |
+| **[`mtk-package`](crates/mtk-package)** | 核心 | 统一二进制资产缓存容器编解码器：64 字节头部校验、分块 TOC 索引、`memmap2` 零拷贝解析与分块 Zstd 压缩 | [📖 `crates/mtk-package/README.md`](crates/mtk-package/README.md) |
+| **[`libmtk`](crates/libmtk)** | 应用层 | 应用编排 Crate：端到端资产预编译管线 (`prebake`)。**不再重导出领域类型**，下游按需直连 `mtk-*` | [📖 `crates/libmtk/README.md`](crates/libmtk/README.md) |
 | **[`mtk-py`](bindings/mtk-py)** | **P0 (当前重点)** | 基于 PyO3 的统一 Python 扩展模块 (`libmtk_py`)，提供通用 Buffer Protocol 内存视图与默认内嵌的 Blender 硬件级直接内存直写层 (`feature = "blender"`) | [📖 `bindings/mtk-py/README.md`](bindings/mtk-py/README.md) |
 | **[`mtk-cli`](crates/mtk-cli)** | **P1 (工具链)** | 独立命令行工具 (`mtk`)，支持图集烘焙 (`atlas`)、模型烘焙/导出 (`model` / `export`)、CTM 测试 (`ctm`)、规则校验 (`verify`) 与性能基准 (`bench`) | [📖 `crates/mtk-cli/README.md`](crates/mtk-cli/README.md) |
 | **[`mtk-bench`](crates/mtk-bench)** | **P1 (基准压测)** | 4000 区块与网格面剔除基准性能压测套件 | [📖 `crates/mtk-bench/README.md`](crates/mtk-bench/README.md) |
 | **[`mtk-testkit`](crates/mtk-testkit)** | **Dev (测试基建)** | 仅用于测试的资产解析器与内置 JSON fixtures（`publish = false`），统一真包位置发现与缺省跳过策略 | [📖 `crates/mtk-testkit/README.md`](crates/mtk-testkit/README.md) |
-| **[`mtk-ffi`](bindings/mtk-ffi)** | **P2 (远期预备)** | 纯 C-ABI 动态与静态链接库及 C 头文件 (`mtk.h`)，供 C/C++、C# (Unity)、Go、Godot 跨语言调用 | [📖 `bindings/mtk-ffi/README.md`](bindings/mtk-ffi/README.md) |
 | **[`mtk-wasm`](bindings/mtk-wasm)** | **P2 (远期预备)** | 基于 wasm-bindgen 的 WebAssembly 绑定，支持浏览器/Node.js/WebGPU 零拷贝 TypedArray 视图 | [📖 `bindings/mtk-wasm/README.md`](bindings/mtk-wasm/README.md) |
 | **[`mtk-blender-dna`](bindings/mtk-blender-dna)** | **P0 (DNA 适配)** | Blender DNA 裸内存指针零拷贝直写适配层，严格隔离 unsafe 操作，提供带边界防护的硬件级内存灌入 | [📖 `bindings/mtk-blender-dna/README.md`](bindings/mtk-blender-dna/README.md) |
 

@@ -18,6 +18,7 @@ def quad_mesh():
 class TestLibMtkPy(unittest.TestCase):
     def test_version(self):
         self.assertTrue(libmtk_py.version())
+        self.assertEqual(libmtk_py.api_version(), 1)
 
     def test_mesh_data_buffers(self):
         mesh = quad_mesh()
@@ -65,6 +66,22 @@ class TestLibMtkPy(unittest.TestCase):
         )
         self.assertEqual(len(mesh.loop_starts_memoryview()), 4)
         self.assertEqual(len(mesh.loop_totals_memoryview()), 4)
+
+    def test_build_material_palette(self):
+        import numpy as np
+
+        palette, indices = libmtk_py.build_material_palette(
+            ["Grass", "default"],
+            [False, True],
+            ["", "minecraft:block/grass_block_top"],
+            np.array([1, 0, 1], dtype=np.int32),
+        )
+        self.assertEqual(
+            palette, ["minecraft:block/grass_block_top", "Grass"]
+        )
+        np.testing.assert_array_equal(
+            np.frombuffer(indices, dtype=np.uint32), [0, 1, 0]
+        )
 
     def test_point_cloud_palette_indices(self):
         import numpy as np

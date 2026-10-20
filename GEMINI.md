@@ -31,7 +31,7 @@
 - 所有的宿主专有操作（如 Blender 的 `bpy.data.meshes.new`、材质节点树链接）必须且只能在外部宿主胶水层（Python / C# / JS）完成。
 
 ### 规则 4：胶水层轻量化与 Data-In Data-Out 契约 (Bindings & Zero-Copy Policy)
-- 胶水层（`bindings/mtk-py`、`bindings/mtk-ffi`、`bindings/mtk-wasm`）只负责**跨语言数据类型转换与内存生命周期桥接**，严禁在胶水层编写复杂计算逻辑。
+- 胶水层（`bindings/mtk-py`、`bindings/mtk-wasm`）只负责**跨语言数据类型转换与内存生命周期桥接**，严禁在胶水层编写复杂计算逻辑。
 - 针对大块几何（顶点/法线/UV/索引）与贴图像素数据，优先采用连续内存缓冲（Buffer Protocol / memoryview / TypedArray）实现零拷贝或极低拷贝传输。
 - 几何与 UV 算子（如挤出修复、随机挤出、自适应像素网格切分）必须遵循统一的 **Data In, Data Out** 批处理契约，支持保留 Quad 四边形拓扑结构与顶点/面属性（顶点色、蒙皮权重、自定义图层）的双线性插值。
 
@@ -43,7 +43,7 @@
 - 当需要使用 `maturin` 编译 Python 绑定轮子（Wheel, `.whl`）或进行 Python 绑定调试时，**必须严格使用工作区内的虚拟环境（如 `./.venv`）**。
 - 若当前工作区内不存在虚拟环境，**必须首先在工作区根目录下创建专属虚拟环境**（如 `python3 -m venv .venv`），并在该虚拟环境中安装 `maturin`，严禁污染或依赖宿主系统全局环境。
 - **开发态直通与发布态隔离 (Dev Direct-Link vs Release Wheel Isolation)**：
-  - **日常开发态 (Dev Direct Link)**：使用 `cargo build-py`（等价于 `cargo build --release -p mtk-py --features extension-module`）产出 `target/release/liblibmtk_py.so`。通过软链接（`MoziToolKit/dev/lib/libmtk_py.so`）直接打通 Blender 宿主，代码改动后 Blender 重载插件即可即时生效，严禁在开发期频繁构建或安装轮子。
+  - **日常开发态 (Dev Direct Link)**：使用 `cargo build-py`（等价于 `cargo build --release -p mtk-py --features extension-module,test-utils`）产出 `target/release/liblibmtk_py.so`。通过软链接（`MoziToolKit/dev/lib/libmtk_py.so`）直接打通 Blender 宿主，代码改动后 Blender 重载插件即可即时生效，严禁在开发期频繁构建或安装轮子。
   - **发布态 (Release Packaging)**：对外正式打包时通过 `maturin build --release` 产出符合 CPython 3.11+ 标准 ABI (`abi3`) 的规范 Wheel 包，由 `MoziToolKit/build.py` 在发布阶段统一装配并隔离。
   - **严禁将编译产物直接安装（`pip install`）到宿主系统的全局 Python 或 Blender 全局 `bpy` 环境中**，杜绝破坏环境隔离与沙箱完整性。
 
@@ -63,7 +63,7 @@
 - **公共 API 变动强制双向维护**：当子 Crate 的 Public API 发生变更或新增导出时，除更新根目录 `docs/API_REFERENCE.md` 外，**必须同步维护该 Crate 自身的 `README.md`**。
 
 ### 规则 10：内存安全、可见性与 Panic 防御规约 (Safety, Visibility & Panic Defense)
-- **禁止在生产代码中滥用 Panic**：胶水层（`bindings/mtk-py`, `bindings/mtk-ffi`, `bindings/mtk-wasm`）严禁在非测试代码中随意调用 `.unwrap()` / `.expect()`；必须通过 `Result` / `PyResult` 进行优雅的错误向上传播，杜绝因 Rust panic 导致宿主进程（如 Blender 桌面端）无预警崩溃。
+- **禁止在生产代码中滥用 Panic**：胶水层（`bindings/mtk-py`, `bindings/mtk-wasm`）严禁在非测试代码中随意调用 `.unwrap()` / `.expect()`；必须通过 `Result` / `PyResult` 进行优雅的错误向上传播，杜绝因 Rust panic 导致宿主进程（如 Blender 桌面端）无预警崩溃。
 - **最小可见性原则**：严格控制结构体字段与内部辅助函数的可见性，严禁为了跨模块调用方便而无脑使用 `pub`，优先使用 `pub(crate)`、私有字段或显式 getter/setter 维持类型的不变性保证。
 
 ### 规则 11：架构设计与 CLI 一致性原则 (Feature & CLI Parity)
@@ -115,7 +115,6 @@ libmozitoolkit/
 │   └── mtk-testkit/    -> 仅测试用资产解析器与内置 JSON fixtures (publish = false)
 └── bindings/
     ├── mtk-py/         -> PyO3 + maturin Python 绑定 (libmtk_py)
-    ├── mtk-ffi/        -> C-ABI 动态/静态库与 C 头文件 (cbindgen)
     └── mtk-wasm/       -> wasm-bindgen WebAssembly 绑定
 ```
 

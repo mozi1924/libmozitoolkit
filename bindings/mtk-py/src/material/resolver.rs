@@ -11,7 +11,7 @@ use mtk_material::{
 };
 use pyo3::buffer::PyBuffer;
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyMemoryView};
 
 use crate::resource::PyResourcePackStack;
 
@@ -42,6 +42,89 @@ impl BorrowedU32Buffer {
             Self::Owned(vec) => vec.as_slice(),
         }
     }
+}
+
+enum BorrowedI32Buffer {
+    Py(PyBuffer<i32>),
+    Owned(Vec<i32>),
+}
+
+impl BorrowedI32Buffer {
+    fn extract(obj: &Bound<'_, PyAny>) -> PyResult<Self> {
+        if let Ok(buf) = PyBuffer::<i32>::get(obj) {
+            if buf.is_c_contiguous() {
+                return Ok(Self::Py(buf));
+            }
+        }
+        Ok(Self::Owned(obj.extract::<Vec<i32>>()?))
+    }
+
+    fn as_slice(&self) -> &[i32] {
+        match self {
+            Self::Py(buf) => unsafe {
+                std::slice::from_raw_parts(buf.buf_ptr() as *const i32, buf.item_count())
+            },
+            Self::Owned(vec) => vec.as_slice(),
+        }
+    }
+}
+
+/// Builds a compact face-material palette + u32 indices without per-face Python strings.
+#[pyfunction]
+#[pyo3(signature = (slot_names, slot_is_mtk, slot_source_ids, poly_mats, existing_palette=None, existing_indices=None))]
+pub fn build_material_palette<'py>(
+    py: Python<'py>,
+    slot_names: Vec<String>,
+    slot_is_mtk: Vec<bool>,
+    slot_source_ids: Vec<String>,
+    poly_mats: &Bound<'_, PyAny>,
+    existing_palette: Option<Vec<String>>,
+    existing_indices: Option<&Bound<'_, PyAny>>,
+) -> PyResult<(Vec<String>, Bound<'py, PyMemoryView>)> {
+    let mats = BorrowedI32Buffer::extract(poly_mats)?;
+    let existing_arr = existing_indices
+        .map(BorrowedU32Buffer::extract)
+        .transpose()?;
+    let existing_indices = existing_arr.as_ref().map(|b| b.as_slice()).unwrap_or(&[]);
+    let existing_palette = existing_palette.unwrap_or_default();
+
+    let mut palette: Vec<String> = Vec::new();
+    let mut lookup: HashMap<String, u32> = HashMap::new();
+    let mut indices: Vec<u32> = Vec::with_capacity(mats.as_slice().len());
+
+    for &mat in mats.as_slice() {
+        let slot = if mat >= 0 && (mat as usize) < slot_names.len() {
+            mat as usize
+        } else {
+            0
+        };
+        let is_mtk = slot_is_mtk.get(slot).copied().unwrap_or(true);
+        let source_id = slot_source_ids.get(slot).map(String::as_str).unwrap_or("");
+        let existing = existing_indices
+            .get(indices.len())
+            .and_then(|idx| existing_palette.get(*idx as usize))
+            .map(String::as_str)
+            .unwrap_or("");
+        let name = if is_mtk && !existing.is_empty() && existing != "mozi:fallback" {
+            existing
+        } else if is_mtk && !source_id.is_empty() {
+            source_id
+        } else {
+            slot_names
+                .get(slot)
+                .map(String::as_str)
+                .unwrap_or("default")
+        };
+        let idx = *lookup.entry(name.to_string()).or_insert_with(|| {
+            let id = palette.len() as u32;
+            palette.push(name.to_string());
+            id
+        });
+        indices.push(idx);
+    }
+
+    let memoryview = create_owned_u32_memoryview(py, indices)?;
+    Ok((palette, memoryview))
 }
 
 #[pyclass(name = "MaterialResolver")]

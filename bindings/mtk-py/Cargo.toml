@@ -36,6 +36,7 @@ extension-module = ["pyo3/extension-module"]
 zip = ["mtk-resource/zip"]
 parallel = ["dep:rayon", "libmtk/parallel", "mtk-core/parallel", "mtk-voxel/parallel"]
 blender = ["dep:mtk-blender-dna"]
+test-utils = []
 
 [dev-dependencies]
 pyo3 = { workspace = true, features = ["auto-initialize"] }
