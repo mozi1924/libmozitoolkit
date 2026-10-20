@@ -34,8 +34,7 @@ pub use biome::{
 };
 pub use error::MaterialError;
 pub use remap::batch::{
-    remap_mesh_multi_uvs_paletted_with_options, remap_mesh_multi_uvs_parallel,
-    remap_mesh_multi_uvs_parallel_with_options,
+    remap_mesh_multi_uvs_paletted_with_options, remap_mesh_multi_uvs_parallel_with_options,
 };
 pub use remap::routes::{reroute_mesh_animation, resolve_mesh_material_routes};
 pub use remap::{

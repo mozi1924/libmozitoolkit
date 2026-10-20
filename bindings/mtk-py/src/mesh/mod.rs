@@ -341,76 +341,6 @@ impl PyMeshData {
     }
 
     // -------------------------------------------------------------------------
-    // Dedicated Blender Direct Memory Transfer Delegates (enabled by default)
-    // -------------------------------------------------------------------------
-
-    /// Copies vertex positions directly into the destination host pointer (`float32 * 3` per vertex).
-    #[cfg(feature = "blender")]
-    #[pyo3(signature = (dst_ptr, max_bytes=None))]
-    pub fn direct_copy_positions_to_ptr(
-        &self,
-        dst_ptr: usize,
-        max_bytes: Option<usize>,
-    ) -> PyResult<usize> {
-        crate::unstable::blender_dna::copy_positions_to_ptr(self, dst_ptr, max_bytes)
-    }
-
-    /// Copies vertex normals directly into the destination host pointer (`float32 * 3` per vertex).
-    #[cfg(feature = "blender")]
-    #[pyo3(signature = (dst_ptr, max_bytes=None))]
-    pub fn direct_copy_normals_to_ptr(
-        &self,
-        dst_ptr: usize,
-        max_bytes: Option<usize>,
-    ) -> PyResult<usize> {
-        crate::unstable::blender_dna::copy_normals_to_ptr(self, dst_ptr, max_bytes)
-    }
-
-    /// Copies triangle indices directly into the destination host pointer (`uint32` per index).
-    #[cfg(feature = "blender")]
-    #[pyo3(signature = (dst_ptr, max_bytes=None))]
-    pub fn direct_copy_indices_to_ptr(
-        &self,
-        dst_ptr: usize,
-        max_bytes: Option<usize>,
-    ) -> PyResult<usize> {
-        crate::unstable::blender_dna::copy_indices_to_ptr(self, dst_ptr, max_bytes)
-    }
-
-    /// Copies reconstructed quad indices directly into the destination host pointer (`uint32` per index).
-    #[cfg(feature = "blender")]
-    #[pyo3(signature = (dst_ptr, max_bytes=None))]
-    pub fn direct_copy_quad_indices_to_ptr(
-        &self,
-        dst_ptr: usize,
-        max_bytes: Option<usize>,
-    ) -> PyResult<usize> {
-        crate::unstable::blender_dna::copy_quad_indices_to_ptr(self, dst_ptr, max_bytes)
-    }
-
-    /// Copies expanded per-loop UVs directly into the destination host pointer (`float32 * 2` per loop).
-    #[cfg(feature = "blender")]
-    #[pyo3(signature = (dst_ptr, max_bytes=None))]
-    pub fn direct_copy_loop_uvs_to_ptr(
-        &self,
-        dst_ptr: usize,
-        max_bytes: Option<usize>,
-    ) -> PyResult<usize> {
-        crate::unstable::blender_dna::copy_loop_uvs_to_ptr(self, dst_ptr, max_bytes)
-    }
-
-    /// Copies vertex RGBA colors directly into the destination host pointer (`float32 * 4` per vertex).
-    #[cfg(feature = "blender")]
-    #[pyo3(signature = (dst_ptr, max_bytes=None))]
-    pub fn direct_copy_colors_to_ptr(
-        &self,
-        dst_ptr: usize,
-        max_bytes: Option<usize>,
-    ) -> PyResult<usize> {
-        crate::unstable::blender_dna::copy_colors_to_ptr(self, dst_ptr, max_bytes)
-    }
-
-    // -------------------------------------------------------------------------
     // Custom Attributes & List Delegates (implemented in attributes.rs)
     // -------------------------------------------------------------------------
 
@@ -549,9 +479,7 @@ impl PyMeshData {
     }
 }
 
-pub use crate::extrude::{
-    process_flat_mesh_extrude_repair, process_mesh_extrude_repair, process_random_extrude_mesh,
-};
+pub use crate::extrude::process_flat_mesh_extrude_repair;
 pub use crate::subdivide::{
     adaptive_pixel_split_mesh, calculate_face_target_grid, calculate_pixel_grid_cut_factors,
     slice_face_by_pixel_grid,
