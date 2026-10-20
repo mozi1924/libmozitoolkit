@@ -28,14 +28,14 @@ serde_json = { workspace = true }
 xxhash-rust = { workspace = true, features = ["xxh64"] }
 pyo3 = { workspace = true, features = ["abi3-py311"] }
 rayon = { workspace = true, optional = true }
-mtk-blender-dna = { workspace = true, optional = true }
 
 [features]
 default = ["zip", "parallel", "blender"]
 extension-module = ["pyo3/extension-module"]
 zip = ["mtk-resource/zip"]
 parallel = ["dep:rayon", "libmtk/parallel", "mtk-core/parallel", "mtk-voxel/parallel"]
-blender = ["dep:mtk-blender-dna"]
+# Python memoryview exports only; host pointer adapters are separate wheels.
+blender = []
 
 [dev-dependencies]
 pyo3 = { workspace = true, features = ["auto-initialize"] }

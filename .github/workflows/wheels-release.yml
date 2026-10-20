@@ -82,12 +82,19 @@ jobs:
           key: ${{ matrix.platform_id }}
           workspaces: ". -> target"
 
-      - name: Build wheel via maturin-action
+      - name: Build core wheel via maturin-action
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux || 'off' }}
           args: --release --out dist -m bindings/mtk-py/Cargo.toml
+
+      - name: Build Blender DNA wheel via maturin-action
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux || 'off' }}
+          args: --release --out dist -m bindings/mtk-blender-dna-py/Cargo.toml
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
@@ -118,8 +125,9 @@ jobs:
           set -euo pipefail
           ls -lh dist/
           # Per-platform check (not just a file count): exactly one abi3 wheel
-          # for each of the six supported targets.
-          python3 tools/verify_wheels.py dist
+          # for each of the six supported targets, for both distributions.
+          python3 tools/verify_wheels.py dist --prefix libmtk_py
+          python3 tools/verify_wheels.py dist --prefix libmtk_blender_dna --max-size-bytes 1500000
 
       - name: Generate Checksums
         run: |

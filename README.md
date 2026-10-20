@@ -26,12 +26,14 @@
 | **[`mtk-save`](crates/mtk-save)** | 核心 | 现代 Minecraft 存档加载核心：基于内置零拷贝 NBT 解码、Anvil `.mca` 区域文件直接寻址、384 高度世界 3D 生物群系与方块状态解包、按需空间切片流式数据源 (`VoxelSource`) | [📖 `crates/mtk-save/README.md`](crates/mtk-save/README.md) |
 | **[`mtk-package`](crates/mtk-package)** | 核心 | 统一二进制资产缓存容器编解码器：64 字节头部校验、分块 TOC 索引、`memmap2` 零拷贝解析与分块 Zstd 压缩 | [📖 `crates/mtk-package/README.md`](crates/mtk-package/README.md) |
 | **[`libmtk`](crates/libmtk)** | 应用层 | 应用编排 Crate：端到端资产预编译管线 (`prebake`)。**不再重导出领域类型**，下游按需直连 `mtk-*` | [📖 `crates/libmtk/README.md`](crates/libmtk/README.md) |
-| **[`mtk-py`](bindings/mtk-py)** | **P0 (当前重点)** | 基于 PyO3 的统一 Python 扩展模块 (`libmtk_py`)，提供通用 Buffer Protocol 内存视图与默认内嵌的 Blender 硬件级直接内存直写层 (`feature = "blender"`) | [📖 `bindings/mtk-py/README.md`](bindings/mtk-py/README.md) |
+| **[`mtk-py`](bindings/mtk-py)** | **P0 (当前重点)** | 基于 PyO3 的统一 Python 扩展模块 (`libmtk_py`)，提供通用 Buffer Protocol 内存视图；不包含任何宿主指针适配器 | [📖 `bindings/mtk-py/README.md`](bindings/mtk-py/README.md) |
 | **[`mtk-cli`](crates/mtk-cli)** | **P1 (工具链)** | 独立命令行工具 (`mtk`)，支持图集烘焙 (`atlas`)、模型烘焙/导出 (`model` / `export`)、CTM 测试 (`ctm`)、规则校验 (`verify`) 与性能基准 (`bench`) | [📖 `crates/mtk-cli/README.md`](crates/mtk-cli/README.md) |
 | **[`mtk-bench`](crates/mtk-bench)** | **P1 (基准压测)** | 4000 区块与网格面剔除基准性能压测套件 | [📖 `crates/mtk-bench/README.md`](crates/mtk-bench/README.md) |
 | **[`mtk-testkit`](crates/mtk-testkit)** | **Dev (测试基建)** | 仅用于测试的资产解析器与内置 JSON fixtures（`publish = false`），统一真包位置发现与缺省跳过策略 | [📖 `crates/mtk-testkit/README.md`](crates/mtk-testkit/README.md) |
 | **[`mtk-wasm`](bindings/mtk-wasm)** | **P2 (远期预备)** | 基于 wasm-bindgen 的 WebAssembly 绑定，支持浏览器/Node.js/WebGPU 零拷贝 TypedArray 视图 | [📖 `bindings/mtk-wasm/README.md`](bindings/mtk-wasm/README.md) |
-| **[`mtk-blender-dna`](bindings/mtk-blender-dna)** | **P0 (DNA 适配)** | Blender DNA 裸内存指针零拷贝直写适配层，严格隔离 unsafe 操作，提供带边界防护的硬件级内存灌入 | [📖 `bindings/mtk-blender-dna/README.md`](bindings/mtk-blender-dna/README.md) |
+| **[`mtk-host-memory`](crates/mtk-host-memory)** | **P0 (宿主内存)** | 宿主无关 raw slice → pointer 复制原语，无线程/核心/宿主 SDK 依赖 | [📖 `crates/mtk-host-memory/README.md`](crates/mtk-host-memory/README.md) |
+| **[`mtk-blender-dna`](bindings/mtk-blender-dna)** | **P0 (DNA 适配)** | Blender 语义 raw slice → pointer 包装；不依赖核心 crate | [📖 `bindings/mtk-blender-dna/README.md`](bindings/mtk-blender-dna/README.md) |
+| **[`libmtk_blender_dna`](bindings/mtk-blender-dna-py)** | **P0 (独立适配 wheel)** | 独立 ABI3 wheel，通过 Python Buffer Protocol 接收核心 `memoryview` 并写入 Blender 指针 | [📖 `bindings/mtk-blender-dna-py/README.md`](bindings/mtk-blender-dna-py/README.md) |
 
 ---
 
@@ -76,6 +78,7 @@ cargo check -p mtk-wasm --target wasm32-unknown-unknown
 ```bash
 source .venv/bin/activate
 maturin build --release -m bindings/mtk-py/Cargo.toml
+maturin build --release -m bindings/mtk-blender-dna-py/Cargo.toml
 ```
 
 ### 5. 持续集成 (GitHub Actions)

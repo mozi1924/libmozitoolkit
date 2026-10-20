@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Wheel build script for libmozitoolkit (libmtk_py).
+Wheel build script for libmozitoolkit (libmtk_py + libmtk_blender_dna).
 
-Builds abi3-compatible Python wheels for libmtk_py using maturin.
+Builds abi3-compatible Python wheels for the core and standalone host adapter using maturin.
 Compatible with Python 3.10+, Blender 4.2+ (Python 3.11), and Blender 5.x (Python 3.13).
 """
 
@@ -67,56 +67,80 @@ def find_maturin_executable() -> list[str]:
     )
 
 
+def build_wheel_for_manifest(
+    manifest: Path,
+    *,
+    out_dir: Path,
+    release: bool = True,
+    target: str | None = None,
+    sdist: bool = False,
+) -> list[Path]:
+    """Builds one maturin wheel from a manifest."""
+    if not manifest.exists():
+        raise FileNotFoundError(f"Missing Cargo.toml at {manifest}")
+
+    out_dir = Path(out_dir).resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    maturin_cmd = find_maturin_executable()
+    print(f"📦 Using maturin: {' '.join(maturin_cmd)}")
+    print(f"📁 Manifest path: {manifest}")
+    print(f"🎯 Output directory: {out_dir}")
+
+    cmd = list(maturin_cmd) + [
+        "build",
+        "-m",
+        str(manifest),
+        "--out",
+        str(out_dir),
+    ]
+    if release:
+        cmd.append("--release")
+    if target:
+        cmd.extend(["--target", target])
+    if sdist:
+        cmd.append("--sdist")
+
+    print(f"🚀 Running: {' '.join(cmd)}")
+    result = subprocess.run(cmd, cwd=str(manifest.parent.parent.parent), check=False)
+    if result.returncode != 0:
+        raise RuntimeError(f"maturin build failed with exit code {result.returncode}")
+    return list(out_dir.glob("*.whl"))
+
+
 def build_wheels(
     out_dir: Path | None = None,
     release: bool = True,
     target: str | None = None,
     sdist: bool = False,
 ) -> list[Path]:
-    """Builds libmtk_py wheels using maturin."""
+    """Builds both the core and standalone host-adapter wheels."""
     repo_root = Path(__file__).resolve().parent.parent
-    py_manifest = repo_root / "bindings" / "mtk-py" / "Cargo.toml"
-
-    if not py_manifest.exists():
-        raise FileNotFoundError(f"Missing Cargo.toml at {py_manifest}")
-
     if out_dir is None:
         out_dir = repo_root / "target" / "wheels"
     out_dir = Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    maturin_cmd = find_maturin_executable()
-    print(f"📦 Using maturin: {' '.join(maturin_cmd)}")
-    print(f"📁 Manifest path: {py_manifest}")
-    print(f"🎯 Output directory: {out_dir}")
-
-    cmd = list(maturin_cmd) + [
-        "build",
-        "-m",
-        str(py_manifest),
-        "--out",
-        str(out_dir),
+    manifests = [
+        repo_root / "bindings" / "mtk-py" / "Cargo.toml",
+        repo_root / "bindings" / "mtk-blender-dna-py" / "Cargo.toml",
     ]
+    before = set(out_dir.glob("*.whl")) if out_dir.exists() else set()
+    for manifest in manifests:
+        build_wheel_for_manifest(
+            manifest,
+            out_dir=out_dir,
+            release=release,
+            target=target,
+            sdist=sdist,
+        )
 
-    if release:
-        cmd.append("--release")
-
-    if target:
-        cmd.extend(["--target", target])
-
-    if sdist:
-        cmd.append("--sdist")
-
-    print(f"🚀 Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=str(repo_root), check=False)
-    if result.returncode != 0:
-        raise RuntimeError(f"maturin build failed with exit code {result.returncode}")
-
-    built_wheels = list(out_dir.glob("libmtk_py*.whl"))
+    built_wheels = sorted(set(out_dir.glob("*.whl")) - before)
+    if not built_wheels:
+        built_wheels = sorted(out_dir.glob("*.whl"))
     print(f"\n✅ Build successful! Produced {len(built_wheels)} wheel(s):")
     for whl in built_wheels:
         print(f"  • {whl.name} ({whl.stat().st_size / 1024 / 1024:.2f} MB)")
-
     return built_wheels
 
 

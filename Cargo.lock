@@ -671,9 +671,15 @@ dependencies = [
 name = "mtk-blender-dna"
 version = "0.1.0"
 dependencies = [
- "mtk-core",
- "mtk-voxel",
- "thiserror",
+ "mtk-host-memory",
+]
+
+[[package]]
+name = "mtk-blender-dna-py"
+version = "0.1.0"
+dependencies = [
+ "mtk-blender-dna",
+ "pyo3",
 ]
 
 [[package]]
@@ -716,6 +722,13 @@ dependencies = [
  "mtk-core",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "mtk-host-memory"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
 ]
 
 [[package]]
@@ -770,7 +783,6 @@ version = "0.1.0"
 dependencies = [
  "glam",
  "libmtk",
- "mtk-blender-dna",
  "mtk-core",
  "mtk-cull",
  "mtk-material",

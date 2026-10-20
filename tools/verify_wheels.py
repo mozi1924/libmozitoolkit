@@ -7,6 +7,7 @@ Used by the wheel release workflow as a release gate, and useful locally:
     python tools/verify_wheels.py dist
     python tools/verify_wheels.py target/wheels --platforms linux-x64
     python tools/verify_wheels.py dist --prefix libmtk_py --allow-non-abi3
+    python tools/verify_wheels.py dist --prefix libmtk_blender_dna --max-size-bytes 1500000
 
 Exit codes:
     0  every requested platform has exactly one wheel
@@ -103,6 +104,12 @@ def main() -> int:
         action="store_true",
         help="Do not reject wheels that are not tagged as abi3",
     )
+    parser.add_argument(
+        "--max-size-bytes",
+        type=int,
+        default=0,
+        help="Fail if any matching wheel exceeds this size (0 = unlimited)",
+    )
     args = parser.parse_args()
 
     platforms = [item.strip() for item in args.platforms.split(",") if item.strip()]
@@ -130,6 +137,12 @@ def main() -> int:
         if args.prefix and not wheel.name.lower().startswith(args.prefix.lower()):
             ignored.append(wheel)
             continue
+
+        if args.max_size_bytes and wheel.stat().st_size > args.max_size_bytes:
+            errors.append(
+                f"{wheel.name}: {wheel.stat().st_size} bytes exceeds "
+                f"the {args.max_size_bytes}-byte budget"
+            )
 
         try:
             python_tag, abi_tag, tags = wheel_tags(wheel.name)

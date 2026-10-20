@@ -52,7 +52,7 @@ bindings/
   - `indices_memoryview(py)`: 零拷贝返回 `[M]` u32 三角形/多边形索引。
   - `quad_indices_memoryview(py)`: 零拷贝返回 `[Q, 4]` u32 四边形顶角索引缓冲。
   - `face_materials_memoryview(py)`: 逐面材质插槽 ID。
-  - **Blender 专用加速通道隔离 (`mtk-blender-dna`)**：裸指针直写接口 (`copy_*_to_ptr`) 隔离在 `mtk-blender-dna` crate 中，通过 `libmtk_py.unstable.blender_dna` 暴露，并内建指针非空与 `max_bytes` 溢出防御守卫。
+  - **宿主内存适配层隔离 (`mtk-host-memory` / `mtk-blender-dna`)**：通用 raw slice → pointer 复制位于 `mtk-host-memory`，Blender 语义包装位于 `mtk-blender-dna`。两者都不依赖核心 crate；独立 `libmtk_blender_dna` wheel 通过 Python Buffer Protocol 接收核心 `memoryview`，并写入 Blender 指针。核心 wheel 不包含也不要求该适配器。
   - `cull_faces(tolerance=1e-3, cull_opposite=True, cull_duplicates=True) -> PyMeshData`: 执行空间遮挡与叠面剔除，无缝保留所有自定义属性与 Quad 拓扑。
 - `PyBakedModelDatabase`:
   - `deduplicate_all() -> int`: 批量对数据库中所有烘焙模型执行 Element 面去重与内部接触面剔除，返回消除的总面数。
