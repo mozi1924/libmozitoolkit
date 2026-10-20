@@ -288,7 +288,7 @@ pub enum SyncEvent {
 
 2.0 固定输出单一世界网格：
 - 调度器维护一个全局区块网格缓存 `section_mesh_cache: HashMap<IVec3, MeshData>`；
-- 当局部切片发生变更时，自动与缓存内其它切片网格进行极速内存拼接 (`MeshData::merge_all`) 并执行全局空间顶点焊接 (`weld_spatial_vertices`)；
+- 当局部切片发生变更时，自动与缓存内其它切片网格进行极速内存拼接 (`MeshData::merge_all`) 并执行全局空间顶点焊接 (`weld_vertices`)；
 - 派发 `WorldMeshReady` 事件，宿主端仅需更新单一 Object，**彻底消除相邻小 Chunk 拼接处次表面散射 (SSS) 撕裂与法线黑缝**。
 
 ---

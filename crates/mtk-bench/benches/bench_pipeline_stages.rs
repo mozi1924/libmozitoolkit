@@ -151,7 +151,7 @@ fn main() {
     // Stage 5: Comparison with Legacy 2-pass merge + full weld
     let t_s5 = Instant::now();
     let mut legacy_merged = MeshData::merge_all_refs(&mesh_refs);
-    legacy_merged.weld_spatial_vertices(1e-4);
+    legacy_merged.weld_vertices(1e-4);
     let d_s5 = t_s5.elapsed();
     println!(
         " 5. [Legacy Comparison] merge_all_refs + weld:    {:.2} ms (vs {:.2} ms)",

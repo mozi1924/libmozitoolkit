@@ -78,7 +78,7 @@
   - [x] 四边形自适应细分推算与非均匀像素吸附；
   - [x] 属性双线性插值（UV、法线、顶点色、Deform 蒙皮权重、自定义属性）；
   - [x] 动画长条贴图单帧安全截断机制；
-  - [x] 空间哈希拓扑微距焊接 (`weld_spatial_vertices`)。
+  - [x] 空间哈希拓扑微距焊接 (`weld_vertices`)。
 - [x] **智能挤出与 UV 修复系统 (`mtk-core::extrude`)**
   - [x] 侧面 UV 塌陷判定与 SMART / INWARD / OUTWARD 模式几何重构；
   - [x] 3D Perlin 连续梯度噪声、Voronoi 细胞阶梯噪声与随机高度生成；

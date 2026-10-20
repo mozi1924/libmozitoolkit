@@ -4,7 +4,7 @@
 //! zero-copy memoryviews, bidirectional conversions with `MeshData`, and `VoxelStorage`.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyList, PyMemoryView};
+use pyo3::types::{PyBytes, PyMemoryView};
 
 use mtk_voxel::storage::VoxelPointCloud;
 
@@ -154,52 +154,6 @@ impl PyVoxelPointCloud {
         self.inner.bounds = bounds;
     }
 
-    /// Batch constructor from flat arrays or lists.
-    #[staticmethod]
-    #[pyo3(signature = (positions, block_x, block_y, block_z, block_states, biomes=None, light_levels=None, bounds=None))]
-    pub fn from_arrays(
-        positions: Vec<f32>,
-        block_x: Vec<i32>,
-        block_y: Vec<i32>,
-        block_z: Vec<i32>,
-        block_states: Vec<String>,
-        biomes: Option<Vec<String>>,
-        light_levels: Option<Vec<u8>>,
-        bounds: Option<[i32; 6]>,
-    ) -> PyResult<Self> {
-        let count = block_x.len();
-        if positions.len() != count * 3
-            || block_y.len() != count
-            || block_z.len() != count
-            || block_states.len() != count
-        {
-            return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                "Array lengths mismatch: positions={}, block_x={}, block_y={}, block_z={}, block_states={}",
-                positions.len(),
-                block_x.len(),
-                block_y.len(),
-                block_z.len(),
-                block_states.len()
-            )));
-        }
-
-        let biomes_vec = biomes.unwrap_or_else(|| vec!["minecraft:plains".to_string(); count]);
-        let lights_vec = light_levels.unwrap_or_else(|| vec![0u8; count]);
-
-        Ok(Self {
-            inner: VoxelPointCloud {
-                positions,
-                block_x,
-                block_y,
-                block_z,
-                block_states,
-                biomes: biomes_vec,
-                light_levels: lights_vec,
-                bounds,
-            },
-        })
-    }
-
     /// High-performance batch constructor from palette indices using buffer protocol / memoryview.
     #[staticmethod]
     #[pyo3(signature = (positions, block_x, block_y, block_z, state_indices, state_palette, biome_indices=None, biome_palette=None, light_levels=None, bounds=None))]
@@ -302,32 +256,44 @@ impl PyVoxelPointCloud {
         crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
     }
 
-    /// Returns the list of canonical Minecraft blockstate strings.
-    pub fn get_block_states<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
-        let list = PyList::empty(py);
-        for s in &self.inner.block_states {
-            let _ = list.append(s);
+    /// Returns the unique canonical blockstate palette.
+    pub fn get_state_palette(&self) -> Vec<String> {
+        self.inner.state_palette.clone()
+    }
+
+    /// Returns the unique canonical biome palette.
+    pub fn get_biome_palette(&self) -> Vec<String> {
+        self.inner.biome_palette.clone()
+    }
+
+    /// Read-only memoryview of per-point blockstate palette indices (`int32`).
+    pub fn state_indices_memoryview<'py>(
+        slf: &Bound<'py, Self>,
+    ) -> PyResult<Bound<'py, PyMemoryView>> {
+        let py = slf.py();
+        let inner = &slf.borrow().inner;
+        if inner.state_indices.is_empty() {
+            let bytes = PyBytes::new(py, &[]);
+            return PyMemoryView::from(&bytes);
         }
-        list
+        let ptr = inner.state_indices.as_ptr() as *const u8;
+        let len = inner.state_indices.len() * std::mem::size_of::<i32>();
+        crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
     }
 
-    /// Returns the list of biome registry identifier strings.
-    pub fn get_biomes<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
-        let list = PyList::empty(py);
-        for b in &self.inner.biomes {
-            let _ = list.append(b);
+    /// Read-only memoryview of per-point biome palette indices (`int32`).
+    pub fn biome_indices_memoryview<'py>(
+        slf: &Bound<'py, Self>,
+    ) -> PyResult<Bound<'py, PyMemoryView>> {
+        let py = slf.py();
+        let inner = &slf.borrow().inner;
+        if inner.biome_indices.is_empty() {
+            let bytes = PyBytes::new(py, &[]);
+            return PyMemoryView::from(&bytes);
         }
-        list
-    }
-
-    /// Builds a unique state palette and corresponding per-point palette indices.
-    pub fn build_state_palette_indices(&self) -> (Vec<String>, Vec<i32>) {
-        self.inner.build_state_palette_indices()
-    }
-
-    /// Builds a unique biome palette and corresponding per-point palette indices.
-    pub fn build_biome_palette_indices(&self) -> (Vec<String>, Vec<i32>) {
-        self.inner.build_biome_palette_indices()
+        let ptr = inner.biome_indices.as_ptr() as *const u8;
+        let len = inner.biome_indices.len() * std::mem::size_of::<i32>();
+        crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
     }
 
     fn __repr__(&self) -> String {

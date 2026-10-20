@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use glam::Vec3;
-use mtk_core::mesh::MeshData;
+use mtk_core::mesh::{MeshData, UvLayout};
 
 use super::model::{BakedModel, ModelMeshOptions};
 use mtk_cull::clip_face_excluding_hidden_volume;
@@ -19,6 +19,7 @@ impl BakedModel {
     /// using specified `ModelMeshOptions` for clipping and de-overlapping.
     pub fn to_mesh_with_options(&self, options: &ModelMeshOptions) -> (MeshData, Vec<String>) {
         let mut mesh = MeshData::new();
+        mesh.uv_layout = UvLayout::PerLoop;
         let mut texture_to_slot: HashMap<String, u16> = HashMap::new();
         let mut texture_list: Vec<String> = Vec::new();
 

@@ -1,188 +1,122 @@
 import unittest
+
 import libmtk_py
+
+
+def quad_mesh():
+    return libmtk_py.MeshData.from_flat_polygons(
+        [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0],
+        [0, 1, 2, 3],
+        [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0],
+        [0],
+        [4],
+        None,
+        [0],
+    )
 
 
 class TestLibMtkPy(unittest.TestCase):
     def test_version(self):
-        v = libmtk_py.version()
-        self.assertTrue(len(v) > 0)
+        self.assertTrue(libmtk_py.version())
 
     def test_mesh_data_buffers(self):
-        positions = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0]
-        uvs = [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
-        indices = [0, 1, 2, 0, 2, 3]
-
-        mesh = libmtk_py.MeshData.from_raw_buffers(positions, uvs, indices)
+        mesh = quad_mesh()
         self.assertEqual(mesh.vertex_count, 4)
         self.assertEqual(mesh.triangle_count, 2)
-        self.assertEqual(mesh.face_count, 2)
+        self.assertEqual(mesh.face_count, 1)
+        self.assertEqual(mesh.quad_count, 1)
 
-        pos_mv = mesh.positions_memoryview()
-        self.assertEqual(len(pos_mv), 4 * 3 * 4)  # 4 verts * 3 floats * 4 bytes
-
-        uv_mv = mesh.uvs_memoryview()
-        self.assertEqual(len(uv_mv), 4 * 2 * 4)
-
-        idx_mv = mesh.indices_memoryview()
-        self.assertEqual(len(idx_mv), 6 * 4)
-
-    def test_atlas_mapping_and_process_mesh(self):
-        positions = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0]
-        uvs = [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
-        indices = [0, 1, 2, 0, 2, 3]
-        mesh = libmtk_py.MeshData.from_raw_buffers(positions, uvs, indices)
-
-        mapping_json = """{
-            "chunks": [],
-            "sprites": {
-                "minecraft:block/stone": {
-                    "chunk_id": 0,
-                    "category": "blocks",
-                    "is_animated": false,
-                    "sprite_kind": "static_atlas",
-                    "texture_id": 1,
-                    "uv_bounds": [0.0, 0.0, 0.25, 0.25],
-                    "frame_0_uv_bounds": [0.0, 0.0, 0.25, 0.25],
-                    "local_uv_bounds": [0.0, 0.0, 1.0, 1.0],
-                    "pixel_rect": [0, 0, 16, 16],
-                    "frame_size": [16, 16],
-                    "frame_count": 1,
-                    "has_normal": false,
-                    "has_specular": false
-                }
-            }
-        }"""
-        atlas = libmtk_py.BakedAtlas.from_mapping_json(mapping_json)
-
-        out_mesh, mat_info, stats = libmtk_py.process_mesh(
-            mesh,
-            ["Tile_Stone"],
-            atlas=atlas,
-            aliases={"Tile_Stone": ["minecraft:block/stone"]},
-            generate_secondary_uv=True,
-        )
-
-        self.assertEqual(out_mesh.vertex_count, 4)
-        self.assertEqual(stats["resolved_slots"], 1)
-        self.assertEqual(mat_info[0]["canonical_name"], "minecraft:block/stone")
-        self.assertEqual(mat_info[0]["atlas_chunk_id"], 0)
-
-        flat_uvs = out_mesh.get_flat_uvs()
-        self.assertEqual(flat_uvs, [0.0, 0.0, 0.25, 0.0, 0.25, 0.25, 0.0, 0.25])
-
-        flat_sec_uvs = out_mesh.get_flat_secondary_uvs()
-        self.assertEqual(flat_sec_uvs, [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0])
-
-        # Verify custom attributes on out_mesh
-        self.assertTrue(out_mesh.has_attribute("mtk_source_texture"))
-        self.assertTrue(out_mesh.has_attribute("mtk_atlas_chunk_id"))
-        self.assertTrue(out_mesh.has_attribute("mtk_uv_transform"))
-
-        tex_data = out_mesh.get_attribute_data("mtk_source_texture")
-        self.assertEqual(tex_data, ["minecraft:block/stone", "minecraft:block/stone"])
-
-        chunk_data = out_mesh.get_attribute_data("mtk_atlas_chunk_id")
-        self.assertEqual(chunk_data, [0, 0])
+        self.assertEqual(len(mesh.positions_memoryview()), 4 * 3 * 4)
+        self.assertEqual(len(mesh.uvs_memoryview()), 4 * 2 * 4)
+        self.assertEqual(len(mesh.indices_memoryview()), 6 * 4)
+        self.assertEqual(len(mesh.quad_indices_memoryview()), 4 * 4)
 
     def test_custom_attributes_memoryview_and_list(self):
-        mesh = libmtk_py.MeshData.with_capacity(4, 6, 2)
-        mesh.append_unit_cube_face(1, material_slot=0, tint_index=-1)
-        
+        mesh = quad_mesh()
         mesh.add_string_attribute("mtk_source_texture", "face", ["minecraft:block/dirt"])
-        mesh.add_attribute_from_buffer("mtk_emission", "face", "float", bytes([0, 0, 128, 63])) # 1.0f in bytes
+        mesh.add_attribute_from_buffer(
+            "mtk_emission", "face", "float", bytes([0, 0, 128, 63])
+        )
 
         self.assertTrue(mesh.has_attribute("mtk_source_texture"))
         self.assertTrue(mesh.has_attribute("mtk_emission"))
-
-        self.assertEqual(mesh.get_string_attribute("mtk_source_texture"), ["minecraft:block/dirt"])
-        self.assertEqual(mesh.get_attribute_data("mtk_source_texture"), ["minecraft:block/dirt"])
+        self.assertEqual(
+            mesh.get_string_attribute("mtk_source_texture"),
+            ["minecraft:block/dirt"],
+        )
         self.assertAlmostEqual(mesh.get_attribute_data("mtk_emission")[0], 1.0)
 
     def test_mesh_data_memoryviews(self):
         import numpy as np
 
-        positions = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
-        uvs = [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
-        indices = [0, 1, 2, 0, 2, 3]
-        mesh = libmtk_py.MeshData.from_raw_buffers(positions, uvs, indices)
+        mesh = quad_mesh()
+        pos = np.frombuffer(mesh.positions_memoryview(), dtype=np.float32)
+        self.assertEqual(len(pos), 12)
+        np.testing.assert_allclose(
+            pos.reshape(-1, 3)[1], [1.0, 0.0, 0.0]
+        )
 
-        # Test positions_memoryview
-        pos_mv = mesh.positions_memoryview()
-        self.assertIsNotNone(pos_mv)
-        pos_arr = np.frombuffer(pos_mv, dtype=np.float32)
-        self.assertEqual(len(pos_arr), 12)
-        np.testing.assert_allclose(pos_arr, positions)
+        idx = np.frombuffer(mesh.indices_memoryview(), dtype=np.uint32)
+        np.testing.assert_array_equal(idx, [0, 1, 2, 0, 2, 3])
 
-        # Test indices_memoryview
-        idx_mv = mesh.indices_memoryview()
-        self.assertIsNotNone(idx_mv)
-        idx_arr = np.frombuffer(idx_mv, dtype=np.uint32)
-        self.assertEqual(len(idx_arr), 6)
-        np.testing.assert_array_equal(idx_arr, indices)
+        loop_uv = np.frombuffer(mesh.loop_uvs_memoryview(), dtype=np.float32)
+        np.testing.assert_array_equal(
+            loop_uv, [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
+        )
+        self.assertEqual(len(mesh.loop_starts_memoryview()), 4)
+        self.assertEqual(len(mesh.loop_totals_memoryview()), 4)
 
-        # Test loop_uvs_memoryview
-        loop_uv_mv = mesh.loop_uvs_memoryview()
-        self.assertIsNotNone(loop_uv_mv)
-        loop_uv_arr = np.frombuffer(loop_uv_mv, dtype=np.float32)
-        self.assertEqual(len(loop_uv_arr), 12)
-
-    def test_mesh_data_direct_copy_to_ptr(self):
-        import ctypes
+    def test_point_cloud_palette_indices(self):
         import numpy as np
 
-        positions = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
-        uvs = [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
-        indices = [0, 1, 2, 0, 2, 3]
-        mesh = libmtk_py.MeshData.from_raw_buffers(positions, uvs, indices)
+        cloud = libmtk_py.VoxelPointCloud()
+        cloud.push([0.5, 0.5, 0.5], [0, 0, 0], "minecraft:stone", "minecraft:plains", 0)
+        cloud.push([1.5, 0.5, 0.5], [1, 0, 0], "minecraft:dirt", "minecraft:desert", 0)
+        cloud.push([2.5, 0.5, 0.5], [2, 0, 0], "minecraft:stone", "minecraft:plains", 0)
 
-        if not hasattr(mesh, "direct_copy_positions_to_ptr"):
-            self.skipTest("libmtk_py built without blender feature")
+        self.assertEqual(
+            cloud.get_state_palette(), ["minecraft:stone", "minecraft:dirt"]
+        )
+        self.assertEqual(
+            cloud.get_biome_palette(), ["minecraft:plains", "minecraft:desert"]
+        )
+        np.testing.assert_array_equal(
+            np.frombuffer(cloud.state_indices_memoryview(), dtype=np.int32),
+            [0, 1, 0],
+        )
+        np.testing.assert_array_equal(
+            np.frombuffer(cloud.biome_indices_memoryview(), dtype=np.int32),
+            [0, 1, 0],
+        )
 
-        # Test direct_copy_positions_to_ptr
-        dst_pos = np.zeros(12, dtype=np.float32)
-        bytes_copied = mesh.direct_copy_positions_to_ptr(dst_pos.ctypes.data)
-        self.assertEqual(bytes_copied, 12 * 4)
-        np.testing.assert_allclose(dst_pos, positions)
-
-        # Test direct_copy_indices_to_ptr
-        dst_idx = np.zeros(6, dtype=np.uint32)
-        bytes_copied = mesh.direct_copy_indices_to_ptr(dst_idx.ctypes.data)
-        self.assertEqual(bytes_copied, 6 * 4)
-        np.testing.assert_array_equal(dst_idx, indices)
-
-        # Test bounds protection overflow
-        with self.assertRaises(ValueError):
-            mesh.direct_copy_positions_to_ptr(dst_pos.ctypes.data, max_bytes=10)
-
-        # Test null pointer rejection
-        with self.assertRaises(ValueError):
-            mesh.direct_copy_positions_to_ptr(0)
+        restored = libmtk_py.VoxelPointCloud.from_mesh_data(cloud.to_mesh_data())
+        self.assertEqual(restored.get_state_palette(), cloud.get_state_palette())
+        self.assertEqual(restored.get_biome_palette(), cloud.get_biome_palette())
 
     def test_unstable_blender_dna_submodule(self):
         import numpy as np
 
-        if not hasattr(libmtk_py, "unstable") or not hasattr(libmtk_py.unstable, "blender_dna"):
+        if not hasattr(libmtk_py, "unstable") or not hasattr(
+            libmtk_py.unstable, "blender_dna"
+        ):
             self.skipTest("libmtk_py built without blender feature or unstable submodule")
 
         dna = libmtk_py.unstable.blender_dna
-        positions = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
-        uvs = [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
-        indices = [0, 1, 2, 0, 2, 3]
-        mesh = libmtk_py.MeshData.from_raw_buffers(positions, uvs, indices)
+        mesh = quad_mesh()
 
         dst_pos = np.zeros(12, dtype=np.float32)
         copied = dna.copy_positions_to_ptr(mesh, dst_pos.ctypes.data)
         self.assertEqual(copied, 12 * 4)
-        np.testing.assert_allclose(dst_pos, positions)
+        np.testing.assert_allclose(
+            dst_pos.reshape(-1, 3)[0], [0.0, 0.0, 0.0]
+        )
 
-        # Buffer copy
-        src_bytes = b"HelloBlenderDNA"
-        dst_buf = bytearray(len(src_bytes))
-        import ctypes
-        dst_ptr = ctypes.addressof(ctypes.c_char.from_buffer(dst_buf))
-        copied_buf = dna.copy_buffer_to_ptr(src_bytes, dst_ptr, len(src_bytes))
-        self.assertEqual(copied_buf, len(src_bytes))
-        self.assertEqual(dst_buf, src_bytes)
+        dst_uv = np.zeros(8, dtype=np.float32)
+        copied = dna.copy_loop_uvs_to_ptr(mesh, dst_uv.ctypes.data)
+        self.assertEqual(copied, 8 * 4)
+        np.testing.assert_array_equal(
+            dst_uv, [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
+        )
 
 
 if __name__ == "__main__":

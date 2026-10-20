@@ -130,10 +130,16 @@ impl MeshData {
             }
         }
 
+        let uv_layout = meshes
+            .iter()
+            .map(|m| m.uv_layout)
+            .find(|layout| *layout != super::UvLayout::None)
+            .unwrap_or_default();
         let mut merged = Self {
             positions: Vec::with_capacity(total_verts),
             normals: Vec::with_capacity(total_normals),
             uvs: Vec::with_capacity(total_uvs),
+            uv_layout,
             secondary_uvs: if has_sec_uvs {
                 Some(Vec::with_capacity(total_verts))
             } else {
@@ -248,10 +254,16 @@ impl MeshData {
             }
         }
 
+        let uv_layout = meshes
+            .iter()
+            .map(|m| m.uv_layout)
+            .find(|layout| *layout != super::UvLayout::None)
+            .unwrap_or_default();
         let mut merged = Self {
             positions: Vec::with_capacity(total_verts),
             normals: Vec::with_capacity(total_normals),
             uvs: Vec::with_capacity(total_uvs),
+            uv_layout,
             secondary_uvs: if has_sec_uvs {
                 Some(Vec::with_capacity(total_verts))
             } else {

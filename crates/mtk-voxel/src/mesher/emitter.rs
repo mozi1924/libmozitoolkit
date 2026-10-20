@@ -6,7 +6,7 @@
 
 use glam::{IVec3, Vec3};
 use mtk_core::direction::Direction;
-use mtk_core::mesh::MeshData;
+use mtk_core::mesh::{MeshData, UvLayout};
 use mtk_model::baker::baked_model::BakedFace;
 
 use crate::mesher::ao::{ao_level_to_brightness, should_flip_quad_diagonal};
@@ -32,6 +32,7 @@ pub fn emit_baked_face(
     block_pos: IVec3,
     dir: Direction,
 ) {
+    mesh.uv_layout = UvLayout::PerLoop;
     let base_idx = mesh.positions.len() as u32;
     let norm = config.transform_direction(face.normal);
     let n = [norm.x, norm.y, norm.z];
@@ -124,6 +125,7 @@ pub fn emit_unit_cube_face(
     block_pos: IVec3,
     mut grid_context: Option<(&mut GridVertexPool, [usize; 3], Vec3)>,
 ) {
+    mesh.uv_layout = UvLayout::PerLoop;
     let norm = config.transform_direction(dir.normal());
     let n = [norm.x, norm.y, norm.z];
 

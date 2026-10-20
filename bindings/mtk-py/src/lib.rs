@@ -212,12 +212,17 @@ mod tests {
     fn test_python_mesh_data_inner() {
         pyo3::prepare_freethreaded_python();
         Python::with_gil(|py| {
-            let mesh = Bound::new(py, PyMeshData::new()).unwrap();
-            assert_eq!(mesh.borrow().vertex_count(), 0);
-            assert!(mesh.borrow().is_empty());
-
-            let res = mesh.borrow_mut().append_unit_cube_face(1, 7, -1);
-            assert!(res.is_ok());
+            let mesh_data = PyMeshData::from_flat_polygons(
+                vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0],
+                vec![0, 1, 2, 3],
+                vec![0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0],
+                vec![0],
+                vec![4],
+                None,
+                Some(vec![7]),
+            )
+            .unwrap();
+            let mesh = Bound::new(py, mesh_data).unwrap();
             assert_eq!(mesh.borrow().vertex_count(), 4);
             assert_eq!(mesh.borrow().triangle_count(), 2);
             assert_eq!(mesh.borrow().face_count(), 1);

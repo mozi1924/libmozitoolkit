@@ -3,9 +3,12 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyList, PyMemoryView};
 
+use mtk_core::mesh::UvLayout;
+
 use super::PyMeshData;
 use crate::buffer::{
-    create_owned_f32_memoryview, create_owned_i32_memoryview, create_zerocopy_memoryview,
+    create_owned_f32_memoryview, create_owned_i32_memoryview, create_owned_u32_memoryview,
+    create_zerocopy_memoryview,
 };
 
 /// Read-only memoryview of vertex positions as raw bytes (`float32 * 3` per vertex).
@@ -124,6 +127,13 @@ pub fn quad_indices_memoryview<'py>(
             len,
             mesh.as_any(),
         )?))
+    } else if inner.is_quad_topology() {
+        let quads = inner.reconstruct_quad_indices();
+        if quads.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(create_owned_u32_memoryview(py, quads)?))
+        }
     } else {
         Ok(None)
     }
@@ -136,60 +146,26 @@ pub fn loop_uvs_memoryview<'py>(
 ) -> PyResult<Bound<'py, PyMemoryView>> {
     let py = mesh.py();
     let inner = &mesh.borrow().inner;
-    let is_quad = inner.is_quad_topology();
-    let total_loops = inner.loop_count();
 
-    if total_loops == 0 {
+    if inner.loop_count() == 0 {
         let bytes = PyBytes::new(py, &[]);
         return PyMemoryView::from(&bytes);
     }
 
-    // When inner.uvs already stores per-corner (loop) UVs, its length matches total_loops.
-    // Return a true zero-copy memoryview directly over uvs_flat() without re-indexing!
-    if inner.uvs.len() == total_loops {
+    if inner.uv_layout == UvLayout::PerLoop {
         let uvs_flat = inner.uvs_flat();
         let ptr = uvs_flat.as_ptr() as *const u8;
         let len = std::mem::size_of_val(uvs_flat);
         return create_zerocopy_memoryview(py, ptr, len, mesh.as_any());
     }
 
-    let loop_uvs: Vec<f32> = py.allow_threads(|| {
-        if is_quad {
-            let quads = inner.reconstruct_quad_indices();
-            let mut uvs = Vec::with_capacity(quads.len() * 2);
-            for &v_idx in &quads {
-                if let Some(uv) = inner.uvs.get(v_idx as usize) {
-                    uvs.push(uv[0]);
-                    uvs.push(uv[1]);
-                } else {
-                    uvs.push(0.0);
-                    uvs.push(0.0);
-                }
-            }
-            uvs
-        } else if !inner.indices.is_empty() {
-            let mut uvs = Vec::with_capacity(inner.indices.len() * 2);
-            for &v_idx in &inner.indices {
-                if let Some(uv) = inner.uvs.get(v_idx as usize) {
-                    uvs.push(uv[0]);
-                    uvs.push(uv[1]);
-                } else {
-                    uvs.push(0.0);
-                    uvs.push(0.0);
-                }
-            }
-            uvs
-        } else {
-            let mut uvs = Vec::with_capacity(inner.uvs.len() * 2);
-            for uv in &inner.uvs {
-                uvs.push(uv[0]);
-                uvs.push(uv[1]);
-            }
-            uvs
-        }
-    });
-
-    create_owned_f32_memoryview(py, loop_uvs)
+    let loop_uvs = py.allow_threads(|| inner.loop_uvs_expanded());
+    let mut flat = Vec::with_capacity(loop_uvs.len() * 2);
+    for uv in loop_uvs {
+        flat.push(uv[0]);
+        flat.push(uv[1]);
+    }
+    create_owned_f32_memoryview(py, flat)
 }
 
 /// Read-only memoryview of polygon loop start offsets (`int32` per polygon) for Blender direct topology injection.
@@ -198,16 +174,10 @@ pub fn loop_starts_memoryview<'py>(
 ) -> PyResult<Bound<'py, PyMemoryView>> {
     let py = mesh.py();
     let inner = &mesh.borrow().inner;
-    let is_quad = inner.is_quad_topology();
-    let count = inner.poly_count();
-    if count == 0 {
+    let starts: Vec<i32> = inner.loop_starts().into_iter().map(|v| v as i32).collect();
+    if starts.is_empty() {
         let bytes = PyBytes::new(py, &[]);
         return PyMemoryView::from(&bytes);
-    }
-    let step = if is_quad { 4i32 } else { 3i32 };
-    let mut starts: Vec<i32> = Vec::with_capacity(count);
-    for i in 0..count {
-        starts.push(i as i32 * step);
     }
     create_owned_i32_memoryview(py, starts)
 }
@@ -218,14 +188,11 @@ pub fn loop_totals_memoryview<'py>(
 ) -> PyResult<Bound<'py, PyMemoryView>> {
     let py = mesh.py();
     let inner = &mesh.borrow().inner;
-    let is_quad = inner.is_quad_topology();
-    let count = inner.poly_count();
-    if count == 0 {
+    let totals: Vec<i32> = inner.loop_totals().into_iter().map(|v| v as i32).collect();
+    if totals.is_empty() {
         let bytes = PyBytes::new(py, &[]);
         return PyMemoryView::from(&bytes);
     }
-    let val = if is_quad { 4i32 } else { 3i32 };
-    let totals = vec![val; count];
     create_owned_i32_memoryview(py, totals)
 }
 

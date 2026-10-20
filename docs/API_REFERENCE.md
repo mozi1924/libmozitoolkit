@@ -63,7 +63,8 @@ pub struct MeshData {
     pub normals: Vec<[f32; 3]>,             // 连续 3D 法线流 [N, 3]
     pub indices: Vec<u32>,                  // 三角形顶角索引 [M] (M = 3 * Triangles)
     pub quad_indices: Option<Vec<u32>>,     // 四边形顶角索引 [Q * 4] (保留 Quad 拓扑)
-    pub uvs: Vec<[f32; 2]>,                 // 主 UV 坐标流 [N, 2]
+    pub uvs: Vec<[f32; 2]>,                 // 主 UV 坐标流，语义由 uv_layout 决定
+    pub uv_layout: UvLayout,                // None / PerVertex / PerLoop
     pub secondary_uvs: Option<Vec<[f32; 2]>>, // 备用/局部 UV 坐标流 [N, 2]
     pub colors: Option<Vec<[f32; 4]>>,      // 顶点颜色 / Linear RGBA [N, 4]
     pub face_materials: Vec<MaterialSlotId>,// 逐面材质插槽映射 [F]

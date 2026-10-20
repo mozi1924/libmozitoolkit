@@ -12,7 +12,7 @@ pub use grid::{
     calculate_face_target_grid, calculate_pixel_grid_cut_factors, interpolate_bilinear_2d,
     interpolate_bilinear_3d, interpolate_bilinear_4d, invert_quad_bilinear,
 };
-pub use mesh_split::{adaptive_pixel_split_mesh, weld_mesh_vertices};
+pub use mesh_split::adaptive_pixel_split_mesh;
 
 #[cfg(test)]
 mod tests {

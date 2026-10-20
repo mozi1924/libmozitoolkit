@@ -43,11 +43,12 @@ Python 模块名：`libmtk_py`
 ### 2.1 几何网格与自定义属性 (`mesh` & `attributes`)
 - **`MeshData` (`PyMeshData`)**：连续内存紧凑几何网格缓冲容器。
   - 属性：`vertex_count`, `triangle_count`, `face_count`, `is_empty`
-  - 构造与修改：`MeshData()`, `MeshData.with_capacity(verts, indices, faces)`, `append_mesh(other)`, `append_unit_cube_face(dir, slot, tint)`, `clear()`
-  - 内存视图（标准零拷贝通道，推荐）：`positions_memoryview()`, `normals_memoryview()`, `uvs_memoryview()`, `indices_memoryview()`, `quad_indices_memoryview()`, `loop_uvs_memoryview()`, `loop_starts_memoryview()`, `loop_totals_memoryview()`, `face_materials_memoryview()`, `tint_indices_memoryview()`, `flags_memoryview()`
+  - 构造与修改：`MeshData()`, `MeshData.with_capacity(verts, indices, faces)`, `MeshData.from_flat_polygons(positions, loop_vertices, loop_uvs, face_loop_starts, face_loop_totals, normals=None, face_materials=None)`（共享顶点 + 逐 loop UV）, `append_mesh(other)`, `clear()`
+  - UV 布局：`uv_layout` 显式区分 `PerVertex` / `PerLoop`，不再用 `uvs.len()` 猜测；`loop_uvs_memoryview()` 自动展开为逐 loop。
+  - 内存视图（标准零拷贝通道，推荐）：`positions_memoryview()`, `normals_memoryview()`, `uvs_memoryview()`, `indices_memoryview()`, `quad_indices_memoryview()`, `loop_uvs_memoryview()`, `loop_starts_memoryview()`, `loop_totals_memoryview()`, `face_materials_memoryview()`
   - 非稳定底层 DNA 直写子模块（`libmtk_py.unstable.blender_dna`，由底层 `mtk-blender-dna` crate 驱动）：`copy_positions_to_ptr(mesh, ptr, max_bytes=None)`, `copy_normals_to_ptr(...)`, `copy_indices_to_ptr(...)`, `copy_quad_indices_to_ptr(...)`, `copy_loop_uvs_to_ptr(...)`, `copy_loop_starts_to_ptr(...)`, `copy_loop_totals_to_ptr(...)`, `copy_face_materials_to_ptr(...)`, `copy_colors_to_ptr(...)`, `copy_buffer_to_ptr(buf, ptr, max_bytes=None)`，均内建指针非空与内存越界溢出防御守卫。
   - 顶层 `libmtk_py.blender` 兼容别名与 `BlenderDirectMesh` 类已于 2026-10 API 收敛中移除，唯一入口为 `libmtk_py.unstable.blender_dna`。
-  - 扁平列表提取：`get_flat_positions()`, `get_flat_normals()`, `get_flat_uvs()`, `get_flat_secondary_uvs()`, `get_indices()`, `get_face_materials()`, `get_face_tints()`
+  - 次级 UV / 面 tint：`get_flat_secondary_uvs()`, `face_tint_indices_memoryview()`
   - 顶点与面自定义属性：`add_string_attribute(name, domain, values)`, `add_attribute_from_buffer(name, domain, data_type, buffer)`, `get_attribute_data(name)`, `has_attribute(name)`, `list_attributes()`
   - 来源贴图调色板：`source_texture_palette_indices() -> (palette, u32 memoryview)`，把逐面 `mtk_source_texture_key` 压缩成 palette + 索引，供 Live Sync 等跳过逐面字符串的宿主保留完整 provenance。
 - **`AttributeDomain`**：属性域枚举，支持 `"point"` (顶点) 与 `"face"` (面)。
@@ -82,11 +83,9 @@ Python 模块名：`libmtk_py`
 ### 2.5 体素存储与网格化 (`voxel` & `mesher`)
 - **`VoxelPointCloud` (`PyVoxelPointCloud`)**：全量无剔除 3D 体素点云容器，支持 Blender 点网格 attributes 往返和零拷贝内存视图。
   - `to_mesh_data() -> MeshData`, `from_mesh_data(mesh) -> VoxelPointCloud`
-  - `to_storage() -> VoxelStorage`, `from_arrays(...)`
-  - `direct_copy_to_ptrs(...)`, `direct_copy_positions_to_ptr(...)`, `direct_copy_state_indices_to_ptr(...)`：硬件加速 DNA 裸指针零拷贝写入
-  - `build_state_palette_indices() -> (palette, indices)`, `build_biome_palette_indices() -> (palette, indices)`
+  - `to_storage() -> VoxelStorage`, `from_indexed_arrays(...)`
   - `positions_memoryview()`, `block_x_memoryview()`, `block_y_memoryview()`, `block_z_memoryview()`
-  - `get_block_states()`, `get_biomes()`
+  - `get_state_palette()`, `get_biome_palette()`, `state_indices_memoryview()`, `biome_indices_memoryview()`：点云只存 palette + 索引，不再逐点物化字符串。
 - **`VoxelStorage` (`PyVoxelStorage`)**：16x16x16 稀疏 Chunk Section 体素容器，带脏标记追踪。
   - `to_point_cloud(config=None) -> VoxelPointCloud`, `from_point_cloud(cloud) -> VoxelStorage`, `load_from_point_cloud(cloud)`
   - `create_debug_world()`：一键加载内置嵌入的原版调试世界快照（529 sections, 32,539 blocks）。
@@ -197,7 +196,9 @@ positions = [
 uvs = [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
 indices = [0, 1, 2, 0, 2, 3]
 
-mesh = libmtk_py.MeshData.from_raw_buffers(positions, uvs, indices)
+mesh = libmtk_py.MeshData.from_flat_polygons(
+    positions, [0, 1, 2, 3], uvs, [0], [4], None, [0]
+)
 print(f"Vertices: {mesh.vertex_count}, Faces: {mesh.face_count}")
 
 # 2. 零拷贝提取 memoryview 并在 NumPy / Blender foreach_set 中使用
@@ -207,36 +208,6 @@ pos_np = np.frombuffer(pos_mv, dtype=np.float32).reshape(-1, 3)
 # 3. 添加自定义属性
 mesh.add_string_attribute("mtk_source_texture", "face", ["minecraft:block/stone", "minecraft:block/stone"])
 print("Has attribute:", mesh.has_attribute("mtk_source_texture"))
-```
-
-### 示例 2：端到端网格图集重映射流水线 (`process_mesh`)
-```python
-import libmtk_py
-
-# 加载图集地址映射 JSON
-atlas_json = '{"chunks":[], "sprites":{"minecraft:block/stone":{"chunk_id":0,"texture_id":1,"uv_bounds":[0.0,0.0,0.25,0.25],"frame_0_uv_bounds":[0.0,0.0,0.25,0.25],"local_uv_bounds":[0.0,0.0,1.0,1.0],"pixel_rect":[0,0,16,16],"frame_size":[16,16],"frame_count":1,"is_animated":false,"has_normal":false,"has_specular":false}}}'
-atlas = libmtk_py.BakedAtlas.from_mapping_json(atlas_json)
-
-# 创建输入网格
-mesh = libmtk_py.MeshData.from_raw_buffers(
-    [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0],
-    [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0],
-    [0, 1, 2, 0, 2, 3]
-)
-
-# 执行并行 UV 重映射与次级 PBR UV 计算
-out_mesh, materials, stats = libmtk_py.process_mesh(
-    mesh,
-    material_names=["Tile_Stone"],
-    atlas=atlas,
-    aliases={"Tile_Stone": ["minecraft:block/stone"]},
-    generate_secondary_uv=True,
-)
-
-print("Resolved slots:", stats["resolved_slots"])
-print("Mapped canonical material:", materials[0]["canonical_name"])
-print("New Atlas UVs:", out_mesh.get_flat_uvs())
-print("Secondary PBR UVs:", out_mesh.get_flat_secondary_uvs())
 ```
 
 ### 示例 3：体素世界存储与多核并行网格化 (`SectionMesher`)

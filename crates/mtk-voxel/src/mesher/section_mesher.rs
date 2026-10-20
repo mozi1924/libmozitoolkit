@@ -475,7 +475,7 @@ impl SectionMesher {
 
         collector.attach_to_mesh(&mut mesh);
         if config.weld_vertices && has_non_grid_geometry {
-            mesh.weld_spatial_vertices(1e-4);
+            mesh.weld_vertices(1e-4);
         }
         mesh
     }
