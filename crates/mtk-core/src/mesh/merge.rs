@@ -214,6 +214,36 @@ impl MeshData {
     ///
     /// Eliminates intermediate buffer allocations and duplicate full-mesh spatial hash iterations.
     pub fn merge_welded_sections(meshes: &[&MeshData], tolerance: f32) -> Self {
+        Self::merge_welded_sections_with(meshes, tolerance, |_| true)
+    }
+
+    /// Merges multiple internally-welded Section meshes, welding only the vertices for which
+    /// `is_weld_candidate` returns `true`.
+    ///
+    /// The closure receives the quantized spatial cell `[round(x / tolerance), ..]` used as the
+    /// deduplication key, so callers can restrict welding to positions shared between Sections
+    /// (16-block boundary planes) instead of hashing every interior vertex. Vertices rejected by
+    /// the predicate stay unique, which is safe when each Section mesh is already internally
+    /// welded: only positions on a Section boundary can be duplicated by a neighbouring Section.
+    pub fn merge_welded_sections_filtered<F>(
+        meshes: &[&MeshData],
+        tolerance: f32,
+        is_weld_candidate: F,
+    ) -> Self
+    where
+        F: Fn([i32; 3]) -> bool,
+    {
+        Self::merge_welded_sections_with(meshes, tolerance, is_weld_candidate)
+    }
+
+    fn merge_welded_sections_with<F>(
+        meshes: &[&MeshData],
+        tolerance: f32,
+        is_weld_candidate: F,
+    ) -> Self
+    where
+        F: Fn([i32; 3]) -> bool,
+    {
         if meshes.is_empty() {
             return Self::new();
         }
@@ -313,16 +343,21 @@ impl MeshData {
                     (p[2] * inv_dist).round() as i32,
                 ];
 
-                if let Some(&existing_idx) = coord_map.get(&key) {
-                    local_remap.push(existing_idx);
-                } else {
+                if is_weld_candidate(key) {
+                    if let Some(&existing_idx) = coord_map.get(&key) {
+                        local_remap.push(existing_idx);
+                        continue;
+                    }
                     let new_idx = merged.positions.len() as u32;
                     coord_map.insert(key, new_idx);
                     local_remap.push(new_idx);
-                    merged.positions.push(p);
-                    if let Some(&norm) = m.normals.get(i) {
-                        merged.normals.push(norm);
-                    }
+                } else {
+                    local_remap.push(merged.positions.len() as u32);
+                }
+
+                merged.positions.push(p);
+                if let Some(&norm) = m.normals.get(i) {
+                    merged.normals.push(norm);
                 }
             }
 

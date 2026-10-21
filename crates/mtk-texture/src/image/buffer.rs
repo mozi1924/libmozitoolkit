@@ -211,7 +211,7 @@ impl RgbaBuffer {
             }
         }
     }
- 
+
     /// Standard Porter-Duff source-over alpha blend of `overlay` onto `self`.
     pub fn blend_over(&mut self, overlay: &RgbaBuffer) {
         let w = self.width.min(overlay.width);

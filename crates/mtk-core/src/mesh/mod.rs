@@ -738,4 +738,28 @@ mod tests {
         assert_eq!(merged.indices, vec![0, 1, 0, 1, 2, 1]);
         assert_eq!(merged.face_materials, vec![0, 1]);
     }
+
+    #[test]
+    fn test_mesh_merge_welded_sections_filtered() {
+        let mut m1 = MeshData::new();
+        m1.positions = vec![[0.5, 0.0, 0.0], [1.0, 0.0, 0.0]];
+        m1.indices = vec![0, 1, 0];
+
+        let mut m2 = MeshData::new();
+        // [0.5, 0.0, 0.0] is an interior duplicate (not a Section seam candidate);
+        // [1.0, 0.0, 0.0] lies on the Section seam and must still be welded.
+        m2.positions = vec![[0.5, 0.0, 0.0], [1.0, 0.0, 0.0]];
+        m2.indices = vec![0, 1, 0];
+
+        let merged = MeshData::merge_welded_sections_filtered(&[&m1, &m2], 1e-4, |key| {
+            key == [10_000, 0, 0]
+        });
+
+        assert_eq!(merged.vertex_count(), 3);
+        assert_eq!(merged.positions[0], [0.5, 0.0, 0.0]);
+        assert_eq!(merged.positions[1], [1.0, 0.0, 0.0]);
+        assert_eq!(merged.positions[2], [0.5, 0.0, 0.0]);
+        // m2's seam vertex remaps to m1's index 1; its interior vertex stays unique at index 2.
+        assert_eq!(merged.indices, vec![0, 1, 0, 2, 1, 2]);
+    }
 }

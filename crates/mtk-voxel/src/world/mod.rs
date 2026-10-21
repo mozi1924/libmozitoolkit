@@ -286,10 +286,40 @@ impl VoxelWorld {
         }
     }
 
+    /// Builds the predicate used by incremental assembly to select the only vertices that can
+    /// be shared by two Section meshes: positions lying on a 16-block Section boundary plane.
+    ///
+    /// `SectionMesher` already welds every Section internally, so incremental rebuilds only need
+    /// to stitch the interfaces. Hashing just those vertices keeps delta remeshing fast while
+    /// restoring the manifold seams that the full rebuild already produces.
+    fn section_seam_predicate(&self, tolerance: f32) -> impl Fn([i32; 3]) -> bool + '_ {
+        const SECTION_STRIDE: f32 = mtk_core::constants::voxel::SECTION_SIZE as f32;
+        let inv = 1.0 / tolerance;
+        let stride = (SECTION_STRIDE * inv).round() as i64;
+        // `transform_position` is `R(pos) + offset`; because `R` only permutes axes, Section
+        // boundary planes (world coordinate multiples of 16) land on `offset` modulo 16.
+        let offset = self.config.transform_position(glam::Vec3::ZERO);
+        let phases = [
+            (offset.x * inv).round() as i64,
+            (offset.y * inv).round() as i64,
+            (offset.z * inv).round() as i64,
+        ];
+        move |key: [i32; 3]| {
+            if stride < 4 {
+                return true;
+            }
+            key.iter().zip(phases.iter()).any(|(&k, &phase)| {
+                let delta = (k as i64 - phase).rem_euclid(stride);
+                delta <= 1 || stride - delta <= 1
+            })
+        }
+    }
+
     /// Re-assembles and welds the unified world mesh from the current section cache without cloning.
-    /// In incremental mode (`full_weld = false`), uses fast zero-copy buffer merge since individual
-    /// sections are already internally welded by SectionMesher. Full spatial welding is applied on
-    /// global rebuilds (`rebuild_all`). Stage timings are recorded when a profiler is supplied.
+    /// Incremental mode (`full_weld = false`) keeps the fast path by welding only Section seam
+    /// vertices, since each Section mesh is already internally welded by `SectionMesher`. Global
+    /// rebuilds (`rebuild_all`) perform a full spatial weld. Stage timings are recorded when a
+    /// profiler is supplied.
     fn assemble_world_mesh(
         &mut self,
         full_weld: bool,
@@ -304,12 +334,15 @@ impl VoxelWorld {
             None => self.section_mesh_cache.values().collect(),
         };
 
-        let weld = self.config.weld_vertices && full_weld;
+        let weld = self.config.weld_vertices;
         let merge = || {
-            if weld {
+            if !weld {
+                MeshData::merge_all_refs(&meshes)
+            } else if full_weld {
                 MeshData::merge_welded_sections(&meshes, 1e-4)
             } else {
-                MeshData::merge_all_refs(&meshes)
+                let seam = self.section_seam_predicate(1e-4);
+                MeshData::merge_welded_sections_filtered(&meshes, 1e-4, seam)
             }
         };
         let merged = match profiler.as_deref_mut() {

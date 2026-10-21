@@ -131,6 +131,95 @@ fn test_voxel_world_incremental_empty_section_removes_cache() {
     assert_eq!(unified.vertex_count(), 8);
 }
 
+fn canonical_vertex_positions(mesh: &mtk_core::mesh::MeshData) -> Vec<[u32; 3]> {
+    let mut positions: Vec<[u32; 3]> = mesh
+        .positions
+        .iter()
+        .map(|p| [p[0].to_bits(), p[1].to_bits(), p[2].to_bits()])
+        .collect();
+    positions.sort_unstable();
+    positions
+}
+
+fn assert_no_duplicate_vertex_positions(mesh: &mtk_core::mesh::MeshData) {
+    let mut seen = std::collections::HashSet::new();
+    for p in &mesh.positions {
+        let key = [p[0].to_bits(), p[1].to_bits(), p[2].to_bits()];
+        assert!(
+            seen.insert(key),
+            "duplicate vertex position survived assembly: {p:?}"
+        );
+    }
+}
+
+#[test]
+fn test_incremental_rebuild_preserves_cross_section_seam_welding() {
+    let config = MesherConfig {
+        weld_vertices: true,
+        origin_centered: true,
+        ..Default::default()
+    };
+
+    let mut world = VoxelWorld::new(Some(config), None, None);
+    world.set_bounds(0, 0, 0, 32, 16, 16);
+    // Two cubes facing each other across the x = 16 Section seam. Their shared face is
+    // culled, and the four rim vertices on the seam must be welded into one manifold.
+    world.set_block(15, 0, 0, "minecraft:stone", None);
+    world.set_block(16, 0, 0, "minecraft:stone", None);
+
+    let full = world.rebuild_all().unwrap();
+    assert_eq!(full.vertex_count(), 12);
+    assert_eq!(full.face_count(), 10);
+    assert_no_duplicate_vertex_positions(full);
+
+    // An unrelated edit inside Section 0 forces the incremental (dirty) assembly path.
+    world.set_block(0, 5, 5, "minecraft:dirt", None);
+    let rebuilt = world.rebuild_dirty().unwrap();
+    assert_eq!(rebuilt.len(), 1);
+
+    let incremental = world.get_world_mesh().unwrap().clone();
+    // Two welded cubes (12) + one welded dirt cube (8).
+    assert_eq!(incremental.vertex_count(), 20);
+    assert_eq!(incremental.face_count(), 16);
+    assert_no_duplicate_vertex_positions(&incremental);
+
+    // Incremental assembly must agree with a from-scratch rebuild.
+    let full_again = world.rebuild_all().unwrap().clone();
+    assert_eq!(incremental.vertex_count(), full_again.vertex_count());
+    assert_eq!(incremental.face_count(), full_again.face_count());
+    assert_eq!(
+        canonical_vertex_positions(&incremental),
+        canonical_vertex_positions(&full_again)
+    );
+    assert_no_duplicate_vertex_positions(&full_again);
+}
+
+#[test]
+fn test_incremental_seam_welding_with_unaligned_selection_bounds() {
+    let config = MesherConfig {
+        weld_vertices: true,
+        origin_centered: true,
+        ..Default::default()
+    };
+
+    let mut world = VoxelWorld::new(Some(config), None, None);
+    // Selection origin is not Section-aligned: the origin-centering offset is fractional
+    // relative to the 16-block Section grid, so the seam predicate must still find x = 16.
+    world.set_bounds(5, 64, 5, 32, 16, 16);
+    world.set_block(15, 64, 5, "minecraft:stone", None);
+    world.set_block(16, 64, 5, "minecraft:stone", None);
+
+    let full = world.rebuild_all().unwrap();
+    assert_eq!(full.vertex_count(), 12);
+    assert_no_duplicate_vertex_positions(full);
+
+    world.set_block(5, 70, 10, "minecraft:dirt", None);
+    world.rebuild_dirty().unwrap();
+    let incremental = world.get_world_mesh().unwrap();
+    assert_eq!(incremental.vertex_count(), 20);
+    assert_no_duplicate_vertex_positions(incremental);
+}
+
 #[test]
 fn test_voxel_world_manifest_export_import() {
     let mut world = VoxelWorld::new(None, None, None);
