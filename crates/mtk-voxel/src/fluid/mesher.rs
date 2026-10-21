@@ -277,10 +277,10 @@ where
                 ([1.0, 1.0, 0.0, 0.0], [1.0, 1.0, 1.0, 1.0], [0.8, 0.4, 0.0])
             };
             let dir_code = dir.to_index() as u8;
-            let (emission, mat_props) = if fluid_type == FluidType::Water {
-                (0.0, [0.0, 0.0, 1.0, 0.95])
+            let emission = if fluid_type == FluidType::Water {
+                0.0
             } else {
-                (15.0, [15.0, 0.0, 0.0, 0.55])
+                15.0
             };
             col.push_face(
                 source_key,
@@ -294,7 +294,6 @@ where
                 f_tint_color,
                 f_colormap_uv,
                 emission,
-                mat_props,
                 glam::IVec3::new(x, y, z),
                 dir_code,
                 anim_timing,

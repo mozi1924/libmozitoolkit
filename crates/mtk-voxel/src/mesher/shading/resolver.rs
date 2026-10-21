@@ -85,7 +85,6 @@ where
                         config.biome_resolver.as_deref(),
                     );
                     let (timing, fsize) = extract_anim_metrics(Some(atlas_loc));
-                    let material_props = mtk_material::get_material_props("", Some(&ctm_key));
                     return ResolvedFaceShading {
                         texture_key: ctm_key,
                         override_uvs: Some(remapped),
@@ -96,7 +95,6 @@ where
                         tint_color: tc,
                         colormap_uv: c_uv,
                         emission: pre_face.emission,
-                        material_props,
                         anim_timing: timing,
                         anim_frame_size: fsize,
                     };
@@ -109,7 +107,6 @@ where
                     face.tint_index,
                     config.biome_resolver.as_deref(),
                 );
-                let material_props = mtk_material::get_material_props("", Some(&ctm_key));
                 return ResolvedFaceShading {
                     texture_key: ctm_key,
                     override_uvs: None,
@@ -120,7 +117,6 @@ where
                     tint_color: tc,
                     colormap_uv: c_uv,
                     emission: pre_face.emission,
-                    material_props,
                     anim_timing: pre_face.anim_timing,
                     anim_frame_size: pre_face.anim_frame_size,
                 };
@@ -138,7 +134,6 @@ where
         tint_color: pre_face.tint_color,
         colormap_uv: pre_face.colormap_uv,
         emission: pre_face.emission,
-        material_props: pre_face.material_props,
         anim_timing: pre_face.anim_timing,
         anim_frame_size: pre_face.anim_frame_size,
     }
@@ -203,7 +198,6 @@ where
                         config.biome_resolver.as_deref(),
                     );
                     let (timing, fsize) = extract_anim_metrics(Some(atlas_loc));
-                    let material_props = mtk_material::get_material_props("", Some(&ctm_key));
                     return ResolvedFaceShading {
                         texture_key: ctm_key,
                         override_uvs: Some(remapped),
@@ -214,7 +208,6 @@ where
                         tint_color: tc,
                         colormap_uv: c_uv,
                         emission: pre_face.emission,
-                        material_props,
                         anim_timing: timing,
                         anim_frame_size: fsize,
                     };
@@ -223,7 +216,6 @@ where
                 let ctm_key = resolved_loc.as_string();
                 let (td, tc, c_uv) =
                     compute_face_tint(&ctm_key, state_str, -1, config.biome_resolver.as_deref());
-                let material_props = mtk_material::get_material_props("", Some(&ctm_key));
                 return ResolvedFaceShading {
                     texture_key: ctm_key,
                     override_uvs: None,
@@ -234,7 +226,6 @@ where
                     tint_color: tc,
                     colormap_uv: c_uv,
                     emission: pre_face.emission,
-                    material_props,
                     anim_timing: pre_face.anim_timing,
                     anim_frame_size: pre_face.anim_frame_size,
                 };
@@ -252,7 +243,6 @@ where
         tint_color: pre_face.tint_color,
         colormap_uv: pre_face.colormap_uv,
         emission: pre_face.emission,
-        material_props: pre_face.material_props,
         anim_timing: pre_face.anim_timing,
         anim_frame_size: pre_face.anim_frame_size,
     }

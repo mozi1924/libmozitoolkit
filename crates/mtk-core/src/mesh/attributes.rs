@@ -17,7 +17,6 @@ impl MeshData {
         let mut textures = Vec::with_capacity(face_count);
         let mut face_dirs = Vec::with_capacity(face_count);
         let mut emissions = Vec::with_capacity(face_count);
-        let mut mat_props = Vec::with_capacity(face_count);
         let mut uv_transforms = Vec::with_capacity(face_count);
         let mut uv_rotations = Vec::with_capacity(face_count);
         let mut uv_modes = Vec::with_capacity(face_count);
@@ -38,7 +37,6 @@ impl MeshData {
             textures.push(attr.texture_key.clone());
             face_dirs.push(attr.face_dir as i32);
             emissions.push(attr.emission);
-            mat_props.push(attr.material_props);
             uv_transforms.push(attr.uv_transform);
             uv_rotations.push(attr.uv_rotation);
             uv_modes.push(attr.uv_mode);
@@ -80,11 +78,6 @@ impl MeshData {
             ATTR_EMISSION,
             AttributeDomain::Face,
             AttributeData::Float(emissions),
-        ));
-        self.add_custom_attribute(MeshAttribute::new(
-            ATTR_MATERIAL_PROPS,
-            AttributeDomain::Face,
-            AttributeData::Float4(mat_props),
         ));
         self.add_custom_attribute(MeshAttribute::new(
             ATTR_UV_TRANSFORM,

@@ -152,20 +152,6 @@ pub struct MeshMultiUvRemapResult {
 
 ---
 
-### 2.5 材质物理属性目录与并行批处理 (`properties/`)
-```rust
-/// 物理属性四元组: [发光强度 (0..15), 薄壁半透 (0/1), 介质透射 (0/1), 贴纸阈值 (0.55/0.95)]
-pub type MaterialProps = [f32; 4]; // 见 mtk_material::properties::MaterialProps
-
-/// Rayon 多线程全网格并行批处理属性生成
-pub fn compute_mesh_material_props(
-    face_texture_keys: &[String],
-    block_names: Option<&[String]>,
-) -> Vec<MaterialProps>;
-```
-
----
-
 ## 3. 核心公共 API 清单 (Public APIs)
 
 ### 3.1 色彩数学与生物群系工具
@@ -205,20 +191,7 @@ pub fn compute_mesh_material_props(
 | `resolve_mesh_material_routes(keys, aliases, address_map, enable_animated)` | 只解析逐面 chunk/texture/动画路由，不触碰 UV。 |
 | `reroute_mesh_animation(uvs, ranges, keys, old_chunk_ids, atlas, aliases, enable_animated)` | 将已有 Atlas UV 从旧 sprite 反解并投影到新 sprite，支持静态↔动画幂等切换。 |
 
-### 3.3 材质物理属性与数据驱动配置 (Data-Driven Properties)
-| 函数签名 | 描述 |
-| :--- | :--- |
-| `register_material_properties_json(json_str: &str) -> Result<(), ...>` | 动态注入 / 增量合并外部 JSON 材质物理配置（免重编热更新）。 |
-| `load_material_properties_json_replace(json_str: &str) -> Result<(), ...>` | 全量替换全局材质物理属性注册表。 |
-| `reset_material_properties_to_default()` | 重置全局注册表为原版内置规范配置。 |
-| `get_block_emission_strength(block_name, properties, texture_name) -> f32` | 查询 0..15 级发光强度（支持营火/熔炉/红石灯动态状态机与外部覆盖）。 |
-| `is_thin_wall_block(block_name, texture_name) -> bool` | 查询是否属于树叶/作物/花朵植被薄壁半透材质。 |
-| `is_transmissive_block(block_name, texture_name) -> bool` | 查询是否属于玻璃/水体/冰块介质透射材质。 |
-| `get_block_transmission_weight(block_name, texture_name) -> f32` | 查询透射权重（玻璃/水体为 1.0，普通方块为 0.0）。 |
-| `get_block_sticker_threshold(block_name, texture_name) -> f32` | 查询双层贴纸/折射分层透明度阈值（玻璃为 0.55，流体为 0.95）。 |
-| `compute_mesh_material_props(keys, block_names) -> Vec<[f32; 4]>` | Rayon 并行多核计算全网格逐面物理着色器属性（无锁并发读取）。 |
 
----
 
 ## 4. 快速上手示例 (Quick Start)
 

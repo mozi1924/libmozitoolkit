@@ -221,31 +221,6 @@ impl PyBakedAtlas {
         }
     }
 
-    /// Legacy raw LabPBR specular companion. Decoded caches drop this buffer, so it is
-    /// normally `None`; use [`Self::get_chunk_orm_f32`] / [`Self::get_chunk_aux_f32`].
-    #[pyo3(signature = (index, flip_v=true))]
-    pub fn get_chunk_specular_f32<'py>(
-        &self,
-        py: Python<'py>,
-        index: usize,
-        flip_v: bool,
-    ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
-        if let Some(chunk) = self.inner.chunks.get(index) {
-            if let Some(ref s) = chunk.specular {
-                let f32_buf = s.to_f32_buffer(flip_v);
-                Ok(Some(crate::buffer::create_owned_f32_memoryview(
-                    py, f32_buf,
-                )?))
-            } else {
-                Ok(None)
-            }
-        } else {
-            Err(pyo3::exceptions::PyIndexError::new_err(
-                "Chunk index out of bounds",
-            ))
-        }
-    }
-
     /// Read-only memoryview of Overlay companion normalized float32 pixels (if present).
     #[pyo3(signature = (index, flip_v=true))]
     pub fn get_chunk_overlay_f32<'py>(

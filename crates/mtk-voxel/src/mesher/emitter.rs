@@ -80,11 +80,6 @@ pub fn emit_baked_face(
     mesh.face_materials.push(shading.mat_slot);
     mesh.face_tint_indices.push(face.tint_index);
 
-    let mut mat_props = shading.material_props;
-    if shading.emission > 0.0 {
-        mat_props[0] = shading.emission;
-    }
-
     collector.push_face(
         shading.texture_key.clone(),
         shading.mat_slot as i32,
@@ -97,7 +92,6 @@ pub fn emit_baked_face(
         final_tint_color,
         final_colormap_uv,
         shading.emission,
-        mat_props,
         block_pos,
         dir.to_index() as u8,
         shading.anim_timing,
@@ -262,11 +256,6 @@ pub fn emit_unit_cube_face(
     mesh.face_materials.push(shading.mat_slot);
     mesh.face_tint_indices.push(-1);
 
-    let mut mat_props = shading.material_props;
-    if shading.emission > 0.0 {
-        mat_props[0] = shading.emission;
-    }
-
     collector.push_face(
         shading.texture_key.clone(),
         shading.mat_slot as i32,
@@ -279,7 +268,6 @@ pub fn emit_unit_cube_face(
         final_tint_color,
         final_colormap_uv,
         shading.emission,
-        mat_props,
         block_pos,
         dir.to_index() as u8,
         shading.anim_timing,

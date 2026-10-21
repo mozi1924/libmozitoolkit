@@ -14,9 +14,6 @@ pub struct PreResolvedFace {
     pub tint_color: [f32; 4],
     pub colormap_uv: [f32; 3],
     pub emission: f32,
-    /// Packed material properties `[emission, thin_wall, transmission, sticker_threshold]`.
-    /// Precomputed per palette face to avoid per-face registry lookups in the meshing hot loop.
-    pub material_props: [f32; 4],
     pub anim_timing: [f32; 3],
     pub anim_frame_size: [f32; 3],
 }
@@ -160,8 +157,6 @@ pub struct ResolvedFaceShading {
     pub tint_color: [f32; 4],
     pub colormap_uv: [f32; 3],
     pub emission: f32,
-    /// Packed material properties `[emission, thin_wall, transmission, sticker_threshold]`.
-    pub material_props: [f32; 4],
     pub anim_timing: [f32; 3],
     pub anim_frame_size: [f32; 3],
 }

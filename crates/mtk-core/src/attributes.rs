@@ -207,8 +207,6 @@ pub mod constants {
 
     /// Scalar emission intensity (Domain: Face/Point, Type: Float32, range 0.0..15.0 or 0.0..1.0).
     pub const ATTR_EMISSION: &str = "mtk_emission";
-    /// Packed physical properties (Domain: Face, Type: Float4/RGBA [emission, roughness_mult, metallic, thin_wall]).
-    pub const ATTR_MATERIAL_PROPS: &str = "mtk_material_props";
 
     /// Packed UV affine transform (Domain: Face, Type: Float4/RGBA [scale_u, scale_v, offset_u, offset_v]).
     pub const ATTR_UV_TRANSFORM: &str = "mtk_uv_transform";
@@ -267,8 +265,6 @@ pub struct FaceAttributes {
     pub uv_rotation: f32,
     /// Canonical 6-way face normal direction (0..5).
     pub face_dir: u8,
-    /// Packed physical properties [emission, roughness_mult, metallic, thin_wall].
-    pub material_props: [f32; 4],
     /// Animation timing [total_frames, frametime, interpolate].
     pub anim_timing: [f32; 3],
     /// Animation frame size [frame_width, frame_height, 0].
@@ -299,7 +295,6 @@ impl Default for FaceAttributes {
             uv_transform: [1.0, 1.0, 0.0, 0.0],
             uv_rotation: 0.0,
             face_dir: 1, // Default Up
-            material_props: [0.0, 1.0, 0.0, 0.0],
             anim_timing: [1.0, 1.0, 0.0],
             anim_frame_size: [16.0, 16.0, 0.0],
             biome_tint_color: [1.0, 1.0, 1.0, 1.0],

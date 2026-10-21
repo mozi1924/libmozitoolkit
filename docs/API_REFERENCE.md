@@ -100,21 +100,6 @@ pub struct FlatPolygonMesh {
 
 ---
 
-### 2.4 材质物理属性与网格属性驱动单一事实源 (Material Properties SSOT)
-- **唯一权威来源**：`mtk-material::properties`。
-- **四元组物理属性 (`MaterialProps = [f32; 4]`)**：
-  - `emission`: 原版标准 0..15 级发光强度（支持营火、熔炉、红石火把、铜灯等状态机）；
-  - `thin_wall`: 树叶、作物、花草薄壁植被半透散射标志（0.0 或 1.0）；
-  - `transmission`: 玻璃、水体、冰块等介质物理透射权重（0.0 或 1.0）；
-  - `sticker_threshold`: 双层贴纸与折射分离阈值（玻璃 0.55，水体/流体 0.95）。
-- **Rayon 并行批处理**：提供 `compute_mesh_material_props` 与扁平数组 `compute_flat_material_props`，直通 Blender 网格 `mtk_material_props` 面域属性（Float4 / FloatColor）。
-- **数据驱动配置与免编译动态注入 (Data-Driven Configuration)**：
-  - 核心物理属性表从编译期硬编码解耦为外部可配置的 JSON 规范文件（`assets/material_properties.json`）；
-  - 提供 `register_material_properties_json(json_str)` 与 `load_material_properties_json_replace(json_str)`，支持上层在运行时免重新编译增量覆盖或替换注册表；
-  - 提供 `reset_material_properties_to_default()` 随时复位为内置原版权威配置。
-
----
-
 ### 2.5 统一错误处理系统 (`MtkError`)
 `libmtk` 应用层将各领域错误聚合为单一 `MtkError`，并实现 `From<...>` 自动向上传播；绑定层不直接消费它，而是在边界处映射为宿主原生异常：
 ```rust

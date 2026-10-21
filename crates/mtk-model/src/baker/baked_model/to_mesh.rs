@@ -156,7 +156,6 @@ impl BakedModel {
                         uv_transform: uv_trans,
                         uv_rotation: face.uv_rot,
                         face_dir: face.direction.to_index() as u8,
-                        material_props: [emission, 1.0, 0.0, 0.0],
                         biome_tint_color: tint_color,
                         biome_tint_data: tint_data,
                         ..Default::default()
@@ -203,7 +202,6 @@ impl BakedModel {
                 uv_transform: [1.0, 1.0, 0.0, 0.0],
                 uv_rotation: 0.0,
                 face_dir: obj_f.direction.to_index() as u8,
-                material_props: [emission, 1.0, 0.0, 0.0],
                 biome_tint_color: tint_color,
                 biome_tint_data: tint_data,
                 ..Default::default()

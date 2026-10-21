@@ -231,8 +231,6 @@ fn resolve_model_face(
         config.biome_resolver.as_deref(),
     );
 
-    let material_props = mtk_material::get_material_props("", Some(&final_tex_key));
-
     PreResolvedModelFace {
         face: face.clone(),
         pre: PreResolvedFace {
@@ -245,7 +243,6 @@ fn resolve_model_face(
             tint_color,
             colormap_uv,
             emission,
-            material_props,
             anim_timing,
             anim_frame_size,
         },
@@ -289,12 +286,6 @@ pub fn build_palette_meshing_data<'a>(
     palette_emission: &[f32],
     config: &MesherConfig,
 ) -> Vec<PaletteMeshingData> {
-    // Material properties only depend on the resolved texture key, and the same key is
-    // resolved for every face direction of a unit cube (and across many block states).
-    // Cache per build pass to avoid 6 registry scans per palette entry.
-    let props_cache: std::cell::RefCell<std::collections::HashMap<String, [f32; 4]>> =
-        std::cell::RefCell::new(std::collections::HashMap::new());
-
     padded
         .palette
         .iter()
@@ -476,18 +467,6 @@ pub fn build_palette_meshing_data<'a>(
                             tint_idx,
                             config.biome_resolver.as_deref(),
                         );
-                        let material_props = {
-                            let mut cache = props_cache.borrow_mut();
-                            match cache.get(&final_tex_key) {
-                                Some(&props) => props,
-                                None => {
-                                    let props =
-                                        mtk_material::get_material_props("", Some(&final_tex_key));
-                                    cache.insert(final_tex_key.clone(), props);
-                                    props
-                                }
-                            }
-                        };
 
                         faces[dir.to_index()] = Some(PreResolvedFace {
                             source_texture_key: final_tex_key.to_string(),
@@ -499,7 +478,6 @@ pub fn build_palette_meshing_data<'a>(
                             tint_color,
                             colormap_uv,
                             emission,
-                            material_props,
                             anim_timing,
                             anim_frame_size,
                         });

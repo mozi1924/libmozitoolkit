@@ -120,7 +120,6 @@ Python 模块名：`libmtk_py`
 - **`MaterialResolver` (`PyMaterialResolver`)**：着色器材质槽位与外部别名解算器。
 - **即时 Biome 重着色**：`reapply_uniform_biome_tint(base_tt, packed, old_colors, colors..., flags...)`
   返回三个零拷贝 memoryview，供 `foreach_set` 直接写入。
-- **材质物理属性**：`compute_flat_material_props_memoryview(keys)` 返回零拷贝 f32 memoryview。
   - `remap_mesh_multi_uvs(..., enable_animated_textures=false)` / `remap_mesh_multi_uvs_paletted(...)`
   - `remap_mesh_multi_uvs_paletted(..., palette, face_indices, ...)`：palette-native、零拷贝 id/metric buffer
   - `resolve_mesh_routes(face_texture_keys, atlas, aliases=None, enable_animated_textures=false)`

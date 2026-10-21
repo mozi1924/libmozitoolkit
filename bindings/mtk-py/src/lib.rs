@@ -32,8 +32,7 @@ pub use ctm::PyCtmSolver;
 pub use cull::PyFaceCuller;
 pub use material::{
     build_material_palette, classify_tint_category, compute_biome_tint_attributes,
-    compute_biome_tint_attributes_paletted, compute_flat_material_props_memoryview,
-    compute_flat_material_props_paletted_memoryview, compute_mesh_biome_attributes_from_storage,
+    compute_biome_tint_attributes_paletted, compute_mesh_biome_attributes_from_storage,
     get_all_biomes, get_biome_meta, reapply_uniform_biome_tint, PyBiomeResolver, PyGridAtlasSpec,
     PyMaterialResolver,
 };
@@ -143,29 +142,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(material::get_colormap_uv, m)?)?;
     m.add_function(wrap_pyfunction!(material::get_hardcoded_tint, m)?)?;
     m.add_function(wrap_pyfunction!(material::get_hardcoded_tint_hex, m)?)?;
-    m.add_function(wrap_pyfunction!(compute_flat_material_props_memoryview, m)?)?;
-    m.add_function(wrap_pyfunction!(
-        compute_flat_material_props_paletted_memoryview,
-        m
-    )?)?;
-    m.add_function(wrap_pyfunction!(material::get_material_props, m)?)?;
-    m.add_function(wrap_pyfunction!(material::get_block_emission_strength, m)?)?;
-    m.add_function(wrap_pyfunction!(material::is_thin_wall_block, m)?)?;
-    m.add_function(wrap_pyfunction!(material::is_transmissive_block, m)?)?;
-    m.add_function(wrap_pyfunction!(
-        material::get_block_transmission_weight,
-        m
-    )?)?;
-    m.add_function(wrap_pyfunction!(material::get_block_sticker_threshold, m)?)?;
-    m.add_function(wrap_pyfunction!(material::register_material_properties, m)?)?;
-    m.add_function(wrap_pyfunction!(
-        material::load_material_properties_replace,
-        m
-    )?)?;
-    m.add_function(wrap_pyfunction!(
-        material::reset_material_properties_to_default,
-        m
-    )?)?;
     m.add_function(wrap_pyfunction!(material::get_swamp_grass_color, m)?)?;
     m.add("TINT_TYPE_NONE", mtk_material::TINT_TYPE_NONE)?;
     m.add("TINT_TYPE_GRASS", mtk_material::TINT_TYPE_GRASS)?;
