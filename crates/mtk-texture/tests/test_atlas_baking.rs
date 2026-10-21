@@ -53,6 +53,7 @@ fn test_atlas_builder_with_pbr_and_animation() {
             normal: None,
             specular: None,
             overlay: None,
+            emissive: None,
             frame_width: 16,
             frame_height: 16,
             frame_count: 1,
@@ -64,6 +65,7 @@ fn test_atlas_builder_with_pbr_and_animation() {
             normal: Some(diamond_normal),
             specular: Some(diamond_spec),
             overlay: None,
+            emissive: None,
             frame_width: 16,
             frame_height: 16,
             frame_count: 2,
@@ -140,6 +142,7 @@ fn test_pbr_auto_tiling_for_animated_sprite() {
         normal: Some(water_normal),
         specular: None,
         overlay: None,
+        emissive: None,
         frame_width: 16,
         frame_height: 16,
         frame_count: 4,
@@ -197,6 +200,7 @@ fn test_companion_dimension_scaling_and_alignment() {
         normal: None,
         specular: Some(aligned_spec),
         overlay: None,
+        emissive: None,
         frame_width: 32,
         frame_height: 32,
         frame_count: 2,
@@ -275,6 +279,7 @@ fn test_atlas_builder_with_overlay() {
             normal: None,
             specular: None,
             overlay: Some(grass_overlay),
+            emissive: None,
             frame_width: 16,
             frame_height: 16,
             frame_count: 1,
@@ -286,6 +291,7 @@ fn test_atlas_builder_with_overlay() {
             normal: None,
             specular: None,
             overlay: None,
+            emissive: None,
             frame_width: 16,
             frame_height: 16,
             frame_count: 1,
@@ -341,6 +347,7 @@ fn test_independent_atlases_not_hijacked_by_entities() {
         normal: None,
         specular: None,
         overlay: None,
+        emissive: None,
         frame_width: 64,
         frame_height: 64,
         frame_count: 1,
@@ -352,6 +359,7 @@ fn test_independent_atlases_not_hijacked_by_entities() {
         normal: None,
         specular: None,
         overlay: None,
+        emissive: None,
         frame_width: 32,
         frame_height: 32,
         frame_count: 1,
@@ -376,6 +384,7 @@ fn test_independent_atlases_not_hijacked_by_entities() {
             normal: None,
             specular: None,
             overlay: None,
+            emissive: None,
             frame_width: 64,
             frame_height: 64,
             frame_count: 1,
@@ -387,6 +396,7 @@ fn test_independent_atlases_not_hijacked_by_entities() {
             normal: None,
             specular: None,
             overlay: None,
+            emissive: None,
             frame_width: 32,
             frame_height: 32,
             frame_count: 1,
@@ -398,6 +408,7 @@ fn test_independent_atlases_not_hijacked_by_entities() {
             normal: None,
             specular: None,
             overlay: None,
+            emissive: None,
             frame_width: 64,
             frame_height: 64,
             frame_count: 1,
@@ -426,4 +437,54 @@ fn test_independent_atlases_not_hijacked_by_entities() {
 
     let zombie_loc = combined_map.lookup_static(&zombie_id).unwrap();
     assert_eq!(zombie_loc.category, "entities");
+}
+
+#[test]
+fn test_emissive_companion_animation_synthesis() {
+    let bush_id = ResourceLocation::new("minecraft", "block/firefly_bush");
+    // Base bush: 16x16 solid green (0, 180, 0, 255)
+    let bush_base = RgbaBuffer::solid(16, 16, 0, 180, 0, 255);
+    let bush_bytes = bush_base.to_png_bytes().unwrap();
+
+    // Emissive companion: 16x32 (2 frames of 16x16)
+    // Frame 0: transparent except (2, 2) has full-bright yellow (255, 255, 0, 255)
+    // Frame 1: transparent except (8, 8) has full-bright yellow (255, 255, 0, 255)
+    let mut emissive = RgbaBuffer::new(16, 32);
+    emissive.set_pixel(2, 2, [255, 255, 0, 255]);
+    emissive.set_pixel(8, 8 + 16, [255, 255, 0, 255]);
+    let emissive_bytes = emissive.to_png_bytes().unwrap();
+
+    let discovered = mtk_resource::DiscoveredSprite {
+        sprite_id: bush_id.clone(),
+        texture_location: bush_id.clone(),
+        raw_albedo: Some(bush_bytes),
+        raw_normal: None,
+        raw_specular: None,
+        raw_overlay: None,
+        raw_emissive: Some(emissive_bytes),
+        metadata: None,
+        emissive_metadata: Some(AnimationMetadata {
+            frametime: 3,
+            interpolate: false,
+            ..Default::default()
+        }),
+    };
+
+    let decoded = DecodedSprite::from_discovered(discovered).unwrap();
+    assert_eq!(decoded.frame_width, 16);
+    assert_eq!(decoded.frame_height, 16);
+    assert_eq!(decoded.frame_count, 2);
+    assert!(decoded.metadata.is_some());
+    assert_eq!(decoded.albedo.width, 16);
+    assert_eq!(decoded.albedo.height, 32);
+
+    // Frame 0 checks
+    assert_eq!(decoded.albedo.get_pixel(0, 0), [0, 180, 0, 255]);
+    assert_eq!(decoded.albedo.get_pixel(2, 2), [255, 255, 0, 255]); // Firefly pixel blended
+    assert_eq!(decoded.albedo.get_pixel(8, 8), [0, 180, 0, 255]);
+
+    // Frame 1 checks
+    assert_eq!(decoded.albedo.get_pixel(0, 16), [0, 180, 0, 255]);
+    assert_eq!(decoded.albedo.get_pixel(2, 2 + 16), [0, 180, 0, 255]);
+    assert_eq!(decoded.albedo.get_pixel(8, 8 + 16), [255, 255, 0, 255]); // Firefly pixel blended
 }

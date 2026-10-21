@@ -295,6 +295,14 @@ impl BakedModel {
                                 // Exact duplicate face: only remove B if identical texture and tint
                                 if tex_a == tex_b && tint_a == tint_b {
                                     to_remove.insert((*el_b, *dir_b));
+                                } else if is_emissive_overlay_of(tex_b, tex_a) {
+                                    // Face B is an emissive companion overlay (e.g. firefly_bush_emissive over firefly_bush)
+                                    // Remove redundant coplanar face B to eliminate Z-fighting and shadow deadlock
+                                    to_remove.insert((*el_b, *dir_b));
+                                } else if is_emissive_overlay_of(tex_a, tex_b) {
+                                    // Face A is an emissive companion overlay over base face B
+                                    to_remove.insert((*el_a, *dir_a));
+                                    break;
                                 }
                             } else if !*is_plane_a
                                 && !*is_plane_b
@@ -445,5 +453,17 @@ impl BakedModel {
                 }
             }
         }
+    }
+}
+
+/// Helper detecting if `emissive_tex` is an emissive companion overlay of `base_tex`.
+#[inline]
+fn is_emissive_overlay_of(emissive_tex: &str, base_tex: &str) -> bool {
+    if let Some(stripped) = emissive_tex.strip_suffix("_emissive") {
+        stripped == base_tex
+    } else if let Some(stripped) = emissive_tex.strip_suffix("_e") {
+        stripped == base_tex
+    } else {
+        emissive_tex.contains("cross_emissive") && !base_tex.contains("cross_emissive")
     }
 }

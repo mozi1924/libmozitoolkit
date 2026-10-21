@@ -17,7 +17,9 @@ pub struct DiscoveredSprite {
     pub raw_normal: Option<Vec<u8>>,
     pub raw_specular: Option<Vec<u8>>,
     pub raw_overlay: Option<Vec<u8>>,
+    pub raw_emissive: Option<Vec<u8>>,
     pub metadata: Option<AnimationMetadata>,
+    pub emissive_metadata: Option<AnimationMetadata>,
 }
 
 /// Composite PBR companion data extracted for a texture resource.
@@ -27,7 +29,9 @@ pub struct PbrCompanions {
     pub normal: Option<Vec<u8>>,
     pub specular: Option<Vec<u8>>,
     pub overlay: Option<Vec<u8>>,
+    pub emissive: Option<Vec<u8>>,
     pub mcmeta: Option<AnimationMetadata>,
+    pub emissive_mcmeta: Option<AnimationMetadata>,
 }
 
 /// Ordered hierarchy of resource packs evaluated from top (highest priority) to bottom (vanilla fallback).
@@ -49,6 +53,8 @@ pub fn is_companion_asset_path(file: &str) -> bool {
         || lower.ends_with("_s.png")
         || lower.ends_with("_overlay.png")
         || lower.ends_with("_overlay_anim.png")
+        || lower.ends_with("_emissive.png")
+        || lower.ends_with("_emissive_anim.png")
         || lower.ends_with("grass_block_side_overlay.png")
         || lower.ends_with("grass_side_overlay.png")
 }
@@ -275,7 +281,51 @@ impl ResourcePackStack {
             }
         }
 
-        // 5. MCMETA animation
+        // 5. Emissive (e.g. firefly_bush_emissive, open_eyeblossom_emissive, _e.png)
+        let emissive_candidates = [
+            location
+                .with_suffix("_emissive")
+                .to_asset_path("textures", "png"),
+            format!(
+                "assets/{}/{}_emissive.png",
+                location.namespace, location.path
+            ),
+            location.with_suffix("_e").to_asset_path("textures", "png"),
+            location.with_suffix("_E").to_asset_path("textures", "png"),
+            format!("assets/{}/{}_e.png", location.namespace, location.path),
+            format!("assets/{}/{}_E.png", location.namespace, location.path),
+        ];
+        for path in &emissive_candidates {
+            if path != &candidates[0] && path != &candidates[1] {
+                if let Some(bytes) = self.open_asset_raw(path) {
+                    companions.emissive = Some(bytes);
+                    break;
+                }
+            }
+        }
+
+        // Emissive MCMETA animation (if emissive has distinct animation e.g. firefly_bush_emissive.png.mcmeta)
+        let emissive_meta_candidates = [
+            location
+                .with_suffix("_emissive")
+                .to_mcmeta_asset_path("textures", "png"),
+            format!(
+                "assets/{}/{}_emissive.png.mcmeta",
+                location.namespace, location.path
+            ),
+        ];
+        for path in &emissive_meta_candidates {
+            if let Some(meta_bytes) = self.open_asset_raw(path) {
+                if let Ok(meta_str) = std::str::from_utf8(&meta_bytes) {
+                    if let Ok(tex_meta) = TextureMetadata::parse_json(meta_str) {
+                        companions.emissive_mcmeta = tex_meta.animation;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 6. MCMETA animation
         let meta_candidates = [
             location.to_mcmeta_asset_path("textures", "png"),
             format!("assets/{}/{}.png.mcmeta", location.namespace, location.path),
@@ -402,7 +452,9 @@ impl ResourcePackStack {
                                     raw_normal: companions.normal,
                                     raw_specular: companions.specular,
                                     raw_overlay: companions.overlay,
+                                    raw_emissive: companions.emissive,
                                     metadata: companions.mcmeta,
+                                    emissive_metadata: companions.emissive_mcmeta,
                                 });
                             }
                         }
@@ -422,7 +474,9 @@ impl ResourcePackStack {
                                 raw_normal: companions.normal,
                                 raw_specular: companions.specular,
                                 raw_overlay: companions.overlay,
+                                raw_emissive: companions.emissive,
                                 metadata: companions.mcmeta,
+                                emissive_metadata: companions.emissive_mcmeta,
                             });
                         }
                     }
@@ -449,7 +503,9 @@ impl ResourcePackStack {
                                 raw_normal: companions.normal.clone(),
                                 raw_specular: companions.specular.clone(),
                                 raw_overlay: companions.overlay.clone(),
+                                raw_emissive: companions.emissive.clone(),
                                 metadata: None,
+                                emissive_metadata: None,
                             });
                         }
                     }
@@ -498,7 +554,9 @@ impl ResourcePackStack {
                             raw_normal: companions.normal,
                             raw_specular: companions.specular,
                             raw_overlay: companions.overlay,
+                            raw_emissive: companions.emissive,
                             metadata: companions.mcmeta,
+                            emissive_metadata: companions.emissive_mcmeta,
                         });
                     }
                 }

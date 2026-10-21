@@ -212,6 +212,10 @@ fn separate_static_and_anim_sprites(
                     let h = o.height.min(sp.frame_height);
                     o.crop(0, 0, o.width.min(sp.frame_width), h)
                 }),
+                emissive: sp.emissive.as_ref().map(|e| {
+                    let h = e.height.min(sp.frame_height);
+                    e.crop(0, 0, e.width.min(sp.frame_width), h)
+                }),
                 frame_width: sp.frame_width,
                 frame_height: sp.frame_height,
                 frame_count: 1,

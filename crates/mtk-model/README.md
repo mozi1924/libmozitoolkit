@@ -137,7 +137,7 @@ pub struct BakedModel {
     pub unculled_faces: Vec<BakedFace>,
 }
 ```
-- `baked.deduplicate_faces() -> usize`: 消除自身内部同向叠面与反向接触面，并重构 6 向分桶。
+- `baked.deduplicate_faces() -> usize`: 消除自身内部同向叠面（含 `_emissive` 伴生发光层叠面消除）与反向接触面，并重构 6 向分桶。
 - `baked.to_mesh_with_options(opts: &ModelMeshOptions) -> MeshData`: 带叠面消除与隐藏体裁剪导出为 `mtk_core::MeshData`。
 - `face.remap_to_atlas_bounds(bounds, chunk_id, texture_id)`: 离线注入图集 UV 坐标。
 

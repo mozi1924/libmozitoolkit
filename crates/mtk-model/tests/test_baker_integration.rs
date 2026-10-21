@@ -1266,3 +1266,84 @@ fn test_dragon_and_piglin_head_geometry() {
         max_x
     );
 }
+
+#[test]
+fn test_cross_emissive_coplanar_deduplication() {
+    use glam::{Vec2, Vec3};
+    use mtk_core::direction::Direction;
+    use mtk_model::baker::baked_model::{BakedElement, BakedFace, BakedModel};
+    use std::collections::HashMap;
+
+    // Simulate cross_emissive model with 2 elements on the exact same quad geometry:
+    // Element 0: base bush, North face
+    // Element 1: firefly_bush_emissive, North face
+    let verts = [
+        Vec3::new(0.05, 0.0, 0.5),
+        Vec3::new(0.95, 0.0, 0.5),
+        Vec3::new(0.95, 1.0, 0.5),
+        Vec3::new(0.05, 1.0, 0.5),
+    ];
+    let norm = Vec3::new(0.0, 0.0, -1.0);
+    let uvs = [Vec2::ZERO, Vec2::X, Vec2::ONE, Vec2::Y];
+
+    let mut el0_faces = HashMap::new();
+    el0_faces.insert(
+        Direction::North,
+        BakedFace {
+            direction: Direction::North,
+            texture: "minecraft:block/firefly_bush".to_string(),
+            vertices: verts,
+            normal: norm,
+            uvs,
+            tint_index: -1,
+            ..Default::default()
+        },
+    );
+
+    let mut el1_faces = HashMap::new();
+    el1_faces.insert(
+        Direction::North,
+        BakedFace {
+            direction: Direction::North,
+            texture: "minecraft:block/firefly_bush_emissive".to_string(),
+            vertices: verts,
+            normal: norm,
+            uvs,
+            tint_index: -1,
+            ..Default::default()
+        },
+    );
+
+    let mut model = BakedModel {
+        block_state: "minecraft:firefly_bush".to_string(),
+        elements: vec![
+            BakedElement {
+                from_pos: [0.8, 0.0, 8.0],
+                to_pos: [15.2, 16.0, 8.0],
+                faces: el0_faces,
+            },
+            BakedElement {
+                from_pos: [0.8, 0.0, 8.0],
+                to_pos: [15.2, 16.0, 8.0],
+                faces: el1_faces,
+            },
+        ],
+        obj_faces: Vec::new(),
+        ..Default::default()
+    };
+
+    let removed = model.deduplicate_faces();
+    assert_eq!(
+        removed, 1,
+        "Must deduplicate the redundant emissive companion face"
+    );
+
+    // Verify remaining face is the base texture
+    let remaining_faces: Vec<_> = model
+        .elements
+        .iter()
+        .flat_map(|e| e.faces.values())
+        .collect();
+    assert_eq!(remaining_faces.len(), 1);
+    assert_eq!(remaining_faces[0].texture, "minecraft:block/firefly_bush");
+}

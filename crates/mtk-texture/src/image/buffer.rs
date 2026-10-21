@@ -211,6 +211,33 @@ impl RgbaBuffer {
             }
         }
     }
+ 
+    /// Standard Porter-Duff source-over alpha blend of `overlay` onto `self`.
+    pub fn blend_over(&mut self, overlay: &RgbaBuffer) {
+        let w = self.width.min(overlay.width);
+        let h = self.height.min(overlay.height);
+        for y in 0..h {
+            for x in 0..w {
+                let src = overlay.get_pixel(x, y);
+                let src_a = src[3];
+                if src_a == 0 {
+                    continue;
+                }
+                if src_a == 255 {
+                    self.set_pixel(x, y, src);
+                    continue;
+                }
+                let dst = self.get_pixel(x, y);
+                let a = src_a as f32 / 255.0;
+                let inv_a = 1.0 - a;
+                let r = (src[0] as f32 * a + dst[0] as f32 * inv_a).round() as u8;
+                let g = (src[1] as f32 * a + dst[1] as f32 * inv_a).round() as u8;
+                let b = (src[2] as f32 * a + dst[2] as f32 * inv_a).round() as u8;
+                let out_a = (dst[3] as f32 * inv_a + src_a as f32).round().min(255.0) as u8;
+                self.set_pixel(x, y, [r, g, b, out_a]);
+            }
+        }
+    }
 
     /// In-place vertically flip (V-axis / Y-axis inversion) the pixel rows.
     pub fn flip_v(&mut self) {

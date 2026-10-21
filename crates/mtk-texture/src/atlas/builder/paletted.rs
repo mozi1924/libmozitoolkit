@@ -66,6 +66,7 @@ pub fn process_paletted_permutations(
                                     normal,
                                     specular,
                                     overlay,
+                                    emissive: None,
                                     frame_width: fw,
                                     frame_height: fh,
                                     frame_count: 1,

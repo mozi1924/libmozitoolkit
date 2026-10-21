@@ -10,6 +10,7 @@ pub struct DecodedSprite {
     pub normal: Option<RgbaBuffer>,
     pub specular: Option<RgbaBuffer>,
     pub overlay: Option<RgbaBuffer>,
+    pub emissive: Option<RgbaBuffer>,
     pub frame_width: u32,
     pub frame_height: u32,
     pub frame_count: u32,
@@ -26,7 +27,7 @@ impl DecodedSprite {
             ))
         })?;
 
-        let albedo = RgbaBuffer::from_png_bytes(&raw_albedo)?;
+        let mut albedo = RgbaBuffer::from_png_bytes(&raw_albedo)?;
         let normal = match discovered.raw_normal {
             Some(ref bytes) => RgbaBuffer::from_png_bytes(bytes).ok(),
             None => None,
@@ -39,26 +40,68 @@ impl DecodedSprite {
             Some(ref bytes) => RgbaBuffer::from_png_bytes(bytes).ok(),
             None => None,
         };
+        let emissive_raw = match discovered.raw_emissive {
+            Some(ref bytes) => RgbaBuffer::from_png_bytes(bytes).ok(),
+            None => None,
+        };
 
-        // Determine single-frame dimensions:
-        // Vanilla standard: ONLY textures with AnimationMetadata (.png.mcmeta with "animation": { ... })
-        // are multi-frame animations. If metadata is present, default frame_height to albedo.width
-        // (if height >= width) or albedo.height.
-        // If NO AnimationMetadata is present, the texture is static (regardless of aspect ratio:
-        // paintings e.g. 16x32, 48x64; entities e.g. 64x128, 16x256; blocks; GUI, etc.).
-        let (frame_width, frame_height, frame_count) = if let Some(ref meta) = discovered.metadata {
-            let fw = meta.width.unwrap_or(albedo.width);
-            let fh = meta
-                .height
-                .unwrap_or(if albedo.height >= albedo.width && albedo.width > 0 {
-                    albedo.width
+        // Determine initial single-frame dimensions from base albedo
+        let mut final_metadata = discovered.metadata;
+        let (mut frame_width, mut frame_height, mut frame_count) =
+            if let Some(ref meta) = final_metadata {
+                let fw = meta.width.unwrap_or(albedo.width);
+                let fh =
+                    meta.height
+                        .unwrap_or(if albedo.height >= albedo.width && albedo.width > 0 {
+                            albedo.width
+                        } else {
+                            albedo.height
+                        });
+                let fc = albedo.height.checked_div(fh).unwrap_or(1);
+                (fw, fh, fc.max(1))
+            } else {
+                (albedo.width, albedo.height, 1)
+            };
+
+        // If this sprite has an emissive companion (e.g. firefly_bush_emissive on firefly_bush)
+        // and the emissive layer is animated while albedo is static, expand the static albedo
+        // into a multi-frame animation matching the emissive layer before blending.
+        let emissive = if let Some(em) = emissive_raw {
+            if frame_count <= 1 && (discovered.emissive_metadata.is_some() || em.height > em.width)
+            {
+                let em_fw = em.width;
+                let em_fh = if let Some(ref em_meta) = discovered.emissive_metadata {
+                    em_meta.height.unwrap_or(em_fw)
+                } else if em.height >= em_fw && em_fw > 0 {
+                    em_fw
                 } else {
-                    albedo.height
-                });
-            let fc = albedo.height.checked_div(fh).unwrap_or(1);
-            (fw, fh, fc.max(1))
+                    em.height
+                };
+                let em_fc = em.height.checked_div(em_fh).unwrap_or(1).max(1);
+
+                // Resize base albedo frame to match emissive frame dimensions, then tile vertically
+                if albedo.width != em_fw || albedo.height != em_fh {
+                    albedo = albedo.resize_nearest(em_fw, em_fh);
+                }
+                albedo = albedo.tile_vertical(em_fh * em_fc);
+
+                // Blend the animated emissive frames over the tiled albedo
+                albedo.blend_over(&em);
+
+                frame_width = em_fw;
+                frame_height = em_fh;
+                frame_count = em_fc;
+                final_metadata = discovered.emissive_metadata;
+
+                Some(em)
+            } else {
+                let aligned_em =
+                    em.align_companion_to_albedo(frame_width, frame_height, frame_count);
+                albedo.blend_over(&aligned_em);
+                Some(aligned_em)
+            }
         } else {
-            (albedo.width, albedo.height, 1)
+            None
         };
 
         // Align PBR companion buffers with albedo frame metrics and vertical tiling
@@ -75,10 +118,11 @@ impl DecodedSprite {
             normal,
             specular,
             overlay,
+            emissive,
             frame_width,
             frame_height,
             frame_count,
-            metadata: discovered.metadata,
+            metadata: final_metadata,
         })
     }
 

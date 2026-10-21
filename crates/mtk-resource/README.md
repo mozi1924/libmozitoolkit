@@ -82,8 +82,8 @@ pub struct ResourcePackStack {
     packs: Vec<Box<dyn ResourcePack>>,
 }
 ```
-- `is_companion_asset_path(file: &str) -> bool`: 权威判断贴图是否为伴随贴图（`_n.png`, `_s.png`, `_overlay.png` 等），避免误入图集主精灵表。
-- `PbrCompanions`: 单一纹理对应的复合伴随数据（Albedo, Normal, Specular, Overlay, MCMETA）。
+- `is_companion_asset_path(file: &str) -> bool`: 权威判断贴图是否为伴随贴图（`_n.png`, `_s.png`, `_overlay.png`, `_emissive.png` 等），避免误入图集主精灵表。
+- `PbrCompanions`: 单一纹理对应的复合伴随数据（Albedo, Normal, Specular, Overlay, Emissive, MCMETA）。
 - `DiscoveredSprite`: 图集构建前收集的完整待解码精灵图描述。
 
 ---
