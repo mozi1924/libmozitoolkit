@@ -1,16 +1,9 @@
 //! VoxelWorld Python bindings.
 
 use super::config::PyMesherConfig;
+use super::map_voxel_err;
 use super::storage::PyVoxelStorage;
 use pyo3::prelude::*;
-
-fn map_voxel_err(e: mtk_voxel::VoxelError) -> PyErr {
-    match e {
-        mtk_voxel::VoxelError::MissingVanillaBasePack(msg)
-        | mtk_voxel::VoxelError::MissingAssets(msg) => pyo3::exceptions::PyValueError::new_err(msg),
-        _ => pyo3::exceptions::PyRuntimeError::new_err(e.to_string()),
-    }
-}
 
 /// Python wrapper for `VoxelWorld` 3D scene engine.
 #[pyclass(name = "VoxelWorld")]
