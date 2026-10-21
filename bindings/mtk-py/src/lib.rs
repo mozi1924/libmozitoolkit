@@ -118,6 +118,8 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(is_valid_cache_package, m)?)?;
     m.add_function(wrap_pyfunction!(resolve_active_cache_package, m)?)?;
     m.add_function(wrap_pyfunction!(get_cache_manifest, m)?)?;
+    m.add_function(wrap_pyfunction!(texture::sample_uv_alpha_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(texture::is_face_transparent_f32, m)?)?;
     m.add_function(wrap_pyfunction!(
         texture::batch_analyze_transparent_faces_f32,
         m
@@ -139,12 +141,22 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_biome_meta, m)?)?;
     m.add_function(wrap_pyfunction!(get_all_biomes, m)?)?;
     m.add_function(wrap_pyfunction!(material::get_colormap_uv, m)?)?;
+    m.add_function(wrap_pyfunction!(material::get_hardcoded_tint, m)?)?;
+    m.add_function(wrap_pyfunction!(material::get_hardcoded_tint_hex, m)?)?;
     m.add_function(wrap_pyfunction!(compute_flat_material_props_memoryview, m)?)?;
     m.add_function(wrap_pyfunction!(
         compute_flat_material_props_paletted_memoryview,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(material::get_material_props, m)?)?;
+    m.add_function(wrap_pyfunction!(material::get_block_emission_strength, m)?)?;
+    m.add_function(wrap_pyfunction!(material::is_thin_wall_block, m)?)?;
+    m.add_function(wrap_pyfunction!(material::is_transmissive_block, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        material::get_block_transmission_weight,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(material::get_block_sticker_threshold, m)?)?;
     m.add_function(wrap_pyfunction!(material::register_material_properties, m)?)?;
     m.add_function(wrap_pyfunction!(
         material::load_material_properties_replace,
@@ -154,6 +166,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
         material::reset_material_properties_to_default,
         m
     )?)?;
+    m.add_function(wrap_pyfunction!(material::get_swamp_grass_color, m)?)?;
     m.add("TINT_TYPE_NONE", mtk_material::TINT_TYPE_NONE)?;
     m.add("TINT_TYPE_GRASS", mtk_material::TINT_TYPE_GRASS)?;
     m.add("TINT_TYPE_FOLIAGE", mtk_material::TINT_TYPE_FOLIAGE)?;
@@ -165,10 +178,24 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyModelBaker>()?;
     m.add_class::<PyBakedModelDatabase>()?;
 
-    // 9. UV Geometry Algorithms & Extrude (High-Level Batched Only)
+    // 9. UV Geometry Algorithms & Extrude
+    m.add_function(wrap_pyfunction!(uv::calculate_uv_area, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::get_uv_bounds, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::get_uv_center, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::is_uv_collapsed, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::is_orthogonal_angle, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::detect_uv_rotation, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::straighten_uv, m)?)?;
     m.add_function(wrap_pyfunction!(uv::scale_uv, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::normalize_uv_for_atlas_tiling, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::uv_requires_atlas_tiling, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::restore_atlas_tiling_uv, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::repair_quad_fluid_uv, m)?)?;
     m.add_function(wrap_pyfunction!(uv::batch_repair_fluid_uv, m)?)?;
     m.add_function(wrap_pyfunction!(uv::repair_mesh_fluid_uv_inplace, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::get_fluid_top_uvs, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::get_fluid_side_uvs, m)?)?;
+    m.add_function(wrap_pyfunction!(uv::repair_extruded_side_uv, m)?)?;
     m.add_function(wrap_pyfunction!(uv::generate_random_extrude_heights, m)?)?;
     m.add_function(wrap_pyfunction!(
         extrude::process_flat_mesh_extrude_repair,
