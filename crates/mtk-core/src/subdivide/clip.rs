@@ -5,7 +5,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::grid::{interpolate_bilinear_3d, invert_quad_bilinear};
+use super::grid::{interpolate_bilinear_3d, invert_quad_bilinear, is_vertical_animation_strip};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Point2D {
@@ -189,12 +189,11 @@ pub fn slice_face_by_pixel_grid(
     }
 
     let mut y_lines = Vec::new();
-    let effective_max_y =
-        if tex_h > tex_w && tex_h.is_multiple_of(tex_w) && (max_y - min_y) > (tex_w as f32 * 1.5) {
-            min_y + tex_w as f32
-        } else {
-            max_y
-        };
+    let effective_max_y = if is_vertical_animation_strip(tex_w, tex_h, max_y - min_y) {
+        min_y + tex_w as f32
+    } else {
+        max_y
+    };
     let mut k_y = ((min_y / step) + 1e-4).ceil() * step;
     while k_y < effective_max_y - 1e-4 {
         y_lines.push(k_y);

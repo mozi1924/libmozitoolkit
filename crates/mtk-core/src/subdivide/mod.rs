@@ -6,6 +6,7 @@
 pub mod clip;
 pub mod grid;
 pub mod mesh_split;
+pub(crate) mod quad;
 
 pub use clip::{slice_face_by_pixel_grid, SlicedFaceResult};
 pub use grid::{
@@ -28,6 +29,39 @@ mod tests {
         assert_eq!(
             rows, 16,
             "Must clamp to single square frame 16x16 instead of 512!"
+        );
+    }
+
+    #[test]
+    fn test_vertical_animation_strip_policy() {
+        // Full-height faces on a frame stack are clamped to one frame.
+        assert!(grid::is_vertical_animation_strip(16, 512, 512.0));
+        assert!(grid::is_vertical_animation_strip(16, 64, 64.0));
+        // Faces that sample less than one frame are left alone.
+        assert!(!grid::is_vertical_animation_strip(16, 512, 12.0));
+        assert!(!grid::is_vertical_animation_strip(16, 64, 20.0));
+        // Non-strip aspect ratios never clamp.
+        assert!(!grid::is_vertical_animation_strip(32, 32, 32.0));
+        assert!(!grid::is_vertical_animation_strip(16, 100, 100.0));
+    }
+
+    #[test]
+    fn test_cut_factors_do_not_clamp_a_sub_frame_v_span() {
+        // 16x64 texture, face spans 20 pixels vertically: below the 1.5-frame
+        // threshold, so all 19 interior pixel lines must survive (old code
+        // clamped every tall-multiple texture to 16 cuts unconditionally).
+        let uvs = [
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [1.0, 20.0 / 64.0],
+            [0.0, 20.0 / 64.0],
+        ];
+        let (_u_cuts, v_cuts) = calculate_pixel_grid_cut_factors(&uvs, 16, 64, 1.0, 64);
+        assert_eq!(
+            v_cuts.len(),
+            21,
+            "expected 0.0 + 19 interior cuts + 1.0, got {:?}",
+            v_cuts
         );
     }
 

@@ -65,17 +65,30 @@ pub fn calculate_face_target_grid(
     };
 
     // Anti-explosion defense for long vertical animated strips (e.g. 16x512)
-    let effective_v_pixels =
-        if tex_h > tex_w && tex_h.is_multiple_of(tex_w) && v_pixels > (tex_w as f32 * 1.5) {
-            tex_w as f32
-        } else {
-            v_pixels
-        };
+    let effective_v_pixels = if is_vertical_animation_strip(tex_w, tex_h, v_pixels) {
+        tex_w as f32
+    } else {
+        v_pixels
+    };
 
     let cols = ((u_pixels / ppf).round() as u32).clamp(1, max_sub);
     let rows = ((effective_v_pixels / ppf).round() as u32).clamp(1, max_sub);
 
     (cols, rows)
+}
+
+/// Detects faces that sample a single frame of a tall vertical animation strip.
+///
+/// Animated textures store their frames vertically (16x512 = 32 frames of 16x16).
+/// A face spanning the whole texture height would otherwise be cut into hundreds
+/// of horizontal strips. Animation metadata is not available at this layer, so a
+/// V span wider than 1.5 frames is treated as "samples one frame" and clamped.
+///
+/// This is the single policy shared by target-grid sizing, cut-factor generation
+/// and polygon clipping; do not duplicate the condition.
+#[inline]
+pub(crate) fn is_vertical_animation_strip(tex_w: u32, tex_h: u32, v_pixels: f32) -> bool {
+    tex_h > tex_w && tex_h.is_multiple_of(tex_w) && v_pixels > tex_w as f32 * 1.5
 }
 
 /// Calculates non-uniform [0, 1] parameter cut factors along U and V axes of a quad face,
@@ -168,7 +181,8 @@ pub fn calculate_pixel_grid_cut_factors(
     };
 
     // Anti-explosion defense for long vertical animated strips
-    let max_sub_v = if tex_h > tex_w && tex_h.is_multiple_of(tex_w) {
+    let v_pixels = (p3[1] - p0[1]).abs().max((p2[1] - p1[1]).abs());
+    let max_sub_v = if is_vertical_animation_strip(tex_w, tex_h, v_pixels) {
         max_sub.min(tex_w as usize)
     } else {
         max_sub
