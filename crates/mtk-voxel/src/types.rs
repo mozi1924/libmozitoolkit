@@ -158,6 +158,10 @@ pub enum VoxelError {
     MalformedSnapshot(String),
     #[error("Invalid point cloud data: {0}")]
     InvalidPointCloud(String),
+    #[error("Missing vanilla base pack: {0}")]
+    MissingVanillaBasePack(String),
+    #[error("Missing assets: {0}")]
+    MissingAssets(String),
 }
 
 #[cfg(test)]

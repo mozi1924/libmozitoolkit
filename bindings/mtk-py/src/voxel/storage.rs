@@ -11,6 +11,14 @@ use mtk_voxel::storage::VoxelStorage;
 
 use super::config::PyMesherConfig;
 
+fn map_voxel_err(e: mtk_voxel::VoxelError) -> PyErr {
+    match e {
+        mtk_voxel::VoxelError::MissingVanillaBasePack(msg)
+        | mtk_voxel::VoxelError::MissingAssets(msg) => pyo3::exceptions::PyValueError::new_err(msg),
+        _ => pyo3::exceptions::PyRuntimeError::new_err(e.to_string()),
+    }
+}
+
 /// Python wrapper for `VoxelStorage` sparse 3D chunk voxel container.
 #[pyclass(name = "VoxelStorage")]
 #[derive(Debug, Clone)]
@@ -51,7 +59,7 @@ impl PyVoxelStorage {
         } else {
             VoxelStorage::create_debug_world()
         }
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        .map_err(map_voxel_err)?;
 
         Ok(Self { inner: storage })
     }
@@ -59,8 +67,8 @@ impl PyVoxelStorage {
     /// Pure-code generation from an explicit slice of blockstate strings.
     #[staticmethod]
     pub fn create_debug_world_from_states(states: Vec<String>) -> PyResult<Self> {
-        let storage = VoxelStorage::create_debug_world_from_states(&states)
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        let storage =
+            VoxelStorage::create_debug_world_from_states(&states).map_err(map_voxel_err)?;
         Ok(Self { inner: storage })
     }
 
@@ -70,8 +78,14 @@ impl PyVoxelStorage {
         stack: &crate::resource::PyResourcePackStack,
     ) -> PyResult<Self> {
         let storage = VoxelStorage::create_debug_world_from_pack_stack(&stack.inner)
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+            .map_err(map_voxel_err)?;
         Ok(Self { inner: storage })
+    }
+
+    /// Clears the internally cached debug storage (useful during live pack reload or tests).
+    #[staticmethod]
+    pub fn clear_debug_world_cache() {
+        VoxelStorage::clear_debug_world_cache();
     }
 
     /// Sets the active 3D selection bounding box with incremental section pruning.

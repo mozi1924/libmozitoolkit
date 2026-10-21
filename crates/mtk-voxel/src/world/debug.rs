@@ -31,7 +31,9 @@ impl VoxelWorld {
             if !db.is_empty() {
                 VoxelStorage::create_debug_world_from_model_db(db)?
             } else {
-                VoxelStorage::create_debug_world()?
+                return Err(VoxelError::MissingAssets(
+                    "Cannot generate debug world: baked model database is empty".into(),
+                ));
             }
         } else {
             VoxelStorage::create_debug_world()?

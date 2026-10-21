@@ -38,12 +38,14 @@ impl VoxelStorage {
     /// - Air blocks are skipped.
     /// - Dynamic bounds encompass the entire generated field.
     pub fn create_debug_world_from_states<S: AsRef<str>>(states: &[S]) -> Result<Self, VoxelError> {
-        let mut storage = Self::new();
         let total = states.len();
         if total == 0 {
-            return Ok(storage);
+            return Err(VoxelError::MissingAssets(
+                "Cannot generate debug world from an empty list of blockstates".into(),
+            ));
         }
 
+        let mut storage = Self::new();
         let grid_width = (total as f32).sqrt().ceil() as i32;
         let grid_height = ((total as f32) / (grid_width as f32)).ceil() as i32;
 
@@ -77,9 +79,18 @@ impl VoxelStorage {
     /// Scans all blockstate JSONs discovered across all active packs (including vanilla and any
     /// loaded mods), enumerates all possible blockstate combinations, sorts them deterministically,
     /// and lays them out into the canonical debug world grid.
+    ///
+    /// # Gate
+    /// Strictly rejects execution if the pack stack does not contain a valid Minecraft Vanilla Client base pack.
     pub fn create_debug_world_from_pack_stack(
         stack: &mtk_resource::ResourcePackStack,
     ) -> Result<Self, VoxelError> {
+        if stack.is_empty() || !stack.has_vanilla_client_base() {
+            return Err(VoxelError::MissingVanillaBasePack(
+                "Cannot generate debug world: active resource pack stack must contain a valid Minecraft Vanilla Client base pack".into(),
+            ));
+        }
+
         let locs = stack.list_all_blockstate_locations();
         let mut all_states = Vec::new();
         let mut seen = HashSet::new();
@@ -98,6 +109,13 @@ impl VoxelStorage {
             }
         }
 
+        if all_states.is_empty() {
+            return Err(VoxelError::MissingAssets(
+                "Cannot generate debug world: no blockstates discovered across resource pack stack"
+                    .into(),
+            ));
+        }
+
         all_states.sort();
         Self::create_debug_world_from_states(&all_states)
     }
@@ -106,9 +124,17 @@ impl VoxelStorage {
     ///
     /// Takes all pre-baked blockstate keys already present in the database, sorts them
     /// deterministically, and arranges them in the canonical debug world grid.
+    ///
+    /// # Gate
+    /// Strictly rejects execution if the model database is empty.
     pub fn create_debug_world_from_model_db(
         db: &mtk_model::BakedModelDatabase,
     ) -> Result<Self, VoxelError> {
+        if db.is_empty() {
+            return Err(VoxelError::MissingAssets(
+                "Cannot generate debug world: baked model database is empty".into(),
+            ));
+        }
         let mut states: Vec<String> = db.keys().cloned().collect();
         states.sort();
         Self::create_debug_world_from_states(&states)
@@ -132,12 +158,15 @@ impl VoxelStorage {
     /// Default entry point: loads or generates the canonical Minecraft debug world.
     ///
     /// Checks in order:
-    /// 1. `MC_ASSETS_DIR` or `MC_DIR` environment variables (unpacked vanilla assets);
-    /// 2. In-memory pure-code vanilla fallback generator.
+    /// 1. Memoized in-memory cache;
+    /// 2. `MC_ASSETS_DIR`, `MC_DIR`, or `MTK_TEST_ASSETS` environment variables (unpacked vanilla assets).
     ///
     /// Results are memoized for sub-millisecond cloning on repeat requests. Hosts that
     /// reload resource packs at runtime can invalidate the cache via
     /// [`VoxelStorage::clear_debug_world_cache`].
+    ///
+    /// # Gate
+    /// Rejects generation if no valid vanilla Minecraft client base pack is found.
     pub fn create_debug_world() -> Result<Self, VoxelError> {
         if let Ok(guard) = CACHED_DEBUG_STORAGE.read() {
             if let Some(cached) = guard.as_ref() {
@@ -146,20 +175,22 @@ impl VoxelStorage {
         }
 
         // 1. Environment variable override (CI / custom unpack locations)
-        if let Ok(env_path) = std::env::var("MC_ASSETS_DIR").or_else(|_| std::env::var("MC_DIR")) {
-            let p = Path::new(&env_path);
-            if p.join("assets").exists() {
-                if let Ok(storage) = Self::create_debug_world_from_dir(p) {
-                    Self::store_debug_world(storage.clone());
-                    return Ok(storage);
+        for env_key in &["MC_ASSETS_DIR", "MC_DIR", "MTK_TEST_ASSETS"] {
+            if let Ok(env_path) = std::env::var(env_key) {
+                let p = Path::new(&env_path);
+                if p.join("assets").exists() {
+                    if let Ok(storage) = Self::create_debug_world_from_dir(p) {
+                        Self::store_debug_world(storage.clone());
+                        return Ok(storage);
+                    }
                 }
             }
         }
 
-        // 2. Fallback: In-memory pure-code vanilla state generator
-        let fallback_storage = Self::create_fallback_debug_world()?;
-        Self::store_debug_world(fallback_storage.clone());
-        Ok(fallback_storage)
+        // Rejection gate: no vanilla assets available
+        Err(VoxelError::MissingVanillaBasePack(
+            "Cannot generate debug world: no vanilla Minecraft client base pack available in environment or cache".into(),
+        ))
     }
 
     fn store_debug_world(storage: VoxelStorage) {
@@ -173,182 +204,6 @@ impl VoxelStorage {
         if let Ok(mut guard) = CACHED_DEBUG_STORAGE.write() {
             *guard = None;
         }
-    }
-
-    /// In-memory pure-code generator for hundreds of canonical vanilla states without any external files.
-    pub fn create_fallback_debug_world() -> Result<Self, VoxelError> {
-        let mut states = Vec::new();
-
-        // Basic stone & minerals
-        let simple_blocks = [
-            "stone",
-            "granite",
-            "polished_granite",
-            "diorite",
-            "polished_diorite",
-            "andesite",
-            "polished_andesite",
-            "dirt",
-            "coarse_dirt",
-            "cobblestone",
-            "bedrock",
-            "sand",
-            "gravel",
-            "gold_ore",
-            "iron_ore",
-            "coal_ore",
-            "obsidian",
-            "oak_planks",
-            "spruce_planks",
-            "birch_planks",
-            "jungle_planks",
-            "acacia_planks",
-            "dark_oak_planks",
-            "glass",
-            "lapis_block",
-            "sandstone",
-            "gold_block",
-            "iron_block",
-            "bricks",
-            "mossy_cobblestone",
-            "diamond_block",
-            "netherrack",
-            "soul_sand",
-            "glowstone",
-            "stone_bricks",
-            "mossy_stone_bricks",
-            "cracked_stone_bricks",
-            "chiseled_stone_bricks",
-            "emerald_block",
-            "redstone_block",
-            "quartz_block",
-            "prismarine",
-            "prismarine_bricks",
-            "dark_prismarine",
-            "sea_lantern",
-            "magma_block",
-            "nether_wart_block",
-            "red_nether_bricks",
-            "bone_block",
-        ];
-        for b in &simple_blocks {
-            states.push(format!("minecraft:{}", b));
-        }
-
-        // Directional stairs (facing x half x shape)
-        let stair_types = [
-            "oak_stairs",
-            "cobblestone_stairs",
-            "stone_brick_stairs",
-            "sandstone_stairs",
-        ];
-        let facings = ["north", "south", "east", "west"];
-        let halves = ["top", "bottom"];
-        let shapes = [
-            "straight",
-            "inner_left",
-            "inner_right",
-            "outer_left",
-            "outer_right",
-        ];
-        for st in &stair_types {
-            for f in &facings {
-                for h in &halves {
-                    for s in &shapes {
-                        states.push(format!(
-                            "minecraft:{}[facing={},half={},shape={}]",
-                            st, f, h, s
-                        ));
-                    }
-                }
-            }
-        }
-
-        // Slabs
-        let slab_types = [
-            "oak_slab",
-            "cobblestone_slab",
-            "stone_brick_slab",
-            "sandstone_slab",
-        ];
-        let slab_types_vals = ["bottom", "top", "double"];
-        for sl in &slab_types {
-            for v in &slab_types_vals {
-                states.push(format!("minecraft:{}[type={}]", sl, v));
-            }
-        }
-
-        // Walls (north, south, east, west, up)
-        let wall_types = [
-            "cobblestone_wall",
-            "stone_brick_wall",
-            "granite_wall",
-            "diorite_wall",
-        ];
-        let wall_conns = ["none", "low", "tall"];
-        for w in &wall_types {
-            for n in &wall_conns {
-                for s in &wall_conns {
-                    for up in &["true", "false"] {
-                        states.push(format!(
-                            "minecraft:{}[east=none,north={},south={},up={},west=none]",
-                            w, n, s, up
-                        ));
-                    }
-                }
-            }
-        }
-
-        // Doors (facing x half x hinge x open)
-        let doors = ["oak_door", "iron_door"];
-        for d in &doors {
-            for f in &facings {
-                for h in &["upper", "lower"] {
-                    for open in &["true", "false"] {
-                        states.push(format!(
-                            "minecraft:{}[facing={},half={},hinge=left,open={},powered=false]",
-                            d, f, h, open
-                        ));
-                    }
-                }
-            }
-        }
-
-        // Logs (axis)
-        let logs = [
-            "oak_log",
-            "spruce_log",
-            "birch_log",
-            "jungle_log",
-            "acacia_log",
-            "dark_oak_log",
-        ];
-        for l in &logs {
-            for axis in &["x", "y", "z"] {
-                states.push(format!("minecraft:{}[axis={}]", l, axis));
-            }
-        }
-
-        // Entities: Chests, Beds, Shulker Boxes
-        for f in &facings {
-            for t in &["single", "left", "right"] {
-                states.push(format!("minecraft:chest[facing={},type={}]", f, t));
-                states.push(format!("minecraft:trapped_chest[facing={},type={}]", f, t));
-            }
-            states.push(format!("minecraft:ender_chest[facing={}]", f));
-            for part in &["head", "foot"] {
-                states.push(format!(
-                    "minecraft:red_bed[facing={},occupied=false,part={}]",
-                    f, part
-                ));
-            }
-        }
-        for f in &["down", "up", "north", "south", "west", "east"] {
-            states.push(format!("minecraft:shulker_box[facing={}]", f));
-        }
-
-        states.sort();
-        Self::create_debug_world_from_states(&states)
     }
 }
 
@@ -403,9 +258,42 @@ mod tests {
     }
 
     #[test]
+    fn test_debug_world_gates_reject_missing_assets() {
+        // 1. Empty states slice is strictly rejected
+        let empty_states: Vec<String> = Vec::new();
+        let res_states = VoxelStorage::create_debug_world_from_states(&empty_states);
+        assert!(matches!(res_states, Err(VoxelError::MissingAssets(_))));
+
+        // 2. Empty or non-vanilla pack stack is strictly rejected
+        let empty_stack = mtk_resource::ResourcePackStack::new();
+        let res_stack = VoxelStorage::create_debug_world_from_pack_stack(&empty_stack);
+        assert!(matches!(
+            res_stack,
+            Err(VoxelError::MissingVanillaBasePack(_))
+        ));
+
+        // 3. Empty baked model database is strictly rejected
+        let empty_db = mtk_model::BakedModelDatabase::new();
+        let res_db = VoxelStorage::create_debug_world_from_model_db(&empty_db);
+        assert!(matches!(res_db, Err(VoxelError::MissingAssets(_))));
+    }
+
+    #[test]
     fn test_debug_world_clone_is_cached_and_fast() {
         VoxelStorage::clear_debug_world_cache();
-        let first = VoxelStorage::create_debug_world().expect("Should generate/cache debug world");
+        let first = match VoxelStorage::create_debug_world() {
+            Ok(s) => s,
+            Err(_) => {
+                // If environment assets are unavailable, synthesize a valid cached storage from sample states
+                let sample_states = vec![
+                    "minecraft:stone".to_string(),
+                    "minecraft:granite".to_string(),
+                ];
+                let s = VoxelStorage::create_debug_world_from_states(&sample_states).unwrap();
+                VoxelStorage::store_debug_world(s.clone());
+                s
+            }
+        };
 
         // Test repeat cloning speed
         let start = std::time::Instant::now();

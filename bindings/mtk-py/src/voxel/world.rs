@@ -4,6 +4,14 @@ use super::config::PyMesherConfig;
 use super::storage::PyVoxelStorage;
 use pyo3::prelude::*;
 
+fn map_voxel_err(e: mtk_voxel::VoxelError) -> PyErr {
+    match e {
+        mtk_voxel::VoxelError::MissingVanillaBasePack(msg)
+        | mtk_voxel::VoxelError::MissingAssets(msg) => pyo3::exceptions::PyValueError::new_err(msg),
+        _ => pyo3::exceptions::PyRuntimeError::new_err(e.to_string()),
+    }
+}
+
 /// Python wrapper for `VoxelWorld` 3D scene engine.
 #[pyclass(name = "VoxelWorld")]
 #[derive(Clone)]
@@ -78,7 +86,7 @@ impl PyVoxelWorld {
         } else {
             mtk_voxel::VoxelWorld::create_debug_world_with_threads(cfg, cul, mdb, threads)
         }
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        .map_err(map_voxel_err)?;
 
         Ok(Self { inner: world })
     }
@@ -122,7 +130,7 @@ impl PyVoxelWorld {
         } else {
             py.allow_threads(|| self.inner.rebuild_all().cloned())
         }
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        .map_err(map_voxel_err)?;
         Ok(crate::mesh::PyMeshData { inner: mesh })
     }
 
