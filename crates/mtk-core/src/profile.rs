@@ -83,7 +83,8 @@ impl ExecutionProfile {
         duration_us: u64,
         items_count: Option<usize>,
     ) {
-        self.stages.push(StageSpan::new(name, duration_us, items_count));
+        self.stages
+            .push(StageSpan::new(name, duration_us, items_count));
     }
 
     /// Formats the profile into a human-readable multi-line summary table.
@@ -143,8 +144,7 @@ impl ExecutionProfiler {
             let t0 = Instant::now();
             let result = f();
             let dur = t0.elapsed();
-            self.profile
-                .add_stage(name, dur.as_micros() as u64, None);
+            self.profile.add_stage(name, dur.as_micros() as u64, None);
             result
         }
         #[cfg(target_arch = "wasm32")]

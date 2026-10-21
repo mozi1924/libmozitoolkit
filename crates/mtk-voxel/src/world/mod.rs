@@ -356,10 +356,8 @@ impl VoxelWorld {
         }
 
         #[cfg(feature = "parallel")]
-        let padded_sections: Vec<_> = profiler.measure_with_count(
-            "padded_array_extraction",
-            non_empty.len(),
-            || {
+        let padded_sections: Vec<_> = profiler
+            .measure_with_count("padded_array_extraction", non_empty.len(), || {
                 use rayon::prelude::*;
                 mtk_core::constants::concurrency::execute_parallel(self.num_threads, || {
                     non_empty
@@ -367,29 +365,23 @@ impl VoxelWorld {
                         .map(|&coord| self.storage.get_section_padded_array(coord))
                         .collect()
                 })
-            },
-        )
-        .map_err(VoxelError::ThreadPoolError)?;
+            })
+            .map_err(VoxelError::ThreadPoolError)?;
 
         #[cfg(not(feature = "parallel"))]
-        let padded_sections: Vec<_> = profiler.measure_with_count(
-            "padded_array_extraction",
-            non_empty.len(),
-            || {
+        let padded_sections: Vec<_> =
+            profiler.measure_with_count("padded_array_extraction", non_empty.len(), || {
                 non_empty
                     .iter()
                     .map(|&coord| self.storage.get_section_padded_array(coord))
                     .collect()
-            },
-        );
+            });
 
         let db_opt = self.model_db.as_deref();
         let model_lookup = |state: &str| Self::model_source_for_state(db_opt, state);
 
-        let results = profiler.measure_with_count(
-            "parallel_section_meshing",
-            non_empty.len(),
-            || {
+        let results =
+            profiler.measure_with_count("parallel_section_meshing", non_empty.len(), || {
                 SectionMesher::mesh_sections_parallel_with_source_and_progress(
                     &padded_sections,
                     &self.culler,
@@ -398,8 +390,7 @@ impl VoxelWorld {
                     self.num_threads,
                     progress,
                 )
-            },
-        )?;
+            })?;
 
         profiler.measure("section_cache_insertion", || {
             self.section_mesh_cache.clear();
