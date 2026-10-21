@@ -55,12 +55,11 @@ Python 模块名：`libmtk_py`
 - **`AttributeDomain`**：属性域枚举，支持 `"point"` (顶点) 与 `"face"` (面)。
 - **`analyze_mesh_hard_edges(positions, edge_verts, face_loop_starts, face_loop_totals, loop_verts, sharp_angle_rad, explicit_sharp_edges=None) -> PyBytes`**：基于二面角与边界的高性能硬边/锐边拓扑分析算子，支持零拷贝 Buffer Protocol。
 
-### 2.2 遮挡剔除与叠面消重 (`cull`)
+### 2.2 遮挡剔除与状态机 (`cull`)
 - **`FaceCuller` (`PyFaceCuller`)**：原版方块与复杂连接体遮挡状态机。
   - `FaceCuller(leaves_cull_mode=0, glass_cull_mode=0)`
   - `is_face_occluded(block, neighbor, direction, pos_a=None, pos_b=None)`
   - `clear_cache()`, `cache_len`
-- **`cull_mesh_faces(mesh, culler, ...)`**：对输入网格执行 2D 矩形差集切分与微观几何遮挡剔除。
 
 ### 2.3 自适应像素网格切分 (`subdivide`)
 - **`calculate_face_target_grid(uvs, tex_w, tex_h, max_grid)`**：根据 UV 跨越的纹理像素计算切分密度。

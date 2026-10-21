@@ -28,7 +28,7 @@
 - **邻域面遮挡状态机 (`FaceCuller`)**：原版 1.21+ 规范的 6 向邻域剔除判定，内置实心不透明体 (`SolidOpaque`)、半透明玻璃 (`GlassTranslucent`)、镂空树叶 (`CutoutLeaves`)、异形方块 (`PartialShape`)、流体 (`Fluid`) 与非遮挡装饰 (`NonOccluding`) 的全状态分类决策。
 - **2D 矩形差集切分算法 (`subtract_rect`)**：极速微观 2D 矩形布尔差集运算（返回 `Vec<Aabb2d>`），精准解算半砖 (Slabs)、楼梯 (Stairs)、活板门 (Trapdoors) 与地毯等异形方块的局部遮挡面。
 - **共面关系分析 (`check_coplanar_overlap`)**：2D 投影下判定两多边形是否 `Exact` / `ContainedInA` / `ContainedInB` / `Partial` 重叠，供上层做叠面去重。
-- **外部网格微观剔除 (`cull_mesh_faces`)**：基于空间哈希的高性能网格面剔除算子，对任意 `MeshData` 进行无缝拓扑精简，完整保留所有顶点/角点/面级自定义属性与 Quad 拓扑。
+- **网格微观剔除与叠面消除 (`cull_mesh_faces`)**：基于空间哈希的高性能网格面剔除算子，用于烘焙期内部多元素模型消重（如 `mtk-model` 消除内部重叠体积），完整保留所有顶点/角点/面级自定义属性与 Quad 拓扑。
 
 ---
 

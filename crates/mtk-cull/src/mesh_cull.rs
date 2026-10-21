@@ -139,14 +139,13 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
         profiler.measure_with_count("spatial_plane_bucketing_and_search", face_count, || {
             let mut plane_buckets: HashMap<
                 [i32; 4],
-                Vec<(usize, glam::Vec3, glam::Vec3, Vec<glam::Vec3>)>,
+                Vec<(usize, glam::Vec3, glam::Vec3, glam::Vec3, Vec<glam::Vec3>)>,
             > = HashMap::new();
             let mut faces_to_cull: BTreeSet<usize> = BTreeSet::new();
 
             for face_idx in 0..face_count {
                 let base = face_idx * poly_step;
                 let mut center = glam::Vec3::ZERO;
-                let mut normal = glam::Vec3::ZERO;
 
                 let num_verts = if is_quad_mesh { 4 } else { 3 };
                 let vert_indices = if is_quad_mesh {
@@ -165,32 +164,33 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
                 };
 
                 let mut face_verts = Vec::with_capacity(num_verts);
+                let mut aabb_min = glam::Vec3::splat(f32::INFINITY);
+                let mut aabb_max = glam::Vec3::splat(f32::NEG_INFINITY);
                 for &vi in &vert_indices {
                     let p_raw = mesh.positions.get(vi).copied().unwrap_or([0.0; 3]);
                     let p = glam::Vec3::new(p_raw[0], p_raw[1], p_raw[2]);
                     face_verts.push(p);
                     center += p;
-
-                    let n_raw = mesh.normals.get(vi).copied().unwrap_or([0.0, 0.0, 1.0]);
-                    normal += glam::Vec3::new(n_raw[0], n_raw[1], n_raw[2]);
+                    aabb_min = aabb_min.min(p);
+                    aabb_max = aabb_max.max(p);
                 }
 
                 let inv_n = 1.0 / (num_verts as f32);
                 center *= inv_n;
-                normal *= inv_n;
-                let norm_len = normal.length();
-                if norm_len > 1e-5 {
-                    normal /= norm_len;
-                } else if face_verts.len() >= 3 {
+
+                // Derive true geometric face normal from vertex winding
+                let normal = if face_verts.len() >= 3 {
                     let e1 = face_verts[1] - face_verts[0];
                     let e2 = face_verts[2] - face_verts[0];
-                    normal = e1.cross(e2).normalize_or_zero();
-                    if normal.length_squared() < 1e-5 {
-                        normal = glam::Vec3::Z;
+                    let gn = e1.cross(e2).normalize_or_zero();
+                    if gn.length_squared() > 1e-5 {
+                        gn
+                    } else {
+                        glam::Vec3::Z
                     }
                 } else {
-                    normal = glam::Vec3::Z;
-                }
+                    glam::Vec3::Z
+                };
 
                 let d = -normal.dot(center);
 
@@ -219,8 +219,21 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
                         plane_key[3] + delta_d,
                     ];
                     if let Some(neighbors) = plane_buckets.get(&search_key) {
-                        for (other_idx, other_norm, _other_center, other_verts) in neighbors {
+                        for (other_idx, other_norm, other_aabb_min, other_aabb_max, other_verts) in
+                            neighbors
+                        {
                             if faces_to_cull.contains(other_idx) {
+                                continue;
+                            }
+
+                            // Fast AABB rejection filter
+                            if aabb_max.x < other_aabb_min.x - tol
+                                || aabb_min.x > other_aabb_max.x + tol
+                                || aabb_max.y < other_aabb_min.y - tol
+                                || aabb_min.y > other_aabb_max.y + tol
+                                || aabb_max.z < other_aabb_min.z - tol
+                                || aabb_min.z > other_aabb_max.z + tol
+                            {
                                 continue;
                             }
 
@@ -237,30 +250,30 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
                                     == crate::geometry::coplanar::FaceAlignment::OppositeDirection;
 
                                 match rel.overlap {
-                            crate::geometry::coplanar::CoplanarOverlap::Exact => {
-                                if config.cull_duplicates && is_same_dir {
-                                    faces_to_cull.insert(face_idx);
-                                    break 'search;
-                                } else if config.cull_coplanar_opposite && is_opp_dir {
-                                    faces_to_cull.insert(face_idx);
-                                    faces_to_cull.insert(*other_idx);
-                                    break 'search;
+                                    crate::geometry::coplanar::CoplanarOverlap::Exact => {
+                                        if config.cull_duplicates && is_same_dir {
+                                            faces_to_cull.insert(face_idx);
+                                            break 'search;
+                                        } else if config.cull_coplanar_opposite && is_opp_dir {
+                                            faces_to_cull.insert(face_idx);
+                                            faces_to_cull.insert(*other_idx);
+                                            break 'search;
+                                        }
+                                    }
+                                    crate::geometry::coplanar::CoplanarOverlap::ContainedInB => {
+                                        // Face A is completely covered by other face B back-to-back
+                                        if config.cull_coplanar_opposite && is_opp_dir {
+                                            faces_to_cull.insert(face_idx);
+                                            break 'search;
+                                        }
+                                    }
+                                    crate::geometry::coplanar::CoplanarOverlap::ContainedInA
+                                        // Other face B is completely covered by Face A back-to-back
+                                        if config.cull_coplanar_opposite && is_opp_dir => {
+                                            faces_to_cull.insert(*other_idx);
+                                        }
+                                    _ => {}
                                 }
-                            }
-                            crate::geometry::coplanar::CoplanarOverlap::ContainedInB => {
-                                // Face A is completely covered by other face B back-to-back
-                                if config.cull_coplanar_opposite && is_opp_dir {
-                                    faces_to_cull.insert(face_idx);
-                                    break 'search;
-                                }
-                            }
-                            crate::geometry::coplanar::CoplanarOverlap::ContainedInA
-                                // Other face B is completely covered by Face A back-to-back
-                                if config.cull_coplanar_opposite && is_opp_dir => {
-                                    faces_to_cull.insert(*other_idx);
-                                }
-                            _ => {}
-                        }
                             }
                         }
                     }
@@ -269,7 +282,7 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
                 plane_buckets
                     .entry(plane_key)
                     .or_default()
-                    .push((face_idx, normal, center, face_verts));
+                    .push((face_idx, normal, aabb_min, aabb_max, face_verts));
             }
 
             faces_to_cull
@@ -342,56 +355,147 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
             let base = face_idx * poly_step;
             let quad_start_v = out.positions.len() as u32;
 
-            for step in 0..poly_step {
-                let orig_idx = mesh.indices[base + step] as usize;
-                let new_v_idx = out.positions.len() as u32;
+            if is_quad_mesh {
+                let vert_indices = [
+                    mesh.indices[base] as usize,
+                    mesh.indices[base + 1] as usize,
+                    mesh.indices[base + 2] as usize,
+                    mesh.indices[base + 5] as usize,
+                ];
 
-                out.positions.push(mesh.positions[orig_idx]);
-                out.normals.push(
-                    mesh.normals
-                        .get(orig_idx)
-                        .copied()
-                        .unwrap_or([0.0, 0.0, 1.0]),
-                );
-                out.uvs
-                    .push(mesh.uvs.get(orig_idx).copied().unwrap_or([0.0, 0.0]));
+                for (step, &orig_idx) in vert_indices.iter().enumerate() {
+                    let new_v_idx = out.positions.len() as u32;
 
-                if let (Some(sec_in), Some(sec_out)) = (&mesh.secondary_uvs, &mut out.secondary_uvs)
-                {
-                    sec_out.push(sec_in.get(orig_idx).copied().unwrap_or([0.0, 0.0]));
-                }
-                if let (Some(col_in), Some(col_out)) = (&mesh.colors, &mut out.colors) {
-                    col_out.push(
-                        col_in
+                    out.positions.push(mesh.positions[orig_idx]);
+                    out.normals.push(
+                        mesh.normals
                             .get(orig_idx)
                             .copied()
-                            .unwrap_or([1.0, 1.0, 1.0, 1.0]),
+                            .unwrap_or([0.0, 0.0, 1.0]),
                     );
-                }
 
-                // Copy Point and Corner domain attributes
-                for (name, in_attr) in &mesh.custom_attributes {
-                    if in_attr.domain == mtk_core::attributes::AttributeDomain::Point {
-                        if let Some(out_attr) = out.custom_attributes.get_mut(name) {
-                            copy_attribute_element(&in_attr.data, &mut out_attr.data, orig_idx);
+                    let uv = match mesh.uv_layout {
+                        mtk_core::UvLayout::PerLoop => {
+                            if mesh.uvs.len() == face_count * 4 {
+                                mesh.uvs.get(face_idx * 4 + step).copied()
+                            } else if mesh.uvs.len() == face_count * 6 {
+                                let tri_step = if step == 3 { 5 } else { step };
+                                mesh.uvs.get(base + tri_step).copied()
+                            } else {
+                                mesh.uvs.get(orig_idx).copied()
+                            }
                         }
-                    } else if in_attr.domain == mtk_core::attributes::AttributeDomain::Corner {
-                        if let Some(out_attr) = out.custom_attributes.get_mut(name) {
-                            copy_attribute_element(&in_attr.data, &mut out_attr.data, base + step);
+                        mtk_core::UvLayout::PerVertex | mtk_core::UvLayout::None => {
+                            mesh.uvs.get(orig_idx).copied()
+                        }
+                    };
+                    out.uvs.push(uv.unwrap_or([0.0, 0.0]));
+
+                    if let (Some(sec_in), Some(sec_out)) =
+                        (&mesh.secondary_uvs, &mut out.secondary_uvs)
+                    {
+                        sec_out.push(sec_in.get(orig_idx).copied().unwrap_or([0.0, 0.0]));
+                    }
+                    if let (Some(col_in), Some(col_out)) = (&mesh.colors, &mut out.colors) {
+                        col_out.push(
+                            col_in
+                                .get(orig_idx)
+                                .copied()
+                                .unwrap_or([1.0, 1.0, 1.0, 1.0]),
+                        );
+                    }
+
+                    // Copy Point and Corner domain attributes
+                    for (name, in_attr) in &mesh.custom_attributes {
+                        if in_attr.domain == mtk_core::attributes::AttributeDomain::Point {
+                            if let Some(out_attr) = out.custom_attributes.get_mut(name) {
+                                copy_attribute_element(&in_attr.data, &mut out_attr.data, orig_idx);
+                            }
+                        } else if in_attr.domain == mtk_core::attributes::AttributeDomain::Corner {
+                            if let Some(out_attr) = out.custom_attributes.get_mut(name) {
+                                let c_idx = if in_attr.data.len() == face_count * 4 {
+                                    face_idx * 4 + step
+                                } else {
+                                    base + if step == 3 { 5 } else { step }
+                                };
+                                copy_attribute_element(&in_attr.data, &mut out_attr.data, c_idx);
+                            }
                         }
                     }
+
+                    let _ = new_v_idx;
                 }
 
-                out.indices.push(new_v_idx);
-            }
-
-            // Quad indices maintenance: 4 corner vertex indices
-            if is_quad_mesh {
+                // Quad indices maintenance: 4 corner vertex indices
                 if let Some(ref mut q_indices) = out_quad_indices {
                     q_indices.push(quad_start_v);
                     q_indices.push(quad_start_v + 1);
                     q_indices.push(quad_start_v + 2);
-                    q_indices.push(quad_start_v + 5);
+                    q_indices.push(quad_start_v + 3);
+                }
+
+                // Triangle indices for quads: 2 triangles (0, 1, 2) and (0, 2, 3)
+                out.indices.extend_from_slice(&[
+                    quad_start_v,
+                    quad_start_v + 1,
+                    quad_start_v + 2,
+                    quad_start_v,
+                    quad_start_v + 2,
+                    quad_start_v + 3,
+                ]);
+            } else {
+                // Triangle mesh (poly_step == 3)
+                for step in 0..3 {
+                    let orig_idx = mesh.indices[base + step] as usize;
+                    let new_v_idx = out.positions.len() as u32;
+
+                    out.positions.push(mesh.positions[orig_idx]);
+                    out.normals.push(
+                        mesh.normals
+                            .get(orig_idx)
+                            .copied()
+                            .unwrap_or([0.0, 0.0, 1.0]),
+                    );
+
+                    let uv = match mesh.uv_layout {
+                        mtk_core::UvLayout::PerLoop => mesh.uvs.get(base + step).copied(),
+                        mtk_core::UvLayout::PerVertex | mtk_core::UvLayout::None => {
+                            mesh.uvs.get(orig_idx).copied()
+                        }
+                    };
+                    out.uvs.push(uv.unwrap_or([0.0, 0.0]));
+
+                    if let (Some(sec_in), Some(sec_out)) =
+                        (&mesh.secondary_uvs, &mut out.secondary_uvs)
+                    {
+                        sec_out.push(sec_in.get(orig_idx).copied().unwrap_or([0.0, 0.0]));
+                    }
+                    if let (Some(col_in), Some(col_out)) = (&mesh.colors, &mut out.colors) {
+                        col_out.push(
+                            col_in
+                                .get(orig_idx)
+                                .copied()
+                                .unwrap_or([1.0, 1.0, 1.0, 1.0]),
+                        );
+                    }
+
+                    for (name, in_attr) in &mesh.custom_attributes {
+                        if in_attr.domain == mtk_core::attributes::AttributeDomain::Point {
+                            if let Some(out_attr) = out.custom_attributes.get_mut(name) {
+                                copy_attribute_element(&in_attr.data, &mut out_attr.data, orig_idx);
+                            }
+                        } else if in_attr.domain == mtk_core::attributes::AttributeDomain::Corner {
+                            if let Some(out_attr) = out.custom_attributes.get_mut(name) {
+                                copy_attribute_element(
+                                    &in_attr.data,
+                                    &mut out_attr.data,
+                                    base + step,
+                                );
+                            }
+                        }
+                    }
+
+                    out.indices.push(new_v_idx);
                 }
             }
 
@@ -412,6 +516,7 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
             }
         }
 
+        out.uv_layout = mesh.uv_layout;
         out.quad_indices = out_quad_indices;
         (out, remaining_faces)
     });
@@ -570,5 +675,59 @@ mod tests {
         } else {
             panic!("Expected String attribute data");
         }
+    }
+
+    #[test]
+    fn test_cull_with_shared_vertices_and_per_loop_uvs() {
+        let mut mesh = MeshData::new();
+        // 6 shared vertices
+        // v0, v1, v2, v3 form a quad at z = 0.
+        // v4, v5 form a connected quad at z = 1.
+        mesh.positions = vec![
+            [-0.5, -0.5, 0.0], // 0
+            [0.5, -0.5, 0.0],  // 1
+            [0.5, 0.5, 0.0],   // 2
+            [-0.5, 0.5, 0.0],  // 3
+            [0.5, 1.5, 0.0],   // 4
+            [-0.5, 1.5, 0.0],  // 5
+        ];
+        mesh.normals = vec![[0.0, 0.0, 1.0]; 6];
+        mesh.uv_layout = mtk_core::UvLayout::PerLoop;
+
+        // Quad 1 (z=0, facing +Z): vertices [0, 1, 2, 3]
+        // Quad 2 (z=0, touching back-to-back facing -Z): vertices [0, 3, 2, 1]
+        // Quad 3 (z=0..1, facing +Z): vertices [3, 2, 4, 5]
+        mesh.indices = vec![
+            0, 1, 2, 0, 2, 3, // Quad 1
+            0, 3, 2, 0, 2, 1, // Quad 2
+            3, 2, 4, 3, 4, 5, // Quad 3
+        ];
+        mesh.face_materials = vec![1, 2, 3];
+        mesh.face_tint_indices = vec![-1, -1, -1];
+
+        // Per-loop UVs: 4 UVs per quad (12 UVs total)
+        let q1_uvs = [[0.1, 0.1], [0.2, 0.1], [0.2, 0.2], [0.1, 0.2]];
+        let q2_uvs = [[0.3, 0.3], [0.4, 0.3], [0.4, 0.4], [0.3, 0.4]];
+        let q3_uvs = [[0.8, 0.8], [0.9, 0.8], [0.9, 0.9], [0.8, 0.9]];
+        mesh.uvs = [q1_uvs, q2_uvs, q3_uvs].concat();
+        mesh.quad_indices = Some(vec![0, 1, 2, 3, 0, 3, 2, 1, 3, 2, 4, 5]);
+
+        let res = cull_mesh_faces(&mesh, &MeshCullConfig::default());
+        assert_eq!(res.initial_faces, 3);
+        assert_eq!(res.culled_faces, 2, "Quad 1 and 2 touch and must be culled");
+        assert_eq!(res.remaining_faces, 1, "Quad 3 must survive");
+        assert_eq!(res.mesh.face_materials, vec![3]);
+
+        // Quad 3 must have exactly 4 vertices, 4 UVs, 6 triangle indices, and 4 quad indices!
+        assert_eq!(res.mesh.positions.len(), 4);
+        assert_eq!(res.mesh.uvs.len(), 4);
+        assert_eq!(res.mesh.uv_layout, mtk_core::UvLayout::PerLoop);
+        assert_eq!(
+            res.mesh.uvs,
+            q3_uvs.to_vec(),
+            "UVs of Quad 3 must be preserved exactly!"
+        );
+        assert_eq!(res.mesh.indices, vec![0, 1, 2, 0, 2, 3]);
+        assert_eq!(res.mesh.quad_indices, Some(vec![0, 1, 2, 3]));
     }
 }

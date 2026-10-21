@@ -87,7 +87,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // 3. Culling
     m.add_class::<PyFaceCuller>()?;
-    m.add_function(wrap_pyfunction!(cull::cull_mesh_faces, m)?)?;
 
     // 4. Voxel Storage & Config & World & Point Cloud
     m.add_class::<PyVoxelStorage>()?;
