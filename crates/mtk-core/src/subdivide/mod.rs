@@ -215,4 +215,103 @@ mod tests {
             "Must have 1x1 pixel interior quads"
         );
     }
+
+    #[test]
+    fn test_adaptive_pixel_split_shared_vertices_per_loop_uvs() {
+        // 2 adjacent quad faces sharing vertices 1 and 2 (6 vertices total)
+        // Face 0: vertices 0, 1, 2, 3 with UV [0, 0] to [0.5, 1.0]
+        // Face 1: vertices 1, 4, 5, 2 with UV [0.5, 0] to [1.0, 1.0]
+        let mut mesh = MeshData::new();
+        mesh.positions = vec![
+            [-1.0, -1.0, 0.0], // 0
+            [0.0, -1.0, 0.0],  // 1
+            [0.0, 0.0, 0.0],   // 2
+            [-1.0, 0.0, 0.0],  // 3
+            [1.0, -1.0, 0.0],  // 4
+            [1.0, 0.0, 0.0],   // 5
+        ];
+        mesh.normals = vec![[0.0, 0.0, 1.0]; 6];
+        mesh.uv_layout = crate::mesh::UvLayout::PerLoop;
+        // 8 loop UVs (4 for face 0, 4 for face 1)
+        mesh.uvs = vec![
+            [0.0, 0.0],
+            [0.5, 0.0],
+            [0.5, 1.0],
+            [0.0, 1.0],
+            [0.5, 0.0],
+            [1.0, 0.0],
+            [1.0, 1.0],
+            [0.5, 1.0],
+        ];
+        mesh.indices = vec![0, 1, 2, 0, 2, 3, 1, 4, 5, 1, 5, 2];
+        mesh.quad_indices = Some(vec![0, 1, 2, 3, 1, 4, 5, 2]);
+        mesh.face_materials = vec![0, 0];
+        mesh.face_tint_indices = vec![-1, -1];
+
+        let res =
+            adaptive_pixel_split_mesh(&mesh, &[Some((4, 2)), Some((4, 2))], (4, 2), 1.0, 64, 0.0);
+
+        // 2 faces * (2x2 sub-quads) = 8 quads
+        assert_eq!(
+            res.indices.len(),
+            8 * 6,
+            "Must produce 8 quads = 48 indices"
+        );
+        assert_eq!(
+            res.uvs.len(),
+            8 * 4,
+            "Must produce exactly 32 loop UVs (4 per quad)"
+        );
+        assert_eq!(res.uv_layout, crate::mesh::UvLayout::PerLoop);
+
+        // Face 0 sub-quads (first 4 quads = 16 UVs) must have U in [0.0, 0.5]
+        for uv in &res.uvs[..16] {
+            assert!(
+                uv[0] >= -1e-4 && uv[0] <= 0.5 + 1e-4,
+                "Face 0 UV must stay within [0.0, 0.5], got {:?}",
+                uv
+            );
+        }
+
+        // Face 1 sub-quads (last 4 quads = 16 UVs) must have U in [0.5, 1.0]
+        for uv in &res.uvs[16..] {
+            assert!(
+                uv[0] >= 0.5 - 1e-4 && uv[0] <= 1.0 + 1e-4,
+                "Face 1 UV must stay within [0.5, 1.0], got {:?}",
+                uv
+            );
+        }
+    }
+
+    #[test]
+    fn test_adaptive_pixel_split_rotated_45_in_mesh() {
+        let mut mesh = MeshData::new();
+        mesh.positions = vec![
+            [-1.0, -1.0, 0.0],
+            [1.0, -1.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [-1.0, 1.0, 0.0],
+        ];
+        mesh.normals = vec![[0.0, 0.0, 1.0]; 4];
+        // 45-degree diamond UV
+        mesh.uvs = vec![[0.5, 0.0], [1.0, 0.5], [0.5, 1.0], [0.0, 0.5]];
+        mesh.uv_layout = crate::mesh::UvLayout::PerLoop;
+        mesh.indices = vec![0, 1, 2, 0, 2, 3];
+        mesh.quad_indices = Some(vec![0, 1, 2, 3]);
+        mesh.face_materials = vec![0];
+        mesh.face_tint_indices = vec![-1];
+
+        let res = adaptive_pixel_split_mesh(&mesh, &[Some((16, 16))], (16, 16), 1.0, 64, 0.0);
+        // Slicing rotated 45 deg diamond produces interior 1x1 quads and boundary triangles
+        assert!(
+            res.indices.len() > 30,
+            "Must subdivide 45-degree rotated UV"
+        );
+        assert_eq!(
+            res.uvs.len(),
+            res.loop_count(),
+            "UV count must equal loop count"
+        );
+        assert_eq!(res.uv_layout, crate::mesh::UvLayout::PerLoop);
+    }
 }

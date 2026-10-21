@@ -78,6 +78,12 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMeshData>()?;
     m.add_class::<buffer::PyBufferOwner>()?;
     m.add_function(wrap_pyfunction!(subdivide::adaptive_pixel_split_mesh, m)?)?;
+    m.add_function(wrap_pyfunction!(subdivide::calculate_face_target_grid, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        subdivide::calculate_pixel_grid_cut_factors,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(subdivide::slice_face_by_pixel_grid, m)?)?;
     m.add_function(wrap_pyfunction!(mesh::analyze_mesh_hard_edges, m)?)?;
 
     // 3. Culling

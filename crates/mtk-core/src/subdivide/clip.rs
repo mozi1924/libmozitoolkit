@@ -189,8 +189,14 @@ pub fn slice_face_by_pixel_grid(
     }
 
     let mut y_lines = Vec::new();
+    let effective_max_y =
+        if tex_h > tex_w && tex_h.is_multiple_of(tex_w) && (max_y - min_y) > (tex_w as f32 * 1.5) {
+            min_y + tex_w as f32
+        } else {
+            max_y
+        };
     let mut k_y = ((min_y / step) + 1e-4).ceil() * step;
-    while k_y < max_y - 1e-4 {
+    while k_y < effective_max_y - 1e-4 {
         y_lines.push(k_y);
         k_y += step;
         if y_lines.len() >= max_subdivisions as usize {
@@ -275,19 +281,35 @@ pub fn slice_face_by_pixel_grid(
             continue;
         }
         let poly_indices: Vec<u32> = poly.iter().map(|&pt| get_or_insert_vert(pt)).collect();
-        if matches!(poly_indices.len(), 3 | 4) {
-            out_faces.push(poly_indices);
-        } else if poly_indices.len() == 5 {
+        let mut clean_indices = Vec::with_capacity(poly_indices.len());
+        for &idx in &poly_indices {
+            if clean_indices.last() != Some(&idx) {
+                clean_indices.push(idx);
+            }
+        }
+        if clean_indices.len() > 1 && clean_indices.first() == clean_indices.last() {
+            clean_indices.pop();
+        }
+        if clean_indices.len() < 3 {
+            continue;
+        }
+        if matches!(clean_indices.len(), 3 | 4) {
+            out_faces.push(clean_indices);
+        } else if clean_indices.len() == 5 {
             out_faces.push(vec![
-                poly_indices[0],
-                poly_indices[1],
-                poly_indices[2],
-                poly_indices[3],
+                clean_indices[0],
+                clean_indices[1],
+                clean_indices[2],
+                clean_indices[3],
             ]);
-            out_faces.push(vec![poly_indices[0], poly_indices[3], poly_indices[4]]);
+            out_faces.push(vec![clean_indices[0], clean_indices[3], clean_indices[4]]);
         } else {
-            for i in 1..(poly_indices.len() - 1) {
-                out_faces.push(vec![poly_indices[0], poly_indices[i], poly_indices[i + 1]]);
+            for i in 1..(clean_indices.len() - 1) {
+                out_faces.push(vec![
+                    clean_indices[0],
+                    clean_indices[i],
+                    clean_indices[i + 1],
+                ]);
             }
         }
     }
@@ -339,7 +361,7 @@ pub fn slice_face_by_pixel_grid(
                 let sp1 = glam::Vec3::from(out_positions[face[1] as usize]);
                 let sp2 = glam::Vec3::from(out_positions[face[2] as usize]);
                 let sub_normal = (sp1 - sp0).cross(sp2 - sp0);
-                if sub_normal.dot(orig_normal) < 0.0 {
+                if orig_normal.length_squared() > 1e-8 && sub_normal.dot(orig_normal) < 0.0 {
                     face.reverse();
                 }
             }

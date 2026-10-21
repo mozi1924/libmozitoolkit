@@ -167,9 +167,16 @@ pub fn calculate_pixel_grid_cut_factors(
         u_cuts_top
     };
 
+    // Anti-explosion defense for long vertical animated strips
+    let max_sub_v = if tex_h > tex_w && tex_h.is_multiple_of(tex_w) {
+        max_sub.min(tex_w as usize)
+    } else {
+        max_sub
+    };
+
     // Compute cuts along V (left edge p0->p3 and right edge p1->p2)
-    let v_cuts_left = get_edge_cuts(p0, p3, step, max_sub);
-    let v_cuts_right = get_edge_cuts(p1, p2, step, max_sub);
+    let v_cuts_left = get_edge_cuts(p0, p3, step, max_sub_v);
+    let v_cuts_right = get_edge_cuts(p1, p2, step, max_sub_v);
     let v_cuts = if v_cuts_left.len() >= v_cuts_right.len() {
         v_cuts_left
     } else {
