@@ -289,20 +289,46 @@ impl VoxelWorld {
     /// Re-assembles and welds the unified world mesh from the current section cache without cloning.
     /// In incremental mode (`full_weld = false`), uses fast zero-copy buffer merge since individual
     /// sections are already internally welded by SectionMesher. Full spatial welding is applied on
-    /// global rebuilds (`rebuild_all`).
-    fn assemble_world_mesh(&mut self, full_weld: bool) {
-        let meshes: Vec<&MeshData> = self.section_mesh_cache.values().collect();
-        let merged = if self.config.weld_vertices && full_weld {
-            MeshData::merge_welded_sections(&meshes, 1e-4)
-        } else {
-            MeshData::merge_all_refs(&meshes)
+    /// global rebuilds (`rebuild_all`). Stage timings are recorded when a profiler is supplied.
+    fn assemble_world_mesh(
+        &mut self,
+        full_weld: bool,
+        mut profiler: Option<&mut mtk_core::ExecutionProfiler>,
+    ) {
+        let meshes: Vec<&MeshData> = match profiler.as_deref_mut() {
+            Some(p) => p.measure_with_count(
+                "collect_section_mesh_refs",
+                self.section_mesh_cache.len(),
+                || self.section_mesh_cache.values().collect(),
+            ),
+            None => self.section_mesh_cache.values().collect(),
         };
-        self.used_chunk_ids = merged
-            .used_materials()
-            .into_iter()
-            .map(|id| id as u32)
-            .collect();
-        self.world_mesh = Some(merged);
+
+        let weld = self.config.weld_vertices && full_weld;
+        let merge = || {
+            if weld {
+                MeshData::merge_welded_sections(&meshes, 1e-4)
+            } else {
+                MeshData::merge_all_refs(&meshes)
+            }
+        };
+        let merged = match profiler.as_deref_mut() {
+            Some(p) => p.measure("merge_welded_seams", merge),
+            None => merge(),
+        };
+
+        let compact = |this: &mut Self, merged: MeshData| {
+            this.used_chunk_ids = merged
+                .used_materials()
+                .into_iter()
+                .map(|id| id as u32)
+                .collect();
+            this.world_mesh = Some(merged);
+        };
+        match profiler {
+            Some(p) => p.measure("compact_material_slots", || compact(self, merged)),
+            None => compact(self, merged),
+        }
     }
 
     /// Resolves the model source (variant group or single model) for a blockstate.
@@ -411,29 +437,7 @@ impl VoxelWorld {
             ));
         }
 
-        let meshes: Vec<&MeshData> = profiler.measure_with_count(
-            "collect_section_mesh_refs",
-            self.section_mesh_cache.len(),
-            || self.section_mesh_cache.values().collect(),
-        );
-
-        let merged = profiler.measure("merge_welded_seams", || {
-            if self.config.weld_vertices {
-                MeshData::merge_welded_sections(&meshes, 1e-4)
-            } else {
-                MeshData::merge_all_refs(&meshes)
-            }
-        });
-
-        profiler.measure("compact_material_slots", || {
-            self.used_chunk_ids = merged
-                .used_materials()
-                .into_iter()
-                .map(|id| id as u32)
-                .collect();
-            self.world_mesh = Some(merged);
-        });
-
+        self.assemble_world_mesh(true, Some(&mut profiler));
         self.storage.clear_dirty_sections();
 
         self.last_profile = Some(profiler.finish());
@@ -476,9 +480,7 @@ impl VoxelWorld {
             }
         });
 
-        profiler.measure("assemble_world_mesh", || {
-            self.assemble_world_mesh(false);
-        });
+        self.assemble_world_mesh(false, Some(&mut profiler));
 
         self.last_profile = Some(profiler.finish());
 
