@@ -829,6 +829,9 @@ fn test_cache_driven_animated_texture_routing_block_models() {
         has_normal: false,
         has_specular: false,
         has_overlay: false,
+        has_orm: false,
+        has_aux: false,
+        pbr: None,
     });
     address_map.chunks.push(AtlasChunkMeta {
         chunk_id: 1,
@@ -840,6 +843,9 @@ fn test_cache_driven_animated_texture_routing_block_models() {
         has_normal: false,
         has_specular: false,
         has_overlay: false,
+        has_orm: false,
+        has_aux: false,
+        pbr: None,
     });
 
     let anim_textures = [

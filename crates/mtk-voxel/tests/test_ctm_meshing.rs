@@ -44,6 +44,9 @@ tiles=0-3
         has_normal: false,
         has_specular: false,
         has_overlay: false,
+        has_orm: false,
+        has_aux: false,
+        pbr: None,
     });
 
     for i in 0..4 {

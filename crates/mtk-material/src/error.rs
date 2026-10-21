@@ -13,4 +13,14 @@ pub enum MaterialError {
 
     #[error("Buffer length mismatch: expected {expected}, got {actual}")]
     BufferLengthMismatch { expected: usize, actual: usize },
+
+    #[error(
+        "PBR buffer size mismatch: expected {expected_width}x{expected_height}, got {actual_width}x{actual_height}"
+    )]
+    PbrSizeMismatch {
+        expected_width: u32,
+        expected_height: u32,
+        actual_width: u32,
+        actual_height: u32,
+    },
 }

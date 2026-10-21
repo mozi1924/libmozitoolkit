@@ -220,7 +220,7 @@ fn run_bake_all(args: AtlasBakeAllArgs) -> Result<(), Box<dyn std::error::Error>
         let cat_name = category.as_str();
         let t_cat = Instant::now();
 
-        let baked = match builder.build_category(&stack, category) {
+        let mut baked = match builder.build_category(&stack, category) {
             Ok(b) => b,
             Err(e) => {
                 println!(" [SKIP] Category '{}': {:?}", cat_name, e);
@@ -235,6 +235,9 @@ fn run_bake_all(args: AtlasBakeAllArgs) -> Result<(), Box<dyn std::error::Error>
             );
             continue;
         }
+
+        // Decode raw LabPBR companions into canonical MtkPackedV1 channels.
+        mtk_material::pbr::decode_baked_atlas(&mut baked)?;
 
         let cat_elapsed = t_cat.elapsed();
         let sprite_count = baked.address_map.sprites.len();
@@ -279,16 +282,22 @@ fn run_bake_all(args: AtlasBakeAllArgs) -> Result<(), Box<dyn std::error::Error>
             let albedo_png = chunk.albedo.to_png_bytes()?;
             fs::write(&albedo_path, albedo_png)?;
 
-            if let Some(ref norm_buf) = chunk.normal {
+            if let Some(ref norm_buf) = chunk.normal_gl {
                 let norm_path = args.output.join(format!("{}_normal.png", file_stem));
                 let norm_png = norm_buf.to_png_bytes()?;
                 fs::write(&norm_path, norm_png)?;
             }
 
-            if let Some(ref spec_buf) = chunk.specular {
-                let spec_path = args.output.join(format!("{}_specular.png", file_stem));
-                let spec_png = spec_buf.to_png_bytes()?;
-                fs::write(&spec_path, spec_png)?;
+            if let Some(ref orm_buf) = chunk.orm {
+                let orm_path = args.output.join(format!("{}_orm.png", file_stem));
+                let orm_png = orm_buf.to_png_bytes()?;
+                fs::write(&orm_path, orm_png)?;
+            }
+
+            if let Some(ref aux_buf) = chunk.aux {
+                let aux_path = args.output.join(format!("{}_aux.png", file_stem));
+                let aux_png = aux_buf.to_png_bytes()?;
+                fs::write(&aux_path, aux_png)?;
             }
         }
 

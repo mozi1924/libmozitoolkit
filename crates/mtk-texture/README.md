@@ -122,6 +122,9 @@ pub struct AtlasBuilderConfig {
     pub padding: u32,
 }
 
+// v4: PBR 伴生图在预编译期解码为 MtkPackedV1。
+// normal_gl = OpenGL 法线 RGB + 高度 A；orm = AO/roughness/metallic/emission；
+// aux = encoded IOR/porosity/SSS/transmission。normal/specular 仅保留为 legacy 内存字段。
 pub struct BakedAtlasChunk {
     pub chunk_id: u16,
     pub category: String,
@@ -133,6 +136,9 @@ pub struct BakedAtlasChunk {
     pub normal: Option<RgbaBuffer>,
     pub specular: Option<RgbaBuffer>,
     pub overlay: Option<RgbaBuffer>,
+    pub normal_gl: Option<RgbaBuffer>,
+    pub orm: Option<RgbaBuffer>,
+    pub aux: Option<RgbaBuffer>,
 }
 
 pub struct BakedAtlas {
@@ -193,12 +199,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Generated {} atlas chunks", baked.chunks.len());
     for chunk in &baked.chunks {
         println!(
-            "Chunk {}: {}x{} (Has Normal: {}, Has Specular: {})",
+            "Chunk {}: {}x{} (Normal: {}, ORM: {}, Aux: {})",
             chunk.file_stem(),
             chunk.width,
             chunk.height,
-            chunk.normal.is_some(),
-            chunk.specular.is_some(),
+            chunk.normal_gl.is_some(),
+            chunk.orm.is_some(),
+            chunk.aux.is_some(),
         );
     }
 

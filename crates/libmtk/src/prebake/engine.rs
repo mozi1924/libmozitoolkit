@@ -203,7 +203,11 @@ fn precompile_all_assets_inner(
                 padding: 0,
             };
             let atlas_builder = AtlasBuilder::new(atlas_cfg);
-            let baked_atlas = atlas_builder.build_categories(stack, &def_list)?;
+            let mut baked_atlas = atlas_builder.build_categories(stack, &def_list)?;
+
+            // Decode raw LabPBR companions into canonical MtkPackedV1 channels before the
+            // address map is serialized, so has_orm/has_aux/pbr metadata is authoritative.
+            mtk_material::pbr::decode_baked_atlas(&mut baked_atlas)?;
             let total_chunks = baked_atlas.chunks.len();
 
             let mapping_json = baked_atlas.address_map.to_json()?;
@@ -229,7 +233,7 @@ fn precompile_all_assets_inner(
                     &ChunkWriteOptions::raw(),
                 )?;
 
-                if let Some(ref normal) = chunk.normal {
+                if let Some(ref normal) = chunk.normal_gl {
                     let normal_bytes = normal.to_png_bytes()?;
                     writer.add_chunk(
                         *b"ATLS",
@@ -239,12 +243,22 @@ fn precompile_all_assets_inner(
                     )?;
                 }
 
-                if let Some(ref specular) = chunk.specular {
-                    let spec_bytes = specular.to_png_bytes()?;
+                if let Some(ref orm) = chunk.orm {
+                    let orm_bytes = orm.to_png_bytes()?;
                     writer.add_chunk(
                         *b"ATLS",
-                        format!("atlas/textures/{}_s.png", stem),
-                        &spec_bytes,
+                        format!("atlas/textures/{}_orm.png", stem),
+                        &orm_bytes,
+                        &ChunkWriteOptions::raw(),
+                    )?;
+                }
+
+                if let Some(ref aux) = chunk.aux {
+                    let aux_bytes = aux.to_png_bytes()?;
+                    writer.add_chunk(
+                        *b"ATLS",
+                        format!("atlas/textures/{}_aux.png", stem),
+                        &aux_bytes,
                         &ChunkWriteOptions::raw(),
                     )?;
                 }

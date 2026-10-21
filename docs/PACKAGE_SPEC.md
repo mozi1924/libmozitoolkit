@@ -123,11 +123,11 @@ pub struct ChunkEntry {
 * **存储原则**：
   * 存储 Standalone PBR 独立纹理条目与原始 PNG 字节流。
   * 相同纹理严格去重。
-  * 可选携带伴生 PBR 贴图（`_n.png` 法线、`_s.png` 高光光泽度）。
+  * 可选携带伴生 PBR 贴图（`_n.png` OpenGL 法线 + 高度、`_orm.png` AO/粗糙度/金属度/发光、`_aux.png` IOR/SSS/孔隙度/透射）。
   * `SceneInterchange` 中按需仅打包场景方块实际引用的纹理，避免将整个原版/材质包塞入。
 
 ### 5.5 `ATLS` - 图集与映射块 (`AssetCache` 专属)
-* 存储全量预烘焙出的图集切片（`atlas_0.png`, `atlas_0_n.png`, `atlas_0_s.png`）。
+* 存储全量预烘焙出的图集切片（`atlas_0.png`, `atlas_0_n.png`, `atlas_0_orm.png`, `atlas_0_aux.png`）；LabPBR 在写入前已解码为标准通道。
 * 存储 `AtlasAddressMap` 映射表，使宿主无需重新执行装箱计算，直接根据 UV 坐标寻址。
 
 ### 5.6 `BIOM` - 生物群系调色板映射块

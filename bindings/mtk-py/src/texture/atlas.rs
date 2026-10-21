@@ -35,7 +35,7 @@ impl PyBakedAtlas {
     }
 
     /// Returns chunk metadata dictionary by chunk ID:
-    /// `{chunk_id, category, is_animated, width, height, has_normal, has_specular, has_overlay, file_stem, category_chunk_index}`.
+    /// `{chunk_id, category, is_animated, width, height, has_normal, has_specular, has_orm, has_aux, has_overlay, file_stem, category_chunk_index, pbr}`.
     pub fn get_chunk_info<'py>(
         &self,
         py: Python<'py>,
@@ -51,8 +51,18 @@ impl PyBakedAtlas {
             dict.set_item("height", cm.height)?;
             dict.set_item("has_normal", cm.has_normal)?;
             dict.set_item("has_specular", cm.has_specular)?;
+            dict.set_item("has_orm", cm.has_orm)?;
+            dict.set_item("has_aux", cm.has_aux)?;
             dict.set_item("has_overlay", cm.has_overlay)?;
             dict.set_item("file_stem", cm.file_stem())?;
+            dict.set_item(
+                "pbr",
+                cm.pbr
+                    .as_ref()
+                    .map(serde_json::to_string)
+                    .transpose()
+                    .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?,
+            )?;
             Ok(Some(dict))
         } else {
             Ok(None)
@@ -75,8 +85,18 @@ impl PyBakedAtlas {
             dict.set_item("height", cm.height)?;
             dict.set_item("has_normal", cm.has_normal)?;
             dict.set_item("has_specular", cm.has_specular)?;
+            dict.set_item("has_orm", cm.has_orm)?;
+            dict.set_item("has_aux", cm.has_aux)?;
             dict.set_item("has_overlay", cm.has_overlay)?;
             dict.set_item("file_stem", cm.file_stem())?;
+            dict.set_item(
+                "pbr",
+                cm.pbr
+                    .as_ref()
+                    .map(serde_json::to_string)
+                    .transpose()
+                    .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?,
+            )?;
             list.append(dict)?;
         }
         Ok(list)
@@ -126,7 +146,8 @@ impl PyBakedAtlas {
         }
     }
 
-    /// Read-only memoryview of Normal companion normalized float32 pixels (if present).
+    /// Read-only memoryview of decoded Normal + height normalized float32 pixels (if present).
+    /// RGB = OpenGL tangent normal, A = height.
     #[pyo3(signature = (index, flip_v=true))]
     pub fn get_chunk_normal_f32<'py>(
         &self,
@@ -135,7 +156,7 @@ impl PyBakedAtlas {
         flip_v: bool,
     ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
         if let Some(chunk) = self.inner.chunks.get(index) {
-            if let Some(ref n) = chunk.normal {
+            if let Some(ref n) = chunk.normal_gl {
                 let f32_buf = n.to_f32_buffer(flip_v);
                 Ok(Some(crate::buffer::create_owned_f32_memoryview(
                     py, f32_buf,
@@ -150,7 +171,58 @@ impl PyBakedAtlas {
         }
     }
 
-    /// Read-only memoryview of Specular companion normalized float32 pixels (if present).
+    /// Read-only memoryview of decoded ORM + emission normalized float32 pixels (if present).
+    /// R = AO, G = roughness, B = metallic, A = emission mask.
+    #[pyo3(signature = (index, flip_v=true))]
+    pub fn get_chunk_orm_f32<'py>(
+        &self,
+        py: Python<'py>,
+        index: usize,
+        flip_v: bool,
+    ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
+        if let Some(chunk) = self.inner.chunks.get(index) {
+            if let Some(ref orm) = chunk.orm {
+                let f32_buf = orm.to_f32_buffer(flip_v);
+                Ok(Some(crate::buffer::create_owned_f32_memoryview(
+                    py, f32_buf,
+                )?))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Err(pyo3::exceptions::PyIndexError::new_err(
+                "Chunk index out of bounds",
+            ))
+        }
+    }
+
+    /// Read-only memoryview of decoded aux normalized float32 pixels (if present).
+    /// R = encoded IOR, G = porosity, B = SSS weight, A = transmission mask.
+    #[pyo3(signature = (index, flip_v=true))]
+    pub fn get_chunk_aux_f32<'py>(
+        &self,
+        py: Python<'py>,
+        index: usize,
+        flip_v: bool,
+    ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
+        if let Some(chunk) = self.inner.chunks.get(index) {
+            if let Some(ref aux) = chunk.aux {
+                let f32_buf = aux.to_f32_buffer(flip_v);
+                Ok(Some(crate::buffer::create_owned_f32_memoryview(
+                    py, f32_buf,
+                )?))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Err(pyo3::exceptions::PyIndexError::new_err(
+                "Chunk index out of bounds",
+            ))
+        }
+    }
+
+    /// Legacy raw LabPBR specular companion. Decoded caches drop this buffer, so it is
+    /// normally `None`; use [`Self::get_chunk_orm_f32`] / [`Self::get_chunk_aux_f32`].
     #[pyo3(signature = (index, flip_v=true))]
     pub fn get_chunk_specular_f32<'py>(
         &self,
@@ -259,8 +331,11 @@ impl PyAtlasBuilder {
         };
 
         let builder = AtlasBuilder::new(self.config.clone());
-        let baked = py
+        let mut baked = py
             .allow_threads(|| builder.build_category(&stack.inner, &cat))
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        mtk_material::pbr::decode_baked_atlas(&mut baked)
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
         Ok(PyBakedAtlas { inner: baked })

@@ -336,6 +336,9 @@ fn animated_water_atlas() -> AtlasAddressMap {
         has_normal: false,
         has_specular: false,
         has_overlay: false,
+        has_orm: false,
+        has_aux: false,
+        pbr: None,
     });
     address_map.chunks.push(mtk_texture::AtlasChunkMeta {
         chunk_id: 1,
@@ -347,6 +350,9 @@ fn animated_water_atlas() -> AtlasAddressMap {
         has_normal: false,
         has_specular: false,
         has_overlay: false,
+        has_orm: false,
+        has_aux: false,
+        pbr: None,
     });
 
     address_map.sprites.insert(

@@ -2,6 +2,8 @@ use mtk_resource::{AnimationMetadata, ResourceLocation};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::atlas::pbr::PbrMeta;
+
 /// Classification of sprite placement and usage mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -109,6 +111,15 @@ pub struct AtlasChunkMeta {
     pub has_specular: bool,
     #[serde(default)]
     pub has_overlay: bool,
+    /// Whether the packed `_orm` sheet was written for this chunk.
+    #[serde(default)]
+    pub has_orm: bool,
+    /// Whether the packed `_aux` sheet was written for this chunk.
+    #[serde(default)]
+    pub has_aux: bool,
+    /// Canonical PBR layout metadata; `None` means a pre-v4 legacy cache.
+    #[serde(default)]
+    pub pbr: Option<PbrMeta>,
 }
 
 fn default_chunk_index() -> usize {

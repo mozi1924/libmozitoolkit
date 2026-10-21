@@ -136,16 +136,17 @@ pub enum MtkError {
 ---
 
 ### 2.6 资产预编译缓存格式规范 (`ASSET_CACHE_FORMAT_VERSION`)
-由 `libmtk::prebake` 产出的资产预编译缓存目录结构受全局版本号严格约束（当前版本：`ASSET_CACHE_FORMAT_VERSION = 3`）：
+由 `libmtk::prebake` 产出的资产预编译缓存目录结构受全局版本号严格约束（当前版本：`ASSET_CACHE_FORMAT_VERSION = 4`）：
 ```
 cache_output_dir/
 ├── cache_manifest.json     # 全局清单、时间戳、CRC 校验与版本号
 ├── atlas_mapping.json      # 全量材质名 -> 图集坐标/UV 映射表
 ├── biome_mapping.json      # 全量方块模型染色规则与 Tint 元数据
 ├── atlases/                # 烘焙完成的 PNG 图集文件
-│   ├── blocks_0.png        # 基础 Albedo 图集
-│   ├── blocks_0_n.png      # Normal 法线图集
-│   └── blocks_0_s.png      # Specular 镜面高光图集
+│   ├── blocks_0.png        # 基础 Albedo 图集（sRGB）
+│   ├── blocks_0_n.png      # OpenGL 法线 RGB + 高度 A（Non-Color）
+│   ├── blocks_0_orm.png    # AO / Roughness / Metallic / Emission（Non-Color）
+│   └── blocks_0_aux.png    # Encoded IOR / Porosity / SSS / Transmission（Non-Color）
 └── models/                 # 烘焙完成的预解析二进制方块几何库
 ```
 

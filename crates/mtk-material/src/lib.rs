@@ -7,10 +7,16 @@
 
 pub mod biome;
 pub mod error;
+pub mod pbr;
 pub mod properties;
 pub mod remap;
 pub mod resolver;
 pub mod types;
+
+pub use pbr::{
+    decode_baked_atlas, decode_ior, decode_labpbr13, DecodedPbr, IorEncoding, NormalConvention,
+    PbrDecodeSummary, PbrLayout, PbrMeta, PbrSourceFormat, RoughnessSpace,
+};
 
 pub use properties::{
     compute_mesh_material_props, compute_mesh_material_props_paletted, get_block_emission_strength,

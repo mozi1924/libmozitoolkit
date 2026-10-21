@@ -207,6 +207,9 @@ pub fn build_static_atlas_chunks(
             has_normal,
             has_specular,
             has_overlay,
+            has_orm: false,
+            has_aux: false,
+            pbr: None,
         });
 
         baked_chunks.push(BakedAtlasChunk {
@@ -220,6 +223,9 @@ pub fn build_static_atlas_chunks(
             normal: normal_buf,
             specular: specular_buf,
             overlay: overlay_buf,
+            normal_gl: None,
+            orm: None,
+            aux: None,
         });
     }
 

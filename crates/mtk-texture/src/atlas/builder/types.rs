@@ -31,9 +31,17 @@ pub struct BakedAtlasChunk {
     pub width: u32,
     pub height: u32,
     pub albedo: RgbaBuffer,
+    /// Raw LabPBR `_n` companion (legacy in-memory access; not written to new caches).
     pub normal: Option<RgbaBuffer>,
+    /// Raw LabPBR `_s` companion (legacy in-memory access; not written to new caches).
     pub specular: Option<RgbaBuffer>,
     pub overlay: Option<RgbaBuffer>,
+    /// Decoded OpenGL normal RGB + height A (`MtkPackedV1`).
+    pub normal_gl: Option<RgbaBuffer>,
+    /// Decoded AO / roughness / metallic / emission mask (`MtkPackedV1`).
+    pub orm: Option<RgbaBuffer>,
+    /// Decoded IOR / porosity / SSS / transmission mask (`MtkPackedV1`).
+    pub aux: Option<RgbaBuffer>,
 }
 
 impl BakedAtlasChunk {
