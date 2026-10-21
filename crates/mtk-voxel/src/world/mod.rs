@@ -43,6 +43,8 @@ pub struct VoxelWorld {
     section_mesh_cache: HashMap<IVec3, MeshData>,
     /// Assembled unified world mesh buffer.
     world_mesh: Option<MeshData>,
+    /// Execution profile of the most recent rebuild operation.
+    pub last_profile: Option<mtk_core::ExecutionProfile>,
     /// Unique Atlas Chunk IDs actually present on the active world mesh geometry.
     used_chunk_ids: Vec<u32>,
 }
@@ -63,6 +65,7 @@ impl VoxelWorld {
             section_mesh_cache: HashMap::new(),
             world_mesh: None,
             used_chunk_ids: Vec::new(),
+            last_profile: None,
         }
     }
 
@@ -93,6 +96,7 @@ impl VoxelWorld {
             section_mesh_cache: HashMap::new(),
             world_mesh: None,
             used_chunk_ids: Vec::new(),
+            last_profile: None,
         }
     }
 
@@ -328,7 +332,11 @@ impl VoxelWorld {
         &mut self,
         progress: Option<ProgressCallback>,
     ) -> Result<&MeshData, VoxelError> {
-        self.sync_selection_bounds();
+        let mut profiler = mtk_core::ExecutionProfiler::start();
+
+        profiler.measure("sync_selection_bounds", || {
+            self.sync_selection_bounds();
+        });
 
         let non_empty = self.storage.get_all_non_empty_sections();
         if non_empty.is_empty() {
@@ -343,45 +351,64 @@ impl VoxelWorld {
                     "No sections to mesh",
                 ));
             }
+            self.last_profile = Some(profiler.finish());
             return Ok(self.world_mesh.as_ref().unwrap());
         }
 
         #[cfg(feature = "parallel")]
-        let padded_sections: Vec<_> = {
-            use rayon::prelude::*;
-            mtk_core::constants::concurrency::execute_parallel(self.num_threads, || {
-                non_empty
-                    .par_iter()
-                    .map(|&coord| self.storage.get_section_padded_array(coord))
-                    .collect()
-            })
-            .map_err(VoxelError::ThreadPoolError)?
-        };
+        let padded_sections: Vec<_> = profiler.measure_with_count(
+            "padded_array_extraction",
+            non_empty.len(),
+            || {
+                use rayon::prelude::*;
+                mtk_core::constants::concurrency::execute_parallel(self.num_threads, || {
+                    non_empty
+                        .par_iter()
+                        .map(|&coord| self.storage.get_section_padded_array(coord))
+                        .collect()
+                })
+            },
+        )
+        .map_err(VoxelError::ThreadPoolError)?;
 
         #[cfg(not(feature = "parallel"))]
-        let padded_sections: Vec<_> = non_empty
-            .iter()
-            .map(|&coord| self.storage.get_section_padded_array(coord))
-            .collect();
+        let padded_sections: Vec<_> = profiler.measure_with_count(
+            "padded_array_extraction",
+            non_empty.len(),
+            || {
+                non_empty
+                    .iter()
+                    .map(|&coord| self.storage.get_section_padded_array(coord))
+                    .collect()
+            },
+        );
 
         let db_opt = self.model_db.as_deref();
         let model_lookup = |state: &str| Self::model_source_for_state(db_opt, state);
 
-        let results = SectionMesher::mesh_sections_parallel_with_source_and_progress(
-            &padded_sections,
-            &self.culler,
-            model_lookup,
-            &self.config,
-            self.num_threads,
-            progress,
+        let results = profiler.measure_with_count(
+            "parallel_section_meshing",
+            non_empty.len(),
+            || {
+                SectionMesher::mesh_sections_parallel_with_source_and_progress(
+                    &padded_sections,
+                    &self.culler,
+                    model_lookup,
+                    &self.config,
+                    self.num_threads,
+                    progress,
+                )
+            },
         )?;
 
-        self.section_mesh_cache.clear();
-        for (coord, mesh) in results {
-            if !mesh.is_empty() {
-                self.section_mesh_cache.insert(coord, mesh);
+        profiler.measure("section_cache_insertion", || {
+            self.section_mesh_cache.clear();
+            for (coord, mesh) in results {
+                if !mesh.is_empty() {
+                    self.section_mesh_cache.insert(coord, mesh);
+                }
             }
-        }
+        });
 
         if let Some(cb) = progress {
             let total = non_empty.len();
@@ -393,9 +420,12 @@ impl VoxelWorld {
             ));
         }
 
-        self.assemble_world_mesh(true);
+        profiler.measure("assemble_and_seam_weld", || {
+            self.assemble_world_mesh(true);
+        });
         self.storage.clear_dirty_sections();
 
+        self.last_profile = Some(profiler.finish());
         Ok(self.world_mesh.as_ref().unwrap())
     }
 

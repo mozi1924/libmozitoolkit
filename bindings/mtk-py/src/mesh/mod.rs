@@ -26,9 +26,27 @@ pub use crate::attributes::PyAttributeDomain;
 #[derive(Debug, Clone, Default)]
 pub struct PyMeshData {
     pub inner: MeshData,
+    pub profile: Option<mtk_core::profile::ExecutionProfile>,
+}
+
+impl From<MeshData> for PyMeshData {
+    fn from(inner: MeshData) -> Self {
+        Self {
+            inner,
+            profile: None,
+        }
+    }
 }
 
 impl PyMeshData {
+    /// Wraps raw MeshData with no profile.
+    pub fn from_mesh(inner: MeshData) -> Self {
+        Self {
+            inner,
+            profile: None,
+        }
+    }
+
     /// Direct reference to underlying MeshData.
     pub fn inner(&self) -> &MeshData {
         &self.inner
@@ -38,6 +56,12 @@ impl PyMeshData {
     pub fn inner_mut(&mut self) -> &mut MeshData {
         &mut self.inner
     }
+
+    /// Constructs a `PyMeshData` with an execution profile.
+    pub fn with_profile(mut self, profile: mtk_core::profile::ExecutionProfile) -> Self {
+        self.profile = Some(profile);
+        self
+    }
 }
 
 #[pymethods]
@@ -46,6 +70,7 @@ impl PyMeshData {
     pub fn new() -> Self {
         Self {
             inner: MeshData::new(),
+            profile: None,
         }
     }
 
@@ -54,7 +79,19 @@ impl PyMeshData {
     pub fn with_capacity(num_vertices: usize, num_indices: usize, num_faces: usize) -> Self {
         Self {
             inner: MeshData::with_capacity(num_vertices, num_indices, num_faces),
+            profile: None,
         }
+    }
+
+    /// Execution profile of the operation that generated this mesh, if recorded.
+    #[getter]
+    pub fn profile(&self) -> Option<crate::profile::PyExecutionProfile> {
+        self.profile.clone().map(Into::into)
+    }
+
+    /// Sets the execution profile for this mesh.
+    pub fn set_profile(&mut self, profile: Option<crate::profile::PyExecutionProfile>) {
+        self.profile = profile.map(|p| p.inner);
     }
 
     /// Number of vertices in the mesh buffer.
@@ -137,7 +174,7 @@ impl PyMeshData {
         });
         let mesh = MeshData::from_flat_polygons(&flat, normal_vec.as_deref())
             .map_err(pyo3::exceptions::PyValueError::new_err)?;
-        Ok(Self { inner: mesh })
+        Ok(Self::from_mesh(mesh))
     }
 
     // -------------------------------------------------------------------------

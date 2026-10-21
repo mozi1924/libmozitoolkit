@@ -131,7 +131,17 @@ impl PyVoxelWorld {
             py.allow_threads(|| self.inner.rebuild_all().cloned())
         }
         .map_err(map_voxel_err)?;
-        Ok(crate::mesh::PyMeshData { inner: mesh })
+        let profile = self.inner.last_profile.clone();
+        Ok(crate::mesh::PyMeshData {
+            inner: mesh,
+            profile,
+        })
+    }
+
+    /// Execution profile of the most recent rebuild operation.
+    #[getter]
+    pub fn last_profile(&self) -> Option<crate::profile::PyExecutionProfile> {
+        self.inner.last_profile.clone().map(Into::into)
     }
 
     /// Incrementally rebuilds only the modified/dirty sections and returns a dict mapping (sx, sy, sz) to PyMeshData.
@@ -146,7 +156,7 @@ impl PyVoxelWorld {
         for (coord, mesh) in rebuilt {
             dict.set_item(
                 (coord.x, coord.y, coord.z),
-                crate::mesh::PyMeshData { inner: mesh },
+                crate::mesh::PyMeshData::from_mesh(mesh),
             )?;
         }
         Ok(dict)
@@ -155,7 +165,7 @@ impl PyVoxelWorld {
     /// Returns the current full merged world geometry directly as a PyMeshData buffer.
     pub fn get_world_mesh(&self) -> crate::mesh::PyMeshData {
         let mesh = self.inner.get_world_mesh().cloned().unwrap_or_default();
-        crate::mesh::PyMeshData { inner: mesh }
+        crate::mesh::PyMeshData::from_mesh(mesh)
     }
 
     /// Returns the list of unique Atlas Chunk IDs used by the active world mesh.

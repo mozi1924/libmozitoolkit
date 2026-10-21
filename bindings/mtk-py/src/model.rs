@@ -49,7 +49,7 @@ impl PyBakedModelDatabase {
     ) -> Option<(PyMeshData, Vec<String>)> {
         self.inner.get(state_str).map(|baked| {
             let (mesh, textures) = baked.to_mesh_with_textures(clip_hidden);
-            (PyMeshData { inner: mesh }, textures)
+            (PyMeshData::from_mesh(mesh), textures)
         })
     }
 
@@ -166,6 +166,6 @@ impl PyModelBaker {
             )
             .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
 
-        Ok((PyMeshData { inner: mesh }, textures))
+        Ok((PyMeshData::from_mesh(mesh), textures))
     }
 }

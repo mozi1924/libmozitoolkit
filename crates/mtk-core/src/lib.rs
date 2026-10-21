@@ -8,6 +8,7 @@ pub mod extrude;
 pub mod geometry;
 pub mod mesh;
 pub mod polygon;
+pub mod profile;
 pub mod progress;
 pub mod random;
 pub mod subdivide;
@@ -31,6 +32,7 @@ pub use geometry::{
 };
 pub use mesh::{analyze_hard_edges, MeshData, UvLayout};
 pub use polygon::FlatPolygonMesh;
+pub use profile::{ExecutionProfile, ExecutionProfiler, StageSpan};
 pub use progress::{ProgressCallback, ProgressReport, ProgressThrottler};
 pub use random::{
     determine_block_offset_type, get_block_offset, mc_coordinate_seed, JavaRandom, OffsetType,

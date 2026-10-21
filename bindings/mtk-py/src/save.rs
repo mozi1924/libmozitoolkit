@@ -134,10 +134,15 @@ pub fn load_and_mesh_minecraft_save(
     num_threads: Option<usize>,
     callback: Option<PyObject>,
 ) -> PyResult<(PyMeshData, PyLevelData, PyVoxelStorage)> {
+    let mut profiler = mtk_core::ExecutionProfiler::start();
+
     let path = Path::new(world_dir);
-    let level_data = SaveLoader::read_level_data(path)
-        .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
-    let dimensions = SaveLoader::discover_dimensions(path);
+    let (level_data, dimensions) = profiler.measure("read_level_metadata", || {
+        let ld = SaveLoader::read_level_data(path)
+            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+        let dims = SaveLoader::discover_dimensions(path);
+        Ok::<_, PyErr>((ld, dims))
+    })?;
 
     let min_coord = IVec3::new(min_block.0, min_block.1, min_block.2);
     let max_coord = IVec3::new(max_block.0, max_block.1, max_block.2);
@@ -161,15 +166,17 @@ pub fn load_and_mesh_minecraft_save(
         .map(|f| f as &(dyn Fn(mtk_core::progress::ProgressReport) + Send + Sync));
 
     let mut storage = VoxelStorage::new();
-    SaveLoader::load_box_into_storage_with_progress(
-        path,
-        dimension,
-        min_coord,
-        max_coord,
-        &mut storage,
-        progress_ref,
-    )
-    .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+    let loaded_sections = profiler.measure("load_region_chunks", || {
+        SaveLoader::load_box_into_storage_with_progress(
+            path,
+            dimension,
+            min_coord,
+            max_coord,
+            &mut storage,
+            progress_ref,
+        )
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+    })?;
 
     // Asset cache input gate: valid model database and atlas mapping are strictly required
     if model_db.is_none() {
@@ -194,12 +201,29 @@ pub fn load_and_mesh_minecraft_save(
 
     let mut world = VoxelWorld::from_storage_with_threads(storage.clone(), cfg, cul, mdb, threads);
 
-    let mesh = py
-        .allow_threads(|| world.rebuild_all_with_progress(progress_ref).cloned())
+    let (mesh, world_profile) = py
+        .allow_threads(|| {
+            let m = world.rebuild_all_with_progress(progress_ref)?.clone();
+            let p = world.last_profile.clone();
+            Ok::<_, mtk_voxel::VoxelError>((m, p))
+        })
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
+    if let Some(wp) = world_profile {
+        for stage in wp.stages {
+            profiler.record_stage(stage.name, stage.duration_us, stage.items_count);
+        }
+    } else {
+        profiler.record_stage("mesh_voxel_world", 0, Some(loaded_sections));
+    }
+
+    let final_profile = profiler.finish();
+
     Ok((
-        PyMeshData { inner: mesh },
+        PyMeshData {
+            inner: mesh,
+            profile: Some(final_profile),
+        },
         PyLevelData {
             inner: level_data,
             dimensions,

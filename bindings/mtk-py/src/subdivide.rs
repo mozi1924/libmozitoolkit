@@ -86,15 +86,18 @@ pub fn adaptive_pixel_split_mesh(
 ) -> PyMeshData {
     let empty_vec = Vec::new();
     let res_slice = face_resolutions.as_deref().unwrap_or(&empty_vec);
+    let mut profiler = mtk_core::ExecutionProfiler::start();
     let output_mesh = py.allow_threads(|| {
-        mtk_core::subdivide::adaptive_pixel_split_mesh(
-            &mesh.inner,
-            res_slice,
-            default_resolution,
-            pixels_per_face,
-            max_subdivisions,
-            weld_dist,
-        )
+        profiler.measure("adaptive_pixel_split_mesh", || {
+            mtk_core::subdivide::adaptive_pixel_split_mesh(
+                &mesh.inner,
+                res_slice,
+                default_resolution,
+                pixels_per_face,
+                max_subdivisions,
+                weld_dist,
+            )
+        })
     });
-    PyMeshData { inner: output_mesh }
+    PyMeshData::from_mesh(output_mesh).with_profile(profiler.finish())
 }

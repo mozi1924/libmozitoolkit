@@ -87,5 +87,5 @@ pub fn cull_mesh_faces<'py>(
     stats_dict.set_item("culled_faces", result.culled_faces)?;
     stats_dict.set_item("remaining_faces", result.remaining_faces)?;
 
-    Ok((crate::mesh::PyMeshData { inner: result.mesh }, stats_dict))
+    Ok((crate::mesh::PyMeshData::from_mesh(result.mesh), stats_dict))
 }

@@ -20,6 +20,7 @@ pub mod uv;
 pub mod voxel;
 
 pub mod buffer;
+pub mod profile;
 pub mod unstable;
 
 use pyo3::prelude::*;
@@ -39,6 +40,7 @@ pub use material::{
 pub use mesh::{PyAttributeDomain, PyMeshData};
 pub use model::{PyBakedModelDatabase, PyModelBaker};
 pub use point_cloud::PyVoxelPointCloud;
+pub use profile::{PyExecutionProfile, PyStageSpan};
 pub use protocol::{
     compute_canonical_state_hash, decode_packet, encode_baseline_begin, encode_baseline_chunk,
     encode_baseline_end, encode_delta_op, encode_palette_update, encode_welcome,
@@ -67,30 +69,26 @@ pub fn api_version() -> u32 {
 /// Main entrypoint for Python module `libmtk_py`.
 #[pymodule]
 fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    // 1. Mesh & Core
+    // 1. Profiling & Diagnostics
+    m.add_class::<profile::PyStageSpan>()?;
+    m.add_class::<profile::PyExecutionProfile>()?;
+
+    // 2. Mesh & Core
     m.add_class::<PyAttributeDomain>()?;
     m.add_class::<PyMeshData>()?;
     m.add_class::<buffer::PyBufferOwner>()?;
-    m.add_function(wrap_pyfunction!(subdivide::calculate_face_target_grid, m)?)?;
-    m.add_function(wrap_pyfunction!(
-        subdivide::calculate_pixel_grid_cut_factors,
-        m
-    )?)?;
-    m.add_function(wrap_pyfunction!(subdivide::slice_face_by_pixel_grid, m)?)?;
     m.add_function(wrap_pyfunction!(subdivide::adaptive_pixel_split_mesh, m)?)?;
     m.add_function(wrap_pyfunction!(mesh::analyze_mesh_hard_edges, m)?)?;
 
-    // 2. Culling
+    // 3. Culling
     m.add_class::<PyFaceCuller>()?;
     m.add_function(wrap_pyfunction!(cull::cull_mesh_faces, m)?)?;
 
-    // 3. Voxel Storage & Config & World & Point Cloud
+    // 4. Voxel Storage & Config & World & Point Cloud
     m.add_class::<PyVoxelStorage>()?;
     m.add_class::<PyMesherConfig>()?;
     m.add_class::<PyVoxelWorld>()?;
     m.add_class::<PyVoxelPointCloud>()?;
-
-    // 4. Meshing Generator
 
     // 5. Live Sync & Protocol
     m.add_class::<PyLiveSyncSession>()?;
@@ -114,8 +112,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(is_valid_cache_package, m)?)?;
     m.add_function(wrap_pyfunction!(resolve_active_cache_package, m)?)?;
     m.add_function(wrap_pyfunction!(get_cache_manifest, m)?)?;
-    m.add_function(wrap_pyfunction!(texture::sample_uv_alpha_f32, m)?)?;
-    m.add_function(wrap_pyfunction!(texture::is_face_transparent_f32, m)?)?;
     m.add_function(wrap_pyfunction!(
         texture::batch_analyze_transparent_faces_f32,
         m
@@ -137,22 +133,12 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_biome_meta, m)?)?;
     m.add_function(wrap_pyfunction!(get_all_biomes, m)?)?;
     m.add_function(wrap_pyfunction!(material::get_colormap_uv, m)?)?;
-    m.add_function(wrap_pyfunction!(material::get_hardcoded_tint, m)?)?;
-    m.add_function(wrap_pyfunction!(material::get_hardcoded_tint_hex, m)?)?;
     m.add_function(wrap_pyfunction!(compute_flat_material_props_memoryview, m)?)?;
     m.add_function(wrap_pyfunction!(
         compute_flat_material_props_paletted_memoryview,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(material::get_material_props, m)?)?;
-    m.add_function(wrap_pyfunction!(material::get_block_emission_strength, m)?)?;
-    m.add_function(wrap_pyfunction!(material::is_thin_wall_block, m)?)?;
-    m.add_function(wrap_pyfunction!(material::is_transmissive_block, m)?)?;
-    m.add_function(wrap_pyfunction!(
-        material::get_block_transmission_weight,
-        m
-    )?)?;
-    m.add_function(wrap_pyfunction!(material::get_block_sticker_threshold, m)?)?;
     m.add_function(wrap_pyfunction!(material::register_material_properties, m)?)?;
     m.add_function(wrap_pyfunction!(
         material::load_material_properties_replace,
@@ -162,7 +148,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
         material::reset_material_properties_to_default,
         m
     )?)?;
-    m.add_function(wrap_pyfunction!(material::get_swamp_grass_color, m)?)?;
     m.add("TINT_TYPE_NONE", mtk_material::TINT_TYPE_NONE)?;
     m.add("TINT_TYPE_GRASS", mtk_material::TINT_TYPE_GRASS)?;
     m.add("TINT_TYPE_FOLIAGE", mtk_material::TINT_TYPE_FOLIAGE)?;
@@ -174,24 +159,10 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyModelBaker>()?;
     m.add_class::<PyBakedModelDatabase>()?;
 
-    // 9. UV Geometry Algorithms & Extrude
-    m.add_function(wrap_pyfunction!(uv::calculate_uv_area, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::get_uv_bounds, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::get_uv_center, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::is_uv_collapsed, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::is_orthogonal_angle, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::detect_uv_rotation, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::straighten_uv, m)?)?;
+    // 9. UV Geometry Algorithms & Extrude (High-Level Batched Only)
     m.add_function(wrap_pyfunction!(uv::scale_uv, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::normalize_uv_for_atlas_tiling, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::uv_requires_atlas_tiling, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::restore_atlas_tiling_uv, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::repair_quad_fluid_uv, m)?)?;
     m.add_function(wrap_pyfunction!(uv::batch_repair_fluid_uv, m)?)?;
     m.add_function(wrap_pyfunction!(uv::repair_mesh_fluid_uv_inplace, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::get_fluid_top_uvs, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::get_fluid_side_uvs, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::repair_extruded_side_uv, m)?)?;
     m.add_function(wrap_pyfunction!(uv::generate_random_extrude_heights, m)?)?;
     m.add_function(wrap_pyfunction!(
         extrude::process_flat_mesh_extrude_repair,
@@ -266,6 +237,17 @@ mod tests {
             let mesh = world.rebuild_all(py, None).unwrap();
             assert!(!mesh.is_empty());
             assert_eq!(mesh.vertex_count(), 8); // 8 vertices for welded unit cube
+
+            // Verify execution profile attached to mesh and world
+            assert!(mesh.profile().is_some());
+            let profile = mesh.profile().unwrap();
+            assert!(profile.stage_count() > 0);
+            assert!(world.last_profile().is_some());
+            let summary = profile.summary();
+            println!("\n=== Rebuild all execution profile ===\n{}", summary);
+            assert!(summary.contains("Execution Profile"));
+            assert!(summary.contains("padded_array_extraction"));
+            assert!(summary.contains("parallel_section_meshing"));
 
             let mut unwelded_config = PyMesherConfig::default();
             unwelded_config.inner.weld_vertices = false;

@@ -117,10 +117,17 @@ pub struct PyPrecompileResult {
     pub package_path: String,
     #[pyo3(get)]
     pub cache_dir: String,
+    pub profile: Option<mtk_core::profile::ExecutionProfile>,
 }
 
 #[pymethods]
 impl PyPrecompileResult {
+    /// Execution profile detailing prebake step durations.
+    #[getter]
+    pub fn profile(&self) -> Option<crate::profile::PyExecutionProfile> {
+        self.profile.clone().map(Into::into)
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "<PrecompileResult packs={} atlas_chunks={} models={} package='{}'>",
@@ -381,6 +388,7 @@ pub fn precompile_all_assets<'py>(
         fingerprint: res.fingerprint,
         package_path: res.package_path,
         cache_dir: res.cache_dir,
+        profile: res.profile,
     })
 }
 

@@ -51,6 +51,7 @@ pub struct PrecompileResult {
     pub fingerprint: String,
     pub package_path: String,
     pub cache_dir: String,
+    pub profile: Option<mtk_core::profile::ExecutionProfile>,
 }
 
 /// Executes unified end-to-end asset precompilation directly to `.mtkcache` with progress reporting.
@@ -105,6 +106,8 @@ fn precompile_all_assets_inner(
     let mut writer =
         MtkPackageFileWriter::create(&package_path, PackageProfile::AssetCache, fp_bytes)?;
 
+    let mut profiler = mtk_core::ExecutionProfiler::start();
+
     // 0. Biome Tinting & Colormaps
     if let Some(cb) = progress_callback {
         cb(ProgressReport::new(
@@ -115,27 +118,30 @@ fn precompile_all_assets_inner(
         ));
     }
 
-    let mut biome_resolver = BiomeResolver::new();
-    biome_resolver.load_from_pack_stack(stack);
-    let biome_json = biome_resolver.to_json()?;
-    writer.add_str_chunk(
-        *b"BIOM",
-        "biome/mapping",
-        &biome_json,
-        &ChunkWriteOptions::zstd_fast(),
-    )?;
+    profiler.measure("prebake_biome", || -> Result<(), MtkError> {
+        let mut biome_resolver = BiomeResolver::new();
+        biome_resolver.load_from_pack_stack(stack);
+        let biome_json = biome_resolver.to_json()?;
+        writer.add_str_chunk(
+            *b"BIOM",
+            "biome/mapping",
+            &biome_json,
+            &ChunkWriteOptions::zstd_fast(),
+        )?;
 
-    for cm_name in &["grass", "foliage", "dry_foliage"] {
-        let asset_path = format!("assets/minecraft/textures/colormap/{}.png", cm_name);
-        if let Some(bytes) = stack.open_asset_raw(&asset_path) {
-            writer.add_chunk(
-                *b"BIOM",
-                format!("biome/colormap/{}", cm_name),
-                &bytes,
-                &ChunkWriteOptions::raw(),
-            )?;
+        for cm_name in &["grass", "foliage", "dry_foliage"] {
+            let asset_path = format!("assets/minecraft/textures/colormap/{}.png", cm_name);
+            if let Some(bytes) = stack.open_asset_raw(&asset_path) {
+                writer.add_chunk(
+                    *b"BIOM",
+                    format!("biome/colormap/{}", cm_name),
+                    &bytes,
+                    &ChunkWriteOptions::raw(),
+                )?;
+            }
         }
-    }
+        Ok(())
+    })?;
 
     if let Some(cb) = progress_callback {
         cb(ProgressReport::new(
@@ -161,106 +167,113 @@ fn precompile_all_assets_inner(
             ));
         }
 
-        let mut def_list: Vec<(String, mtk_resource::AtlasDefinition)> = Vec::new();
-        let mut seen_cats = std::collections::HashSet::new();
+        let baked_atlas = profiler.measure("prebake_atlas", || -> Result<_, MtkError> {
+            let mut def_list: Vec<(String, mtk_resource::AtlasDefinition)> = Vec::new();
+            let mut seen_cats = std::collections::HashSet::new();
 
-        if config.atlas_category != "all"
-            && config.atlas_category != "blocks"
-            && !config.atlas_category.is_empty()
-        {
-            let cat = AtlasCategory::parse(&config.atlas_category);
-            let def = stack.load_atlas_category(&cat);
-            def_list.push((cat.as_str().to_string(), def));
-        } else {
-            for loc in stack.list_all_atlas_locations() {
-                if let Ok(def) = stack.load_atlas_definition(&loc) {
-                    let cat_name = loc.path.clone();
+            if config.atlas_category != "all"
+                && config.atlas_category != "blocks"
+                && !config.atlas_category.is_empty()
+            {
+                let cat = AtlasCategory::parse(&config.atlas_category);
+                let def = stack.load_atlas_category(&cat);
+                def_list.push((cat.as_str().to_string(), def));
+            } else {
+                for loc in stack.list_all_atlas_locations() {
+                    if let Ok(def) = stack.load_atlas_definition(&loc) {
+                        let cat_name = loc.path.clone();
+                        if seen_cats.insert(cat_name.clone()) {
+                            def_list.push((cat_name, def));
+                        }
+                    }
+                }
+                for standard_cat in &AtlasCategory::ALL_STANDARD {
+                    let cat_name = standard_cat.as_str().to_string();
                     if seen_cats.insert(cat_name.clone()) {
+                        let def = stack.load_atlas_category(standard_cat);
                         def_list.push((cat_name, def));
                     }
                 }
             }
-            for standard_cat in &AtlasCategory::ALL_STANDARD {
-                let cat_name = standard_cat.as_str().to_string();
-                if seen_cats.insert(cat_name.clone()) {
-                    let def = stack.load_atlas_category(standard_cat);
-                    def_list.push((cat_name, def));
-                }
-            }
-        }
 
-        let atlas_cfg = AtlasBuilderConfig {
-            max_width: config.max_atlas_width,
-            max_height: config.max_atlas_height,
-            mip_level: 0,
-            padding: 0,
-        };
-        let atlas_builder = AtlasBuilder::new(atlas_cfg);
-        let baked_atlas = atlas_builder.build_categories(stack, &def_list)?;
-        chunk_count = baked_atlas.chunks.len();
+            let atlas_cfg = AtlasBuilderConfig {
+                max_width: config.max_atlas_width,
+                max_height: config.max_atlas_height,
+                mip_level: 0,
+                padding: 0,
+            };
+            let atlas_builder = AtlasBuilder::new(atlas_cfg);
+            let baked_atlas = atlas_builder.build_categories(stack, &def_list)?;
+            let total_chunks = baked_atlas.chunks.len();
 
-        let mapping_json = baked_atlas.address_map.to_json()?;
-        writer.add_str_chunk(
-            *b"ATLS",
-            "atlas/mapping",
-            &mapping_json,
-            &ChunkWriteOptions::zstd_fast(),
-        )?;
-
-        let atlas_throttler =
-            ProgressThrottler::new("prebake_atlas", chunk_count.max(1), progress_callback)
-                .with_step(1)
-                .with_prefix("Packaging atlas chunk textures");
-
-        for chunk in &baked_atlas.chunks {
-            let stem = chunk.file_stem();
-            let albedo_bytes = chunk.albedo.to_png_bytes()?;
-            writer.add_chunk(
+            let mapping_json = baked_atlas.address_map.to_json()?;
+            writer.add_str_chunk(
                 *b"ATLS",
-                format!("atlas/textures/{}.png", stem),
-                &albedo_bytes,
-                &ChunkWriteOptions::raw(),
+                "atlas/mapping",
+                &mapping_json,
+                &ChunkWriteOptions::zstd_fast(),
             )?;
 
-            if let Some(ref normal) = chunk.normal {
-                let normal_bytes = normal.to_png_bytes()?;
+            let atlas_throttler =
+                ProgressThrottler::new("prebake_atlas", total_chunks.max(1), progress_callback)
+                    .with_step(1)
+                    .with_prefix("Packaging atlas chunk textures");
+
+            for chunk in &baked_atlas.chunks {
+                let stem = chunk.file_stem();
+                let albedo_bytes = chunk.albedo.to_png_bytes()?;
                 writer.add_chunk(
                     *b"ATLS",
-                    format!("atlas/textures/{}_n.png", stem),
-                    &normal_bytes,
+                    format!("atlas/textures/{}.png", stem),
+                    &albedo_bytes,
                     &ChunkWriteOptions::raw(),
                 )?;
+
+                if let Some(ref normal) = chunk.normal {
+                    let normal_bytes = normal.to_png_bytes()?;
+                    writer.add_chunk(
+                        *b"ATLS",
+                        format!("atlas/textures/{}_n.png", stem),
+                        &normal_bytes,
+                        &ChunkWriteOptions::raw(),
+                    )?;
+                }
+
+                if let Some(ref specular) = chunk.specular {
+                    let spec_bytes = specular.to_png_bytes()?;
+                    writer.add_chunk(
+                        *b"ATLS",
+                        format!("atlas/textures/{}_s.png", stem),
+                        &spec_bytes,
+                        &ChunkWriteOptions::raw(),
+                    )?;
+                }
+
+                if let Some(ref overlay) = chunk.overlay {
+                    let overlay_bytes = overlay.to_png_bytes()?;
+                    writer.add_chunk(
+                        *b"ATLS",
+                        format!("atlas/textures/{}_overlay.png", stem),
+                        &overlay_bytes,
+                        &ChunkWriteOptions::raw(),
+                    )?;
+                }
+                atlas_throttler.inc();
             }
 
-            if let Some(ref specular) = chunk.specular {
-                let spec_bytes = specular.to_png_bytes()?;
-                writer.add_chunk(
-                    *b"ATLS",
-                    format!("atlas/textures/{}_s.png", stem),
-                    &spec_bytes,
-                    &ChunkWriteOptions::raw(),
-                )?;
-            }
+            Ok(baked_atlas)
+        })?;
 
-            if let Some(ref overlay) = chunk.overlay {
-                let overlay_bytes = overlay.to_png_bytes()?;
-                writer.add_chunk(
-                    *b"ATLS",
-                    format!("atlas/textures/{}_overlay.png", stem),
-                    &overlay_bytes,
-                    &ChunkWriteOptions::raw(),
-                )?;
-            }
-            atlas_throttler.inc();
-        }
-
+        chunk_count = baked_atlas.chunks.len();
         baked_atlas_opt = Some(baked_atlas);
     }
 
     // 2. Full-Scale Model Baking & Bincode Packaging (Zstd compressed)
     if config.compile_models {
         let atlas_map = baked_atlas_opt.as_ref().map(|a| &a.address_map);
-        let model_db = prebake_all_models_with_progress(stack, atlas_map, progress_callback)?;
+        let model_db = profiler.measure("prebake_models", || {
+            prebake_all_models_with_progress(stack, atlas_map, progress_callback)
+        })?;
         baked_count = model_db.len();
         let bin_bytes = model_db.to_bincode()?;
         writer.add_chunk(
@@ -294,7 +307,7 @@ fn precompile_all_assets_inner(
     )?;
 
     // 4. Finalize container
-    writer.finish()?;
+    profiler.measure("finalize_package", || writer.finish())?;
 
     if let Some(cb) = progress_callback {
         cb(ProgressReport::new(
@@ -314,6 +327,8 @@ fn precompile_all_assets_inner(
         base_path.to_string_lossy().to_string()
     };
 
+    let profile = profiler.finish();
+
     Ok(PrecompileResult {
         success: true,
         pack_count: stack.len(),
@@ -322,5 +337,6 @@ fn precompile_all_assets_inner(
         fingerprint,
         package_path: package_path.to_string_lossy().to_string(),
         cache_dir: cache_dir_str,
+        profile: Some(profile),
     })
 }

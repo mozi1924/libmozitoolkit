@@ -63,9 +63,7 @@ impl PyLiveSyncSession {
 
     /// Meshes the entire active VoxelStorage volume and returns a unified `MeshData`.
     pub fn get_world_mesh(&self) -> PyMeshData {
-        PyMeshData {
-            inner: self.inner.get_world_mesh(),
-        }
+        PyMeshData::from_mesh(self.inner.get_world_mesh())
     }
 
     /// Starts the background sync client thread connecting to Minecraft at `url`,
@@ -249,7 +247,7 @@ impl PyLiveSyncSession {
                 }
                 SyncEvent::WorldMeshReady { mesh, generation } => {
                     dict.set_item("type", "WORLD_MESH_READY")?;
-                    dict.set_item("mesh", PyMeshData { inner: mesh })?;
+                    dict.set_item("mesh", PyMeshData::from_mesh(mesh))?;
                     dict.set_item("generation", generation)?;
                 }
                 SyncEvent::StreamProgress {

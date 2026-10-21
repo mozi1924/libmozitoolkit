@@ -123,9 +123,7 @@ impl PyVoxelPointCloud {
     /// Converts this `VoxelPointCloud` into a pure-point `MeshData` with standard
     /// attributes attached on the `Point` domain (without edges or polygons).
     pub fn to_mesh_data(&self) -> PyMeshData {
-        PyMeshData {
-            inner: self.inner.to_mesh_data(),
-        }
+        PyMeshData::from_mesh(self.inner.to_mesh_data())
     }
 
     /// Reconstructs a `VoxelPointCloud` from a `MeshData` containing Point-domain attributes.
