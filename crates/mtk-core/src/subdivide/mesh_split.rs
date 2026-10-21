@@ -12,6 +12,7 @@ use super::grid::{
     calculate_face_target_grid, calculate_pixel_grid_cut_factors, interpolate_bilinear_2d,
     interpolate_bilinear_3d, interpolate_bilinear_4d,
 };
+use super::quad::{emit_quad_copy, QuadAccumulator};
 use crate::attributes::{AttributeData, MeshAttribute};
 use crate::mesh::{MeshData, UvLayout};
 
@@ -111,10 +112,7 @@ pub fn adaptive_pixel_split_mesh(
         });
     }
 
-    let mut sub_quad_indices: Vec<[u32; 4]> = Vec::new();
-    let mut sub_quad_uvs: Vec<[[f32; 2]; 4]> = Vec::new();
-    let mut sub_quad_materials: Vec<u16> = Vec::new();
-    let mut sub_quad_tints: Vec<i16> = Vec::new();
+    let mut quads = QuadAccumulator::default();
 
     let mut sub_tri_indices: Vec<[u32; 3]> = Vec::new();
     let mut sub_tri_uvs: Vec<[[f32; 2]; 3]> = Vec::new();
@@ -218,21 +216,17 @@ pub fn adaptive_pixel_split_mesh(
         };
 
         if tex_w == 0 || tex_h == 0 {
-            let base_v = out.positions.len() as u32;
-            out.positions.extend_from_slice(&[p0, p1, p2, p3]);
-            out.normals.extend_from_slice(&[n0, n1, n2, n3]);
-            if let Some((s0, s1, s2, s3)) = sec_quad {
-                let s_out = out.secondary_uvs.as_mut().unwrap();
-                s_out.extend_from_slice(&[s0, s1, s2, s3]);
-            }
-            if let Some((c0, c1, c2, c3)) = col_quad {
-                let c_out = out.colors.as_mut().unwrap();
-                c_out.extend_from_slice(&[c0, c1, c2, c3]);
-            }
-            sub_quad_indices.push([base_v, base_v + 1, base_v + 2, base_v + 3]);
-            sub_quad_uvs.push([uv0, uv1, uv2, uv3]);
-            sub_quad_materials.push(mat_id);
-            sub_quad_tints.push(tint_idx);
+            emit_quad_copy(
+                &mut out,
+                &mut quads,
+                [p0, p1, p2, p3],
+                [n0, n1, n2, n3],
+                sec_quad.map(|(s0, s1, s2, s3)| [s0, s1, s2, s3]),
+                col_quad.map(|(c0, c1, c2, c3)| [c0, c1, c2, c3]),
+                [uv0, uv1, uv2, uv3],
+                mat_id,
+                tint_idx,
+            );
             continue;
         }
 
@@ -264,21 +258,17 @@ pub fn adaptive_pixel_split_mesh(
             let rows = v_factors.len() - 1;
 
             if cols <= 1 && rows <= 1 {
-                let base_v = out.positions.len() as u32;
-                out.positions.extend_from_slice(&[p0, p1, p2, p3]);
-                out.normals.extend_from_slice(&[n0, n1, n2, n3]);
-                if let Some((s0, s1, s2, s3)) = sec_quad {
-                    let s_out = out.secondary_uvs.as_mut().unwrap();
-                    s_out.extend_from_slice(&[s0, s1, s2, s3]);
-                }
-                if let Some((c0, c1, c2, c3)) = col_quad {
-                    let c_out = out.colors.as_mut().unwrap();
-                    c_out.extend_from_slice(&[c0, c1, c2, c3]);
-                }
-                sub_quad_indices.push([base_v, base_v + 1, base_v + 2, base_v + 3]);
-                sub_quad_uvs.push([uv0, uv1, uv2, uv3]);
-                sub_quad_materials.push(mat_id);
-                sub_quad_tints.push(tint_idx);
+                emit_quad_copy(
+                    &mut out,
+                    &mut quads,
+                    [p0, p1, p2, p3],
+                    [n0, n1, n2, n3],
+                    sec_quad.map(|(s0, s1, s2, s3)| [s0, s1, s2, s3]),
+                    col_quad.map(|(c0, c1, c2, c3)| [c0, c1, c2, c3]),
+                    [uv0, uv1, uv2, uv3],
+                    mat_id,
+                    tint_idx,
+                );
                 continue;
             }
 
@@ -320,8 +310,6 @@ pub fn adaptive_pixel_split_mesh(
                     let v11 = grid_indices[r + 1][c + 1];
                     let v01 = grid_indices[r + 1][c];
 
-                    sub_quad_indices.push([v00, v10, v11, v01]);
-
                     let uv_00 =
                         interpolate_bilinear_2d(uv0, uv1, uv2, uv3, u_factors[c], v_factors[r]);
                     let uv_10 =
@@ -337,9 +325,12 @@ pub fn adaptive_pixel_split_mesh(
                     let uv_01 =
                         interpolate_bilinear_2d(uv0, uv1, uv2, uv3, u_factors[c], v_factors[r + 1]);
 
-                    sub_quad_uvs.push([uv_00, uv_10, uv_11, uv_01]);
-                    sub_quad_materials.push(mat_id);
-                    sub_quad_tints.push(tint_idx);
+                    quads.push(
+                        [v00, v10, v11, v01],
+                        [uv_00, uv_10, uv_11, uv_01],
+                        mat_id,
+                        tint_idx,
+                    );
                 }
             }
         } else {
@@ -354,21 +345,17 @@ pub fn adaptive_pixel_split_mesh(
             );
 
             if sliced.faces.len() <= 1 {
-                let base_v = out.positions.len() as u32;
-                out.positions.extend_from_slice(&[p0, p1, p2, p3]);
-                out.normals.extend_from_slice(&[n0, n1, n2, n3]);
-                if let Some((s0, s1, s2, s3)) = sec_quad {
-                    let s_out = out.secondary_uvs.as_mut().unwrap();
-                    s_out.extend_from_slice(&[s0, s1, s2, s3]);
-                }
-                if let Some((c0, c1, c2, c3)) = col_quad {
-                    let c_out = out.colors.as_mut().unwrap();
-                    c_out.extend_from_slice(&[c0, c1, c2, c3]);
-                }
-                sub_quad_indices.push([base_v, base_v + 1, base_v + 2, base_v + 3]);
-                sub_quad_uvs.push([uv0, uv1, uv2, uv3]);
-                sub_quad_materials.push(mat_id);
-                sub_quad_tints.push(tint_idx);
+                emit_quad_copy(
+                    &mut out,
+                    &mut quads,
+                    [p0, p1, p2, p3],
+                    [n0, n1, n2, n3],
+                    sec_quad.map(|(s0, s1, s2, s3)| [s0, s1, s2, s3]),
+                    col_quad.map(|(c0, c1, c2, c3)| [c0, c1, c2, c3]),
+                    [uv0, uv1, uv2, uv3],
+                    mat_id,
+                    tint_idx,
+                );
                 continue;
             }
 
@@ -400,15 +387,17 @@ pub fn adaptive_pixel_split_mesh(
                     let v1 = base_v + poly[1];
                     let v2 = base_v + poly[2];
                     let v3 = base_v + poly[3];
-                    sub_quad_indices.push([v0, v1, v2, v3]);
-                    sub_quad_uvs.push([
-                        sliced.uvs[poly[0] as usize],
-                        sliced.uvs[poly[1] as usize],
-                        sliced.uvs[poly[2] as usize],
-                        sliced.uvs[poly[3] as usize],
-                    ]);
-                    sub_quad_materials.push(mat_id);
-                    sub_quad_tints.push(tint_idx);
+                    quads.push(
+                        [v0, v1, v2, v3],
+                        [
+                            sliced.uvs[poly[0] as usize],
+                            sliced.uvs[poly[1] as usize],
+                            sliced.uvs[poly[2] as usize],
+                            sliced.uvs[poly[3] as usize],
+                        ],
+                        mat_id,
+                        tint_idx,
+                    );
                 } else if poly.len() == 3 {
                     let v0 = base_v + poly[0];
                     let v1 = base_v + poly[1];
@@ -428,14 +417,14 @@ pub fn adaptive_pixel_split_mesh(
 
     if sub_tri_indices.is_empty() {
         // Pure quad mesh
-        let quad_count = sub_quad_indices.len();
+        let quad_count = quads.indices.len();
         let mut flat_quads = Vec::with_capacity(quad_count * 4);
         out.indices.reserve(quad_count * 6);
         out.uvs.reserve(quad_count * 4);
 
         for i in 0..quad_count {
-            let q = sub_quad_indices[i];
-            let u = sub_quad_uvs[i];
+            let q = quads.indices[i];
+            let u = quads.uvs[i];
             flat_quads.extend_from_slice(&q);
             out.indices
                 .extend_from_slice(&[q[0], q[1], q[2], q[0], q[2], q[3]]);
@@ -443,21 +432,21 @@ pub fn adaptive_pixel_split_mesh(
         }
 
         out.quad_indices = Some(flat_quads);
-        out.face_materials = sub_quad_materials;
-        out.face_tint_indices = sub_quad_tints;
+        out.face_materials = quads.materials;
+        out.face_tint_indices = quads.tints;
     } else {
         // Triangulate quads to guarantee uniform triangle topology for DCC injection
-        let total_tris = sub_quad_indices.len() * 2 + sub_tri_indices.len();
+        let total_tris = quads.indices.len() * 2 + sub_tri_indices.len();
         out.indices.reserve(total_tris * 3);
         out.uvs.reserve(total_tris * 3);
         out.face_materials.reserve(total_tris);
         out.face_tint_indices.reserve(total_tris);
 
-        for i in 0..sub_quad_indices.len() {
-            let q = sub_quad_indices[i];
-            let u = sub_quad_uvs[i];
-            let mat = sub_quad_materials[i];
-            let tint = sub_quad_tints[i];
+        for i in 0..quads.indices.len() {
+            let q = quads.indices[i];
+            let u = quads.uvs[i];
+            let mat = quads.materials[i];
+            let tint = quads.tints[i];
 
             out.indices.extend_from_slice(&[q[0], q[1], q[2]]);
             out.uvs.extend_from_slice(&[u[0], u[1], u[2]]);
