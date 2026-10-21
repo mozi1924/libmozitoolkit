@@ -26,6 +26,7 @@
 ## 1. 核心特性与职责边界
 
 - **邻域面遮挡状态机 (`FaceCuller`)**：原版 1.21+ 规范的 6 向邻域剔除判定，内置实心不透明体 (`SolidOpaque`)、半透明玻璃 (`GlassTranslucent`)、镂空树叶 (`CutoutLeaves`)、异形方块 (`PartialShape`)、流体 (`Fluid`) 与非遮挡装饰 (`NonOccluding`) 的全状态分类决策。
+- **高度感知流体面剔除 (`should_render_fluid_face`)**：独立复刻原版 `FluidRenderer` 语义。流体顶面仅在表面到达 `y = 1.0` 时才被上方方块遮挡；非满高流体（水源 `8/9`、斜向水流）在方块下方仍保留顶面，水平面使用该侧最大角点高度。
 - **2D 矩形差集切分算法 (`subtract_rect`)**：极速微观 2D 矩形布尔差集运算（返回 `Vec<Aabb2d>`），精准解算半砖 (Slabs)、楼梯 (Stairs)、活板门 (Trapdoors) 与地毯等异形方块的局部遮挡面。
 - **共面关系分析 (`check_coplanar_overlap`)**：2D 投影下判定两多边形是否 `Exact` / `ContainedInA` / `ContainedInB` / `Partial` 重叠，供上层做叠面去重。
 - **网格微观剔除与叠面消除 (`cull_mesh_faces`)**：基于空间哈希的高性能网格面剔除算子，用于烘焙期内部多元素模型消重（如 `mtk-model` 消除内部重叠体积），完整保留所有顶点/角点/面级自定义属性与 Quad 拓扑。
@@ -45,6 +46,8 @@
 | [`GlassCullMode`](src/types.rs) | 玻璃剔除模式：`Group`（跨色玻璃全局互剔）、`SameBlock`（同色方块互剔）、`None`。 |
 | [`is_inherently_submerged_block`](src/rules/categories/meta.rs) | `(name: &str) -> bool`：判定原版中无 `waterlogged` 属性但实质恒定处于水下的方块（水草 `seagrass`、海带 `kelp` 等）。在属性解析时自动注入 `waterlogged=true` 作为普通含水方块处理。 |
 | `should_skip_rendering` | `(curr_cat, neighbor_cat, ...) -> bool`：基于类别与方块属性的快速渲染跳过规则。 |
+| [`FaceCuller::should_render_fluid_face`](src/engine/face_culler.rs) | `(fluid_meta, self_meta, neighbor_meta, direction, face_height) -> bool`：原版 `FluidRenderer.isFaceOccludedByNeighbor` / `isFaceOccludedBySelf` 的高度感知流体面可见性判定。`face_height` 在顶面传四角最小值、侧面传该侧两角最大值。 |
+| [`fluid_cull`](src/rules/fluid_cull.rs) | `fluid_group` / `is_same_fluid` / `is_face_occluded_by_state` / `should_render_fluid_face`：独立于方块满面状态的流体剔除原语。 |
 
 ### 2.2 2D 矩形布尔与遮挡检测 (`geometry::rect_ops`)
 
@@ -114,6 +117,27 @@ fn main() {
     );
     assert!(render_air, "Face touching air should be rendered");
 }
+```
+
+### 示例 1.1：高度感知的流体顶面剔除
+
+```rust
+use mtk_cull::FaceCuller;
+use mtk_core::direction::Direction;
+
+let culler = FaceCuller::default();
+let water = culler.get_meta("minecraft:water[level=0]", None, None);
+let stone = culler.get_meta("minecraft:stone", None, None);
+
+// 水源表面在 8/9，方块底面在 1.0：顶面必须保留。
+assert!(culler.should_render_fluid_face(
+    &water, None, Some(&stone), Direction::Up, 8.0 / 9.0,
+));
+
+// 仅当流体表面真正到达 y = 1.0 时，上方满面方块才遮挡顶面。
+assert!(!culler.should_render_fluid_face(
+    &water, None, Some(&stone), Direction::Up, 1.0,
+));
 ```
 
 ### 示例 2：2D 矩形差集切分 (半砖/局部遮挡)

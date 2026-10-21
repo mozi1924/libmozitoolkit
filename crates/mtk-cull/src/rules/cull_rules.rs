@@ -6,6 +6,10 @@ use crate::types::{BlockCullMeta, CullCategory, GlassCullMode, LeavesCullMode};
 /// Custom face skipping rules for specialized Minecraft blocks.
 /// Replicates `BlockBehaviour.skipRendering` and its overrides in vanilla Minecraft.
 ///
+/// Fluid **rendering** visibility is height-aware and lives in
+/// [`crate::rules::fluid_cull`]; this function retains vanilla `skipRendering` semantics
+/// for direct callers and non-fluid block paths.
+///
 /// Returns `true` if this face should be skipped (culled), `false` otherwise.
 pub fn should_skip_rendering(
     state_meta: &BlockCullMeta,

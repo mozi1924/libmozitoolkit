@@ -11,7 +11,7 @@
 | 层次 (Layer) | Crate / Binding | 核心定位与职责 | API 与技术手册 |
 | :--- | :--- | :--- | :--- |
 | **Layer 0: 基础几何** | **[`mtk-core`](../crates/mtk-core/README.md)** | 标准连续几何缓冲 (`MeshData`)、6向拓扑与标准化右手坐标转换、面切线基底推导 (`derive_quad_face_tangents`)、硬边分析 (`analyze_hard_edges`)、自适应像素网格切分 (`subdivide`)、智能挤出与 UV 修复 (`extrude`) | [查看 API 手册 ↗](../crates/mtk-core/README.md) |
-| **Layer 1: 遮挡与清洗** | **[`mtk-cull`](../crates/mtk-cull/README.md)** | 1.21+ 邻域遮挡状态机 (`FaceCuller`)、2D 矩形差集切分 (Subtract Rect)、外部网格叠面剔除 (`cull_mesh_faces`) | [查看 API 手册 ↗](../crates/mtk-cull/README.md) |
+| **Layer 1: 遮挡与清洗** | **[`mtk-cull`](../crates/mtk-cull/README.md)** | 1.21+ 邻域遮挡状态机 (`FaceCuller`)、高度感知流体面剔除 (`should_render_fluid_face`)、2D 矩形差集切分 (Subtract Rect)、外部网格叠面剔除 (`cull_mesh_faces`) | [查看 API 手册 ↗](../crates/mtk-cull/README.md) |
 | **Layer 1: 模型与状态** | **[`mtk-model`](../crates/mtk-model/README.md)** | BlockState 状态机解析 (multipart/variants)、1.21+ Block Model JSON 递归继承展开与几何烘焙、`BakedModelDatabase` 多级回退、OBJ 加载 | [查看 API 手册 ↗](../crates/mtk-model/README.md) |
 | **Layer 1: 资源包 VFS** | **[`mtk-resource`](../crates/mtk-resource/README.md)** | 虚拟文件系统 (Zip/Jar/Dir)、PBR 多层资源栈合并、`.png.mcmeta` 动图元数据、`atlases/*.json` 规范与自适应切线 CTM 47/17 连接纹理求解器 (`resolve_face_with_tangents`) | [查看 API 手册 ↗](../crates/mtk-resource/README.md) |
 | **Layer 1: 贴图与图集** | **[`mtk-texture`](../crates/mtk-texture/README.md)** | 2D 矩形二叉装箱 Stitcher、多通道 PBR 图集烘焙、盔甲调色板置换与抗渗色填充 | [查看 API 手册 ↗](../crates/mtk-texture/README.md) |

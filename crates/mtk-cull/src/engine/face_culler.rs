@@ -2,6 +2,7 @@ use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use std::collections::HashMap;
 
+use mtk_core::constants::fluid::MAX_FLUID_HEIGHT;
 use mtk_core::direction::Direction;
 use mtk_core::geometry::Aabb2d;
 use mtk_core::{IVec3, Vec3};
@@ -91,6 +92,31 @@ impl FaceCuller {
         }
         meta
     }
+
+    /// Evaluates canonical Minecraft fluid face visibility.
+    ///
+    /// Fluids are not full cubes, so their height-aware occlusion rules cannot be
+    /// represented by [`BlockCullMeta`] alone. Callers that have corner heights should
+    /// use this method instead of [`Self::should_render_face`].
+    ///
+    /// Returns `true` if this fluid face SHOULD be rendered, `false` if culled.
+    pub fn should_render_fluid_face(
+        &self,
+        fluid_meta: &BlockCullMeta,
+        self_meta: Option<&BlockCullMeta>,
+        neighbor_meta: Option<&BlockCullMeta>,
+        direction: Direction,
+        face_height: f32,
+    ) -> bool {
+        crate::rules::fluid_cull::should_render_fluid_face(
+            fluid_meta,
+            self_meta,
+            neighbor_meta,
+            direction,
+            face_height,
+        )
+    }
+
     /// Evaluates Minecraft 1.21+ canonical face visibility test.
     ///
     /// Returns `true` if this face SHOULD be rendered, `false` if culled.
@@ -105,6 +131,21 @@ impl FaceCuller {
     ) -> bool {
         if state_meta.is_air {
             return false;
+        }
+
+        // Fluids have height-dependent face visibility. Without corner heights this
+        // conservative fallback assumes the canonical still-fluid surface (8/9), which
+        // keeps a top face under a ceiling visible while still culling full-block sides
+        // and bottoms. The voxel mesher calls `should_render_fluid_face` with exact
+        // per-corner heights.
+        if state_meta.category == CullCategory::Fluid {
+            return crate::rules::fluid_cull::should_render_fluid_face(
+                state_meta,
+                None,
+                neighbor_meta,
+                direction,
+                MAX_FLUID_HEIGHT,
+            );
         }
 
         let neighbor_meta = match neighbor_meta {

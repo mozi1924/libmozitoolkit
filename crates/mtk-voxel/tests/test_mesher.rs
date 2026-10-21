@@ -458,8 +458,11 @@ fn test_waterlogged_isolated_block_meshing() {
     // Specifically, water top, bottom, and side faces should be emitted in open air.
     assert!(mesh.face_count() > 0);
     // 2 isolated waterlogged blocks in air with fallback unit cube:
-    // each emits 6 fluid faces + 6 solid block faces = 12 faces per block = 24 total faces!
-    assert_eq!(mesh.face_count(), 24);
+    // - kelp: 6 fluid faces + 6 solid faces (its own occlusion shape is empty)
+    // - bottom slab: 5 fluid faces (the fluid bottom is coplanar with the slab bottom and
+    //   is self-occluded by vanilla `isFaceOccludedBySelf`) + 6 solid faces
+    // Total: 11 + 12 = 23.
+    assert_eq!(mesh.face_count(), 23);
 }
 
 #[test]
@@ -527,8 +530,9 @@ fn test_waterlogged_isolated_block_with_baked_model() {
         &config,
     );
 
-    // 1 solid model face + 6 fluid faces (top, bottom, 4 sides) = 7 faces!
-    assert_eq!(mesh.face_count(), 7);
+    // 1 solid model face + 5 fluid faces. The fluid bottom face is coplanar with the
+    // waterlogged bottom slab and is self-occluded like vanilla `FluidRenderer`.
+    assert_eq!(mesh.face_count(), 6);
 }
 
 #[test]

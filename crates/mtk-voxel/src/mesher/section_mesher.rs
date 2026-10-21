@@ -188,12 +188,6 @@ impl SectionMesher {
                             (None, None)
                         };
 
-                        let effective_fluid_state = if meta.is_waterlogged && !meta.is_fluid {
-                            "minecraft:water[level=0]"
-                        } else {
-                            state_str
-                        };
-
                         emit_fluid_geometry(
                             &mut mesh,
                             block_pos.x,
@@ -202,7 +196,7 @@ impl SectionMesher {
                             wx,
                             wy,
                             wz,
-                            effective_fluid_state,
+                            state_str,
                             get_state,
                             culler,
                             config,

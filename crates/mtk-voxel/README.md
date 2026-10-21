@@ -256,6 +256,7 @@ pub fn should_flip_quad_diagonal(ao: [u8; 4]) -> bool {
 
 - **流体高度插值**：`calculate_fluid_corner_heights` 采样中心与 8 邻域流体高度，结合 Minecraft 原版物理规则（静止水源表面张力 $8/9$ 高度、下落水流高度为 $1.0$）计算 4 角高度 $(c_{\text{NW}}, c_{\text{NE}}, c_{\text{SE}}, c_{\text{SW}})$。
 - **流向矢量与 UV 旋转**：`calculate_fluid_flow_vector` 依据周围 4 邻域及下层方块高度差计算流动矢量 $(v_x, v_z)$ 与旋转角 $\theta = \text{atan2}(v_z, v_x) - \frac{\pi}{2}$，并在生成顶面网格时对 UV 应用旋转变换矩阵。
+- **高度感知面剔除**：六个面统一调用 `FaceCuller::should_render_fluid_face`。顶面以四角最小值、侧面以该侧两角最大值作为 `face_height`，复刻原版 `FluidRenderer`：非满高流体（水源 $8/9$、斜向流动）位于方块下方时顶面可见；仅当表面到达 $y = 1.0$ 时才被上方满面方块遮挡。
 
 ---
 

@@ -18,6 +18,9 @@ pub use geometry::{
     CoplanarRelation, FaceAlignment,
 };
 pub use mesh_cull::{cull_mesh_faces, MeshCullConfig, MeshCullResult};
+pub use rules::fluid_cull::{
+    fluid_group, is_face_occluded_by_state, is_same_fluid, should_render_fluid_face,
+};
 pub use rules::should_skip_rendering;
 pub use types::{
     is_empty_rect, is_full_rect, BlockCullMeta, CullCategory, GlassCullMode, LeavesCullMode,

@@ -301,3 +301,77 @@ fn test_animated_texture_routing_dual_channel() {
         );
     }
 }
+
+#[test]
+fn test_fluid_top_face_under_ceiling_is_not_culled() {
+    use glam::IVec3;
+    use mtk_cull::FaceCuller;
+    use mtk_voxel::mesher::shading::ModelSource;
+    use mtk_voxel::mesher::SectionMesher;
+    use mtk_voxel::storage::VoxelStorage;
+    use mtk_voxel::types::MesherConfig;
+
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+    world.set_block(4, 4, 4, "minecraft:water[level=0]", None);
+    world.set_block(4, 5, 4, "minecraft:stone", None);
+
+    let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
+    let culler = FaceCuller::default();
+    let mesh = SectionMesher::mesh_section(
+        &padded,
+        &culler,
+        |_| ModelSource::None,
+        &MesherConfig::default(),
+    );
+
+    // 6 water quads (including the top surface at 8/9) + 6 stone quads.
+    // The top water face is 1/9 below the ceiling and must remain visible.
+    assert_eq!(mesh.face_count(), 12);
+}
+
+#[test]
+fn test_flowing_fluid_top_face_under_ceiling_is_not_culled() {
+    use glam::IVec3;
+    use mtk_cull::FaceCuller;
+    use mtk_voxel::mesher::shading::ModelSource;
+    use mtk_voxel::mesher::SectionMesher;
+    use mtk_voxel::storage::VoxelStorage;
+    use mtk_voxel::types::MesherConfig;
+
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+    // A sloped flow: a source feeding a lower flowing cell, with a block above the flow.
+    world.set_block(4, 4, 4, "minecraft:water[level=0]", None);
+    world.set_block(5, 4, 4, "minecraft:flowing_water[level=1]", None);
+    world.set_block(5, 5, 4, "minecraft:stone", None);
+
+    let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
+    let culler = FaceCuller::default();
+    let mesh = SectionMesher::mesh_section(
+        &padded,
+        &culler,
+        |_| ModelSource::None,
+        &MesherConfig::default(),
+    );
+
+    // Find the top surface of the flowing cell (x=5). All four corners are above the
+    // block floor and below the ceiling, and every vertex stays inside x = [5, 6].
+    let top_face_exists = mesh
+        .quad_indices
+        .as_ref()
+        .expect("quad indices")
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .any(|quad| {
+            quad.iter().all(|&idx| {
+                let p = mesh.positions[idx as usize];
+                p[1] > 4.0 && p[1] < 5.0 && p[0] >= 5.0
+            })
+        });
+    assert!(
+        top_face_exists,
+        "sloped fluid top face beneath a solid ceiling must not be culled"
+    );
+}

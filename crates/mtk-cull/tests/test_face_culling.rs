@@ -221,8 +221,9 @@ fn test_fluid_culling() {
     // Water touching Lava: rendered (different fluid)
     assert!(culler.should_render_face(&water, Some(&lava), Direction::East, None, None, None));
 
-    // Water under Stone ceiling: water UP face is culled by solid ceiling
-    assert!(!culler.should_render_face(&water, Some(&stone), Direction::Up, None, None, None));
+    // Water under Stone ceiling: the canonical 8/9 surface does not touch the ceiling,
+    // so the top face must stay visible (vanilla FluidRenderer: height < 1.0).
+    assert!(culler.should_render_face(&water, Some(&stone), Direction::Up, None, None, None));
     // Stone bottom face facing water: rendered
     assert!(culler.should_render_face(&stone, Some(&water), Direction::Down, None, None, None));
 
@@ -669,5 +670,56 @@ fn test_vegetation_and_transparent_culling() {
         None,
         None,
         None
+    ));
+}
+
+#[test]
+fn test_height_aware_fluid_face_culling() {
+    let culler = FaceCuller::default();
+    let water = culler.get_meta("minecraft:water[level=0]", None, None);
+    let stone = culler.get_meta("minecraft:stone", None, None);
+    let bottom_slab = culler.get_meta("minecraft:oak_slab[type=bottom]", None, None);
+
+    // A full block above a non-full fluid surface does not occlude the top face.
+    assert!(culler.should_render_fluid_face(&water, None, Some(&stone), Direction::Up, 8.0 / 9.0));
+    // Only a fluid surface that actually reaches y = 1.0 is occluded by a ceiling.
+    assert!(!culler.should_render_fluid_face(&water, None, Some(&stone), Direction::Up, 1.0));
+    // Empty occlusion shapes (glass, leaves, air-like decorations) never occlude.
+    let glass = culler.get_meta("minecraft:glass", None, None);
+    assert!(culler.should_render_fluid_face(&water, None, Some(&glass), Direction::Up, 1.0));
+
+    // Horizontal faces use the maximum corner height of the side.
+    assert!(!culler.should_render_fluid_face(&water, None, Some(&stone), Direction::East, 0.5));
+    // A bottom slab only covers the lower half of a fluid side face.
+    assert!(culler.should_render_fluid_face(
+        &water,
+        None,
+        Some(&bottom_slab),
+        Direction::East,
+        8.0 / 9.0
+    ));
+    // A low flowing surface is fully hidden behind the same slab.
+    assert!(!culler.should_render_fluid_face(
+        &water,
+        None,
+        Some(&bottom_slab),
+        Direction::East,
+        0.4
+    ));
+
+    // Same-fluid boundaries and full-block floors stay culled.
+    assert!(!culler.should_render_fluid_face(
+        &water,
+        None,
+        Some(&water),
+        Direction::East,
+        8.0 / 9.0
+    ));
+    assert!(!culler.should_render_fluid_face(
+        &water,
+        None,
+        Some(&stone),
+        Direction::Down,
+        8.0 / 9.0
     ));
 }

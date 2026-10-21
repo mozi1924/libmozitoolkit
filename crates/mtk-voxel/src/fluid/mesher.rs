@@ -62,6 +62,12 @@ where
         FluidType::Lava => "minecraft:lava[level=0]",
     };
     let fluid_meta = culler.get_meta(fluid_state_str, None, None);
+    // Vanilla self-occlusion only matters for the solid host state of waterlogged blocks.
+    let self_meta = is_waterlogged.then(|| culler.get_meta(state_str, None, None));
+
+    // Vanilla corner heights used for per-face occlusion:
+    // top = min of all four corners, each side = max of its two corners.
+    let up_height = c_nw.min(c_sw).min(c_se).min(c_ne);
 
     let (still_sprite, flow_sprite) = if let Some(atlas) = &config.atlas_address_map {
         let (still_name, flow_name) = match fluid_type {
@@ -312,13 +318,12 @@ where
         None
     };
 
-    if culler.should_render_face(
+    if culler.should_render_fluid_face(
         &fluid_meta,
+        self_meta.as_deref(),
         up_meta.as_deref(),
         Direction::Up,
-        None,
-        None,
-        None,
+        up_height,
     ) {
         let v_nw = Vec3::new(wx, wy + c_nw, wz);
         let v_sw = Vec3::new(wx, wy + c_sw, wz + 1.0);
@@ -343,13 +348,12 @@ where
         None
     };
 
-    if culler.should_render_face(
+    if culler.should_render_fluid_face(
         &fluid_meta,
+        self_meta.as_deref(),
         down_meta.as_deref(),
         Direction::Down,
-        None,
-        None,
-        None,
+        MAX_FLUID_HEIGHT,
     ) {
         let v_sw = Vec3::new(wx, wy, wz + 1.0);
         let v_nw = Vec3::new(wx, wy, wz);
@@ -374,13 +378,12 @@ where
     } else {
         None
     };
-    if culler.should_render_face(
+    if culler.should_render_fluid_face(
         &fluid_meta,
+        self_meta.as_deref(),
         n_meta.as_deref(),
         Direction::North,
-        None,
-        None,
-        None,
+        c_ne.max(c_nw),
     ) {
         let v_ne_top = Vec3::new(wx + 1.0, wy + c_ne, wz);
         let v_ne_bot = Vec3::new(wx + 1.0, wy, wz);
@@ -403,13 +406,12 @@ where
     } else {
         None
     };
-    if culler.should_render_face(
+    if culler.should_render_fluid_face(
         &fluid_meta,
+        self_meta.as_deref(),
         s_meta.as_deref(),
         Direction::South,
-        None,
-        None,
-        None,
+        c_sw.max(c_se),
     ) {
         let v_sw_top = Vec3::new(wx, wy + c_sw, wz + 1.0);
         let v_sw_bot = Vec3::new(wx, wy, wz + 1.0);
@@ -432,13 +434,12 @@ where
     } else {
         None
     };
-    if culler.should_render_face(
+    if culler.should_render_fluid_face(
         &fluid_meta,
+        self_meta.as_deref(),
         w_meta.as_deref(),
         Direction::West,
-        None,
-        None,
-        None,
+        c_nw.max(c_sw),
     ) {
         let v_nw_top = Vec3::new(wx, wy + c_nw, wz);
         let v_nw_bot = Vec3::new(wx, wy, wz);
@@ -461,13 +462,12 @@ where
     } else {
         None
     };
-    if culler.should_render_face(
+    if culler.should_render_fluid_face(
         &fluid_meta,
+        self_meta.as_deref(),
         e_meta.as_deref(),
         Direction::East,
-        None,
-        None,
-        None,
+        c_se.max(c_ne),
     ) {
         let v_se_top = Vec3::new(wx + 1.0, wy + c_se, wz + 1.0);
         let v_se_bot = Vec3::new(wx + 1.0, wy, wz + 1.0);
