@@ -77,6 +77,25 @@ impl ResourcePackStack {
         self.packs.is_empty()
     }
 
+    /// Returns true if the stack contains at least one pack providing vanilla minecraft client assets
+    /// (e.g. `assets/minecraft/textures/` or `assets/minecraft/blockstates/` or `assets/minecraft/models/`).
+    pub fn has_vanilla_client_base(&self) -> bool {
+        if self.packs.is_empty() {
+            return false;
+        }
+        for pack in &self.packs {
+            for file in pack.list_files("assets/minecraft/") {
+                if file.starts_with("assets/minecraft/textures/")
+                    || file.starts_with("assets/minecraft/blockstates/")
+                    || file.starts_with("assets/minecraft/models/")
+                {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// Returns the slice of active resource packs in priority order.
     pub fn packs(&self) -> &[Box<dyn ResourcePack>] {
         &self.packs

@@ -82,6 +82,12 @@ fn precompile_all_assets_inner(
     config: &PrecompileConfig,
     progress_callback: Option<ProgressCallback>,
 ) -> Result<PrecompileResult, MtkError> {
+    if stack.is_empty() || !stack.has_vanilla_client_base() {
+        return Err(MtkError::Resource(mtk_resource::error::ResourceError::MissingVanillaBasePack(
+            "Cannot precompile: resource pack stack must contain a valid Minecraft Vanilla Client base pack".into(),
+        )));
+    }
+
     let fingerprint = stack.compute_stack_fingerprint();
 
     // Determine target .mtkcache file path

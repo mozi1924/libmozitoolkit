@@ -18,6 +18,9 @@ pub enum ResourceError {
     #[error("Zip archive error: {0}")]
     Zip(#[from] zip::result::ZipError),
 
+    #[error("Missing vanilla base pack: {0}")]
+    MissingVanillaBasePack(String),
+
     #[error("Atlas configuration error: {0}")]
     AtlasConfig(String),
 }

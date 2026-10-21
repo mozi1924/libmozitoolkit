@@ -72,6 +72,11 @@ impl PyResourcePackStack {
         self.inner.len()
     }
 
+    /// Returns true if the stack contains at least one pack providing vanilla minecraft client assets.
+    pub fn has_vanilla_client_base(&self) -> bool {
+        self.inner.has_vanilla_client_base()
+    }
+
     /// Computes a deterministic fingerprint string for the active resource pack stack configuration.
     pub fn compute_stack_fingerprint(&self) -> String {
         self.inner.compute_stack_fingerprint()

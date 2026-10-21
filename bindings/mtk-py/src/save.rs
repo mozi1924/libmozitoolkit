@@ -171,6 +171,22 @@ pub fn load_and_mesh_minecraft_save(
     )
     .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
+    // Asset cache input gate: valid model database and atlas mapping are strictly required
+    if model_db.is_none() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "Active asset cache (model_db) is strictly required to mesh Minecraft save geometry",
+        ));
+    }
+    if config.is_none()
+        || config
+            .and_then(|c| c.inner.atlas_address_map.as_ref())
+            .is_none()
+    {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "Active asset cache (atlas) is strictly required to mesh Minecraft save geometry",
+        ));
+    }
+
     let cfg = config.map(|c| c.inner.clone());
     let cul = culler.map(|c| c.inner.clone());
     let mdb = model_db.map(|db| db.inner.clone());
