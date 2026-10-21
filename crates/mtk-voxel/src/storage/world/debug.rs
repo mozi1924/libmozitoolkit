@@ -159,7 +159,7 @@ impl VoxelStorage {
     ///
     /// Checks in order:
     /// 1. Memoized in-memory cache;
-    /// 2. `MC_ASSETS_DIR`, `MC_DIR`, or `MTK_TEST_ASSETS` environment variables (unpacked vanilla assets).
+    /// 2. `MC_ASSETS_DIR` / `MC_DIR` host environment overrides (unpacked vanilla assets).
     ///
     /// Results are memoized for sub-millisecond cloning on repeat requests. Hosts that
     /// reload resource packs at runtime can invalidate the cache via
@@ -174,8 +174,8 @@ impl VoxelStorage {
             }
         }
 
-        // 1. Environment variable override (CI / custom unpack locations)
-        for env_key in &["MC_ASSETS_DIR", "MC_DIR", "MTK_TEST_ASSETS"] {
+        // 1. Host-level asset root override (CI / custom unpack locations)
+        for env_key in &["MC_ASSETS_DIR", "MC_DIR"] {
             if let Ok(env_path) = std::env::var(env_key) {
                 let p = Path::new(&env_path);
                 if p.join("assets").exists() {
