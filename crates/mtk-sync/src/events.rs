@@ -29,7 +29,11 @@ pub enum SyncEvent {
     },
 
     /// A unified, merged world mesh containing the entire active volume has been assembled.
-    WorldMeshReady { mesh: MeshData, generation: u64 },
+    WorldMeshReady {
+        mesh: MeshData,
+        generation: u64,
+        profile: Option<mtk_core::profile::ExecutionProfile>,
+    },
 
     /// Stream batch progress update.
     StreamProgress {

@@ -373,9 +373,11 @@ pub fn check_debounced_remesh(
         let _ = w.rebuild_dirty();
         if let Some(wm) = w.get_world_mesh().cloned() {
             let gen = generation_atomic.fetch_add(1, Ordering::SeqCst) + 1;
+            let profile = w.last_profile.clone();
             let _ = event_sender.send(SyncEvent::WorldMeshReady {
                 mesh: wm,
                 generation: gen,
+                profile,
             });
         }
     }
@@ -689,18 +691,20 @@ pub fn handle_packet(
                             }
                         };
 
-                        let (world_mesh, built_sections) = {
+                        let (world_mesh, built_sections, profile) = {
                             let mut w = lock_world_write(world);
                             let _ = w.rebuild_all_with_progress(Some(&progress_cb));
                             let mesh = w.get_world_mesh().cloned().unwrap_or_default();
                             let count = w.storage.sections.len();
-                            (mesh, count)
+                            let profile = w.last_profile.clone();
+                            (mesh, count, profile)
                         };
 
                         let gen = generation_atomic.fetch_add(1, Ordering::SeqCst) + 1;
                         let _ = event_sender.send(SyncEvent::WorldMeshReady {
                             mesh: world_mesh,
                             generation: gen,
+                            profile,
                         });
                         let _ = event_sender.send(SyncEvent::StreamFinished { built_sections });
 

@@ -203,6 +203,12 @@ impl LiveSyncSession {
         w.get_world_mesh().cloned().unwrap_or_default()
     }
 
+    /// Execution profile of the most recent rebuild operation, if any.
+    pub fn last_profile(&self) -> Option<mtk_core::profile::ExecutionProfile> {
+        let w = self.world.read().unwrap_or_else(|e| e.into_inner());
+        w.last_profile.clone()
+    }
+
     /// Sends a RESYNC_REQUEST packet to request recovery / re-sync.
     pub fn request_resync(&self) -> Result<(), String> {
         let (epoch, seq) = {
@@ -375,24 +381,33 @@ impl LiveSyncSession {
     /// Non-mesh events keep their arrival order; the newest mesh is appended last.
     pub fn poll_events_coalesced(&self) -> Vec<SyncEvent> {
         let events = self.poll_events();
-        let mut latest_mesh: Option<(u64, MeshData)> = None;
+        let mut latest_mesh: Option<(u64, MeshData, Option<mtk_core::profile::ExecutionProfile>)> =
+            None;
         let mut out = Vec::with_capacity(events.len());
         for event in events {
             match event {
-                SyncEvent::WorldMeshReady { mesh, generation } => {
+                SyncEvent::WorldMeshReady {
+                    mesh,
+                    generation,
+                    profile,
+                } => {
                     let should_replace = latest_mesh
                         .as_ref()
-                        .map(|(current, _)| generation >= *current)
+                        .map(|(current, _, _)| generation >= *current)
                         .unwrap_or(true);
                     if should_replace {
-                        latest_mesh = Some((generation, mesh));
+                        latest_mesh = Some((generation, mesh, profile));
                     }
                 }
                 other => out.push(other),
             }
         }
-        if let Some((generation, mesh)) = latest_mesh {
-            out.push(SyncEvent::WorldMeshReady { mesh, generation });
+        if let Some((generation, mesh, profile)) = latest_mesh {
+            out.push(SyncEvent::WorldMeshReady {
+                mesh,
+                generation,
+                profile,
+            });
         }
         out
     }
@@ -420,6 +435,7 @@ mod tests {
             .send(SyncEvent::WorldMeshReady {
                 mesh: MeshData::new(),
                 generation: 1,
+                profile: None,
             })
             .unwrap();
         session
@@ -427,6 +443,7 @@ mod tests {
             .send(SyncEvent::WorldMeshReady {
                 mesh: MeshData::new(),
                 generation: 3,
+                profile: None,
             })
             .unwrap();
         session
@@ -434,6 +451,7 @@ mod tests {
             .send(SyncEvent::WorldMeshReady {
                 mesh: MeshData::new(),
                 generation: 2,
+                profile: None,
             })
             .unwrap();
 

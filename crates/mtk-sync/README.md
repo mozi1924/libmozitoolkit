@@ -250,7 +250,7 @@ pub enum SyncEvent {
     SelectionUpdated { min_pos: IVec3, size: IVec3 }, // 选区尺寸或位置发生改变
     Handshake { epoch, sequence, decision, decision_code, dimension }, // 场景元数据就绪；decision_code 为 RFC v3.1 原始值
     SectionMeshReady { coord: IVec3, mesh: MeshData }, // 单个切片网格就绪 (独立切片模式)
-    WorldMeshReady { mesh: MeshData },         // 全局合并大网格就绪
+    WorldMeshReady { mesh: MeshData, generation: u64, profile: Option<ExecutionProfile> }, // 全局合并大网格就绪及分步性能探针数据
     StreamProgress { stage: String, current: usize, total: usize, message: String }, // 物理进度；宿主应使用 normalize_stream_progress 归一化
     StreamFinished { stream_id: u32, built_sections: usize },         // 流传输结束
     DeltaApplied { change_count: usize, affected_sections: Vec<IVec3> }, // 增量修改已应用

@@ -165,7 +165,11 @@ impl PyVoxelWorld {
     /// Returns the current full merged world geometry directly as a PyMeshData buffer.
     pub fn get_world_mesh(&self) -> crate::mesh::PyMeshData {
         let mesh = self.inner.get_world_mesh().cloned().unwrap_or_default();
-        crate::mesh::PyMeshData::from_mesh(mesh)
+        let profile = self.inner.last_profile.clone();
+        crate::mesh::PyMeshData {
+            inner: mesh,
+            profile,
+        }
     }
 
     /// Returns the list of unique Atlas Chunk IDs used by the active world mesh.

@@ -80,12 +80,15 @@ pub fn cull_mesh_faces<'py>(
         cull_duplicates,
     };
 
-    let result = py.allow_threads(|| mtk_cull::cull_mesh_faces(&mesh.inner, &cfg));
+    let mut result = py.allow_threads(|| mtk_cull::cull_mesh_faces(&mesh.inner, &cfg));
 
     let stats_dict = pyo3::types::PyDict::new(py);
     stats_dict.set_item("initial_faces", result.initial_faces)?;
     stats_dict.set_item("culled_faces", result.culled_faces)?;
     stats_dict.set_item("remaining_faces", result.remaining_faces)?;
 
-    Ok((crate::mesh::PyMeshData::from_mesh(result.mesh), stats_dict))
+    let mut py_mesh = crate::mesh::PyMeshData::from_mesh(result.mesh);
+    py_mesh.profile = result.profile.take();
+
+    Ok((py_mesh, stats_dict))
 }

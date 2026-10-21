@@ -88,16 +88,27 @@ pub fn adaptive_pixel_split_mesh(
     let res_slice = face_resolutions.as_deref().unwrap_or(&empty_vec);
     let mut profiler = mtk_core::ExecutionProfiler::start();
     let output_mesh = py.allow_threads(|| {
-        profiler.measure("adaptive_pixel_split_mesh", || {
-            mtk_core::subdivide::adaptive_pixel_split_mesh(
-                &mesh.inner,
-                res_slice,
-                default_resolution,
-                pixels_per_face,
-                max_subdivisions,
-                weld_dist,
-            )
-        })
+        let face_count = mesh.inner.indices.len() / 6;
+        let mut split =
+            profiler.measure_with_count("split_faces_to_pixel_grid", face_count, || {
+                mtk_core::subdivide::adaptive_pixel_split_mesh(
+                    &mesh.inner,
+                    res_slice,
+                    default_resolution,
+                    pixels_per_face,
+                    max_subdivisions,
+                    0.0,
+                )
+            });
+
+        if weld_dist > 0.0 {
+            profiler.measure_with_count("weld_subdivided_vertices", split.positions.len(), || {
+                split.uv_layout = mtk_core::mesh::UvLayout::PerLoop;
+                split.weld_vertices(weld_dist);
+            });
+        }
+
+        split
     });
     PyMeshData::from_mesh(output_mesh).with_profile(profiler.finish())
 }

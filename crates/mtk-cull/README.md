@@ -59,7 +59,7 @@
 | 类型 / 函数 | 说明 |
 | :--- | :--- |
 | [`MeshCullConfig`](src/mesh_cull.rs) | 网格剔除配置：`tolerance`（几何容差）、`cull_duplicates`（同向重复面消除）、`cull_coplanar_opposite`（反向接触面剔除）。 |
-| [`MeshCullResult`](src/mesh_cull.rs) | 剔除统计结果，包含 `initial_faces`, `culled_faces`, `remaining_faces` 与净化后的 `mesh: MeshData`。 |
+| [`MeshCullResult`](src/mesh_cull.rs) | 剔除统计结果，包含 `initial_faces`, `culled_faces`, `remaining_faces`, 净化后的 `mesh: MeshData` 与 `profile: Option<ExecutionProfile>`。 |
 | `cull_mesh_faces` | `(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResult`：外部网格微观剔除与叠面消除入口。 |
 | `check_coplanar_overlap` | `(verts_a, norm_a, verts_b, norm_b, tol) -> Option<CoplanarRelation>`：计算两多边形的共面投影重叠关系（`Exact`, `ContainedInA`, `ContainedInB`, `Partial`）。 |
 

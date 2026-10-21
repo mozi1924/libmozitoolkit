@@ -411,9 +411,29 @@ impl VoxelWorld {
             ));
         }
 
-        profiler.measure("assemble_and_seam_weld", || {
-            self.assemble_world_mesh(true);
+        let meshes: Vec<&MeshData> = profiler.measure_with_count(
+            "collect_section_mesh_refs",
+            self.section_mesh_cache.len(),
+            || self.section_mesh_cache.values().collect(),
+        );
+
+        let merged = profiler.measure("merge_welded_seams", || {
+            if self.config.weld_vertices {
+                MeshData::merge_welded_sections(&meshes, 1e-4)
+            } else {
+                MeshData::merge_all_refs(&meshes)
+            }
         });
+
+        profiler.measure("compact_material_slots", || {
+            self.used_chunk_ids = merged
+                .used_materials()
+                .into_iter()
+                .map(|id| id as u32)
+                .collect();
+            self.world_mesh = Some(merged);
+        });
+
         self.storage.clear_dirty_sections();
 
         self.last_profile = Some(profiler.finish());
@@ -427,27 +447,40 @@ impl VoxelWorld {
             return Ok(Vec::new());
         }
 
-        self.sync_selection_bounds();
+        let mut profiler = mtk_core::ExecutionProfiler::start();
+
+        profiler.measure("sync_selection_bounds", || {
+            self.sync_selection_bounds();
+        });
 
         let db_opt = self.model_db.as_deref();
         let model_lookup = |state: &str| Self::model_source_for_state(db_opt, state);
 
-        let rebuilt = DeltaMesher::rebuild_dirty_sections_with_source(
-            &mut self.storage,
-            &self.culler,
-            model_lookup,
-            &self.config,
-        );
+        let dirty_count = self.storage.dirty_sections.len();
+        let rebuilt = profiler.measure_with_count("rebuild_dirty_sections", dirty_count, || {
+            DeltaMesher::rebuild_dirty_sections_with_source(
+                &mut self.storage,
+                &self.culler,
+                model_lookup,
+                &self.config,
+            )
+        });
 
-        for (coord, mesh) in &rebuilt {
-            if mesh.is_empty() {
-                self.section_mesh_cache.remove(coord);
-            } else {
-                self.section_mesh_cache.insert(*coord, mesh.clone());
+        profiler.measure("section_cache_insertion", || {
+            for (coord, mesh) in &rebuilt {
+                if mesh.is_empty() {
+                    self.section_mesh_cache.remove(coord);
+                } else {
+                    self.section_mesh_cache.insert(*coord, mesh.clone());
+                }
             }
-        }
+        });
 
-        self.assemble_world_mesh(false);
+        profiler.measure("assemble_world_mesh", || {
+            self.assemble_world_mesh(false);
+        });
+
+        self.last_profile = Some(profiler.finish());
 
         Ok(rebuilt)
     }
