@@ -80,12 +80,10 @@ pub fn adaptive_pixel_split_mesh(
     }
 
     let mut out = MeshData::new();
-    let has_sec = mesh.secondary_uvs.is_some();
-    let has_col = mesh.colors.is_some();
-    if has_sec {
+    if mesh.secondary_uvs.is_some() {
         out.secondary_uvs = Some(Vec::new());
     }
-    if has_col {
+    if mesh.colors.is_some() {
         out.colors = Some(Vec::new());
     }
 
@@ -168,11 +166,21 @@ pub fn adaptive_pixel_split_mesh(
             )
         };
 
-        let sec_quad = if has_sec {
-            let sec = mesh.secondary_uvs.as_ref().unwrap();
-            let s = if mesh.uv_layout == UvLayout::PerLoop && sec.len() >= (face_idx + 1) * 4 {
+        let sec_quad = mesh.secondary_uvs.as_ref().map(|sec| {
+            if mesh.uv_layout == UvLayout::PerLoop {
+                // Never mix layouts: a short PerLoop buffer is a data bug, not a reason
+                // to silently read the secondary UVs by vertex index.
                 let lb = face_idx * 4;
-                (sec[lb], sec[lb + 1], sec[lb + 2], sec[lb + 3])
+                debug_assert!(
+                    sec.len() >= lb + 4,
+                    "PerLoop secondary UV buffer shorter than the loop count"
+                );
+                (
+                    sec.get(lb).copied().unwrap_or([0.0, 0.0]),
+                    sec.get(lb + 1).copied().unwrap_or([0.0, 0.0]),
+                    sec.get(lb + 2).copied().unwrap_or([0.0, 0.0]),
+                    sec.get(lb + 3).copied().unwrap_or([0.0, 0.0]),
+                )
             } else {
                 (
                     sec.get(idx0).copied().unwrap_or([0.0, 0.0]),
@@ -180,17 +188,22 @@ pub fn adaptive_pixel_split_mesh(
                     sec.get(idx2).copied().unwrap_or([1.0, 1.0]),
                     sec.get(idx3).copied().unwrap_or([0.0, 1.0]),
                 )
-            };
-            Some(s)
-        } else {
-            None
-        };
+            }
+        });
 
-        let col_quad = if has_col {
-            let cols = mesh.colors.as_ref().unwrap();
-            let c = if mesh.uv_layout == UvLayout::PerLoop && cols.len() >= (face_idx + 1) * 4 {
+        let col_quad = mesh.colors.as_ref().map(|cols| {
+            if mesh.uv_layout == UvLayout::PerLoop {
                 let lb = face_idx * 4;
-                (cols[lb], cols[lb + 1], cols[lb + 2], cols[lb + 3])
+                debug_assert!(
+                    cols.len() >= lb + 4,
+                    "PerLoop color buffer shorter than the loop count"
+                );
+                (
+                    cols.get(lb).copied().unwrap_or([1.0, 1.0, 1.0, 1.0]),
+                    cols.get(lb + 1).copied().unwrap_or([1.0, 1.0, 1.0, 1.0]),
+                    cols.get(lb + 2).copied().unwrap_or([1.0, 1.0, 1.0, 1.0]),
+                    cols.get(lb + 3).copied().unwrap_or([1.0, 1.0, 1.0, 1.0]),
+                )
             } else {
                 (
                     cols.get(idx0).copied().unwrap_or([1.0, 1.0, 1.0, 1.0]),
@@ -198,11 +211,8 @@ pub fn adaptive_pixel_split_mesh(
                     cols.get(idx2).copied().unwrap_or([1.0, 1.0, 1.0, 1.0]),
                     cols.get(idx3).copied().unwrap_or([1.0, 1.0, 1.0, 1.0]),
                 )
-            };
-            Some(c)
-        } else {
-            None
-        };
+            }
+        });
 
         let resolution = if face_resolutions.is_empty() {
             Some(default_resolution)
