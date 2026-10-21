@@ -89,11 +89,6 @@ impl PyMeshData {
         self.profile.clone().map(Into::into)
     }
 
-    /// Sets the execution profile for this mesh.
-    pub fn set_profile(&mut self, profile: Option<crate::profile::PyExecutionProfile>) {
-        self.profile = profile.map(|p| p.inner);
-    }
-
     /// Number of vertices in the mesh buffer.
     #[getter]
     pub fn vertex_count(&self) -> usize {
