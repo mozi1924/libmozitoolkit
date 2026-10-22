@@ -190,30 +190,26 @@ impl MeshAttribute {
     }
 }
 
-/// Canonical built-in mesh attribute names (libmtk Spec v1).
+/// Canonical built-in mesh attribute names (libmtk Spec v2).
+///
+/// This module is the single source of truth for the mesh attribute contract.
+/// Hosts (Blender / WASM / CLI) must consume [`MESH_ATTRIBUTE_SPECS`] and
+/// [`RETIRED_MESH_ATTRIBUTES`] instead of maintaining their own name lists.
 pub mod constants {
     /// Canonical source texture key (Domain: Face, Type: String).
     pub const ATTR_SOURCE_TEXTURE_KEY: &str = "mtk_source_texture_key";
-    /// Source provenance file or model origin path.
-    pub const ATTR_SOURCE_ORIGIN: &str = "mtk_source_origin";
+    /// Palette index for [`ATTR_SOURCE_TEXTURE_KEY`] (Domain: Face, Type: Int32).
+    /// Produced by the host from the native source-texture palette; kept in the
+    /// canonical schema so every consumer agrees on its type and role.
+    pub const ATTR_SOURCE_TEXTURE_IDX: &str = "mtk_source_texture_idx";
 
-    /// Target Atlas chunk/sheet slot index (Domain: Face, Type: Int32/UInt16).
+    /// Target Atlas chunk/sheet slot index (Domain: Face, Type: Int32).
     pub const ATTR_ATLAS_CHUNK_ID: &str = "mtk_atlas_chunk_id";
-    /// Target Atlas texture/sprite index (Domain: Face, Type: UInt32).
-    pub const ATTR_ATLAS_TEXTURE_ID: &str = "mtk_atlas_texture_id";
-    /// Material slot ID assigned to the polygon.
-    pub const ATTR_MATERIAL_SLOT: &str = "mtk_material_slot";
-    pub const ATTR_MATERIAL_ID: &str = "mtk_material_id";
-
-    /// Scalar emission intensity (Domain: Face/Point, Type: Float32, range 0.0..15.0 or 0.0..1.0).
-    pub const ATTR_EMISSION: &str = "mtk_emission";
 
     /// Packed UV affine transform (Domain: Face, Type: Float4/RGBA [scale_u, scale_v, offset_u, offset_v]).
     pub const ATTR_UV_TRANSFORM: &str = "mtk_uv_transform";
     /// Dynamic UV rotation angle in radians (Domain: Face, Type: Float32).
     pub const ATTR_UV_ROTATION: &str = "mtk_uv_rotation";
-    /// UV decoder routing mode (Domain: Face, Type: UInt8/Int32: 0=Atlas, 1=Standalone, 2=Animated, 3=Overlay).
-    pub const ATTR_UV_MODE: &str = "mtk_uv_mode";
 
     /// Animation timing parameters (Domain: Face, Type: Float3 [total_frames, frametime, interpolate]).
     pub const ATTR_ANIM_TIMING: &str = "mtk_anim_timing";
@@ -224,20 +220,191 @@ pub mod constants {
     pub const ATTR_BIOME_TINT_COLOR: &str = "mtk_biome_tint_color";
     /// Packed biome tint data and weights (Domain: Face, Type: Float4 [base_weight, overlay_weight, tint_weight, tint_type]).
     pub const ATTR_BIOME_TINT_DATA: &str = "mtk_biome_tint_data";
-    /// Biome colormap UV coordinate (Domain: Face, Type: Float3 [u, v, 0]).
-    pub const ATTR_COLORMAP_UV: &str = "mtk_colormap_uv";
 
-    /// Minecraft absolute world coordinates (Domain: Face/Point, Type: Int32 x 3 or Float3).
+    /// Minecraft absolute world coordinates (Domain: Face/Point, Type: Int32 x 3).
     pub const ATTR_BLOCK_X: &str = "mtk_block_x";
     pub const ATTR_BLOCK_Y: &str = "mtk_block_y";
     pub const ATTR_BLOCK_Z: &str = "mtk_block_z";
-
-    /// Canonical 6-way face normal direction (Domain: Face, Type: UInt8/Int32:
-    /// 0=East, 1=West, 2=Up, 3=Down, 4=South, 5=North — matches `Direction`).
-    pub const ATTR_FACE_DIR: &str = "mtk_face_dir";
-    /// Whether the face is opaque (Domain: Face, Type: Bool).
-    pub const ATTR_IS_OPAQUE: &str = "mtk_is_opaque";
 }
+
+/// High-level role of a canonical mesh attribute.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AttributeRole {
+    /// Read by DCC shader node graphs (must be injected as a mesh attribute).
+    Material,
+    /// Read by host-side metadata logic (provenance, atlas routing, spatial sampling).
+    Metadata,
+    /// No longer produced; listed only so hosts can purge it from legacy files.
+    Retired,
+}
+
+impl AttributeRole {
+    /// Stable string identifier used by bindings and generated host schemas.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Material => "material",
+            Self::Metadata => "metadata",
+            Self::Retired => "retired",
+        }
+    }
+}
+
+/// Static declaration of one mesh attribute in the canonical schema.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MeshAttributeSpec {
+    /// Attribute name as written into DCC / mesh data.
+    pub name: &'static str,
+    /// Attribute domain.
+    pub domain: AttributeDomain,
+    /// Portable data type name (matches [`AttributeData::type_name`]).
+    pub data_type: &'static str,
+    /// Whether the attribute feeds material nodes, host metadata logic, or neither.
+    pub role: AttributeRole,
+}
+
+impl MeshAttributeSpec {
+    const fn new(
+        name: &'static str,
+        domain: AttributeDomain,
+        data_type: &'static str,
+        role: AttributeRole,
+    ) -> Self {
+        Self {
+            name,
+            domain,
+            data_type,
+            role,
+        }
+    }
+}
+
+/// Canonical active mesh attribute schema.
+///
+/// Only attributes listed here may be produced by the native core or injected by
+/// a host. The order is stable so generated host bindings stay deterministic.
+pub const MESH_ATTRIBUTE_SPECS: &[MeshAttributeSpec] = &[
+    MeshAttributeSpec::new(
+        constants::ATTR_SOURCE_TEXTURE_KEY,
+        AttributeDomain::Face,
+        "string",
+        AttributeRole::Metadata,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_SOURCE_TEXTURE_IDX,
+        AttributeDomain::Face,
+        "int32",
+        AttributeRole::Metadata,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_ATLAS_CHUNK_ID,
+        AttributeDomain::Face,
+        "int32",
+        AttributeRole::Metadata,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_UV_TRANSFORM,
+        AttributeDomain::Face,
+        "float4",
+        AttributeRole::Material,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_UV_ROTATION,
+        AttributeDomain::Face,
+        "float",
+        AttributeRole::Material,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_ANIM_TIMING,
+        AttributeDomain::Face,
+        "float3",
+        AttributeRole::Material,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_ANIM_FRAME_SIZE,
+        AttributeDomain::Face,
+        "float3",
+        AttributeRole::Material,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_BIOME_TINT_COLOR,
+        AttributeDomain::Face,
+        "float4",
+        AttributeRole::Material,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_BIOME_TINT_DATA,
+        AttributeDomain::Face,
+        "float4",
+        AttributeRole::Material,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_BLOCK_X,
+        AttributeDomain::Face,
+        "int32",
+        AttributeRole::Metadata,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_BLOCK_Y,
+        AttributeDomain::Face,
+        "int32",
+        AttributeRole::Metadata,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_BLOCK_Z,
+        AttributeDomain::Face,
+        "int32",
+        AttributeRole::Metadata,
+    ),
+];
+
+/// Mesh attributes that must never be written again.
+///
+/// Hosts use this list to purge stale attributes from legacy `.blend` files.
+/// Nothing in this list may appear in [`MESH_ATTRIBUTE_SPECS`].
+pub const RETIRED_MESH_ATTRIBUTES: &[&str] = &[
+    // Obsolete atlas routing / material metadata.
+    "mtk_material_slot",
+    "mtk_material_id",
+    "mtk_atlas_texture_id",
+    "mtk_uv_mode",
+    "mtk_source_origin",
+    "mtk_is_opaque",
+    "mtk_alpha_mode",
+    // Emission moved into the pre-decoded ORM alpha channel; per-face value is dead.
+    "mtk_emission",
+    // Face direction is redundant with the polygon normal.
+    "mtk_face_dir",
+    // Biome colormap sampling now resolves Linear RGBA directly in the native core.
+    "mtk_colormap_uv",
+    "mtk_tint_weight",
+    "mtk_base_tint_weight",
+    "mtk_overlay_tint_weight",
+    "mtk_tint_color",
+    "mtk_tint_type",
+    "mtk_hardcoded_color",
+    "mtk_use_hardcoded",
+    "mtk_biome_temperature",
+    "mtk_biome_humidity",
+    "mtk_biome_coords",
+    // Scalar animation splits replaced by mtk_anim_timing / mtk_anim_frame_size.
+    "mtk_anim_total_frames",
+    "mtk_anim_frametime",
+    "mtk_anim_interpolate",
+    "mtk_anim_frame_width",
+    "mtk_anim_frame_height",
+    // Legacy UV tiling replaced by mtk_uv_transform.
+    "mtk_uv_tiling_scale",
+    "mtk_uv_tiling_location",
+    "mtk_uv_tiling_transform",
+    // Retired physical-property table and legacy point-cloud strings.
+    "mtk_material_props",
+    "mtk_block_state",
+    "mtk_biome",
+    // Legacy unnamespaced names.
+    "atlas_chunk_id",
+    "atlas_texture_id",
+    "material_id",
+];
 
 /// Face-level metadata attached to baked geometry.
 #[derive(Debug, Clone, PartialEq)]
@@ -249,22 +416,14 @@ pub struct FaceAttributes {
     pub material_slot: MaterialSlotId,
     /// Tint index for colormap or biome blending (-1 for none).
     pub tint_index: TintIndex,
-    /// Baked emission intensity (0.0 .. 15.0 or 0.0 .. 1.0).
-    pub emission: f32,
     /// Whether this face is an overlay layer (e.g. grass side overlay).
     pub is_overlay: bool,
-    /// UV routing mode: 0 = Atlas, 1 = Standalone Static, 2 = Standalone Anim, 3 = Overlay Local.
-    pub uv_mode: u8,
     /// Atlas chunk/tile ID if mapped into a global atlas.
     pub atlas_chunk_id: Option<u32>,
-    /// Atlas texture/sprite ID within chunk.
-    pub atlas_texture_id: Option<u32>,
     /// Packed UV affine transform [scale_u, scale_v, offset_u, offset_v].
     pub uv_transform: [f32; 4],
     /// UV rotation angle in radians.
     pub uv_rotation: f32,
-    /// Canonical 6-way face normal direction (0..5).
-    pub face_dir: u8,
     /// Animation timing [total_frames, frametime, interpolate].
     pub anim_timing: [f32; 3],
     /// Animation frame size [frame_width, frame_height, 0].
@@ -273,8 +432,6 @@ pub struct FaceAttributes {
     pub biome_tint_color: [f32; 4],
     /// Packed biome tint data [base_weight, overlay_weight, tint_weight, tint_type].
     pub biome_tint_data: [f32; 4],
-    /// Colormap UV sampling coordinate [u, v, 0].
-    pub colormap_uv: [f32; 3],
     /// Minecraft absolute block coordinate [x, y, z].
     pub block_pos: [i32; 3],
     /// Light level.
@@ -287,19 +444,14 @@ impl Default for FaceAttributes {
             texture_key: String::new(),
             material_slot: 0,
             tint_index: -1,
-            emission: 0.0,
             is_overlay: false,
-            uv_mode: 0,
             atlas_chunk_id: None,
-            atlas_texture_id: None,
             uv_transform: [1.0, 1.0, 0.0, 0.0],
             uv_rotation: 0.0,
-            face_dir: 1, // Default Up
             anim_timing: [1.0, 1.0, 0.0],
             anim_frame_size: [16.0, 16.0, 0.0],
             biome_tint_color: [1.0, 1.0, 1.0, 1.0],
             biome_tint_data: [1.0, 1.0, 0.0, 0.0],
-            colormap_uv: [0.0, 0.0, 0.0],
             block_pos: [0, 0, 0],
             light_level: LightLevel::ZERO,
         }
@@ -336,5 +488,45 @@ mod tests {
 
         let s = AttributeData::String(vec!["hello".to_string()]);
         assert!(s.as_bytes().is_none());
+    }
+
+    #[test]
+    fn test_canonical_attribute_specs_are_unique_and_typed() {
+        let mut names = std::collections::HashSet::new();
+        for spec in MESH_ATTRIBUTE_SPECS {
+            assert!(
+                spec.name.starts_with("mtk_"),
+                "unexpected name: {}",
+                spec.name
+            );
+            assert!(
+                names.insert(spec.name),
+                "duplicate canonical attribute: {}",
+                spec.name
+            );
+            assert!(!spec.data_type.is_empty());
+            assert_ne!(spec.role, AttributeRole::Retired);
+        }
+    }
+
+    #[test]
+    fn test_retired_attributes_are_disjoint_from_active_schema() {
+        let active: std::collections::HashSet<&str> =
+            MESH_ATTRIBUTE_SPECS.iter().map(|spec| spec.name).collect();
+        let mut retired = std::collections::HashSet::new();
+        for name in RETIRED_MESH_ATTRIBUTES {
+            assert!(retired.insert(*name), "duplicate retired attribute: {name}");
+            assert!(
+                !active.contains(name),
+                "attribute {name} is both active and retired"
+            );
+        }
+    }
+
+    #[test]
+    fn test_attribute_role_strings_are_stable() {
+        assert_eq!(AttributeRole::Material.as_str(), "material");
+        assert_eq!(AttributeRole::Metadata.as_str(), "metadata");
+        assert_eq!(AttributeRole::Retired.as_str(), "retired");
     }
 }

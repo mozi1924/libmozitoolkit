@@ -16,10 +16,9 @@ use super::types::{
 fn resolve_model_face(
     face: &BakedFace,
     state_str: &str,
-    emission: f32,
     config: &MesherConfig,
 ) -> PreResolvedModelFace {
-    let (final_tex_key, override_uvs, mat_slot, chunk_id, tex_id, anim_timing, anim_frame_size) =
+    let (final_tex_key, override_uvs, mat_slot, chunk_id, anim_timing, anim_frame_size) =
         if let Some(atlas) = &config.atlas_address_map {
             // Cache-driven animated texture gate:
             // When enabled, probe the prebaked animated sprite cache.
@@ -58,7 +57,6 @@ fn resolve_model_face(
                     Some(remapped),
                     anim_loc.chunk_id,
                     anim_loc.chunk_id as i32,
-                    anim_loc.texture_id,
                     timing,
                     fsize,
                 )
@@ -68,7 +66,6 @@ fn resolve_model_face(
                     Some(*atlas_uvs),
                     face.atlas_chunk_id.unwrap_or(0),
                     face.atlas_chunk_id.unwrap_or(0) as i32,
-                    face.atlas_texture_id.unwrap_or(0),
                     [1.0, 1.0, 0.0],
                     [16.0, 16.0, 0.0],
                 )
@@ -148,7 +145,6 @@ fn resolve_model_face(
                         Some(remapped),
                         atlas_loc.chunk_id,
                         atlas_loc.chunk_id as i32,
-                        atlas_loc.texture_id,
                         timing,
                         fsize,
                     )
@@ -183,7 +179,6 @@ fn resolve_model_face(
                         Some(remapped),
                         fallback_loc.chunk_id,
                         fallback_loc.chunk_id as i32,
-                        fallback_loc.texture_id,
                         timing,
                         fsize,
                     )
@@ -206,7 +201,6 @@ fn resolve_model_face(
                         Some(remapped),
                         default_chunk,
                         default_chunk as i32,
-                        0u32,
                         [1.0, 1.0, 0.0],
                         [16.0, 16.0, 0.0],
                     )
@@ -218,13 +212,12 @@ fn resolve_model_face(
                 None,
                 face.atlas_chunk_id.unwrap_or(0),
                 face.atlas_chunk_id.unwrap_or(0) as i32,
-                face.atlas_texture_id.unwrap_or(0),
                 [1.0, 1.0, 0.0],
                 [16.0, 16.0, 0.0],
             )
         };
 
-    let (tint_data, tint_color, colormap_uv) = compute_face_tint(
+    let (tint_data, tint_color) = compute_face_tint(
         &final_tex_key,
         state_str,
         face.tint_index,
@@ -238,11 +231,8 @@ fn resolve_model_face(
             override_uvs,
             mat_slot,
             chunk_id,
-            tex_id,
             tint_data,
             tint_color,
-            colormap_uv,
-            emission,
             anim_timing,
             anim_frame_size,
         },
@@ -251,7 +241,6 @@ fn resolve_model_face(
 
 fn resolve_model_buckets(
     baked: &BakedModel,
-    emission: f32,
     state_str: &str,
     config: &MesherConfig,
 ) -> ModelFaceBuckets {
@@ -261,12 +250,12 @@ fn resolve_model_buckets(
         let idx = dir.to_index();
         culled_faces[idx] = c_buckets[idx]
             .iter()
-            .map(|f| resolve_model_face(f, state_str, emission, config))
+            .map(|f| resolve_model_face(f, state_str, config))
             .collect();
     }
     let unculled_faces = u_bucket
         .iter()
-        .map(|f| resolve_model_face(f, state_str, emission, config))
+        .map(|f| resolve_model_face(f, state_str, config))
         .collect();
 
     ModelFaceBuckets {
@@ -277,33 +266,29 @@ fn resolve_model_buckets(
 
 /// Pre-resolves palette meshing data (Atlas UVs, material slots, tint) outside the meshing hot loop.
 ///
-/// `palette_emission` carries the pre-computed emission level for each palette entry
-/// (from the baked model, or from a single `BlockState` parse), so the state string is
-/// not parsed a second time here.
+/// Pre-resolves palette meshing data (Atlas UVs, material slots, tint) outside the meshing hot loop.
 pub fn build_palette_meshing_data<'a>(
     padded: &PaddedVoxelArray,
     palette_sources: &[ModelSource<'a>],
-    palette_emission: &[f32],
     config: &MesherConfig,
 ) -> Vec<PaletteMeshingData> {
     padded
         .palette
         .iter()
         .zip(palette_sources.iter())
-        .zip(palette_emission.iter())
-        .map(|((state_str, source), &emission)| {
+        .map(|(state_str, source)| {
             let clean_block = mtk_resource::extract_block_name(state_str);
 
             match source {
                 ModelSource::Single(baked) => {
-                    let b = resolve_model_buckets(baked, emission, state_str, config);
+                    let b = resolve_model_buckets(baked, state_str, config);
                     PaletteMeshingData::Model {
                         culled_faces: b.culled_faces,
                         unculled_faces: b.unculled_faces,
                     }
                 }
                 ModelSource::OwnedSingle(baked) => {
-                    let b = resolve_model_buckets(baked.as_ref(), emission, state_str, config);
+                    let b = resolve_model_buckets(baked.as_ref(), state_str, config);
                     PaletteMeshingData::Model {
                         culled_faces: b.culled_faces,
                         unculled_faces: b.unculled_faces,
@@ -312,7 +297,7 @@ pub fn build_palette_meshing_data<'a>(
                 ModelSource::Variant(group) => {
                     if group.len() <= 1 || !config.enable_alternate_blocks {
                         let primary = group.select_primary();
-                        let b = resolve_model_buckets(primary, emission, state_str, config);
+                        let b = resolve_model_buckets(primary, state_str, config);
                         PaletteMeshingData::Model {
                             culled_faces: b.culled_faces,
                             unculled_faces: b.unculled_faces,
@@ -321,7 +306,7 @@ pub fn build_palette_meshing_data<'a>(
                         let variants = group
                             .models
                             .iter()
-                            .map(|m| resolve_model_buckets(m, emission, state_str, config))
+                            .map(|m| resolve_model_buckets(m, state_str, config))
                             .collect();
                         PaletteMeshingData::VariantModel {
                             variants,
@@ -333,7 +318,7 @@ pub fn build_palette_meshing_data<'a>(
                 ModelSource::OwnedVariant(group) => {
                     if group.len() <= 1 || !config.enable_alternate_blocks {
                         let primary = group.select_primary();
-                        let b = resolve_model_buckets(primary, emission, state_str, config);
+                        let b = resolve_model_buckets(primary, state_str, config);
                         PaletteMeshingData::Model {
                             culled_faces: b.culled_faces,
                             unculled_faces: b.unculled_faces,
@@ -342,7 +327,7 @@ pub fn build_palette_meshing_data<'a>(
                         let variants = group
                             .models
                             .iter()
-                            .map(|m| resolve_model_buckets(m, emission, state_str, config))
+                            .map(|m| resolve_model_buckets(m, state_str, config))
                             .collect();
                         PaletteMeshingData::VariantModel {
                             variants,
@@ -366,7 +351,6 @@ pub fn build_palette_meshing_data<'a>(
                             override_uvs,
                             mat_slot,
                             chunk_id,
-                            tex_id,
                             anim_timing,
                             anim_frame_size,
                         ) = if let Some(atlas) = &config.atlas_address_map {
@@ -412,7 +396,6 @@ pub fn build_palette_meshing_data<'a>(
                                     Some(remapped),
                                     atlas_loc.chunk_id,
                                     atlas_loc.chunk_id as i32,
-                                    atlas_loc.texture_id,
                                     timing,
                                     fsize,
                                 )
@@ -433,7 +416,6 @@ pub fn build_palette_meshing_data<'a>(
                                     Some(remapped),
                                     fb.chunk_id,
                                     fb.chunk_id as i32,
-                                    fb.texture_id,
                                     timing,
                                     fsize,
                                 )
@@ -441,7 +423,6 @@ pub fn build_palette_meshing_data<'a>(
                                 (
                                     format!("minecraft:block/{}", clean_sub),
                                     None,
-                                    0,
                                     0,
                                     0,
                                     [1.0, 1.0, 0.0],
@@ -454,14 +435,13 @@ pub fn build_palette_meshing_data<'a>(
                                 None,
                                 0,
                                 0,
-                                0,
                                 [1.0, 1.0, 0.0],
                                 [16.0, 16.0, 0.0],
                             )
                         };
 
                         let tint_idx = tint_indices[dir.to_index()];
-                        let (tint_data, tint_color, colormap_uv) = compute_face_tint(
+                        let (tint_data, tint_color) = compute_face_tint(
                             &final_tex_key,
                             state_str,
                             tint_idx,
@@ -473,11 +453,8 @@ pub fn build_palette_meshing_data<'a>(
                             override_uvs,
                             mat_slot,
                             chunk_id,
-                            tex_id,
                             tint_data,
                             tint_color,
-                            colormap_uv,
-                            emission,
                             anim_timing,
                             anim_frame_size,
                         });

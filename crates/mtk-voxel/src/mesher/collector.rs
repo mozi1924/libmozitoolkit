@@ -1,9 +1,10 @@
 //! # Face Attributes Collector
 //!
-//! High-throughput collector for all 15 per-face attributes needed for Atlas materials,
-//! UV tiling transforms, labPBR provenance, and dynamic Biome Tinting.
+//! High-throughput collector for canonical per-face attributes needed for Atlas
+//! materials, UV tiling transforms, and dynamic Biome Tinting.
 
 use glam::IVec3;
+use mtk_core::attributes::constants::*;
 use mtk_core::attributes::{AttributeData, AttributeDomain, MeshAttribute};
 use mtk_core::mesh::MeshData;
 
@@ -15,11 +16,9 @@ pub struct FaceAttributesCollector {
     pub uv_rotations: Vec<f32>,
     pub biome_tint_data: Vec<[f32; 4]>,
     pub biome_tint_colors: Vec<[f32; 4]>,
-    pub emissions: Vec<f32>,
     pub block_xs: Vec<i32>,
     pub block_ys: Vec<i32>,
     pub block_zs: Vec<i32>,
-    pub face_dirs: Vec<u8>,
     pub anim_timings: Vec<[f32; 3]>,
     pub anim_frame_sizes: Vec<[f32; 3]>,
 }
@@ -33,11 +32,9 @@ impl FaceAttributesCollector {
             uv_rotations: Vec::with_capacity(capacity),
             biome_tint_data: Vec::with_capacity(capacity),
             biome_tint_colors: Vec::with_capacity(capacity),
-            emissions: Vec::with_capacity(capacity),
             block_xs: Vec::with_capacity(capacity),
             block_ys: Vec::with_capacity(capacity),
             block_zs: Vec::with_capacity(capacity),
-            face_dirs: Vec::with_capacity(capacity),
             anim_timings: Vec::with_capacity(capacity),
             anim_frame_sizes: Vec::with_capacity(capacity),
         }
@@ -53,9 +50,7 @@ impl FaceAttributesCollector {
         uv_rotation: f32,
         tint_data: [f32; 4],
         tint_color: [f32; 4],
-        emission: f32,
         block_pos: IVec3,
-        face_dir: u8,
         anim_timing: [f32; 3],
         anim_frame_size: [f32; 3],
     ) {
@@ -65,78 +60,66 @@ impl FaceAttributesCollector {
         self.uv_rotations.push(uv_rotation);
         self.biome_tint_data.push(tint_data);
         self.biome_tint_colors.push(tint_color);
-        self.emissions.push(emission);
         self.block_xs.push(block_pos.x);
         self.block_ys.push(block_pos.y);
         self.block_zs.push(block_pos.z);
-        self.face_dirs.push(face_dir);
         self.anim_timings.push(anim_timing);
         self.anim_frame_sizes.push(anim_frame_size);
     }
 
     pub fn attach_to_mesh(self, mesh: &mut MeshData) {
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_source_texture_key",
+            ATTR_SOURCE_TEXTURE_KEY,
             AttributeDomain::Face,
             AttributeData::String(self.source_texture_keys),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_atlas_chunk_id",
+            ATTR_ATLAS_CHUNK_ID,
             AttributeDomain::Face,
             AttributeData::Int32(self.atlas_chunk_ids),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_uv_transform",
+            ATTR_UV_TRANSFORM,
             AttributeDomain::Face,
             AttributeData::Float4(self.uv_transforms),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_uv_rotation",
+            ATTR_UV_ROTATION,
             AttributeDomain::Face,
             AttributeData::Float(self.uv_rotations),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_biome_tint_data",
+            ATTR_BIOME_TINT_DATA,
             AttributeDomain::Face,
             AttributeData::Float4(self.biome_tint_data),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_biome_tint_color",
+            ATTR_BIOME_TINT_COLOR,
             AttributeDomain::Face,
             AttributeData::Float4(self.biome_tint_colors),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_block_x",
+            ATTR_BLOCK_X,
             AttributeDomain::Face,
             AttributeData::Int32(self.block_xs),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_block_y",
+            ATTR_BLOCK_Y,
             AttributeDomain::Face,
             AttributeData::Int32(self.block_ys),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_block_z",
+            ATTR_BLOCK_Z,
             AttributeDomain::Face,
             AttributeData::Int32(self.block_zs),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_face_dir",
-            AttributeDomain::Face,
-            AttributeData::UInt8(self.face_dirs),
-        ));
-        mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_emission",
-            AttributeDomain::Face,
-            AttributeData::Float(self.emissions),
-        ));
-        mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_anim_timing",
+            ATTR_ANIM_TIMING,
             AttributeDomain::Face,
             AttributeData::Float3(self.anim_timings),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_anim_frame_size",
+            ATTR_ANIM_FRAME_SIZE,
             AttributeDomain::Face,
             AttributeData::Float3(self.anim_frame_sizes),
         ));

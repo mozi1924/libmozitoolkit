@@ -55,7 +55,6 @@ fn test_fluid_corner_height_calculation() {
 #[test]
 fn test_fluid_side_and_top_texture_keys_with_atlas() {
     use glam::IVec3;
-    use mtk_core::Direction;
     use mtk_cull::FaceCuller;
     use mtk_resource::ResourceLocation;
     use mtk_texture::{AtlasAddressMap, AtlasSpriteLocation};
@@ -116,18 +115,9 @@ fn test_fluid_side_and_top_texture_keys_with_atlas() {
         mtk_core::attributes::AttributeData::String(s) => s,
         _ => panic!("Expected String attribute"),
     };
-    let dirs_attr = still_mesh
-        .get_custom_attribute("mtk_face_dir")
-        .expect("Must have face dirs");
-    let dirs = match &dirs_attr.data {
-        mtk_core::attributes::AttributeData::UInt8(d) => d,
-        _ => panic!("Expected UInt8 attribute"),
-    };
-
-    for i in 0..6 {
-        let dir = dirs[i];
-        let key = &keys[i];
-        if dir == Direction::Up.to_index() as u8 || dir == Direction::Down.to_index() as u8 {
+    // Emission order is stable: Up, Down, North, South, West, East.
+    for (i, key) in keys.iter().enumerate() {
+        if i <= 1 {
             assert_eq!(
                 key, "minecraft:block/water_still",
                 "Up/Down face of still water must use water_still"
@@ -159,18 +149,8 @@ fn test_fluid_side_and_top_texture_keys_with_atlas() {
         mtk_core::attributes::AttributeData::String(s) => s,
         _ => panic!("Expected String attribute"),
     };
-    let flow_dirs_attr = flow_mesh
-        .get_custom_attribute("mtk_face_dir")
-        .expect("Must have face dirs");
-    let flow_dirs = match &flow_dirs_attr.data {
-        mtk_core::attributes::AttributeData::UInt8(d) => d,
-        _ => panic!("Expected UInt8 attribute"),
-    };
-
-    for i in 0..6 {
-        let dir = flow_dirs[i];
-        let key = &flow_keys[i];
-        if dir == Direction::Down.to_index() as u8 {
+    for (i, key) in flow_keys.iter().enumerate() {
+        if i == 1 {
             assert_eq!(
                 key, "minecraft:block/water_still",
                 "Down face of fluid uses water_still"

@@ -76,6 +76,8 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyAttributeDomain>()?;
     m.add_class::<PyMeshData>()?;
     m.add_class::<buffer::PyBufferOwner>()?;
+    m.add_function(wrap_pyfunction!(attributes::mesh_attribute_schema, m)?)?;
+    m.add_function(wrap_pyfunction!(attributes::retired_mesh_attributes, m)?)?;
     m.add_function(wrap_pyfunction!(subdivide::adaptive_pixel_split_mesh, m)?)?;
     m.add_function(wrap_pyfunction!(subdivide::calculate_face_target_grid, m)?)?;
     m.add_function(wrap_pyfunction!(

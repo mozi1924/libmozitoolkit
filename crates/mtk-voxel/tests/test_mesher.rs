@@ -108,7 +108,6 @@ fn test_mesher_custom_attributes() {
         "mtk_block_x",
         "mtk_block_y",
         "mtk_block_z",
-        "mtk_face_dir",
     ];
 
     for attr_name in &expected_attrs {
@@ -256,46 +255,23 @@ fn test_grass_block_meshing_no_duplicate_overlay_faces() {
     };
     assert_eq!(tint_data.len(), 6);
 
-    let dir_attr = mesh
-        .get_custom_attribute("mtk_face_dir")
-        .expect("Must have mtk_face_dir");
-    let dirs = match &dir_attr.data {
-        mtk_core::attributes::AttributeData::UInt8(v) => v,
-        _ => panic!("Expected UInt8"),
-    };
+    // Face order is not part of the attribute contract; classify by tint payload.
+    let up_faces = tint_data
+        .iter()
+        .filter(|td| td[0] == 1.0 && td[1] == 1.0 && td[2] == 1.0 && td[3] == 1.0)
+        .count();
+    let down_faces = tint_data.iter().filter(|td| td[2] == 0.0).count();
+    let side_faces = tint_data
+        .iter()
+        .filter(|td| td[0] == 0.0 && td[1] == 1.0 && td[2] == 1.0 && td[3] == 1.0)
+        .count();
 
-    for i in 0..6 {
-        let dir = dirs[i];
-        let td = tint_data[i];
-        if dir == Direction::Up.to_index() as u8 {
-            // Up face: top grass, tinted
-            assert_eq!(td[0], 1.0, "Top face base_weight must be 1.0");
-            assert_eq!(td[1], 1.0, "Top face overlay_weight must be 1.0");
-            assert_eq!(td[2], 1.0, "Top face tint_weight must be 1.0");
-            assert_eq!(td[3], 1.0, "Top face tint_type must be 1 (GRASS)");
-        } else if dir == Direction::Down.to_index() as u8 {
-            // Down face: dirt, untinted
-            assert_eq!(
-                td[2], 0.0,
-                "Dirt bottom face tint_weight must be 0.0 (untinted!)"
-            );
-        } else {
-            // Side faces: grass_block_side, base untinted, overlay tinted
-            assert_eq!(
-                td[0], 0.0,
-                "Side face base_weight must be 0.0 (dirt base untinted)"
-            );
-            assert_eq!(
-                td[1], 1.0,
-                "Side face overlay_weight must be 1.0 (grass overlay tinted)"
-            );
-            assert_eq!(
-                td[2], 1.0,
-                "Side face tint_weight must be 1.0 (tint enabled)"
-            );
-            assert_eq!(td[3], 1.0, "Side face tint_type must be 1 (GRASS)");
-        }
-    }
+    assert_eq!(up_faces, 1, "Exactly one grass top face must be tinted");
+    assert_eq!(down_faces, 1, "Dirt bottom face must be untinted");
+    assert_eq!(
+        side_faces, 4,
+        "All four side faces must tint only the overlay"
+    );
 }
 
 #[test]

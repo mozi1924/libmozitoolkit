@@ -4,7 +4,10 @@
 
 use super::MeshData;
 use crate::attributes::constants::*;
-use crate::attributes::{AttributeData, AttributeDomain, FaceAttributes, MeshAttribute};
+use crate::attributes::{
+    AttributeData, AttributeDomain, FaceAttributes, MeshAttribute, MeshAttributeSpec,
+    MESH_ATTRIBUTE_SPECS,
+};
 
 impl MeshData {
     /// Populates all standard Face attributes from an ordered slice of `FaceAttributes`.
@@ -15,8 +18,6 @@ impl MeshData {
         }
 
         let mut textures = Vec::with_capacity(face_count);
-        let mut face_dirs = Vec::with_capacity(face_count);
-        let mut emissions = Vec::with_capacity(face_count);
         let mut uv_transforms = Vec::with_capacity(face_count);
         let mut uv_rotations = Vec::with_capacity(face_count);
         let mut anim_timings = Vec::with_capacity(face_count);
@@ -31,8 +32,6 @@ impl MeshData {
 
         for attr in face_attrs {
             textures.push(attr.texture_key.clone());
-            face_dirs.push(attr.face_dir as i32);
-            emissions.push(attr.emission);
             uv_transforms.push(attr.uv_transform);
             uv_rotations.push(attr.uv_rotation);
             anim_timings.push(attr.anim_timing);
@@ -55,16 +54,6 @@ impl MeshData {
             ATTR_SOURCE_TEXTURE_KEY,
             AttributeDomain::Face,
             AttributeData::String(textures),
-        ));
-        self.add_custom_attribute(MeshAttribute::new(
-            ATTR_FACE_DIR,
-            AttributeDomain::Face,
-            AttributeData::Int32(face_dirs),
-        ));
-        self.add_custom_attribute(MeshAttribute::new(
-            ATTR_EMISSION,
-            AttributeDomain::Face,
-            AttributeData::Float(emissions),
         ));
         self.add_custom_attribute(MeshAttribute::new(
             ATTR_UV_TRANSFORM,
@@ -118,6 +107,46 @@ impl MeshData {
                 AttributeDomain::Face,
                 AttributeData::Int32(chunk_ids),
             ));
+        }
+
+        debug_assert!(
+            self.custom_attributes
+                .keys()
+                .all(|name| attribute_spec(name).is_some()),
+            "populate_standard_face_attributes emitted an attribute missing from MESH_ATTRIBUTE_SPECS"
+        );
+    }
+}
+
+/// Looks up a canonical attribute declaration by name.
+///
+/// Returns `None` for retired or unknown attributes; hosts must not write those.
+pub fn attribute_spec(name: &str) -> Option<&'static MeshAttributeSpec> {
+    MESH_ATTRIBUTE_SPECS.iter().find(|spec| spec.name == name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::attributes::RETIRED_MESH_ATTRIBUTES;
+
+    #[test]
+    fn test_populate_standard_face_attributes_stays_within_schema() {
+        let attrs = vec![FaceAttributes::new("minecraft:block/stone", 0)];
+        let mut mesh = MeshData::new();
+        mesh.populate_standard_face_attributes(&attrs);
+
+        for name in mesh.custom_attributes.keys() {
+            assert!(
+                attribute_spec(name).is_some(),
+                "attribute {name} is not declared in MESH_ATTRIBUTE_SPECS"
+            );
+        }
+        for name in RETIRED_MESH_ATTRIBUTES {
+            assert!(
+                mesh.get_custom_attribute(name).is_none(),
+                "retired attribute {name} must not be emitted"
+            );
         }
     }
 }

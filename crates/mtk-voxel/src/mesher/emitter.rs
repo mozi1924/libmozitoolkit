@@ -29,7 +29,6 @@ pub fn emit_baked_face(
     final_tint_data: [f32; 4],
     final_tint_color: [f32; 4],
     block_pos: IVec3,
-    dir: Direction,
 ) {
     mesh.uv_layout = UvLayout::PerLoop;
     let base_idx = mesh.positions.len() as u32;
@@ -86,9 +85,7 @@ pub fn emit_baked_face(
         face.uv_rot,
         final_tint_data,
         final_tint_color,
-        shading.emission,
         block_pos,
-        dir.to_index() as u8,
         shading.anim_timing,
         shading.anim_frame_size,
     );
@@ -257,9 +254,7 @@ pub fn emit_unit_cube_face(
         0.0,
         final_tint_data,
         final_tint_color,
-        shading.emission,
         block_pos,
-        dir.to_index() as u8,
         shading.anim_timing,
         shading.anim_frame_size,
     );

@@ -62,16 +62,13 @@ fn test_bake_redstone_wire_vanilla_resolution() {
     assert!(!mesh.positions.is_empty());
     assert!(textures.iter().any(|t| t.contains("redstone_dust_dot")));
 
-    // Check MeshData custom attributes for emission level
-    use mtk_core::attributes::constants::ATTR_EMISSION;
-    use mtk_core::attributes::AttributeData;
-
-    let emission_attr = mesh.get_custom_attribute(ATTR_EMISSION).unwrap();
-    if let AttributeData::Float(ref vals) = emission_attr.data {
-        assert!(!vals.is_empty());
-        assert!((vals[0] - 1.0).abs() < 1e-4);
-    } else {
-        panic!("Emission attribute must be Float");
+    // Emission is baked-model metadata; retired face attributes must not be emitted.
+    use mtk_core::attributes::RETIRED_MESH_ATTRIBUTES;
+    for name in RETIRED_MESH_ATTRIBUTES {
+        assert!(
+            mesh.get_custom_attribute(name).is_none(),
+            "retired attribute {name} must not be emitted"
+        );
     }
 }
 

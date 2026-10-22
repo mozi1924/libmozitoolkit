@@ -92,11 +92,21 @@ pub struct FlatPolygonMesh {
 - **硬编码方块染色与红石信号强度 (Hardcoded Tints & Redstone Wire)**：
   - 云杉树叶、白桦树叶、睡莲与红石引线均为硬编码染色类别 (`TINT_TYPE_HARDCODED = 4`)；
   - 红石引线 (`redstone_wire`) 统一维护 0~15 级标准 sRGB Hex 表与 Linear RGBA 线性渐变色彩，发光强度按 `power / 15.0` 计算；
-  - 烘焙网格注入 `mtk_biome_tint_data` (`[1.0, 1.0, 1.0, 4.0]`) 与 `mtk_emission` 属性，着色器阶段无缝自适应渲染。
+  - 烘焙网格注入 `mtk_biome_tint_data` (`[1.0, 1.0, 1.0, 4.0]`) 等规范属性；属性契约见 `mtk_core::attributes::MESH_ATTRIBUTE_SPECS`。
 - **色彩空间规范**：
   - 宿主与渲染器内部色彩混合**必须在标准线性空间（Linear RGBA, $[0.0, 1.0]$）中进行**；
   - 导出/展示贴图时使用权威转换公式双向映射：
     $$\text{Linear} = \begin{cases} \frac{\text{sRGB}}{12.92} & \text{sRGB} \le 0.04045 \\ \left(\frac{\text{sRGB} + 0.055}{1.055}\right)^{2.4} & \text{sRGB} > 0.04045 \end{cases}$$
+
+---
+
+### 2.4 网格属性契约单一事实源 (Mesh Attribute SSOT)
+- **唯一权威来源**：`mtk_core::attributes::MESH_ATTRIBUTE_SPECS`（名称、域、类型、`material` / `metadata` 角色）与 `RETIRED_MESH_ATTRIBUTES`（退役清单）。
+- **宿主只消费、不复制**：Python / WASM 绑定通过 `mesh_attribute_schema()` 与 `retired_mesh_attributes()` 读取该契约；Blender 前端由 `tools/sync_attribute_schema.py` 生成镜像并在测试中做逐项校验。
+- **当前活跃属性**：
+  - 材质节点消费：`mtk_uv_transform`、`mtk_uv_rotation`、`mtk_anim_timing`、`mtk_anim_frame_size`、`mtk_biome_tint_data`、`mtk_biome_tint_color`；
+  - 宿主元信息：`mtk_source_texture_key`、`mtk_source_texture_idx`、`mtk_atlas_chunk_id`、`mtk_block_x/y/z`。
+- **已退役属性**（`mtk_material_slot`、`mtk_atlas_texture_id`、`mtk_uv_mode`、`mtk_colormap_uv`、`mtk_face_dir`、`mtk_emission`、标量动画拆分、旧 tint 权重等）不再由核心生成；宿主只负责从旧 `.blend` 中清理。
 
 ---
 

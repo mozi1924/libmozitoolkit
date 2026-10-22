@@ -1,6 +1,6 @@
 //! # Biome Tint Resolver for Meshing
 //!
-//! Computes per-face Biome Tint data, linear colors, and colormap UVs.
+//! Computes per-face Biome Tint data and resolved linear colors.
 
 /// Computes biome tint data and linear color for a face.
 pub fn compute_face_tint(
@@ -8,11 +8,9 @@ pub fn compute_face_tint(
     block_name: &str,
     tint_index: i16,
     biome_resolver: Option<&mtk_material::BiomeResolver>,
-) -> ([f32; 4], [f32; 4], [f32; 3]) {
+) -> ([f32; 4], [f32; 4]) {
     // Hot path: the default palette is a static entry, no lookup/allocation needed.
     let default_pal = mtk_material::biome::default_biome_palette();
-    let default_uv = default_pal.colormap_uv();
-    let colormap_uv_3 = [default_uv[0], default_uv[1], 0.0];
 
     // Check if texture has an overlay companion (e.g. grass_block_side has grass_block_side_overlay)
     let has_overlay = if let Some(resolver) = biome_resolver {
@@ -27,7 +25,7 @@ pub fn compute_face_tint(
         texture_key.ends_with("grass_block_side") || texture_key.ends_with("grass_side");
     if tint_index < 0 && !(has_overlay && is_grass_side) {
         let packed_data = [1.0, 0.0, 0.0, 0.0];
-        return (packed_data, [1.0, 1.0, 1.0, 1.0], colormap_uv_3);
+        return (packed_data, [1.0, 1.0, 1.0, 1.0]);
     }
 
     let t_idx = Some(tint_index as i32);
@@ -57,7 +55,7 @@ pub fn compute_face_tint(
                 }
             }
         };
-        (packed_data, final_col, colormap_uv_3)
+        (packed_data, final_col)
     } else {
         // Fallback when no biome_resolver is supplied:
         let is_grass_side =
@@ -104,10 +102,10 @@ pub fn compute_face_tint(
             };
             let ow = if cat == "grass" { 1.0 } else { 0.0 };
             let packed_data = [bw, ow, tw, tt as f32];
-            (packed_data, col, colormap_uv_3)
+            (packed_data, col)
         } else {
             let packed_data = [1.0, 0.0, 0.0, 0.0]; // no tint
-            (packed_data, [1.0, 1.0, 1.0, 1.0], colormap_uv_3)
+            (packed_data, [1.0, 1.0, 1.0, 1.0])
         }
     }
 }

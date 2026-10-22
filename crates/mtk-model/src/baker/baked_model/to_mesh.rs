@@ -100,11 +100,6 @@ impl BakedModel {
                     }]
                 };
 
-                let emission = if self.is_emissive {
-                    self.emissive_level
-                } else {
-                    0.0
-                };
                 let scale_u = (face.uv_bounds[2] - face.uv_bounds[0]).abs();
                 let scale_v = (face.uv_bounds[3] - face.uv_bounds[1]).abs();
                 let uv_trans = [
@@ -148,14 +143,10 @@ impl BakedModel {
                         texture_key: face.texture.clone(),
                         material_slot: slot,
                         tint_index: face.tint_index,
-                        emission,
                         is_overlay: false,
-                        uv_mode: 0,
                         atlas_chunk_id: face.atlas_chunk_id.map(|c| c as u32),
-                        atlas_texture_id: face.atlas_texture_id,
                         uv_transform: uv_trans,
                         uv_rotation: face.uv_rot,
-                        face_dir: face.direction.to_index() as u8,
                         biome_tint_color: tint_color,
                         biome_tint_data: tint_data,
                         ..Default::default()
@@ -183,25 +174,16 @@ impl BakedModel {
                 mesh.uvs.push([uv.x, 1.0 - uv.y]);
             }
 
-            let emission = if self.is_emissive {
-                self.emissive_level
-            } else {
-                0.0
-            };
             let (tint_color, tint_data) = ([1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 0.0, 0.0]);
 
             let face_attr = mtk_core::attributes::FaceAttributes {
                 texture_key: obj_f.texture.clone(),
                 material_slot: slot,
                 tint_index: obj_f.tint_index,
-                emission,
                 is_overlay: false,
-                uv_mode: 0,
                 atlas_chunk_id: None,
-                atlas_texture_id: None,
                 uv_transform: [1.0, 1.0, 0.0, 0.0],
                 uv_rotation: 0.0,
-                face_dir: obj_f.direction.to_index() as u8,
                 biome_tint_color: tint_color,
                 biome_tint_data: tint_data,
                 ..Default::default()

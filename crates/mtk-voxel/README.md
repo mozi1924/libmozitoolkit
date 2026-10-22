@@ -61,7 +61,7 @@
                                 └───────────────────────────────────┘
 ```
 
-- **纯数据流规范**：以紧凑的 1D/3D 缓冲、BlockState 字符串或 Palette 索引为输入，直接产出包含顶点位置、法线、四边形/三角形索引、UV 及 16 项标准面属性（材料槽、图集 Chunk ID、Biome Tint、发光等级 `mtk_emission` 等）的 `MeshData`。
+- **纯数据流规范**：以紧凑的 1D/3D 缓冲、BlockState 字符串或 Palette 索引为输入，直接产出包含顶点位置、法线、四边形/三角形索引、UV 及 12 项标准面属性（来源贴图调色板、图集 Chunk ID、UV 变换/旋转、动画时序/帧尺寸、Biome Tint、方块坐标）的 `MeshData`。
 - **宿主无关 (Host-Agnostic)**：核心内部采用标准 3D 几何坐标系运算，支持运行时输出 `Minecraft` 原生、`ZUpRightHanded` (Unreal/Blender) 或 `YUpRightHanded` (Godot/glTF/Three.js/WebGPU) 坐标。
 - **极致吞吐设计**：采用 4,096 紧凑定长数组、18×18×18 邻域垫片 (Apron)、Palette 级着色预解析（消除内部热循环哈希查找）以及 Rayon 多区块并行。
 

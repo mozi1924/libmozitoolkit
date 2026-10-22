@@ -120,3 +120,30 @@ pub fn attribute_data_to_py_list<'py>(
         AttributeData::String(v) => Ok(PyList::new(py, v)?.into_any()),
     }
 }
+
+/// Returns the canonical mesh attribute schema as
+/// `(name, domain, data_type, role)` tuples.
+///
+/// Hosts must treat this as the single source of truth instead of maintaining
+/// their own attribute name/type tables.
+#[pyfunction]
+pub fn mesh_attribute_schema() -> Vec<(&'static str, &'static str, &'static str, &'static str)> {
+    mtk_core::attributes::MESH_ATTRIBUTE_SPECS
+        .iter()
+        .map(|spec| {
+            (
+                spec.name,
+                spec.domain.as_str(),
+                spec.data_type,
+                spec.role.as_str(),
+            )
+        })
+        .collect()
+}
+
+/// Returns attribute names that must never be written and should be purged
+/// from legacy mesh data.
+#[pyfunction]
+pub fn retired_mesh_attributes() -> Vec<&'static str> {
+    mtk_core::attributes::RETIRED_MESH_ATTRIBUTES.to_vec()
+}

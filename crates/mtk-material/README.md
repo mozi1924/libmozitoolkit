@@ -83,11 +83,11 @@ pub struct BiomePalette {
 - `mtk_material::get_swamp_grass_color(x, z) -> [f32; 4]`: 严格按照原版算法（频率 0.0225、阈值 -0.1）在双色（`#4C763C` / `#6A7039`）间进行权威采样。
 
 **常驻 Colormap 内存像素采样 (`biome/colormap.rs`)**：
-- `mtk_material::get_default_colormaps() -> &'static ColormapStorage`: 获取常驻内存的原版 256x256 草地、树叶、干枯树叶 RGB 色图单例。
-- `cms.sample_grass_linear(t, h) -> [f32; 4]`: 根据温度/湿度双线性插值并转换为 Linear RGBA。
-- `cms.sample_foliage_linear(t, h) -> [f32; 4]`: 树叶色图双线性采样。
-- `cms.sample_dry_foliage_linear(t, h) -> [f32; 4]`: 干枯树叶色图双线性采样。
-- `apply_dark_forest_grass_modifier(linear) -> [f32; 4]`: 黑森林原版加权平均修正算法：`((base & 0xFEFEFE) + 0x28340A) >> 1`。
+- `mtk_material::get_default_colormaps() -> &'static VanillaColormaps`: 获取常驻内存的原版 256x256 草地、树叶、干枯树叶 RGB 色图单例。
+- `cms.sample_grass_linear(t, h) -> [f32; 4]`: 根据温度/湿度最近邻采样并转换为 Linear RGBA。
+- `cms.sample_foliage_linear(t, h) -> [f32; 4]`: 树叶色图最近邻采样。
+- `cms.sample_dry_foliage_linear(t, h) -> [f32; 4]`: 干枯树叶色图最近邻采样。
+- `apply_dark_forest_grass_modifier(base_srgb) -> [f32; 4]`: 输入 sRGB `[r, g, b]`，执行黑森林原版加权平均修正 `((base & 0xFEFEFE) + 0x28340A) >> 1` 并返回 Linear RGBA。
 
 ---
 
@@ -113,8 +113,6 @@ pub struct MeshBiomeAttributesResult {
     pub packed_tint_data: Vec<[f32; 4]>,
     /// mtk_biome_tint_color: (r, g, b, a) Linear RGBA
     pub tint_colors: Vec<[f32; 4]>,
-    /// mtk_colormap_uv: (u, v, 0.0)
-    pub colormap_uvs: Vec<[f32; 3]>,
 }
 ```
 

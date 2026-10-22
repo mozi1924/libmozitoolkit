@@ -78,7 +78,7 @@ where
                         ),
                     ];
                     let ctm_key = resolved_loc.as_string();
-                    let (td, tc, c_uv) = compute_face_tint(
+                    let (td, tc) = compute_face_tint(
                         &ctm_key,
                         state_str,
                         face.tint_index,
@@ -90,18 +90,15 @@ where
                         override_uvs: Some(remapped),
                         mat_slot: atlas_loc.chunk_id,
                         chunk_id: atlas_loc.chunk_id as i32,
-                        tex_id: atlas_loc.texture_id,
                         tint_data: td,
                         tint_color: tc,
-                        colormap_uv: c_uv,
-                        emission: pre_face.emission,
                         anim_timing: timing,
                         anim_frame_size: fsize,
                     };
                 }
             } else {
                 let ctm_key = resolved_loc.as_string();
-                let (td, tc, c_uv) = compute_face_tint(
+                let (td, tc) = compute_face_tint(
                     &ctm_key,
                     state_str,
                     face.tint_index,
@@ -112,11 +109,8 @@ where
                     override_uvs: None,
                     mat_slot: pre_face.mat_slot,
                     chunk_id: 0,
-                    tex_id: 0,
                     tint_data: td,
                     tint_color: tc,
-                    colormap_uv: c_uv,
-                    emission: pre_face.emission,
                     anim_timing: pre_face.anim_timing,
                     anim_frame_size: pre_face.anim_frame_size,
                 };
@@ -129,11 +123,8 @@ where
         override_uvs: pre_face.override_uvs,
         mat_slot: pre_face.mat_slot,
         chunk_id: pre_face.chunk_id,
-        tex_id: pre_face.tex_id,
         tint_data: pre_face.tint_data,
         tint_color: pre_face.tint_color,
-        colormap_uv: pre_face.colormap_uv,
-        emission: pre_face.emission,
         anim_timing: pre_face.anim_timing,
         anim_frame_size: pre_face.anim_frame_size,
     }
@@ -191,7 +182,7 @@ where
                         Vec2::new(u_max, v_max),
                     ];
                     let ctm_key = resolved_loc.as_string();
-                    let (td, tc, c_uv) = compute_face_tint(
+                    let (td, tc) = compute_face_tint(
                         &ctm_key,
                         state_str,
                         -1,
@@ -203,29 +194,23 @@ where
                         override_uvs: Some(remapped),
                         mat_slot: atlas_loc.chunk_id,
                         chunk_id: atlas_loc.chunk_id as i32,
-                        tex_id: atlas_loc.texture_id,
                         tint_data: td,
                         tint_color: tc,
-                        colormap_uv: c_uv,
-                        emission: pre_face.emission,
                         anim_timing: timing,
                         anim_frame_size: fsize,
                     };
                 }
             } else {
                 let ctm_key = resolved_loc.as_string();
-                let (td, tc, c_uv) =
+                let (td, tc) =
                     compute_face_tint(&ctm_key, state_str, -1, config.biome_resolver.as_deref());
                 return ResolvedFaceShading {
                     texture_key: ctm_key,
                     override_uvs: None,
                     mat_slot: pre_face.mat_slot,
                     chunk_id: 0,
-                    tex_id: 0,
                     tint_data: td,
                     tint_color: tc,
-                    colormap_uv: c_uv,
-                    emission: pre_face.emission,
                     anim_timing: pre_face.anim_timing,
                     anim_frame_size: pre_face.anim_frame_size,
                 };
@@ -238,17 +223,14 @@ where
         override_uvs: pre_face.override_uvs,
         mat_slot: pre_face.mat_slot,
         chunk_id: pre_face.chunk_id,
-        tex_id: pre_face.tex_id,
         tint_data: pre_face.tint_data,
         tint_color: pre_face.tint_color,
-        colormap_uv: pre_face.colormap_uv,
-        emission: pre_face.emission,
         anim_timing: pre_face.anim_timing,
         anim_frame_size: pre_face.anim_frame_size,
     }
 }
 
-/// Samples per-column/3D quart biome tint colors and colormap UVs based on face tint configuration.
+/// Samples per-column/3D quart biome tint colors based on face tint configuration.
 pub fn sample_biome_tint(
     biome_data: Option<&[SmoothedBiomeColumn]>,
     lx: usize,
@@ -256,10 +238,9 @@ pub fn sample_biome_tint(
     lz: usize,
     mut tint_data: [f32; 4],
     default_tint_color: [f32; 4],
-    default_colormap_uv: [f32; 3],
-) -> ([f32; 4], [f32; 4], [f32; 3]) {
+) -> ([f32; 4], [f32; 4]) {
     if tint_data[2] <= 0.0 {
-        return (tint_data, default_tint_color, default_colormap_uv);
+        return (tint_data, default_tint_color);
     }
     if let Some(biome_cols) = biome_data {
         let col_idx = if biome_cols.len() == 1024 {
@@ -270,7 +251,6 @@ pub fn sample_biome_tint(
         };
         if col_idx < biome_cols.len() && tint_data[2] > 0.0 {
             let col = &biome_cols[col_idx];
-            let uv = [col.colormap_uv[0], col.colormap_uv[1], 0.0];
             let tt = tint_data[3] as u8;
             let (c, has_custom) = match tt {
                 mtk_material::TINT_TYPE_GRASS => (col.grass_color, col.has_custom_grass),
@@ -285,11 +265,11 @@ pub fn sample_biome_tint(
             if has_custom {
                 tint_data[3] = mtk_material::TINT_TYPE_HARDCODED as f32;
             }
-            (tint_data, c, uv)
+            (tint_data, c)
         } else {
-            (tint_data, default_tint_color, default_colormap_uv)
+            (tint_data, default_tint_color)
         }
     } else {
-        (tint_data, default_tint_color, default_colormap_uv)
+        (tint_data, default_tint_color)
     }
 }

@@ -315,7 +315,7 @@ fn main() {
 ### 示例 4：烘焙内置红石引线并提取发光与染色属性
 ```rust
 use mtk_model::baker::ModelBaker;
-use mtk_core::attributes::constants::{ATTR_EMISSION, ATTR_BIOME_TINT_COLOR};
+use mtk_core::attributes::constants::{ATTR_BIOME_TINT_COLOR, ATTR_UV_TRANSFORM};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut baker = ModelBaker::new();
@@ -331,7 +331,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(baked.emissive_level, 1.0);
 
     let (mesh, _) = baked.to_mesh_with_textures(false);
-    assert!(mesh.has_custom_attribute(ATTR_EMISSION));
+    assert!(mesh.has_custom_attribute(ATTR_UV_TRANSFORM));
     assert!(mesh.has_custom_attribute(ATTR_BIOME_TINT_COLOR));
 
     Ok(())

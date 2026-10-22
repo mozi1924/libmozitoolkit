@@ -79,8 +79,6 @@ mod tests {
         // Verify standard attributes
         use mtk_core::attributes::constants::*;
         assert!(mesh.has_custom_attribute(ATTR_SOURCE_TEXTURE_KEY));
-        assert!(mesh.has_custom_attribute(ATTR_FACE_DIR));
-        assert!(mesh.has_custom_attribute(ATTR_EMISSION));
         assert!(mesh.has_custom_attribute(ATTR_UV_TRANSFORM));
 
         let tex_attr = mesh.get_custom_attribute(ATTR_SOURCE_TEXTURE_KEY).unwrap();

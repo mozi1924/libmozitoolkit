@@ -53,6 +53,8 @@ Python 模块名：`libmtk_py`
   - 顶点与面自定义属性：`add_string_attribute(name, domain, values)`, `add_attribute_from_buffer(name, domain, data_type, buffer)`, `get_attribute_data(name)`, `has_attribute(name)`, `attribute_names()`
   - 来源贴图调色板：`source_texture_palette_indices() -> (palette, u32 memoryview)`，把逐面 `mtk_source_texture_key` 压缩成 palette + 索引，供 Live Sync 等跳过逐面字符串的宿主保留完整 provenance。
 - **`AttributeDomain`**：属性域枚举，支持 `"point"` (顶点) 与 `"face"` (面)。
+- **`mesh_attribute_schema() -> list[tuple[str, str, str, str]]`**：返回规范网格属性 `(name, domain, data_type, role)` 列表，是宿主唯一权威的属性契约来源。
+- **`retired_mesh_attributes() -> list[str]`**：返回已退役、只允许清理的属性名清单。
 - **`analyze_mesh_hard_edges(positions, edge_verts, face_loop_starts, face_loop_totals, loop_verts, sharp_angle_rad, explicit_sharp_edges=None) -> PyBytes`**：基于二面角与边界的高性能硬边/锐边拓扑分析算子，支持零拷贝 Buffer Protocol。
 
 ### 2.2 遮挡剔除与状态机 (`cull`)

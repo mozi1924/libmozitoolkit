@@ -9,11 +9,8 @@ pub struct PreResolvedFace {
     pub override_uvs: Option<[Vec2; 4]>,
     pub mat_slot: u16,
     pub chunk_id: i32,
-    pub tex_id: u32,
     pub tint_data: [f32; 4],
     pub tint_color: [f32; 4],
-    pub colormap_uv: [f32; 3],
-    pub emission: f32,
     pub anim_timing: [f32; 3],
     pub anim_frame_size: [f32; 3],
 }
@@ -152,11 +149,8 @@ pub struct ResolvedFaceShading {
     pub override_uvs: Option<[Vec2; 4]>,
     pub mat_slot: u16,
     pub chunk_id: i32,
-    pub tex_id: u32,
     pub tint_data: [f32; 4],
     pub tint_color: [f32; 4],
-    pub colormap_uv: [f32; 3],
-    pub emission: f32,
     pub anim_timing: [f32; 3],
     pub anim_frame_size: [f32; 3],
 }
