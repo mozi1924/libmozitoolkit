@@ -736,6 +736,7 @@ name = "mtk-material"
 version = "0.1.0"
 dependencies = [
  "glam",
+ "image",
  "mtk-core",
  "mtk-resource",
  "mtk-testkit",

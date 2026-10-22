@@ -2,9 +2,15 @@
 
 pub mod batch;
 pub mod canonical_data;
+pub mod colormap;
 pub mod hardcoded;
 pub mod palettes;
 pub mod resolver;
+
+pub use colormap::{
+    apply_dark_forest_grass_modifier, compute_resolved_tint_color, get_default_colormaps,
+    VanillaColormaps,
+};
 
 pub use batch::{
     compute_mesh_biome_attributes, compute_mesh_biome_attributes_custom,

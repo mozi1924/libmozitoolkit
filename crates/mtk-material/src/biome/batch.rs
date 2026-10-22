@@ -56,18 +56,17 @@ pub fn resolve_biome_color_set(
     custom: Option<&CustomBiomeSettings>,
 ) -> (BiomeColorSet, bool, bool, bool) {
     if let Some(settings) = custom {
+        let cms = super::colormap::get_default_colormaps();
         let default_pal = get_biome_palette("plains");
+        let sampled_grass = cms.sample_grass_linear(settings.temperature, settings.humidity);
+        let sampled_foliage = cms.sample_foliage_linear(settings.temperature, settings.humidity);
+        let sampled_dry = cms.sample_dry_foliage_linear(settings.temperature, settings.humidity);
+
         return (
             BiomeColorSet {
-                grass: settings
-                    .grass_color
-                    .unwrap_or_else(|| default_pal.grass_linear()),
-                foliage: settings
-                    .foliage_color
-                    .unwrap_or_else(|| default_pal.foliage_linear()),
-                dry_foliage: settings
-                    .dry_foliage_color
-                    .unwrap_or_else(|| default_pal.dry_foliage_linear()),
+                grass: settings.grass_color.unwrap_or(sampled_grass),
+                foliage: settings.foliage_color.unwrap_or(sampled_foliage),
+                dry_foliage: settings.dry_foliage_color.unwrap_or(sampled_dry),
                 water: settings
                     .water_color
                     .unwrap_or_else(|| default_pal.water_linear()),
@@ -153,16 +152,15 @@ pub fn compute_mesh_biome_attributes_custom(
         };
     }
 
+    let cms = super::colormap::get_default_colormaps();
     let default_pal = get_biome_palette("plains");
-    let grass_col = custom
-        .grass_color
-        .unwrap_or_else(|| default_pal.grass_linear());
-    let foliage_col = custom
-        .foliage_color
-        .unwrap_or_else(|| default_pal.foliage_linear());
-    let dry_foliage_col = custom
-        .dry_foliage_color
-        .unwrap_or_else(|| default_pal.dry_foliage_linear());
+    let sampled_grass = cms.sample_grass_linear(custom.temperature, custom.humidity);
+    let sampled_foliage = cms.sample_foliage_linear(custom.temperature, custom.humidity);
+    let sampled_dry = cms.sample_dry_foliage_linear(custom.temperature, custom.humidity);
+
+    let grass_col = custom.grass_color.unwrap_or(sampled_grass);
+    let foliage_col = custom.foliage_color.unwrap_or(sampled_foliage);
+    let dry_foliage_col = custom.dry_foliage_color.unwrap_or(sampled_dry);
     let water_col = custom
         .water_color
         .unwrap_or_else(|| default_pal.water_linear());

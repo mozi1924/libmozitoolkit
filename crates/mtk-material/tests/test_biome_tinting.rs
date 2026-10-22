@@ -380,3 +380,39 @@ fn unit_cube_tint_indices_match_per_direction_api() {
     assert_eq!(get_unit_cube_tint_indices("minecraft:oak_leaves"), [0; 6]);
     assert_eq!(get_unit_cube_tint_indices("minecraft:stone"), [-1; 6]);
 }
+
+#[test]
+fn test_resident_colormap_sampling_and_modifiers() {
+    use mtk_material::biome::{
+        compute_resolved_tint_color, get_default_colormaps, linear_to_srgb, TINT_TYPE_GRASS,
+    };
+
+    let cms = get_default_colormaps();
+    assert_eq!(cms.grass_pixels.len(), 256 * 256 * 3);
+    assert_eq!(cms.foliage_pixels.len(), 256 * 256 * 3);
+    assert_eq!(cms.dry_foliage_pixels.len(), 256 * 256 * 3);
+
+    // 1. Plains sample at temp=0.8, downfall=0.4
+    let plains_srgb = cms.sample_grass_srgb(0.8, 0.4);
+    let pr = (plains_srgb[0] * 255.0).round() as u8;
+    let pg = (plains_srgb[1] * 255.0).round() as u8;
+    let pb = (plains_srgb[2] * 255.0).round() as u8;
+    // Canonical Plains grass: #91BD59 -> (145, 189, 89)
+    assert_eq!((pr, pg, pb), (145, 189, 89));
+
+    // 2. Dark forest grass modifier:
+    // Base forest (temp=0.7, downfall=0.8) is #79C05A -> (121, 192, 90)
+    // Modified: ((base & 0xFEFEFE) + 0x28340A) >> 1 -> #507A32 -> (80, 122, 50)
+    let df_grass = compute_resolved_tint_color(TINT_TYPE_GRASS, 0.7, 0.8, true);
+    let df_r = (linear_to_srgb(df_grass[0]) * 255.0).round() as u8;
+    let df_g = (linear_to_srgb(df_grass[1]) * 255.0).round() as u8;
+    let df_b = (linear_to_srgb(df_grass[2]) * 255.0).round() as u8;
+    assert_eq!((df_r, df_g, df_b), (80, 122, 50));
+
+    // 3. Foliage sample in dark forest directly from colormap: (88, 174, 49)
+    let fol_srgb = cms.sample_foliage_srgb(0.7, 0.8);
+    let fol_r = (fol_srgb[0] * 255.0).round() as u8;
+    let fol_g = (fol_srgb[1] * 255.0).round() as u8;
+    let fol_b = (fol_srgb[2] * 255.0).round() as u8;
+    assert_eq!((fol_r, fol_g, fol_b), (88, 174, 49));
+}

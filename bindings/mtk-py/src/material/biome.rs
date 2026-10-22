@@ -168,6 +168,31 @@ pub fn get_colormap_uv(temperature: f32, humidity: f32) -> [f32; 2] {
     mtk_material::get_colormap_uv(temperature, humidity)
 }
 
+/// Sample resident vanilla colormap linear RGBA colors from temperature and humidity.
+#[pyfunction]
+#[pyo3(signature = (temperature, humidity))]
+pub fn sample_colormap_colors(
+    py: Python<'_>,
+    temperature: f32,
+    humidity: f32,
+) -> PyResult<PyObject> {
+    let cms = mtk_material::get_default_colormaps();
+    let dict = PyDict::new(py);
+    dict.set_item(
+        "grass_linear",
+        cms.sample_grass_linear(temperature, humidity),
+    )?;
+    dict.set_item(
+        "foliage_linear",
+        cms.sample_foliage_linear(temperature, humidity),
+    )?;
+    dict.set_item(
+        "dry_foliage_linear",
+        cms.sample_dry_foliage_linear(temperature, humidity),
+    )?;
+    Ok(dict.into())
+}
+
 /// Retrieve the hardcoded linear color for a block or texture stem, if any.
 #[pyfunction]
 #[pyo3(signature = (name))]
