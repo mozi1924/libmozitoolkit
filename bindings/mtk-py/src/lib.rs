@@ -140,7 +140,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(classify_tint_category, m)?)?;
     m.add_function(wrap_pyfunction!(get_biome_meta, m)?)?;
     m.add_function(wrap_pyfunction!(get_all_biomes, m)?)?;
-    m.add_function(wrap_pyfunction!(material::get_colormap_uv, m)?)?;
     m.add_function(wrap_pyfunction!(material::sample_colormap_colors, m)?)?;
     m.add_function(wrap_pyfunction!(material::get_hardcoded_tint, m)?)?;
     m.add_function(wrap_pyfunction!(material::get_hardcoded_tint_hex, m)?)?;

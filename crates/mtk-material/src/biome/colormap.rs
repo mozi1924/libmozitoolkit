@@ -1,10 +1,13 @@
-//! # Authoritative Vanilla Colormap Sampling & Memory Cache
+//! # Authoritative Colormap Sampling & Memory Cache
 //!
-//! Provides in-memory resident Minecraft 256x256 colormaps (grass, foliage, dry_foliage)
-//! for nanosecond-speed lookup, resolving linear RGBA tint colors in Rust without
-//! requiring Blender shader node tree texture sampling.
+//! Provides resident Minecraft colormaps (grass, foliage, dry_foliage) for fast
+//! lookup, resolving linear RGBA tint colors in Rust without requiring Blender
+//! shader node tree texture sampling.
+//!
+//! Embedded vanilla PNGs are the fallback. A precompiled asset cache may provide
+//! resource-pack overrides; opening such a cache installs them as the active set.
 
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock, RwLock};
 
 use super::palettes::{sample_colormap_pixel, srgb_to_linear};
 
@@ -12,53 +15,124 @@ const GRASS_PNG: &[u8] = include_bytes!("../../assets/colormap/grass.png");
 const FOLIAGE_PNG: &[u8] = include_bytes!("../../assets/colormap/foliage.png");
 const DRY_FOLIAGE_PNG: &[u8] = include_bytes!("../../assets/colormap/dry_foliage.png");
 
-/// Resident in-memory 256x256 RGB colormap buffers.
+/// Resident RGB colormap buffers with their source dimensions.
+#[derive(Debug, Clone)]
 pub struct VanillaColormaps {
     pub grass_pixels: Vec<u8>,
     pub foliage_pixels: Vec<u8>,
     pub dry_foliage_pixels: Vec<u8>,
+    pub grass_width: usize,
+    pub grass_height: usize,
+    pub foliage_width: usize,
+    pub foliage_height: usize,
+    pub dry_foliage_width: usize,
+    pub dry_foliage_height: usize,
 }
 
 impl VanillaColormaps {
-    /// Loads and decodes embedded canonical vanilla colormaps into uncompressed raw RGB bytes.
+    fn decode_png(bytes: &[u8], name: &str) -> Result<(Vec<u8>, usize, usize), String> {
+        let image = image::load_from_memory_with_format(bytes, image::ImageFormat::Png)
+            .map_err(|e| format!("failed to decode colormap {name}: {e}"))?;
+        let rgb = image.to_rgb8();
+        let (width, height) = rgb.dimensions();
+        if width == 0 || height == 0 {
+            return Err(format!("colormap {name} has zero dimensions"));
+        }
+        Ok((rgb.into_raw(), width as usize, height as usize))
+    }
+
+    /// Decodes embedded canonical vanilla colormaps.
     fn load_embedded() -> Self {
-        let decode = |bytes: &[u8], name: &str| -> Vec<u8> {
-            match image::load_from_memory_with_format(bytes, image::ImageFormat::Png) {
-                Ok(img) => img.to_rgb8().into_raw(),
-                Err(e) => {
-                    // Fallback to 256x256 white if decoding fails for any reason
-                    eprintln!(
-                        "Warning: failed to decode embedded colormap {}: {}",
-                        name, e
-                    );
-                    vec![255u8; 256 * 256 * 3]
-                }
-            }
-        };
+        let (grass_pixels, grass_width, grass_height) = Self::decode_png(GRASS_PNG, "grass.png")
+            .expect("embedded vanilla grass colormap must be a valid PNG");
+        let (foliage_pixels, foliage_width, foliage_height) =
+            Self::decode_png(FOLIAGE_PNG, "foliage.png")
+                .expect("embedded vanilla foliage colormap must be a valid PNG");
+        let (dry_foliage_pixels, dry_foliage_width, dry_foliage_height) =
+            Self::decode_png(DRY_FOLIAGE_PNG, "dry_foliage.png")
+                .expect("embedded vanilla dry foliage colormap must be a valid PNG");
 
         Self {
-            grass_pixels: decode(GRASS_PNG, "grass.png"),
-            foliage_pixels: decode(FOLIAGE_PNG, "foliage.png"),
-            dry_foliage_pixels: decode(DRY_FOLIAGE_PNG, "dry_foliage.png"),
+            grass_pixels,
+            foliage_pixels,
+            dry_foliage_pixels,
+            grass_width,
+            grass_height,
+            foliage_width,
+            foliage_height,
+            dry_foliage_width,
+            dry_foliage_height,
         }
+    }
+
+    /// Builds a colormap set from embedded vanilla data, replacing only the
+    /// channels supplied by a resource-pack cache.
+    pub fn with_overrides(
+        grass: Option<&[u8]>,
+        foliage: Option<&[u8]>,
+        dry_foliage: Option<&[u8]>,
+    ) -> Result<Self, String> {
+        let mut colormaps = Self::load_embedded();
+
+        if let Some(bytes) = grass {
+            let (pixels, width, height) = Self::decode_png(bytes, "grass.png")?;
+            colormaps.grass_pixels = pixels;
+            colormaps.grass_width = width;
+            colormaps.grass_height = height;
+        }
+        if let Some(bytes) = foliage {
+            let (pixels, width, height) = Self::decode_png(bytes, "foliage.png")?;
+            colormaps.foliage_pixels = pixels;
+            colormaps.foliage_width = width;
+            colormaps.foliage_height = height;
+        }
+        if let Some(bytes) = dry_foliage {
+            let (pixels, width, height) = Self::decode_png(bytes, "dry_foliage.png")?;
+            colormaps.dry_foliage_pixels = pixels;
+            colormaps.dry_foliage_width = width;
+            colormaps.dry_foliage_height = height;
+        }
+
+        Ok(colormaps)
     }
 
     /// Sample grass sRGB color [0.0..1.0] from temperature and downfall.
     #[inline]
     pub fn sample_grass_srgb(&self, temperature: f32, downfall: f32) -> [f32; 3] {
-        sample_colormap_pixel(&self.grass_pixels, 256, 256, temperature, downfall, 3)
+        sample_colormap_pixel(
+            &self.grass_pixels,
+            self.grass_width as u32,
+            self.grass_height as u32,
+            temperature,
+            downfall,
+            3,
+        )
     }
 
     /// Sample foliage sRGB color [0.0..1.0] from temperature and downfall.
     #[inline]
     pub fn sample_foliage_srgb(&self, temperature: f32, downfall: f32) -> [f32; 3] {
-        sample_colormap_pixel(&self.foliage_pixels, 256, 256, temperature, downfall, 3)
+        sample_colormap_pixel(
+            &self.foliage_pixels,
+            self.foliage_width as u32,
+            self.foliage_height as u32,
+            temperature,
+            downfall,
+            3,
+        )
     }
 
     /// Sample dry foliage sRGB color [0.0..1.0] from temperature and downfall.
     #[inline]
     pub fn sample_dry_foliage_srgb(&self, temperature: f32, downfall: f32) -> [f32; 3] {
-        sample_colormap_pixel(&self.dry_foliage_pixels, 256, 256, temperature, downfall, 3)
+        sample_colormap_pixel(
+            &self.dry_foliage_pixels,
+            self.dry_foliage_width as u32,
+            self.dry_foliage_height as u32,
+            temperature,
+            downfall,
+            3,
+        )
     }
 
     /// Sample grass color directly as Linear RGBA [r, g, b, 1.0].
@@ -98,12 +172,53 @@ impl VanillaColormaps {
     }
 }
 
-static DEFAULT_COLORMAPS: OnceLock<VanillaColormaps> = OnceLock::new();
+/// Embedded vanilla fallback, decoded once.
+static EMBEDDED_COLORMAPS: OnceLock<Arc<VanillaColormaps>> = OnceLock::new();
+/// Resource-pack overrides installed when an asset cache is opened.
+static ACTIVE_COLORMAPS: RwLock<Option<Arc<VanillaColormaps>>> = RwLock::new(None);
 
-/// Returns the singleton instance of authoritative resident vanilla colormaps.
+/// Returns the active resident colormaps: cache overrides when installed,
+/// otherwise embedded vanilla.
 #[inline]
-pub fn get_default_colormaps() -> &'static VanillaColormaps {
-    DEFAULT_COLORMAPS.get_or_init(VanillaColormaps::load_embedded)
+pub fn get_default_colormaps() -> Arc<VanillaColormaps> {
+    if let Ok(guard) = ACTIVE_COLORMAPS.read() {
+        if let Some(colormaps) = guard.as_ref() {
+            return Arc::clone(colormaps);
+        }
+    }
+    Arc::clone(EMBEDDED_COLORMAPS.get_or_init(|| Arc::new(VanillaColormaps::load_embedded())))
+}
+
+/// Installs resource-pack colormap overrides from an opened asset cache.
+///
+/// Missing channels keep the embedded vanilla data. Passing all `None` clears
+/// any previous override and returns to embedded vanilla.
+pub fn set_cached_colormaps(
+    grass: Option<&[u8]>,
+    foliage: Option<&[u8]>,
+    dry_foliage: Option<&[u8]>,
+) -> Result<(), String> {
+    let active = if grass.is_none() && foliage.is_none() && dry_foliage.is_none() {
+        None
+    } else {
+        Some(Arc::new(VanillaColormaps::with_overrides(
+            grass,
+            foliage,
+            dry_foliage,
+        )?))
+    };
+    let mut guard = ACTIVE_COLORMAPS
+        .write()
+        .map_err(|_| "colormap cache lock poisoned".to_string())?;
+    *guard = active;
+    Ok(())
+}
+
+/// Clears resource-pack overrides, restoring embedded vanilla colormaps.
+pub fn clear_cached_colormaps() {
+    if let Ok(mut guard) = ACTIVE_COLORMAPS.write() {
+        *guard = None;
+    }
 }
 
 /// Applies the vanilla `GrassColorModifier.DARK_FOREST` to a base sRGB grass color:
@@ -150,5 +265,37 @@ pub fn compute_resolved_tint_color(
         crate::biome::TINT_TYPE_FOLIAGE => cms.sample_foliage_linear(temperature, humidity),
         crate::biome::TINT_TYPE_DRY_FOLIAGE => cms.sample_dry_foliage_linear(temperature, humidity),
         _ => [1.0, 1.0, 1.0, 1.0],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn solid_png(rgb: [u8; 3]) -> Vec<u8> {
+        use image::{DynamicImage, ImageFormat, Rgb, RgbImage};
+        let image = RgbImage::from_pixel(1, 1, Rgb(rgb));
+        let mut buffer = std::io::Cursor::new(Vec::new());
+        DynamicImage::ImageRgb8(image)
+            .write_to(&mut buffer, ImageFormat::Png)
+            .expect("PNG encode");
+        buffer.into_inner()
+    }
+
+    #[test]
+    fn cached_colormap_override_is_used() {
+        let red = solid_png([255, 0, 0]);
+        let colormaps =
+            VanillaColormaps::with_overrides(Some(&red), None, None).expect("custom colormap");
+        assert_eq!((colormaps.grass_width, colormaps.grass_height), (1, 1));
+        assert_eq!(
+            colormaps.sample_grass_linear(0.5, 0.5),
+            [1.0, 0.0, 0.0, 1.0]
+        );
+    }
+
+    #[test]
+    fn invalid_colormap_is_rejected() {
+        assert!(VanillaColormaps::with_overrides(Some(b"not a png"), None, None).is_err());
     }
 }

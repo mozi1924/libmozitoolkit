@@ -88,6 +88,7 @@ impl AssetCacheReader {
     /// Opens an asset cache package file using memory mapping.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, MtkError> {
         let reader = MtkPackageReader::open_file(path)?;
+        install_cached_colormaps(&reader);
         Ok(Self { reader })
     }
 
@@ -222,43 +223,37 @@ impl AssetCacheReader {
         Ok(extracted)
     }
 
-    /// Extracts all colormap textures into the target directory.
-    pub fn extract_all_colormaps(
-        &self,
-        output_dir: impl AsRef<Path>,
-    ) -> Result<Vec<PathBuf>, MtkError> {
-        let out_dir = output_dir.as_ref();
-        fs::create_dir_all(out_dir)?;
-        let mut extracted = Vec::new();
-
-        for entry in self.reader.toc().iter_by_type(*b"BIOM") {
-            if let Some(name) = entry.identifier.strip_prefix("biome/colormap/") {
-                let target = out_dir.join(format!("{}.png", name));
-                self.reader
-                    .extract_chunk_to_file(&entry.identifier, &target)?;
-                extracted.push(target);
-            }
-        }
-        Ok(extracted)
-    }
-
-    /// Extracts a specific colormap texture to disk.
-    pub fn extract_colormap(
-        &self,
-        name: &str,
-        output_path: impl AsRef<Path>,
-    ) -> Result<(), MtkError> {
-        let chunk_id = format!("biome/colormap/{}", name);
-        let out_p = output_path.as_ref();
-        if let Some(parent) = out_p.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        self.reader.extract_chunk_to_file(&chunk_id, out_p)?;
-        Ok(())
-    }
-
     /// Raw package reader accessor.
     pub fn package_reader(&self) -> &MtkPackageReader {
         &self.reader
+    }
+}
+
+/// Installs resource-pack colormap overrides carried by a cache package.
+///
+/// Missing channels fall back to embedded vanilla; a cache without colormap
+/// chunks clears any previously active overrides.
+fn install_cached_colormaps(reader: &MtkPackageReader) {
+    let read = |name: &str| {
+        reader
+            .read_chunk_decompressed(&format!("biome/colormap/{name}"))
+            .ok()
+    };
+    let grass = read("grass");
+    let foliage = read("foliage");
+    let dry_foliage = read("dry_foliage");
+
+    if grass.is_none() && foliage.is_none() && dry_foliage.is_none() {
+        mtk_material::biome::clear_cached_colormaps();
+        return;
+    }
+
+    if let Err(error) = mtk_material::biome::set_cached_colormaps(
+        grass.as_deref(),
+        foliage.as_deref(),
+        dry_foliage.as_deref(),
+    ) {
+        eprintln!("Warning: failed to install cached colormaps: {error}");
+        mtk_material::biome::clear_cached_colormaps();
     }
 }

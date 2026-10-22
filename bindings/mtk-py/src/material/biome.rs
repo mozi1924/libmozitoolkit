@@ -106,7 +106,6 @@ pub fn get_biome_meta(py: Python<'_>, biome_name: &str) -> PyResult<Py<PyAny>> {
             mtk_material::hex_to_linear_rgba("#A37546"),
         )?;
         dict.set_item("water_linear", mtk_material::hex_to_linear_rgba("#3F76E4"))?;
-        dict.set_item("colormap_uv", mtk_material::get_colormap_uv(0.8, 0.4))?;
         dict.set_item("has_custom_grass", false)?;
         dict.set_item("has_custom_foliage", false)?;
         dict.set_item("has_custom_dry_foliage", false)?;
@@ -159,13 +158,6 @@ pub fn get_all_biomes(py: Python<'_>) -> PyResult<Py<PyAny>> {
         list.append(dict)?;
     }
     Ok(list.into())
-}
-
-/// Compute colormap UV coordinates from temperature and humidity.
-#[pyfunction]
-#[pyo3(signature = (temperature, humidity))]
-pub fn get_colormap_uv(temperature: f32, humidity: f32) -> [f32; 2] {
-    mtk_material::get_colormap_uv(temperature, humidity)
 }
 
 /// Sample resident vanilla colormap linear RGBA colors from temperature and humidity.

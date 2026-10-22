@@ -293,13 +293,6 @@ impl PyAssetCache {
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         Ok(pyo3::types::PyBytes::new(py, &bytes))
     }
-
-    /// Extracts a single colormap texture to the specified destination path.
-    pub fn extract_colormap(&self, name: &str, output_path: &str) -> PyResult<()> {
-        self.inner
-            .extract_colormap(name, output_path)
-            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))
-    }
 }
 
 /// Checks if a `.mtkcache` file at `path` is valid for `fingerprint` using 64-byte header.

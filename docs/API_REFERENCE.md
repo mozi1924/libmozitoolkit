@@ -145,6 +145,7 @@ cache_output_dir/
 └── models/                 # 烘焙完成的预解析二进制方块几何库
 ```
 - **v5**：`models.bin` 由 Bincode 切换为 Postcard + Zstd，烘焙体积更小；旧 v4（Bincode）缓存会被 manifest 版本校验直接拒绝并重建。
+- **资源包 Colormap 覆盖**：预编译期仍会把资源包的 `assets/minecraft/textures/colormap/{grass,foliage,dry_foliage}.png` 写入 `BIOM` chunk；`AssetCacheReader::open` 会读取并安装为当前采样色盘，缺失通道回退内置原版。Python 宿主不再解包或传递 colormap 文件。
 
 ---
 
