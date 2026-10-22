@@ -202,13 +202,37 @@ impl AtlasAddressMap {
 
     /// Lookup animated strip sprite location by string.
     pub fn lookup_animated_str(&self, s: &str) -> Option<&AtlasSpriteLocation> {
-        if let Ok(loc) = ResourceLocation::parse_texture_path(s) {
-            self.lookup_animated(&loc)
-        } else if let Ok(loc) = ResourceLocation::parse(s) {
-            self.lookup_animated(&loc)
-        } else {
-            None
+        if self.anim_sprites.is_empty() || s.is_empty() {
+            return None;
         }
+        let s = s.trim();
+        let s = s.strip_suffix(".png").unwrap_or(s);
+        let (ns, path) = if let Some((ns, p)) = s.split_once(':') {
+            (ns, p)
+        } else {
+            ("minecraft", s)
+        };
+        let norm_path = path.strip_prefix("textures/").unwrap_or(path);
+
+        if norm_path.starts_with("block/") {
+            let loc = ResourceLocation::new(ns, norm_path);
+            if let Some(sp) = self.anim_sprites.get(&loc) {
+                return Some(sp);
+            }
+            return None;
+        }
+
+        for (loc, sp) in &self.anim_sprites {
+            if loc.namespace == ns
+                && (loc.path == path
+                    || loc.path == norm_path
+                    || loc.path.strip_prefix("block/").unwrap_or(&loc.path) == norm_path
+                    || norm_path.strip_prefix("block/").unwrap_or(norm_path) == loc.path)
+            {
+                return Some(sp);
+            }
+        }
+        None
     }
 
     /// Merge another address map into this one.

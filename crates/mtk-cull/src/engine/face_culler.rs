@@ -38,6 +38,8 @@ impl Default for FaceCuller {
 }
 
 impl FaceCuller {
+    /// Maximum capacity of the block cull meta cache.
+    pub const CACHE_CAPACITY: usize = 32_768;
     /// Creates a new `FaceCuller` engine with custom leaves and glass modes.
     pub fn new(leaves_cull_mode: LeavesCullMode, glass_cull_mode: GlassCullMode) -> Self {
         Self {
@@ -83,7 +85,7 @@ impl FaceCuller {
         ));
 
         if let Ok(mut cache) = self.meta_cache.write() {
-            if cache.len() >= 8192 && !cache.contains_key(state_str) {
+            if cache.len() >= Self::CACHE_CAPACITY && !cache.contains_key(state_str) {
                 if let Some(first_key) = cache.keys().next().cloned() {
                     cache.remove(&first_key);
                 }

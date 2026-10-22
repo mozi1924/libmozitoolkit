@@ -9,6 +9,14 @@ pub fn compute_face_tint(
     tint_index: i16,
     biome_resolver: Option<&mtk_material::BiomeResolver>,
 ) -> ([f32; 4], [f32; 4]) {
+    // In Minecraft rendering, any face with negative tint index is strictly untinted,
+    // UNLESS it has an overlay companion whose overlay part must be tinted (such as grass_block_side).
+    let is_grass_side =
+        texture_key.ends_with("grass_block_side") || texture_key.ends_with("grass_side");
+    if tint_index < 0 && !is_grass_side {
+        return ([1.0, 0.0, 0.0, 0.0], [1.0, 1.0, 1.0, 1.0]);
+    }
+
     // Hot path: the default palette is a static entry, no lookup/allocation needed.
     let default_pal = mtk_material::biome::default_biome_palette();
 
@@ -16,16 +24,11 @@ pub fn compute_face_tint(
     let has_overlay = if let Some(resolver) = biome_resolver {
         resolver.get_overlay_texture(texture_key).is_some()
     } else {
-        texture_key.ends_with("grass_block_side") || texture_key.ends_with("grass_side")
+        is_grass_side
     };
 
-    // In Minecraft rendering, any face with negative tint index is strictly untinted,
-    // UNLESS it has an overlay companion whose overlay part must be tinted (such as grass_block_side).
-    let is_grass_side =
-        texture_key.ends_with("grass_block_side") || texture_key.ends_with("grass_side");
     if tint_index < 0 && !(has_overlay && is_grass_side) {
-        let packed_data = [1.0, 0.0, 0.0, 0.0];
-        return (packed_data, [1.0, 1.0, 1.0, 1.0]);
+        return ([1.0, 0.0, 0.0, 0.0], [1.0, 1.0, 1.0, 1.0]);
     }
 
     let t_idx = Some(tint_index as i32);

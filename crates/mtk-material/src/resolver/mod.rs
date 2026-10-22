@@ -7,15 +7,18 @@ pub mod overrides;
 use crate::types::GridAtlasSpec;
 
 use self::overrides::{builtin_biome_suffixes, builtin_material_fallbacks, ResolverOverrides};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 
 /// Active external material rules, installed when a compatibility profile/cache is opened.
 static MATERIAL_OVERRIDES: RwLock<Option<Arc<ResolverOverrides>>> = RwLock::new(None);
+static HAS_OVERRIDES: AtomicBool = AtomicBool::new(false);
 
 /// Installs external material compatibility rules.
 pub fn set_material_overrides(overrides: ResolverOverrides) {
     if let Ok(mut guard) = MATERIAL_OVERRIDES.write() {
         *guard = Some(Arc::new(overrides));
+        HAS_OVERRIDES.store(true, Ordering::Release);
     }
 }
 
@@ -23,10 +26,14 @@ pub fn set_material_overrides(overrides: ResolverOverrides) {
 pub fn clear_material_overrides() {
     if let Ok(mut guard) = MATERIAL_OVERRIDES.write() {
         *guard = None;
+        HAS_OVERRIDES.store(false, Ordering::Release);
     }
 }
 
 fn active_material_overrides() -> Option<Arc<ResolverOverrides>> {
+    if !HAS_OVERRIDES.load(Ordering::Acquire) {
+        return None;
+    }
     MATERIAL_OVERRIDES
         .read()
         .ok()
@@ -92,15 +99,17 @@ pub fn clean_identifier(raw: &str) -> String {
     }
 
     // 4. Strip exporter biome suffixes (external config overrides the built-ins)
-    let active = active_material_overrides();
-    let biome_suffixes: &[String] = match active.as_ref() {
-        Some(overrides) => overrides.effective_biome_suffixes(),
-        None => builtin_biome_suffixes(),
-    };
-    for suffix in biome_suffixes {
-        if s.ends_with(suffix) {
-            s = s[..s.len() - suffix.len()].to_string();
-            break;
+    if s.contains('-') || s.contains('_') {
+        let active = active_material_overrides();
+        let biome_suffixes: &[String] = match active.as_ref() {
+            Some(overrides) => overrides.effective_biome_suffixes(),
+            None => builtin_biome_suffixes(),
+        };
+        for suffix in biome_suffixes {
+            if s.ends_with(suffix) {
+                s = s[..s.len() - suffix.len()].to_string();
+                break;
+            }
         }
     }
 
@@ -182,12 +191,15 @@ pub fn resolve_animated_sprite<'a>(
     custom_aliases: Option<&HashMap<String, Vec<String>>>,
     address_map: &'a AtlasAddressMap,
 ) -> Option<(ResourceLocation, &'a AtlasSpriteLocation)> {
+    if address_map.anim_sprites.is_empty() {
+        return None;
+    }
     let raw = raw_material_name.trim();
     if raw.is_empty() {
         return None;
     }
 
-    // 1. Direct O(1) lookup on the raw string.
+    // 0. Direct O(1) lookup on the raw string first (avoids cleaning for standard texture paths).
     if let Some(sprite) = address_map.lookup_animated_str(raw) {
         if let Ok(loc) = ResourceLocation::parse_texture_path(raw) {
             return Some((loc, sprite));
@@ -197,15 +209,26 @@ pub fn resolve_animated_sprite<'a>(
         }
     }
 
-    // 2. Parsed resource location.
+    // 1. Parsed resource location.
     if let Ok(loc) = ResourceLocation::parse(raw) {
         if let Some(sprite) = address_map.lookup_animated(&loc) {
             return Some((loc, sprite));
         }
     }
 
-    // 3. Cleaned identifier.
+    // 2. Built-in fluid alias prioritization
     let cleaned = clean_identifier(raw);
+    if let Some(candidates) = get_fluid_candidates(raw).or_else(|| get_fluid_candidates(&cleaned)) {
+        for &cand in candidates {
+            if let Some(sprite) = address_map.lookup_animated_str(cand) {
+                let loc = ResourceLocation::parse(cand)
+                    .unwrap_or_else(|_| ResourceLocation::new("minecraft", cand));
+                return Some((loc, sprite));
+            }
+        }
+    }
+
+    // 3. Cleaned identifier.
     if cleaned != raw {
         if let Some(sprite) = address_map.lookup_animated_str(&cleaned) {
             if let Ok(loc) = ResourceLocation::parse(&cleaned) {
@@ -224,14 +247,6 @@ pub fn resolve_animated_sprite<'a>(
                     return Some((loc, sprite));
                 }
             }
-        }
-    }
-
-    // 5. Fall back to the canonical resolver so built-in aliases (fluids, legacy
-    // redstone names, etc.) also gain animated routing.
-    if let Some((loc, _)) = MaterialResolver::resolve(raw, custom_aliases, address_map) {
-        if let Some(sprite) = address_map.lookup_animated(&loc) {
-            return Some((loc, sprite));
         }
     }
 

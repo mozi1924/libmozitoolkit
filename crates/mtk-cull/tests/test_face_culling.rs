@@ -590,14 +590,14 @@ fn test_fence_cross_section_culling() {
 #[test]
 fn test_culler_cache_eviction() {
     let culler = FaceCuller::default();
-    for i in 0..8192 {
+    for i in 0..FaceCuller::CACHE_CAPACITY {
         culler.get_meta(&format!("dummy:state_{}", i), None, None);
     }
-    assert_eq!(culler.cache_len(), 8192);
+    assert_eq!(culler.cache_len(), FaceCuller::CACHE_CAPACITY);
 
     // Getting a new state should evict oldest
     culler.get_meta("minecraft:emerald_block", None, None);
-    assert_eq!(culler.cache_len(), 8192);
+    assert_eq!(culler.cache_len(), FaceCuller::CACHE_CAPACITY);
 }
 
 #[test]

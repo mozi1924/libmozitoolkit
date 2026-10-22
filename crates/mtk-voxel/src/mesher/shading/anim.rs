@@ -19,5 +19,16 @@ pub fn lookup_animated_from_cache<'a>(
     custom_aliases: Option<&HashMap<String, Vec<String>>>,
     atlas: &'a AtlasAddressMap,
 ) -> Option<&'a AtlasSpriteLocation> {
-    mtk_material::resolve_animated_sprite(texture, custom_aliases, atlas).map(|(_, sprite)| sprite)
+    if atlas.anim_sprites.is_empty() || texture.is_empty() {
+        return None;
+    }
+    if let Some(sp) = atlas.lookup_animated_str(texture) {
+        return Some(sp);
+    }
+    if custom_aliases.is_some() {
+        mtk_material::resolve_animated_sprite(texture, custom_aliases, atlas)
+            .map(|(_, sprite)| sprite)
+    } else {
+        None
+    }
 }

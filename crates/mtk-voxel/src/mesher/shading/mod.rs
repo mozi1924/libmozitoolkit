@@ -10,7 +10,7 @@ pub mod resolver;
 pub mod types;
 
 pub use anim::{extract_anim_metrics, lookup_animated_from_cache};
-pub use palette::build_palette_meshing_data;
+pub use palette::{build_palette_meshing_data, resolve_palette_meshing_data_for_state};
 pub use resolver::{resolve_model_face_shading, resolve_unit_cube_face_shading, sample_biome_tint};
 pub use types::{
     ModelFaceBuckets, ModelSource, PaletteMeshingData, PreResolvedFace, PreResolvedModelFace,

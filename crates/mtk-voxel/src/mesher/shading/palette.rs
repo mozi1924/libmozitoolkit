@@ -227,7 +227,7 @@ fn resolve_model_face(
     PreResolvedModelFace {
         face: face.clone(),
         pre: PreResolvedFace {
-            source_texture_key: final_tex_key.to_string(),
+            source_texture_key: final_tex_key,
             override_uvs,
             mat_slot,
             chunk_id,
@@ -264,8 +264,203 @@ fn resolve_model_buckets(
     }
 }
 
-/// Pre-resolves palette meshing data (Atlas UVs, material slots, tint) outside the meshing hot loop.
-///
+/// Pre-resolves meshing data for a single palette entry (either complex BakedModel, VariantGroup, or simple UnitCube).
+pub fn resolve_palette_meshing_data_for_state<'a>(
+    state_str: &str,
+    source: &ModelSource<'a>,
+    config: &MesherConfig,
+) -> PaletteMeshingData {
+    let clean_block = mtk_resource::extract_block_name(state_str);
+
+    match source {
+        ModelSource::Single(baked) => {
+            let b = resolve_model_buckets(baked, state_str, config);
+            PaletteMeshingData::Model {
+                culled_faces: b.culled_faces,
+                unculled_faces: b.unculled_faces,
+            }
+        }
+        ModelSource::OwnedSingle(baked) => {
+            let b = resolve_model_buckets(baked.as_ref(), state_str, config);
+            PaletteMeshingData::Model {
+                culled_faces: b.culled_faces,
+                unculled_faces: b.unculled_faces,
+            }
+        }
+        ModelSource::Variant(group) => {
+            if group.len() <= 1 || !config.enable_alternate_blocks {
+                let primary = group.select_primary();
+                let b = resolve_model_buckets(primary, state_str, config);
+                PaletteMeshingData::Model {
+                    culled_faces: b.culled_faces,
+                    unculled_faces: b.unculled_faces,
+                }
+            } else {
+                let variants = group
+                    .models
+                    .iter()
+                    .map(|m| resolve_model_buckets(m, state_str, config))
+                    .collect();
+                PaletteMeshingData::VariantModel {
+                    variants,
+                    weights: group.weights.clone(),
+                    total_weight: group.total_weight,
+                }
+            }
+        }
+        ModelSource::OwnedVariant(group) => {
+            if group.len() <= 1 || !config.enable_alternate_blocks {
+                let primary = group.select_primary();
+                let b = resolve_model_buckets(primary, state_str, config);
+                PaletteMeshingData::Model {
+                    culled_faces: b.culled_faces,
+                    unculled_faces: b.unculled_faces,
+                }
+            } else {
+                let variants = group
+                    .models
+                    .iter()
+                    .map(|m| resolve_model_buckets(m, state_str, config))
+                    .collect();
+                PaletteMeshingData::VariantModel {
+                    variants,
+                    weights: group.weights.clone(),
+                    total_weight: group.total_weight,
+                }
+            }
+        }
+        ModelSource::None => {
+            let clean_sub = clean_block
+                .strip_prefix("minecraft:")
+                .unwrap_or(clean_block);
+
+            let mut faces: [Option<PreResolvedFace>; 6] = Default::default();
+            // Classify the block once for all six directions instead of
+            // re-running the (allocation-heavy) tint classifier per face.
+            let tint_indices = mtk_material::get_unit_cube_tint_indices(clean_sub);
+            for dir in Direction::ALL {
+                let (final_tex_key, override_uvs, mat_slot, chunk_id, anim_timing, anim_frame_size) =
+                    if let Some(atlas) = &config.atlas_address_map {
+                        let candidates = get_unit_cube_texture_candidates(clean_sub, dir);
+                        let mut resolved = None;
+                        for cand in &candidates {
+                            if let Some((res, sp)) = MaterialResolver::resolve(
+                                cand,
+                                config.custom_aliases.as_deref(),
+                                atlas,
+                            ) {
+                                resolved = Some((res, sp));
+                                break;
+                            }
+                        }
+                        if let Some((res_loc, mut atlas_loc)) = resolved {
+                            if config.enable_animated_textures {
+                                if let Some(anim_loc) = lookup_animated_from_cache(
+                                    &res_loc.as_string(),
+                                    config.custom_aliases.as_deref(),
+                                    atlas,
+                                ) {
+                                    atlas_loc = anim_loc;
+                                }
+                            } else if atlas_loc.is_animated {
+                                if let Some(static_loc) = atlas.lookup_static(&res_loc) {
+                                    atlas_loc = static_loc;
+                                }
+                            }
+                            let (timing, fsize) = extract_anim_metrics(Some(atlas_loc));
+                            let u_min = atlas_loc.frame_0_uv_bounds[0];
+                            let v_min = atlas_loc.frame_0_uv_bounds[1];
+                            let u_max = atlas_loc.frame_0_uv_bounds[2];
+                            let v_max = atlas_loc.frame_0_uv_bounds[3];
+                            let remapped = [
+                                Vec2::new(u_min, v_max),
+                                Vec2::new(u_min, v_min),
+                                Vec2::new(u_max, v_min),
+                                Vec2::new(u_max, v_max),
+                            ];
+                            (
+                                res_loc.as_string(),
+                                Some(remapped),
+                                atlas_loc.chunk_id,
+                                atlas_loc.chunk_id as i32,
+                                timing,
+                                fsize,
+                            )
+                        } else if let Some(fb) = atlas.lookup_fallback() {
+                            let (timing, fsize) = extract_anim_metrics(Some(fb));
+                            let u_min = fb.frame_0_uv_bounds[0];
+                            let v_min = fb.frame_0_uv_bounds[1];
+                            let u_max = fb.frame_0_uv_bounds[2];
+                            let v_max = fb.frame_0_uv_bounds[3];
+                            let remapped = [
+                                Vec2::new(u_min, v_max),
+                                Vec2::new(u_min, v_min),
+                                Vec2::new(u_max, v_min),
+                                Vec2::new(u_max, v_max),
+                            ];
+                            (
+                                format!("minecraft:block/{}", clean_sub),
+                                Some(remapped),
+                                fb.chunk_id,
+                                fb.chunk_id as i32,
+                                timing,
+                                fsize,
+                            )
+                        } else {
+                            (
+                                format!("minecraft:block/{}", clean_sub),
+                                None,
+                                0,
+                                0,
+                                [1.0, 1.0, 0.0],
+                                [16.0, 16.0, 0.0],
+                            )
+                        }
+                    } else {
+                        (
+                            format!("minecraft:block/{}", clean_sub),
+                            None,
+                            0,
+                            0,
+                            [1.0, 1.0, 0.0],
+                            [16.0, 16.0, 0.0],
+                        )
+                    };
+
+                let tint_idx = tint_indices[dir.to_index()];
+                let (tint_data, tint_color) = compute_face_tint(
+                    &final_tex_key,
+                    state_str,
+                    tint_idx,
+                    config.biome_resolver.as_deref(),
+                );
+
+                faces[dir.to_index()] = Some(PreResolvedFace {
+                    source_texture_key: final_tex_key,
+                    override_uvs,
+                    mat_slot,
+                    chunk_id,
+                    tint_data,
+                    tint_color,
+                    anim_timing,
+                    anim_frame_size,
+                });
+            }
+
+            PaletteMeshingData::UnitCube {
+                faces: [
+                    faces[0].take().unwrap(),
+                    faces[1].take().unwrap(),
+                    faces[2].take().unwrap(),
+                    faces[3].take().unwrap(),
+                    faces[4].take().unwrap(),
+                    faces[5].take().unwrap(),
+                ],
+            }
+        }
+    }
+}
+
 /// Pre-resolves palette meshing data (Atlas UVs, material slots, tint) outside the meshing hot loop.
 pub fn build_palette_meshing_data<'a>(
     padded: &PaddedVoxelArray,
@@ -277,201 +472,7 @@ pub fn build_palette_meshing_data<'a>(
         .iter()
         .zip(palette_sources.iter())
         .map(|(state_str, source)| {
-            let clean_block = mtk_resource::extract_block_name(state_str);
-
-            match source {
-                ModelSource::Single(baked) => {
-                    let b = resolve_model_buckets(baked, state_str, config);
-                    PaletteMeshingData::Model {
-                        culled_faces: b.culled_faces,
-                        unculled_faces: b.unculled_faces,
-                    }
-                }
-                ModelSource::OwnedSingle(baked) => {
-                    let b = resolve_model_buckets(baked.as_ref(), state_str, config);
-                    PaletteMeshingData::Model {
-                        culled_faces: b.culled_faces,
-                        unculled_faces: b.unculled_faces,
-                    }
-                }
-                ModelSource::Variant(group) => {
-                    if group.len() <= 1 || !config.enable_alternate_blocks {
-                        let primary = group.select_primary();
-                        let b = resolve_model_buckets(primary, state_str, config);
-                        PaletteMeshingData::Model {
-                            culled_faces: b.culled_faces,
-                            unculled_faces: b.unculled_faces,
-                        }
-                    } else {
-                        let variants = group
-                            .models
-                            .iter()
-                            .map(|m| resolve_model_buckets(m, state_str, config))
-                            .collect();
-                        PaletteMeshingData::VariantModel {
-                            variants,
-                            weights: group.weights.clone(),
-                            total_weight: group.total_weight,
-                        }
-                    }
-                }
-                ModelSource::OwnedVariant(group) => {
-                    if group.len() <= 1 || !config.enable_alternate_blocks {
-                        let primary = group.select_primary();
-                        let b = resolve_model_buckets(primary, state_str, config);
-                        PaletteMeshingData::Model {
-                            culled_faces: b.culled_faces,
-                            unculled_faces: b.unculled_faces,
-                        }
-                    } else {
-                        let variants = group
-                            .models
-                            .iter()
-                            .map(|m| resolve_model_buckets(m, state_str, config))
-                            .collect();
-                        PaletteMeshingData::VariantModel {
-                            variants,
-                            weights: group.weights.clone(),
-                            total_weight: group.total_weight,
-                        }
-                    }
-                }
-                ModelSource::None => {
-                    let clean_sub = clean_block
-                        .strip_prefix("minecraft:")
-                        .unwrap_or(clean_block);
-
-                    let mut faces: [Option<PreResolvedFace>; 6] = Default::default();
-                    // Classify the block once for all six directions instead of
-                    // re-running the (allocation-heavy) tint classifier per face.
-                    let tint_indices = mtk_material::get_unit_cube_tint_indices(clean_sub);
-                    for dir in Direction::ALL {
-                        let (
-                            final_tex_key,
-                            override_uvs,
-                            mat_slot,
-                            chunk_id,
-                            anim_timing,
-                            anim_frame_size,
-                        ) = if let Some(atlas) = &config.atlas_address_map {
-                            let candidates = get_unit_cube_texture_candidates(clean_sub, dir);
-                            let mut resolved = None;
-                            for cand in &candidates {
-                                if let Some((res, sp)) = MaterialResolver::resolve(
-                                    cand,
-                                    config.custom_aliases.as_deref(),
-                                    atlas,
-                                ) {
-                                    resolved = Some((res, sp));
-                                    break;
-                                }
-                            }
-                            if let Some((res_loc, mut atlas_loc)) = resolved {
-                                if config.enable_animated_textures {
-                                    if let Some(anim_loc) = lookup_animated_from_cache(
-                                        &res_loc.as_string(),
-                                        config.custom_aliases.as_deref(),
-                                        atlas,
-                                    ) {
-                                        atlas_loc = anim_loc;
-                                    }
-                                } else if atlas_loc.is_animated {
-                                    if let Some(static_loc) = atlas.lookup_static(&res_loc) {
-                                        atlas_loc = static_loc;
-                                    }
-                                }
-                                let (timing, fsize) = extract_anim_metrics(Some(atlas_loc));
-                                let u_min = atlas_loc.frame_0_uv_bounds[0];
-                                let v_min = atlas_loc.frame_0_uv_bounds[1];
-                                let u_max = atlas_loc.frame_0_uv_bounds[2];
-                                let v_max = atlas_loc.frame_0_uv_bounds[3];
-                                let remapped = [
-                                    Vec2::new(u_min, v_max),
-                                    Vec2::new(u_min, v_min),
-                                    Vec2::new(u_max, v_min),
-                                    Vec2::new(u_max, v_max),
-                                ];
-                                (
-                                    res_loc.as_string(),
-                                    Some(remapped),
-                                    atlas_loc.chunk_id,
-                                    atlas_loc.chunk_id as i32,
-                                    timing,
-                                    fsize,
-                                )
-                            } else if let Some(fb) = atlas.lookup_fallback() {
-                                let (timing, fsize) = extract_anim_metrics(Some(fb));
-                                let u_min = fb.frame_0_uv_bounds[0];
-                                let v_min = fb.frame_0_uv_bounds[1];
-                                let u_max = fb.frame_0_uv_bounds[2];
-                                let v_max = fb.frame_0_uv_bounds[3];
-                                let remapped = [
-                                    Vec2::new(u_min, v_max),
-                                    Vec2::new(u_min, v_min),
-                                    Vec2::new(u_max, v_min),
-                                    Vec2::new(u_max, v_max),
-                                ];
-                                (
-                                    format!("minecraft:block/{}", clean_sub),
-                                    Some(remapped),
-                                    fb.chunk_id,
-                                    fb.chunk_id as i32,
-                                    timing,
-                                    fsize,
-                                )
-                            } else {
-                                (
-                                    format!("minecraft:block/{}", clean_sub),
-                                    None,
-                                    0,
-                                    0,
-                                    [1.0, 1.0, 0.0],
-                                    [16.0, 16.0, 0.0],
-                                )
-                            }
-                        } else {
-                            (
-                                format!("minecraft:block/{}", clean_sub),
-                                None,
-                                0,
-                                0,
-                                [1.0, 1.0, 0.0],
-                                [16.0, 16.0, 0.0],
-                            )
-                        };
-
-                        let tint_idx = tint_indices[dir.to_index()];
-                        let (tint_data, tint_color) = compute_face_tint(
-                            &final_tex_key,
-                            state_str,
-                            tint_idx,
-                            config.biome_resolver.as_deref(),
-                        );
-
-                        faces[dir.to_index()] = Some(PreResolvedFace {
-                            source_texture_key: final_tex_key.to_string(),
-                            override_uvs,
-                            mat_slot,
-                            chunk_id,
-                            tint_data,
-                            tint_color,
-                            anim_timing,
-                            anim_frame_size,
-                        });
-                    }
-
-                    PaletteMeshingData::UnitCube {
-                        faces: [
-                            faces[0].take().unwrap(),
-                            faces[1].take().unwrap(),
-                            faces[2].take().unwrap(),
-                            faces[3].take().unwrap(),
-                            faces[4].take().unwrap(),
-                            faces[5].take().unwrap(),
-                        ],
-                    }
-                }
-            }
+            resolve_palette_meshing_data_for_state(state_str, source, config)
         })
         .collect()
 }
