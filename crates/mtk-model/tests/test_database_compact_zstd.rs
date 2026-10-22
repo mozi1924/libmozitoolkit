@@ -50,16 +50,16 @@ fn test_database_compact_serialization_and_zstd() {
     );
     db.insert_variant_group("minecraft:dirt".to_string(), dirt_group);
 
-    // 3. Serialize with to_bincode (which now compresses with zstd)
-    let compressed_bytes = db.to_bincode().expect("to_bincode should succeed");
+    // 3. Serialize with to_binary (which compresses with zstd using postcard)
+    let compressed_bytes = db.to_binary().expect("to_binary should succeed");
 
     // Verify zstd magic header [0x28, 0xB5, 0x2F, 0xFD]
     assert!(compressed_bytes.len() >= 4);
     assert_eq!(&compressed_bytes[..4], &[0x28, 0xb5, 0x2f, 0xfd]);
 
-    // 4. Deserialize with from_bincode
+    // 4. Deserialize with from_binary
     let loaded =
-        BakedModelDatabase::from_bincode(&compressed_bytes).expect("from_bincode should succeed");
+        BakedModelDatabase::from_binary(&compressed_bytes).expect("from_binary should succeed");
 
     // Verify models map
     assert_eq!(loaded.models.len(), 2);
@@ -87,10 +87,10 @@ fn test_rejects_uncompressed_pre_v3_payload() {
     let oak = create_sample_cube("minecraft:oak_planks", "minecraft:block/oak_planks");
     db.insert("minecraft:oak_planks".to_string(), oak);
 
-    let uncompressed_bytes = bincode::serialize(&db).expect("serialize should succeed");
+    let uncompressed_bytes = postcard::to_allocvec(&db).expect("serialize should succeed");
     assert_ne!(&uncompressed_bytes[..4], &[0x28, 0xb5, 0x2f, 0xfd]);
 
-    let err = BakedModelDatabase::from_bincode(&uncompressed_bytes)
+    let err = BakedModelDatabase::from_binary(&uncompressed_bytes)
         .expect_err("pre-v3 uncompressed payload must be rejected");
     let message = err.to_string();
     assert!(
@@ -108,7 +108,7 @@ fn test_real_cache_benchmark_if_available() {
 
     let raw_file_bytes = fs::read(&real_cache_path).expect("Failed to read real models.bin");
     if raw_file_bytes.len() < 4 || raw_file_bytes[..4] != [0x28, 0xb5, 0x2f, 0xfd] {
-        let err = BakedModelDatabase::from_bincode(&raw_file_bytes)
+        let err = BakedModelDatabase::from_binary(&raw_file_bytes)
             .expect_err("pre-v3 models.bin must be rejected");
         assert!(err.to_string().contains("asset cache format < 3"));
         eprintln!("Skipping benchmark: $MTK_TEST_MODELS_CACHE is a pre-v3 uncompressed cache");
@@ -123,7 +123,7 @@ fn test_real_cache_benchmark_if_available() {
 
     // Load original file
     let t0 = std::time::Instant::now();
-    let loaded_db = BakedModelDatabase::from_bincode(&raw_file_bytes)
+    let loaded_db = BakedModelDatabase::from_binary(&raw_file_bytes)
         .expect("Failed to load original models.bin");
     let load_dur = t0.elapsed();
     println!(
@@ -135,7 +135,7 @@ fn test_real_cache_benchmark_if_available() {
     // Re-serialize with new compact format and zstd compression
     let t1 = std::time::Instant::now();
     let new_bytes = loaded_db
-        .to_bincode()
+        .to_binary()
         .expect("Failed to serialize with compact zstd");
     let save_dur = t1.elapsed();
     let new_size = new_bytes.len();
@@ -155,7 +155,7 @@ fn test_real_cache_benchmark_if_available() {
     // Decompress and verify
     let t2 = std::time::Instant::now();
     let reloaded =
-        BakedModelDatabase::from_bincode(&new_bytes).expect("Failed to reload compressed data");
+        BakedModelDatabase::from_binary(&new_bytes).expect("Failed to reload compressed data");
     let reload_dur = t2.elapsed();
     println!("[Benchmark] Reloaded from compressed in {:.2?}", reload_dur);
 

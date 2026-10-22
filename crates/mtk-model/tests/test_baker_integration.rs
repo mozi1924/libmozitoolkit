@@ -351,10 +351,10 @@ fn test_baked_model_cull_meta_serialization() {
     assert_eq!(meta.category, mtk_cull::CullCategory::SolidOpaque);
     assert_eq!(meta.full_face_mask, mtk_core::direction::DirMask::ALL);
 
-    // Test bincode roundtrip
-    let bin = bincode::serialize(&baked).unwrap();
+    // Test postcard roundtrip
+    let bin = postcard::to_allocvec(&baked).unwrap();
     let deserialized: mtk_model::baker::baked_model::BakedModel =
-        bincode::deserialize(&bin).unwrap();
+        postcard::from_bytes(&bin).unwrap();
     assert!(deserialized.cull_meta.is_some());
     let des_meta = deserialized.cull_meta.unwrap();
     assert_eq!(des_meta.category, mtk_cull::CullCategory::SolidOpaque);
@@ -410,10 +410,10 @@ fn test_baked_model_atlas_uv_remapping() {
         assert!(uv.y >= 0.5 && uv.y <= 0.75);
     }
 
-    // Test bincode roundtrip serialization
-    let bin = bincode::serialize(&baked).unwrap();
+    // Test postcard roundtrip serialization
+    let bin = postcard::to_allocvec(&baked).unwrap();
     let deserialized: mtk_model::baker::baked_model::BakedModel =
-        bincode::deserialize(&bin).unwrap();
+        postcard::from_bytes(&bin).unwrap();
     let des_face = deserialized.elements[0]
         .faces
         .get(&mtk_core::direction::Direction::Up)
@@ -487,10 +487,10 @@ fn test_baked_model_six_direction_bucketing() {
     );
     assert_eq!(baked.unculled_faces[0].direction, Direction::North);
 
-    // Test bincode roundtrip serialization preserving face buckets
-    let bin = bincode::serialize(&baked).unwrap();
+    // Test postcard roundtrip serialization preserving face buckets
+    let bin = postcard::to_allocvec(&baked).unwrap();
     let deserialized: mtk_model::baker::baked_model::BakedModel =
-        bincode::deserialize(&bin).unwrap();
+        postcard::from_bytes(&bin).unwrap();
     assert_eq!(deserialized.culled_faces[Direction::Up.to_index()].len(), 2);
     assert_eq!(
         deserialized.culled_faces[Direction::Down.to_index()].len(),

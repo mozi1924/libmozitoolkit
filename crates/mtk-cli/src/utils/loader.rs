@@ -41,7 +41,7 @@ impl UniversalAssetLoader {
             let mut all_blockstate_names = Vec::new();
 
             for i in 0..zip.len() {
-                let name = zip.by_index(i)?.name().to_string();
+                let name = zip.by_index(i)?.name()?.to_string();
                 if name.starts_with("assets/minecraft/blockstates/") && name.ends_with(".json") {
                     if let Some(stem) = name
                         .strip_prefix("assets/minecraft/blockstates/")

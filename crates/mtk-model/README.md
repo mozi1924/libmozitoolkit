@@ -156,8 +156,8 @@ pub struct BakedModelDatabase {
 - `db.get_with_pos(state: &str, x: i32, y: i32, z: i32) -> Option<&BakedModel>`: 基于三维世界坐标确定性采样变体模型。
 - `db.deduplicate_all() -> usize`: 批量对库中所有模型及变体组执行面消重。
 - `db.remap_to_atlas_with(lookup_fn)`: 离线对库中所有模型及变体组注入图集坐标。
-- `db.to_bincode() -> Result<Vec<u8>, bincode::Error>`: 序列化为紧凑二进制，采用单变体去重并透明应用 zstd 压缩。
-- `BakedModelDatabase::from_bincode(bytes) -> Result<Self, bincode::Error>`: 从 zstd 压缩的二进制流反序列化；未压缩的 pre-v3 缓存会被明确拒绝。
+- `db.to_binary() -> Result<Vec<u8>, ModelError>` (别名 `to_postcard`): 序列化为紧凑 Postcard 二进制，采用单变体去重并透明应用 zstd 压缩。
+- `BakedModelDatabase::from_binary(bytes) -> Result<Self, ModelError>` (别名 `from_postcard`): 从 zstd 压缩的 Postcard 二进制流反序列化；未压缩的 pre-v3 缓存会被明确拒绝。
 
 ---
 
@@ -346,7 +346,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 | Feature | 默认启用 | 描述 |
 | :--- | :---: | :--- |
-| `std` | 是 | 启用标准库与 `mtk-core/std`、`mtk-cull/std`、`serde/std`、`bincode`。 |
 | `parallel` | 是 | 启用 `rayon` 多线程并发加速（如批量方块状态展开与模型烘焙）。 |
 
 ---

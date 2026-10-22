@@ -19,4 +19,13 @@ pub enum ModelError {
 
     #[error("ThreadPool error: {0}")]
     ThreadPoolError(String),
+
+    #[error("Postcard serialization error: {0}")]
+    Postcard(#[from] postcard::Error),
+
+    #[error("Compression error: {0}")]
+    Compression(String),
+
+    #[error("Invalid model database payload: {0}")]
+    InvalidDatabasePayload(String),
 }

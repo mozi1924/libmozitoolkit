@@ -100,7 +100,7 @@ pub struct ChunkEntry {
 ## 5. 核心分块类型 (Chunk Protocols)
 
 ### 5.1 `META` - 全局元数据块
-* **格式**：JSON 或 Bincode 序列化。
+* **格式**：JSON 或 Postcard 序列化。
 * **内容**：
   * 生成工具标识与版本（如 `libmozitoolkit v0.2.0`, `Blender 4.2`）。
   * 场景坐标 AABB 选区 `(min_x, min_y, min_z) -> (max_x, max_y, max_z)`。

@@ -1,33 +1,28 @@
 use super::database::BakedModelDatabase;
+use crate::ModelError;
 
 impl BakedModelDatabase {
-    pub fn to_bincode(&self) -> Result<Vec<u8>, bincode::Error> {
-        let raw_bytes = bincode::serialize(self)?;
-        zstd::encode_all(&raw_bytes[..], 3).map_err(|e| {
-            bincode::Error::new(bincode::ErrorKind::Custom(format!(
-                "zstd compress error: {}",
-                e
-            )))
-        })
+    /// Serializes and zstd-compresses the database using the compact Postcard format.
+    pub fn to_binary(&self) -> Result<Vec<u8>, ModelError> {
+        let raw_bytes = postcard::to_allocvec(self)?;
+        zstd::encode_all(&raw_bytes[..], 3)
+            .map_err(|e| ModelError::Compression(format!("zstd compress error: {e}")))
     }
 
-    pub fn from_bincode(bytes: &[u8]) -> Result<Self, bincode::Error> {
+    /// Deserializes a zstd-compressed Postcard payload into a `BakedModelDatabase`.
+    pub fn from_binary(bytes: &[u8]) -> Result<Self, ModelError> {
         const ZSTD_MAGIC: [u8; 4] = [0x28, 0xb5, 0x2f, 0xfd];
         if bytes.len() < 4 || bytes[..4] != ZSTD_MAGIC {
-            return Err(bincode::Error::new(bincode::ErrorKind::Custom(
+            return Err(ModelError::InvalidDatabasePayload(
                 "unsupported model database payload: expected zstd-compressed format \
                  (asset cache format < 3 is no longer supported)"
                     .to_string(),
-            )));
+            ));
         }
 
-        let decompressed = zstd::decode_all(bytes).map_err(|e| {
-            bincode::Error::new(bincode::ErrorKind::Custom(format!(
-                "zstd decode error: {}",
-                e
-            )))
-        })?;
-        let mut db: BakedModelDatabase = bincode::deserialize(&decompressed)?;
+        let decompressed = zstd::decode_all(bytes)
+            .map_err(|e| ModelError::Compression(format!("zstd decode error: {e}")))?;
+        let mut db: BakedModelDatabase = postcard::from_bytes(&decompressed)?;
 
         for bm in db.models.values_mut() {
             if bm.culled_faces.iter().all(|v| v.is_empty())
@@ -49,5 +44,17 @@ impl BakedModelDatabase {
         }
 
         Ok(db)
+    }
+
+    /// Alias for [`Self::to_binary`].
+    #[inline]
+    pub fn to_postcard(&self) -> Result<Vec<u8>, ModelError> {
+        self.to_binary()
+    }
+
+    /// Alias for [`Self::from_binary`].
+    #[inline]
+    pub fn from_postcard(bytes: &[u8]) -> Result<Self, ModelError> {
+        Self::from_binary(bytes)
     }
 }

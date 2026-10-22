@@ -113,7 +113,7 @@ pub enum MtkError {
     Package(mtk_package::PackageError),
     Io(std::io::Error),
     Json(serde_json::Error),
-    Bincode(bincode::Error),
+    Postcard(postcard::Error),
     ThreadPool(String),
 }
 ```

@@ -272,7 +272,7 @@ impl BiomeResolver {
 
         for i in 0..archive.len() {
             let mut file = archive.by_index(i)?;
-            let name = file.name().to_string();
+            let name = file.name()?.to_string();
             if name.starts_with("assets/minecraft/models/block/") && name.ends_with(".json") {
                 let mut s = String::new();
                 if file.read_to_string(&mut s).is_ok() {

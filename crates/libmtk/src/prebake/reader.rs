@@ -122,7 +122,7 @@ impl AssetCacheReader {
     /// Loads baked model database directly from package.
     pub fn load_models(&self) -> Result<BakedModelDatabase, MtkError> {
         let raw = self.reader.read_chunk_decompressed("models/database")?;
-        let db = BakedModelDatabase::from_bincode(&raw)?;
+        let db = BakedModelDatabase::from_binary(&raw)?;
         Ok(db)
     }
 

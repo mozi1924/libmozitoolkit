@@ -282,14 +282,14 @@ fn precompile_all_assets_inner(
         baked_atlas_opt = Some(baked_atlas);
     }
 
-    // 2. Full-Scale Model Baking & Bincode Packaging (Zstd compressed)
+    // 2. Full-Scale Model Baking & Postcard Packaging (Zstd compressed)
     if config.compile_models {
         let atlas_map = baked_atlas_opt.as_ref().map(|a| &a.address_map);
         let model_db = profiler.measure("prebake_models", || {
             prebake_all_models_with_progress(stack, atlas_map, progress_callback)
         })?;
         baked_count = model_db.len();
-        let bin_bytes = model_db.to_bincode()?;
+        let bin_bytes = model_db.to_binary()?;
         writer.add_chunk(
             *b"MODL",
             "models/database",

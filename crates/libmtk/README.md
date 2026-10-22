@@ -75,7 +75,7 @@ pub enum MtkError {
     Material(mtk_material::MaterialError),
     Io(std::io::Error),
     Json(serde_json::Error),
-    Bincode(bincode::Error),
+    Postcard(postcard::Error),
     ThreadPool(String),
 }
 

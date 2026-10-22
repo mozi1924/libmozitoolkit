@@ -160,7 +160,7 @@ impl ZipPack {
         for i in 0..archive.len() {
             let mut file_entry = archive.by_index(i)?;
             if file_entry.is_file() {
-                let name = file_entry.name().replace('\\', "/");
+                let name = file_entry.name()?.replace('\\', "/");
                 // Zip-Slip attack protection
                 if name.contains("..") {
                     continue;
@@ -186,7 +186,7 @@ impl ZipPack {
         for i in 0..archive.len() {
             let mut file_entry = archive.by_index(i)?;
             if file_entry.is_file() {
-                let name = file_entry.name().replace('\\', "/");
+                let name = file_entry.name()?.replace('\\', "/");
                 if name.contains("..") {
                     continue;
                 }

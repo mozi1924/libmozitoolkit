@@ -57,8 +57,8 @@ pub enum MtkError {
     #[error("JSON serialization error: {0}")]
     Json(#[from] serde_json::Error),
 
-    #[error("Bincode error: {0}")]
-    Bincode(#[from] bincode::Error),
+    #[error("Postcard error: {0}")]
+    Postcard(#[from] postcard::Error),
 
     #[error("Thread pool error: {0}")]
     ThreadPool(String),
