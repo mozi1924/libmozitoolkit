@@ -2,7 +2,36 @@ use mtk_resource::ResourceLocation;
 use mtk_texture::{AtlasAddressMap, AtlasSpriteLocation};
 use std::collections::HashMap;
 
+pub mod overrides;
+
 use crate::types::GridAtlasSpec;
+
+use self::overrides::{builtin_biome_suffixes, builtin_material_fallbacks, ResolverOverrides};
+use std::sync::{Arc, RwLock};
+
+/// Active external material rules, installed when a compatibility profile/cache is opened.
+static MATERIAL_OVERRIDES: RwLock<Option<Arc<ResolverOverrides>>> = RwLock::new(None);
+
+/// Installs external material compatibility rules.
+pub fn set_material_overrides(overrides: ResolverOverrides) {
+    if let Ok(mut guard) = MATERIAL_OVERRIDES.write() {
+        *guard = Some(Arc::new(overrides));
+    }
+}
+
+/// Clears external material compatibility rules, restoring built-in defaults.
+pub fn clear_material_overrides() {
+    if let Ok(mut guard) = MATERIAL_OVERRIDES.write() {
+        *guard = None;
+    }
+}
+
+fn active_material_overrides() -> Option<Arc<ResolverOverrides>> {
+    MATERIAL_OVERRIDES
+        .read()
+        .ok()
+        .and_then(|guard| guard.as_ref().map(Arc::clone))
+}
 
 /// Generic helper to clean a raw material or texture name into a normalized identifier stem.
 pub fn clean_identifier(raw: &str) -> String {
@@ -62,45 +91,12 @@ pub fn clean_identifier(raw: &str) -> String {
         }
     }
 
-    // 4. Strip exporter biome suffixes
-    let biome_suffixes = [
-        "-desert",
-        "-forest",
-        "-swamp",
-        "-taiga",
-        "-snow",
-        "-ocean",
-        "-jungle",
-        "-badlands",
-        "-savanna",
-        "-dark_forest",
-        "-birch_forest",
-        "-plains",
-        "-meadow",
-        "-mangrove",
-        "-cherry_grove",
-        "-cold_ocean",
-        "-warm_ocean",
-        "_desert",
-        "_forest",
-        "_swamp",
-        "_taiga",
-        "_snow",
-        "_ocean",
-        "_jungle",
-        "_badlands",
-        "_savanna",
-        "_dark_forest",
-        "_birch_forest",
-        "_plains",
-        "_meadow",
-        "_mangrove",
-        "_cherry_grove",
-        "_cold_ocean",
-        "_warm_ocean",
-        "_y",
-    ];
-
+    // 4. Strip exporter biome suffixes (external config overrides the built-ins)
+    let active = active_material_overrides();
+    let biome_suffixes: &[String] = match active.as_ref() {
+        Some(overrides) => overrides.effective_biome_suffixes(),
+        None => builtin_biome_suffixes(),
+    };
     for suffix in biome_suffixes {
         if s.ends_with(suffix) {
             s = s[..s.len() - suffix.len()].to_string();
@@ -520,31 +516,21 @@ impl MaterialResolver {
             }
         }
 
-        // 3.7 Foliage / Leaves and Log fallbacks for modded blocks with missing textures
-        if raw_material_name.contains("leaves")
-            || cleaned.contains("leaves")
-            || raw_material_name.contains("leaf")
-            || cleaned.contains("leaf")
-        {
-            for &cand in &[
-                "block/oak_leaves",
-                "minecraft:block/oak_leaves",
-                "block/leaves",
-            ] {
-                if let Some(sprite_loc) = address_map.lookup_str(cand) {
-                    let res_loc = ResourceLocation::parse(cand)
-                        .unwrap_or_else(|_| ResourceLocation::new("minecraft", cand));
-                    return Some((res_loc, sprite_loc));
-                }
-            }
-        }
-
-        if raw_material_name.contains("log") || cleaned.contains("log") {
-            for &cand in &["block/oak_log", "minecraft:block/oak_log"] {
-                if let Some(sprite_loc) = address_map.lookup_str(cand) {
-                    let res_loc = ResourceLocation::parse(cand)
-                        .unwrap_or_else(|_| ResourceLocation::new("minecraft", cand));
-                    return Some((res_loc, sprite_loc));
+        // 3.7 Configurable legacy/modded material fallbacks.
+        let active = active_material_overrides();
+        let fallback_rules: &[overrides::MaterialFallbackRule] = match active.as_ref() {
+            Some(overrides) => overrides.effective_material_fallbacks(),
+            None => builtin_material_fallbacks(),
+        };
+        for rule in fallback_rules {
+            let keyword = rule.keyword.to_lowercase();
+            if raw_material_name.to_lowercase().contains(&keyword) || cleaned.contains(&keyword) {
+                for cand in &rule.candidates {
+                    if let Some(sprite_loc) = address_map.lookup_str(cand) {
+                        let res_loc = ResourceLocation::parse(cand)
+                            .unwrap_or_else(|_| ResourceLocation::new("minecraft", cand));
+                        return Some((res_loc, sprite_loc));
+                    }
                 }
             }
         }

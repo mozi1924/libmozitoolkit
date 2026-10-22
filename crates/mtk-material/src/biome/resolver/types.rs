@@ -69,6 +69,17 @@ impl BiomeResolver {
         resolver
     }
 
+    /// Merges external compatibility overrides into the resolver maps.
+    pub fn apply_overrides(&mut self, overrides: &crate::resolver::overrides::ResolverOverrides) {
+        for (key, category) in &overrides.tint_categories {
+            self.texture_tint_categories
+                .insert(key.clone(), category.clone());
+        }
+        for (key, color) in &overrides.hardcoded_colors {
+            self.texture_hardcoded_colors.insert(key.clone(), *color);
+        }
+    }
+
     /// Serialize BiomeResolver mapping table to a JSON string.
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string_pretty(self)

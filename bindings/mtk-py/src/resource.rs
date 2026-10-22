@@ -327,7 +327,7 @@ pub fn get_cache_manifest<'py>(
 ///
 /// Releases Python GIL during multi-threaded baking, re-acquiring for progress callbacks.
 #[pyfunction]
-#[pyo3(signature = (stack, cache_dir, atlas_category="blocks", max_atlas_width=4096, max_atlas_height=4096, compile_atlas=true, compile_models=true, num_threads=None, callback=None))]
+#[pyo3(signature = (stack, cache_dir, atlas_category="blocks", max_atlas_width=4096, max_atlas_height=4096, compile_atlas=true, compile_models=true, num_threads=None, callback=None, resolver_overrides_json=None))]
 pub fn precompile_all_assets<'py>(
     py: Python<'py>,
     stack: &PyResourcePackStack,
@@ -339,7 +339,15 @@ pub fn precompile_all_assets<'py>(
     compile_models: bool,
     num_threads: Option<usize>,
     callback: Option<Py<PyAny>>,
+    resolver_overrides_json: Option<&str>,
 ) -> PyResult<PyPrecompileResult> {
+    let resolver_overrides = match resolver_overrides_json {
+        Some(json) => Some(
+            mtk_material::resolver::overrides::parse_overrides(json)
+                .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?,
+        ),
+        None => None,
+    };
     let cfg = libmtk::PrecompileConfig {
         max_atlas_width,
         max_atlas_height,
@@ -347,6 +355,7 @@ pub fn precompile_all_assets<'py>(
         compile_atlas,
         compile_models,
         num_threads,
+        resolver_overrides,
     };
 
     let cb_opt = callback.as_ref();

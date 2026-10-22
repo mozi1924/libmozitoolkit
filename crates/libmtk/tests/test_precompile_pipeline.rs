@@ -64,6 +64,7 @@ fn test_precompile_all_assets_end_to_end() {
         compile_atlas: true,
         compile_models: true,
         num_threads: None,
+        resolver_overrides: None,
     };
 
     let result = precompile_all_assets(&stack, &temp_cache_dir, &config).unwrap();

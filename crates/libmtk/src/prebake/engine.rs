@@ -26,6 +26,8 @@ pub struct PrecompileConfig {
     pub compile_atlas: bool,
     pub compile_models: bool,
     pub num_threads: Option<usize>,
+    /// Optional external material/biome compatibility overrides baked into the cache.
+    pub resolver_overrides: Option<mtk_material::resolver::overrides::ResolverOverrides>,
 }
 
 impl Default for PrecompileConfig {
@@ -37,6 +39,7 @@ impl Default for PrecompileConfig {
             compile_atlas: true,
             compile_models: true,
             num_threads: None,
+            resolver_overrides: None,
         }
     }
 }
@@ -91,6 +94,12 @@ fn precompile_all_assets_inner(
 
     let fingerprint = stack.compute_stack_fingerprint();
 
+    // Apply external compatibility rules for atlas/model baking in this run.
+    match config.resolver_overrides.as_ref() {
+        Some(overrides) => mtk_material::resolver::set_material_overrides(overrides.clone()),
+        None => mtk_material::resolver::clear_material_overrides(),
+    }
+
     // Determine target .mtkcache file path
     let package_path = if base_path.extension().is_some_and(|ext| ext == "mtkcache") {
         if let Some(parent) = base_path.parent() {
@@ -121,6 +130,16 @@ fn precompile_all_assets_inner(
     profiler.measure("prebake_biome", || -> Result<(), MtkError> {
         let mut biome_resolver = BiomeResolver::new();
         biome_resolver.load_from_pack_stack(stack);
+        if let Some(overrides) = config.resolver_overrides.as_ref() {
+            biome_resolver.apply_overrides(overrides);
+            let overrides_json = serde_json::to_string(overrides)?;
+            writer.add_str_chunk(
+                *b"COMP",
+                "resolver/overrides",
+                &overrides_json,
+                &ChunkWriteOptions::zstd_fast(),
+            )?;
+        }
         let biome_json = biome_resolver.to_json()?;
         writer.add_str_chunk(
             *b"BIOM",
