@@ -51,7 +51,7 @@
   - **严禁全局安装**：严禁通过 `pip install` 将轮子安装到宿主系统的全局 Python 或 Blender 全局 `bpy` 环境中。
 
 ### 规则 7：资产缓存与预编译标准 PBR 规范 (Precompile Cache & Canonical PBR)
-- **PBR 预解码权威通道**：资产预烘焙（Atlas 拼接、Standalone PBR 对齐、Model Baking、BiomeResolver）由 `libmtk::prebake` 统一无头处理，版本受 `ASSET_CACHE_FORMAT_VERSION = 4` 约束。
+- **PBR 预解码权威通道**：资产预烘焙（Atlas 拼接、Standalone PBR 对齐、Model Baking、BiomeResolver）由 `libmtk::prebake` 统一无头处理，版本受 `ASSET_CACHE_FORMAT_VERSION = 5` 约束。
 - **彻底告别运行时 LabPBR**：预编译期直接将 LabPBR 解码为规范 PBR 图集通道（Albedo, Normal_GL, Roughness, Metallic, Aux/Emission），丢弃原始 `_n` / `_s`。彻底废弃 `mtk_material_props` 物理属性表。
 
 ### 规则 8：单文件规模红线与模块化防膨胀 (File Length Redline & Submodule Decomposition)

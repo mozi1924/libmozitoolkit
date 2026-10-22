@@ -10,8 +10,15 @@ use crate::attributes::{
 };
 
 impl MeshData {
-    /// Populates all standard Face attributes from an ordered slice of `FaceAttributes`.
-    pub fn populate_standard_face_attributes(&mut self, face_attrs: &[FaceAttributes]) {
+    /// Populates standard Face attributes from an ordered slice of `FaceAttributes`.
+    ///
+    /// `include_block_coords` is opt-in: standalone baked-model meshes have no
+    /// meaningful world position, while voxel/world meshes do.
+    pub fn populate_standard_face_attributes(
+        &mut self,
+        face_attrs: &[FaceAttributes],
+        include_block_coords: bool,
+    ) {
         let face_count = face_attrs.len();
         if face_count == 0 {
             return;
@@ -29,6 +36,7 @@ impl MeshData {
         let mut block_z = Vec::with_capacity(face_count);
         let mut chunk_ids = Vec::with_capacity(face_count);
         let mut has_chunk_id = false;
+        let mut has_animation = false;
 
         for attr in face_attrs {
             textures.push(attr.texture_key.clone());
@@ -36,11 +44,14 @@ impl MeshData {
             uv_rotations.push(attr.uv_rotation);
             anim_timings.push(attr.anim_timing);
             anim_sizes.push(attr.anim_frame_size);
+            has_animation |= attr.anim_timing[0] > 1.0;
             tint_colors.push(attr.biome_tint_color);
             tint_datas.push(attr.biome_tint_data);
-            block_x.push(attr.block_pos[0]);
-            block_y.push(attr.block_pos[1]);
-            block_z.push(attr.block_pos[2]);
+            if include_block_coords {
+                block_x.push(attr.block_pos[0]);
+                block_y.push(attr.block_pos[1]);
+                block_z.push(attr.block_pos[2]);
+            }
 
             if let Some(cid) = attr.atlas_chunk_id {
                 has_chunk_id = true;
@@ -65,16 +76,18 @@ impl MeshData {
             AttributeDomain::Face,
             AttributeData::Float(uv_rotations),
         ));
-        self.add_custom_attribute(MeshAttribute::new(
-            ATTR_ANIM_TIMING,
-            AttributeDomain::Face,
-            AttributeData::Float3(anim_timings),
-        ));
-        self.add_custom_attribute(MeshAttribute::new(
-            ATTR_ANIM_FRAME_SIZE,
-            AttributeDomain::Face,
-            AttributeData::Float3(anim_sizes),
-        ));
+        if has_animation {
+            self.add_custom_attribute(MeshAttribute::new(
+                ATTR_ANIM_TIMING,
+                AttributeDomain::Face,
+                AttributeData::Float3(anim_timings),
+            ));
+            self.add_custom_attribute(MeshAttribute::new(
+                ATTR_ANIM_FRAME_SIZE,
+                AttributeDomain::Face,
+                AttributeData::Float3(anim_sizes),
+            ));
+        }
         self.add_custom_attribute(MeshAttribute::new(
             ATTR_BIOME_TINT_COLOR,
             AttributeDomain::Face,
@@ -85,21 +98,23 @@ impl MeshData {
             AttributeDomain::Face,
             AttributeData::Float4(tint_datas),
         ));
-        self.add_custom_attribute(MeshAttribute::new(
-            ATTR_BLOCK_X,
-            AttributeDomain::Face,
-            AttributeData::Int32(block_x),
-        ));
-        self.add_custom_attribute(MeshAttribute::new(
-            ATTR_BLOCK_Y,
-            AttributeDomain::Face,
-            AttributeData::Int32(block_y),
-        ));
-        self.add_custom_attribute(MeshAttribute::new(
-            ATTR_BLOCK_Z,
-            AttributeDomain::Face,
-            AttributeData::Int32(block_z),
-        ));
+        if include_block_coords {
+            self.add_custom_attribute(MeshAttribute::new(
+                ATTR_BLOCK_X,
+                AttributeDomain::Face,
+                AttributeData::Int32(block_x),
+            ));
+            self.add_custom_attribute(MeshAttribute::new(
+                ATTR_BLOCK_Y,
+                AttributeDomain::Face,
+                AttributeData::Int32(block_y),
+            ));
+            self.add_custom_attribute(MeshAttribute::new(
+                ATTR_BLOCK_Z,
+                AttributeDomain::Face,
+                AttributeData::Int32(block_z),
+            ));
+        }
 
         if has_chunk_id {
             self.add_custom_attribute(MeshAttribute::new(
@@ -134,7 +149,7 @@ mod tests {
     fn test_populate_standard_face_attributes_stays_within_schema() {
         let attrs = vec![FaceAttributes::new("minecraft:block/stone", 0)];
         let mut mesh = MeshData::new();
-        mesh.populate_standard_face_attributes(&attrs);
+        mesh.populate_standard_face_attributes(&attrs, false);
 
         for name in mesh.custom_attributes.keys() {
             assert!(
@@ -148,5 +163,30 @@ mod tests {
                 "retired attribute {name} must not be emitted"
             );
         }
+    }
+
+    #[test]
+    fn test_standalone_faces_skip_world_and_animation_attributes() {
+        let attrs = vec![FaceAttributes::new("minecraft:block/stone", 0)];
+        let mut mesh = MeshData::new();
+        mesh.populate_standard_face_attributes(&attrs, false);
+
+        assert!(mesh.get_custom_attribute(ATTR_BLOCK_X).is_none());
+        assert!(mesh.get_custom_attribute(ATTR_BLOCK_Y).is_none());
+        assert!(mesh.get_custom_attribute(ATTR_BLOCK_Z).is_none());
+        assert!(mesh.get_custom_attribute(ATTR_ANIM_TIMING).is_none());
+        assert!(mesh.get_custom_attribute(ATTR_ANIM_FRAME_SIZE).is_none());
+    }
+
+    #[test]
+    fn test_world_faces_keep_block_coordinates() {
+        let mut attr = FaceAttributes::new("minecraft:block/stone", 0);
+        attr.block_pos = [1, 2, 3];
+        let mut mesh = MeshData::new();
+        mesh.populate_standard_face_attributes(&[attr], true);
+
+        assert!(mesh.get_custom_attribute(ATTR_BLOCK_X).is_some());
+        assert!(mesh.get_custom_attribute(ATTR_BLOCK_Y).is_some());
+        assert!(mesh.get_custom_attribute(ATTR_BLOCK_Z).is_some());
     }
 }

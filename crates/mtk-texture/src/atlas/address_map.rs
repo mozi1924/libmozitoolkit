@@ -117,7 +117,7 @@ pub struct AtlasChunkMeta {
     /// Whether the packed `_aux` sheet was written for this chunk.
     #[serde(default)]
     pub has_aux: bool,
-    /// Canonical PBR layout metadata; `None` means a pre-v4 legacy cache.
+    /// Canonical PBR layout metadata; `None` means a legacy cache predating the current format.
     #[serde(default)]
     pub pbr: Option<PbrMeta>,
 }

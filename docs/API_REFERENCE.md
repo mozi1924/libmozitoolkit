@@ -131,7 +131,7 @@ pub enum MtkError {
 ---
 
 ### 2.6 资产预编译缓存格式规范 (`ASSET_CACHE_FORMAT_VERSION`)
-由 `libmtk::prebake` 产出的资产预编译缓存目录结构受全局版本号严格约束（当前版本：`ASSET_CACHE_FORMAT_VERSION = 4`）：
+由 `libmtk::prebake` 产出的资产预编译缓存目录结构受全局版本号严格约束（当前版本：`ASSET_CACHE_FORMAT_VERSION = 5`）：
 ```
 cache_output_dir/
 ├── cache_manifest.json     # 全局清单、时间戳、CRC 校验与版本号
@@ -144,6 +144,7 @@ cache_output_dir/
 │   └── blocks_0_aux.png    # Encoded IOR / Porosity / SSS / Transmission（Non-Color）
 └── models/                 # 烘焙完成的预解析二进制方块几何库
 ```
+- **v5**：`models.bin` 由 Bincode 切换为 Postcard + Zstd，烘焙体积更小；旧 v4（Bincode）缓存会被 manifest 版本校验直接拒绝并重建。
 
 ---
 

@@ -91,10 +91,10 @@ fn test_rejects_uncompressed_pre_v3_payload() {
     assert_ne!(&uncompressed_bytes[..4], &[0x28, 0xb5, 0x2f, 0xfd]);
 
     let err = BakedModelDatabase::from_binary(&uncompressed_bytes)
-        .expect_err("pre-v3 uncompressed payload must be rejected");
+        .expect_err("legacy uncompressed/bincode payload must be rejected");
     let message = err.to_string();
     assert!(
-        message.contains("asset cache format < 3"),
+        message.contains("legacy bincode caches"),
         "error must explain the version boundary, got: {message}"
     );
 }
@@ -109,9 +109,9 @@ fn test_real_cache_benchmark_if_available() {
     let raw_file_bytes = fs::read(&real_cache_path).expect("Failed to read real models.bin");
     if raw_file_bytes.len() < 4 || raw_file_bytes[..4] != [0x28, 0xb5, 0x2f, 0xfd] {
         let err = BakedModelDatabase::from_binary(&raw_file_bytes)
-            .expect_err("pre-v3 models.bin must be rejected");
-        assert!(err.to_string().contains("asset cache format < 3"));
-        eprintln!("Skipping benchmark: $MTK_TEST_MODELS_CACHE is a pre-v3 uncompressed cache");
+            .expect_err("legacy models.bin must be rejected");
+        assert!(err.to_string().contains("legacy bincode caches"));
+        eprintln!("Skipping benchmark: $MTK_TEST_MODELS_CACHE is a legacy uncompressed cache");
         return;
     }
     let old_size = raw_file_bytes.len();

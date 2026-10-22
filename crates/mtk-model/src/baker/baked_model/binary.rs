@@ -15,7 +15,7 @@ impl BakedModelDatabase {
         if bytes.len() < 4 || bytes[..4] != ZSTD_MAGIC {
             return Err(ModelError::InvalidDatabasePayload(
                 "unsupported model database payload: expected zstd-compressed format \
-                 (asset cache format < 3 is no longer supported)"
+                 (legacy bincode caches are no longer supported; rebuild the asset cache)"
                     .to_string(),
             ));
         }

@@ -221,7 +221,7 @@ impl BakedModel {
         }
 
         if !face_attributes_list.is_empty() {
-            mesh.populate_standard_face_attributes(&face_attributes_list);
+            mesh.populate_standard_face_attributes(&face_attributes_list, false);
         }
 
         // 3. De-overlapping and Duplicate/Opposite Face Culling (prevents DCC renderer Z-fighting)

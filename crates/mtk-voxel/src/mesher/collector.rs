@@ -113,15 +113,62 @@ impl FaceAttributesCollector {
             AttributeDomain::Face,
             AttributeData::Int32(self.block_zs),
         ));
-        mesh.add_custom_attribute(MeshAttribute::new(
-            ATTR_ANIM_TIMING,
-            AttributeDomain::Face,
-            AttributeData::Float3(self.anim_timings),
-        ));
-        mesh.add_custom_attribute(MeshAttribute::new(
-            ATTR_ANIM_FRAME_SIZE,
-            AttributeDomain::Face,
-            AttributeData::Float3(self.anim_frame_sizes),
-        ));
+        if self.anim_timings.iter().any(|timing| timing[0] > 1.0) {
+            mesh.add_custom_attribute(MeshAttribute::new(
+                ATTR_ANIM_TIMING,
+                AttributeDomain::Face,
+                AttributeData::Float3(self.anim_timings),
+            ));
+            mesh.add_custom_attribute(MeshAttribute::new(
+                ATTR_ANIM_FRAME_SIZE,
+                AttributeDomain::Face,
+                AttributeData::Float3(self.anim_frame_sizes),
+            ));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mtk_core::attributes::constants::{
+        ATTR_ANIM_FRAME_SIZE, ATTR_ANIM_TIMING, ATTR_BLOCK_X, ATTR_BLOCK_Y, ATTR_BLOCK_Z,
+    };
+
+    fn collector_with(anim_timing: [f32; 3]) -> FaceAttributesCollector {
+        let mut collector = FaceAttributesCollector::with_capacity(1);
+        collector.push_face(
+            "minecraft:block/stone".to_string(),
+            0,
+            [1.0, 1.0, 0.0, 0.0],
+            0.0,
+            [1.0, 0.0, 0.0, 0.0],
+            [1.0, 1.0, 1.0, 1.0],
+            glam::IVec3::new(1, 2, 3),
+            anim_timing,
+            [16.0, 16.0, 0.0],
+        );
+        collector
+    }
+
+    #[test]
+    fn static_faces_skip_animation_attributes() {
+        let mut mesh = MeshData::new();
+        collector_with([1.0, 1.0, 0.0]).attach_to_mesh(&mut mesh);
+
+        assert!(mesh.get_custom_attribute(ATTR_ANIM_TIMING).is_none());
+        assert!(mesh.get_custom_attribute(ATTR_ANIM_FRAME_SIZE).is_none());
+        assert!(mesh.get_custom_attribute(ATTR_BLOCK_X).is_some());
+        assert!(mesh.get_custom_attribute(ATTR_BLOCK_Y).is_some());
+        assert!(mesh.get_custom_attribute(ATTR_BLOCK_Z).is_some());
+    }
+
+    #[test]
+    fn animated_faces_emit_animation_attributes() {
+        let mut mesh = MeshData::new();
+        collector_with([4.0, 2.0, 1.0]).attach_to_mesh(&mut mesh);
+
+        assert!(mesh.get_custom_attribute(ATTR_ANIM_TIMING).is_some());
+        assert!(mesh.get_custom_attribute(ATTR_ANIM_FRAME_SIZE).is_some());
     }
 }
