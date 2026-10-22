@@ -67,7 +67,7 @@ pub fn decode_labpbr13(
     // Defaults are written once so a normal-only chunk still gets a sane ORM sheet.
     if let Some(buffer) = orm.as_mut() {
         let default_roughness = encode_unit(1.0 - DEFAULT_SMOOTHNESS);
-        for pixel in buffer.pixels.chunks_exact_mut(4) {
+        for pixel in buffer.pixels.as_chunks_mut::<4>().0 {
             pixel[0] = 255;
             pixel[1] = default_roughness;
             pixel[2] = 0;
@@ -76,7 +76,7 @@ pub fn decode_labpbr13(
     }
     if let Some(buffer) = aux.as_mut() {
         let default_ior = encode_ior(DEFAULT_IOR);
-        for pixel in buffer.pixels.chunks_exact_mut(4) {
+        for pixel in buffer.pixels.as_chunks_mut::<4>().0 {
             pixel[0] = default_ior;
             pixel[1] = 0;
             pixel[2] = 0;

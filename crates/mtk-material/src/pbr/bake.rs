@@ -75,7 +75,7 @@ pub fn decode_baked_atlas(
 }
 
 fn clean_transparent_albedo(buffer: &mut mtk_texture::RgbaBuffer) {
-    for pixel in buffer.pixels.chunks_exact_mut(4) {
+    for pixel in buffer.pixels.as_chunks_mut::<4>().0 {
         if pixel[3] == 0 {
             pixel[0] = 255;
             pixel[1] = 255;
