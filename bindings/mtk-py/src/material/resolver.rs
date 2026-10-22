@@ -399,17 +399,6 @@ impl PyBiomeResolver {
         Ok(Self { inner })
     }
 
-    /// Set loaded block models dictionary.
-    pub fn set_models(
-        &mut self,
-        py: Python<'_>,
-        models: Bound<'_, pyo3::types::PyDict>,
-    ) -> PyResult<()> {
-        let map = py_dict_to_json_hashmap(py, &models)?;
-        self.inner.set_models(map);
-        Ok(())
-    }
-
     /// Load BiomeResolver from a JSON string.
     #[staticmethod]
     pub fn from_json(json_str: &str) -> PyResult<Self> {
@@ -433,31 +422,10 @@ impl PyBiomeResolver {
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
     }
 
-    /// Load block models from directory.
-    pub fn load_from_directory(&mut self, dir_path: &str) -> PyResult<()> {
-        self.inner
-            .load_from_directory(dir_path)
-            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))
-    }
-
-    /// Load block models from .jar or .zip pack.
-    pub fn load_from_zip(&mut self, zip_path: &str) -> PyResult<()> {
-        self.inner
-            .load_from_zip(zip_path)
-            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))
-    }
-
     /// Load block models from a ResourcePackStack.
     pub fn load_from_pack_stack(&mut self, stack: &PyResourcePackStack) -> PyResult<()> {
         self.inner.load_from_pack_stack(&stack.inner);
         Ok(())
-    }
-
-    /// Retrieve the paired overlay texture stem for a given base texture stem, if any.
-    pub fn get_overlay_texture(&self, texture_stem: &str) -> Option<String> {
-        self.inner
-            .get_overlay_texture(texture_stem)
-            .map(|s| s.to_string())
     }
 
     /// Resolve tint metadata for a single texture.

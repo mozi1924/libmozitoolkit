@@ -65,28 +65,26 @@ bindings/
     单批次完成离散选区面随机挤出、3D 噪声位移（Uniform / Perlin / Cellular）、侧面拓扑缝合与自动 UV 修复。
   - `adaptive_pixel_split_mesh(...)`:
     自适应像素网格细分，基于贴图分辨率与 UV 物理跨度切分，保留 Quad 拓扑并双线性插值所有顶点属性。
-  - `slice_face_by_pixel_grid(...)` / `calculate_face_target_grid(...)` / `calculate_pixel_grid_cut_factors(...)`。
+  - `slice_face_by_pixel_grid(...)` / `calculate_face_target_grid(...)` / `calculate_pixel_grid_cut_factors(...)` 属于测试/开发 API，位于 `unstable.testing`。
 
 ##### 2. 材质与生物群系 (`mtk.material`)
 - `PyBiomeResolver`:
   - `BiomeResolver(models=None)`: 可选传入原始模型字典构建解析器。
-  - `set_models(models)`: 动态注入方块模型字典并递归解析 parent 继承树。
   - `get_tint_info(texture_name, block_name=None, tint_index=None)`: 返回包含 `tint_type`, `tint_category`, `tint_weight`, `base_tint_weight`, `overlay_tint_weight`, `hardcoded_hex`, `is_hardcoded` 等完整元数据的字典。
   - `from_file(path)`: 从预编译的 `biome_mapping.json` 极速载入映射。
   - `to_json()` / `from_json(json_str)`: 序列化支持。
-- `classify_tint_category(clean_stem, block_name=None, tint_index=None) -> str`: 权威染色语义分类器。
 - `blend_biome_colors(biome_weights, tint_type="grass") -> [f32; 4]`: 多群系平滑线性色彩过渡混合。
 - `sample_colormap_pixel(image_bytes, width, height, temp, hum, channels=4) -> [f32; 3]`: 原版 256x256 三角形 Colormap 像素采样。
 - `mesh_attribute_schema()` / `retired_mesh_attributes()`: 暴露 `mtk-core::attributes` 的规范属性契约（活跃与退役清单），宿主据此生成镜像并清理旧数据。
 - `compute_biome_tint_attributes(...)`: Rayon 多线程批量计算网格面的 Tint 颜色属性（支持全局预设、多群系加权及 `face_biomes` 逐面生物群系数组）。
 - `compute_mesh_biome_attributes_from_storage(face_texture_keys, block_xs, block_ys, block_zs, storage, resolver=None, smooth=True)`: 按每个面的真实 3D 世界坐标从 `VoxelStorage` 查询 3D Quart Biome 并执行 5×5 (R=2) 平滑混合计算面染色属性。
 - `get_biome_meta(name)` / `get_all_biomes()`: 查询 66 原版生物群系规范参数（温度、湿度、草方块/树叶/水体颜色）。
-- `srgb_to_linear(color)` / `linear_to_srgb(color)` / `get_colormap_uv(temp, humidity)`: 线性色彩空间数学。
+- `srgb_to_linear(color)` / `linear_to_srgb(color)`: 线性色彩空间数学；colormap 采样在 Rust 内完成，Python 不再暴露 UV 计算。
 - `MaterialResolver`: 材质别名解算与多通道 UV 重映射 (`remap_mesh_multi_uvs_parallel`)。
 
 
 ##### 3. 体素与实时同步 (`mtk.voxel` & `mtk.sync`)
-- `VoxelStorage`: 稀疏体素世界存储，纳秒级快照更新与选区包围盒裁剪。
+- `VoxelStorage`: 稀疏体素世界存储，纳秒级快照更新与选区包围盒裁剪；测试专用底层方法位于 `unstable.testing`。
 - **技术栈**：`wasm-bindgen` + `wasm-pack` (发布为 npm package / ES Module)。
 - **数据对接**：
   - 利用 `js_sys::Float32Array::view` / `js_sys::Uint32Array::view` 直接将 WASM 线性内存暴露给 JavaScript 前端。
