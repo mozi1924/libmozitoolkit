@@ -156,8 +156,8 @@ pub struct BakedModelDatabase {
 - `db.get_with_pos(state: &str, x: i32, y: i32, z: i32) -> Option<&BakedModel>`: 基于三维世界坐标确定性采样变体模型。
 - `db.deduplicate_all() -> usize`: 批量对库中所有模型及变体组执行面消重。
 - `db.remap_to_atlas_with(lookup_fn)`: 离线对库中所有模型及变体组注入图集坐标。
-- `db.to_binary() -> Result<Vec<u8>, ModelError>` (别名 `to_postcard`): 序列化为紧凑 Postcard 二进制，采用单变体去重并透明应用 zstd 压缩。
-- `BakedModelDatabase::from_binary(bytes) -> Result<Self, ModelError>` (别名 `from_postcard`): 从 zstd 压缩的 Postcard 二进制流反序列化；未压缩或旧 Bincode 缓存会被明确拒绝，需重建资产缓存。
+- `db.to_binary() -> Result<Vec<u8>, ModelError>`: 序列化为紧凑 Postcard 二进制，采用单变体去重并透明应用 zstd 压缩。
+- `BakedModelDatabase::from_binary(bytes) -> Result<Self, ModelError>`: 从 zstd 压缩的 Postcard 二进制流反序列化；未压缩或旧 Bincode 缓存会被明确拒绝，需重建资产缓存。
 
 ---
 

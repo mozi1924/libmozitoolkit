@@ -347,8 +347,6 @@ impl PyMaterialResolver {
             "face_uv_rotations",
             create_owned_f32_memoryview(py, mesh.face_uv_rotations.clone())?,
         )?;
-        dict.set_item("face_uv_modes", mesh.face_uv_modes)?;
-        dict.set_item("face_is_overlay", mesh.face_is_overlay)?;
         dict.set_item("face_is_animated", mesh.face_is_animated)?;
         dict.set_item(
             "face_anim_timing",

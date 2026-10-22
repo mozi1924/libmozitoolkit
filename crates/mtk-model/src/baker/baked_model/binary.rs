@@ -45,16 +45,4 @@ impl BakedModelDatabase {
 
         Ok(db)
     }
-
-    /// Alias for [`Self::to_binary`].
-    #[inline]
-    pub fn to_postcard(&self) -> Result<Vec<u8>, ModelError> {
-        self.to_binary()
-    }
-
-    /// Alias for [`Self::from_binary`].
-    #[inline]
-    pub fn from_postcard(bytes: &[u8]) -> Result<Self, ModelError> {
-        Self::from_binary(bytes)
-    }
 }

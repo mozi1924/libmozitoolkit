@@ -31,10 +31,9 @@ pub const API_VERSION: u32 = 1;
 pub use ctm::PyCtmSolver;
 pub use cull::PyFaceCuller;
 pub use material::{
-    build_material_palette, classify_tint_category, compute_biome_tint_attributes,
-    compute_biome_tint_attributes_paletted, compute_mesh_biome_attributes_from_storage,
-    get_all_biomes, get_biome_meta, reapply_uniform_biome_tint, PyBiomeResolver, PyGridAtlasSpec,
-    PyMaterialResolver,
+    build_material_palette, compute_biome_tint_attributes, compute_biome_tint_attributes_paletted,
+    compute_mesh_biome_attributes_from_storage, get_all_biomes, get_biome_meta,
+    reapply_uniform_biome_tint, PyBiomeResolver, PyGridAtlasSpec, PyMaterialResolver,
 };
 pub use mesh::{PyAttributeDomain, PyMeshData};
 pub use model::{PyBakedModelDatabase, PyModelBaker};
@@ -79,12 +78,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(attributes::mesh_attribute_schema, m)?)?;
     m.add_function(wrap_pyfunction!(attributes::retired_mesh_attributes, m)?)?;
     m.add_function(wrap_pyfunction!(subdivide::adaptive_pixel_split_mesh, m)?)?;
-    m.add_function(wrap_pyfunction!(subdivide::calculate_face_target_grid, m)?)?;
-    m.add_function(wrap_pyfunction!(
-        subdivide::calculate_pixel_grid_cut_factors,
-        m
-    )?)?;
-    m.add_function(wrap_pyfunction!(subdivide::slice_face_by_pixel_grid, m)?)?;
     m.add_function(wrap_pyfunction!(mesh::analyze_mesh_hard_edges, m)?)?;
 
     // 3. Culling
@@ -100,17 +93,10 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyLiveSyncSession>()?;
     m.add_function(wrap_pyfunction!(decode_packet, m)?)?;
     m.add_function(wrap_pyfunction!(compute_canonical_state_hash, m)?)?;
-    m.add_function(wrap_pyfunction!(encode_welcome, m)?)?;
-    m.add_function(wrap_pyfunction!(encode_baseline_begin, m)?)?;
-    m.add_function(wrap_pyfunction!(encode_baseline_chunk, m)?)?;
-    m.add_function(wrap_pyfunction!(encode_baseline_end, m)?)?;
-    m.add_function(wrap_pyfunction!(encode_delta_op, m)?)?;
-    m.add_function(wrap_pyfunction!(encode_palette_update, m)?)?;
 
     // 6. Resource Pack & Textures
     m.add_class::<PyResourcePackStack>()?;
     m.add_class::<PyCtmSolver>()?;
-    m.add_class::<PyAtlasBuilder>()?;
     m.add_class::<PyBakedAtlas>()?;
     m.add_class::<PyPrecompileResult>()?;
     m.add_class::<PyAssetCache>()?;
@@ -118,8 +104,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(is_valid_cache_package, m)?)?;
     m.add_function(wrap_pyfunction!(resolve_active_cache_package, m)?)?;
     m.add_function(wrap_pyfunction!(get_cache_manifest, m)?)?;
-    m.add_function(wrap_pyfunction!(texture::sample_uv_alpha_f32, m)?)?;
-    m.add_function(wrap_pyfunction!(texture::is_face_transparent_f32, m)?)?;
     m.add_function(wrap_pyfunction!(
         texture::batch_analyze_transparent_faces_f32,
         m
@@ -137,13 +121,9 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
     m.add_function(wrap_pyfunction!(reapply_uniform_biome_tint, m)?)?;
-    m.add_function(wrap_pyfunction!(classify_tint_category, m)?)?;
     m.add_function(wrap_pyfunction!(get_biome_meta, m)?)?;
     m.add_function(wrap_pyfunction!(get_all_biomes, m)?)?;
     m.add_function(wrap_pyfunction!(material::sample_colormap_colors, m)?)?;
-    m.add_function(wrap_pyfunction!(material::get_hardcoded_tint, m)?)?;
-    m.add_function(wrap_pyfunction!(material::get_hardcoded_tint_hex, m)?)?;
-    m.add_function(wrap_pyfunction!(material::get_swamp_grass_color, m)?)?;
     m.add("TINT_TYPE_NONE", mtk_material::TINT_TYPE_NONE)?;
     m.add("TINT_TYPE_GRASS", mtk_material::TINT_TYPE_GRASS)?;
     m.add("TINT_TYPE_FOLIAGE", mtk_material::TINT_TYPE_FOLIAGE)?;
@@ -152,27 +132,16 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("TINT_TYPE_DRY_FOLIAGE", mtk_material::TINT_TYPE_DRY_FOLIAGE)?;
 
     // 8. Model Baker
-    m.add_class::<PyModelBaker>()?;
     m.add_class::<PyBakedModelDatabase>()?;
 
     // 9. UV Geometry Algorithms & Extrude
     m.add_function(wrap_pyfunction!(uv::calculate_uv_area, m)?)?;
     m.add_function(wrap_pyfunction!(uv::get_uv_bounds, m)?)?;
     m.add_function(wrap_pyfunction!(uv::get_uv_center, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::is_uv_collapsed, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::is_orthogonal_angle, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::detect_uv_rotation, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::straighten_uv, m)?)?;
     m.add_function(wrap_pyfunction!(uv::scale_uv, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::normalize_uv_for_atlas_tiling, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::uv_requires_atlas_tiling, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::restore_atlas_tiling_uv, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::repair_quad_fluid_uv, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::batch_repair_fluid_uv, m)?)?;
     m.add_function(wrap_pyfunction!(uv::repair_mesh_fluid_uv_inplace, m)?)?;
     m.add_function(wrap_pyfunction!(uv::get_fluid_top_uvs, m)?)?;
     m.add_function(wrap_pyfunction!(uv::get_fluid_side_uvs, m)?)?;
-    m.add_function(wrap_pyfunction!(uv::repair_extruded_side_uv, m)?)?;
     m.add_function(wrap_pyfunction!(uv::generate_random_extrude_heights, m)?)?;
     m.add_function(wrap_pyfunction!(
         extrude::process_flat_mesh_extrude_repair,
@@ -240,7 +209,7 @@ mod tests {
             storage.set_bounds(0, 0, 0, 16, 16, 16);
             storage.set_block(0, 0, 0, "minecraft:stone", None);
             assert_eq!(storage.get_block(0, 0, 0), "minecraft:stone");
-            assert_eq!(storage.dirty_section_count(), 1);
+            assert_eq!(storage.inner.dirty_sections.len(), 1);
 
             let config = PyMesherConfig::default();
             let mut world = PyVoxelWorld::from_storage(&storage, Some(&config), None, None, None);

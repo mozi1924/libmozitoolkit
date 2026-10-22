@@ -151,8 +151,6 @@ pub struct MeshMultiUvRemapResult {
     pub face_texture_ids: Vec<u32>,
     pub face_uv_transforms: Vec<[f32; 4]>,
     pub face_uv_rotations: Vec<f32>,
-    pub face_uv_modes: Vec<u8>,
-    pub face_is_overlay: Vec<bool>,
     pub unmapped_faces: usize,
 }
 ```

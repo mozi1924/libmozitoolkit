@@ -95,10 +95,6 @@ pub struct MeshMultiUvRemapResult {
     pub face_uv_transforms: Vec<[f32; 4]>,
     /// UV rotation angle in radians for each face (Euler Z).
     pub face_uv_rotations: Vec<f32>,
-    /// Face UV routing mode (0 = Atlas, 1 = Standalone Static, 2 = Standalone Anim, 3 = Overlay Local).
-    pub face_uv_modes: Vec<u8>,
-    /// Whether each face is an overlay layer (e.g. grass side overlay).
-    pub face_is_overlay: Vec<bool>,
     /// Whether each face targets a dedicated animated atlas chunk.
     pub face_is_animated: Vec<bool>,
     /// Per-face animation timing `[total_frames, frametime, interpolate]`.

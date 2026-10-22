@@ -107,15 +107,15 @@ Python 模块名：`libmtk_py`
   - `client_generation`, `current_sequence`, `current_epoch`, `state_hash`, `server_uuid`
   - `clear_cache()`, `set_config(config)`, `hot_reload(config=None, model_db=None)`, `request_resync()`
   - `STREAM_PROGRESS.percent` 已由 Rust 归一化为 0..100；`HANDSHAKE.decision_code` 为 RFC v3.1 原始值
-- **二进制协议编解码**：`decode_packet(bytes)`, `compute_canonical_state_hash(...)`,
-  `encode_welcome(...)`, `encode_baseline_begin/chunk/end(...)`, `encode_delta_op(...)`,
-  `encode_palette_update(...)`
+- **二进制协议编解码**：`decode_packet(bytes)`, `compute_canonical_state_hash(...)`；服务端测试用的
+  `encode_welcome(...)` / `encode_baseline_*` / `encode_delta_op` / `encode_palette_update` 位于
+  `libmtk_py.unstable.testing`。
 
 ### 2.7 资源包预烘焙与图集 (`resource` & `texture`)
 - **`ResourcePackStack` (`PyResourcePackStack`)**：虚拟文件系统 (VFS) 资源包层叠加载器。
-- **`AtlasBuilder` / `BakedAtlas`**：多类别 PBR 空间装箱与烘焙图集容器。
+- **`BakedAtlas`**：烘焙图集容器；测试/开发用的 `AtlasBuilder` 位于 `libmtk_py.unstable.testing`。
 - **`precompile_all_assets(jar_path, output_dir, ...)`**：端到端一键无头预烘焙管线。
-- **像素分析**：`sample_uv_alpha_f32`, `batch_analyze_transparent_faces_f32`, `batch_analyze_transparent_faces_u8`
+- **像素分析**：`batch_analyze_transparent_faces_f32`, `batch_analyze_transparent_faces_u8`；单点采样 `sample_uv_alpha_f32` / `is_face_transparent_f32` 位于 `unstable.testing`。
 
 ### 2.8 生物群系与材质解析 (`material`)
 - **`BiomeResolver` (`PyBiomeResolver`)**：原版 66 种生物群系调色板映射与混合器。
@@ -128,14 +128,20 @@ Python 模块名：`libmtk_py`
   - `reroute_mesh_animation(uvs, face_loop_ranges, face_texture_keys, face_old_chunk_ids, atlas, aliases=None, enable_animated_textures=false)`
 - **`GridAtlasSpec` (`PyGridAtlasSpec`)**：网格图集元数据规范。
 - **缓存解析**：`resolve_active_cache_package(cache_dir, fingerprint=None)` 返回 active `.mtkcache` 路径。
-- **色彩数学与常量**：`compute_biome_tint_attributes`, `compute_mesh_biome_attributes_from_storage`, `get_swamp_grass_color`, `blend_biome_colors`, `sample_colormap_pixel`, `srgb_to_linear`, `linear_to_srgb`, `TINT_TYPE_NONE..DRY_FOLIAGE`
+- **色彩数学与常量**：`compute_biome_tint_attributes`, `compute_mesh_biome_attributes_from_storage`, `sample_colormap_colors`, `blend_biome_colors`, `sample_colormap_pixel`, `srgb_to_linear`, `linear_to_srgb`, `TINT_TYPE_NONE..DRY_FOLIAGE`
 
 ### 2.9 模型烘焙 (`model`)
-- **`ModelBaker` (`PyModelBaker`)**：无头 1.21+ BlockState 模型烘焙引擎。
-  - `bake_all(stack, atlas=None)`：并行烘焙所有 BlockState 模型并返回 `BakedModelDatabase`。
-  - `bake_blockstate(stack, state_str, clip_hidden=true)`：烘焙单个 BlockState 几何网格与贴图列表。
 - **`BakedModelDatabase` (`PyBakedModelDatabase`)**：预编译方块几何模型库。
   - `get_mesh(state_str, clip_hidden=true)`, `remap_to_atlas(atlas)`, `get_states()`
+
+### 2.10 测试 / 开发专用 API (`unstable.testing`)
+以下低阶入口不属于稳定 API，仅在测试、Mock 服务端和开发工具中使用：
+`AtlasBuilder`, `ModelBaker`, `calculate_face_target_grid`, `calculate_pixel_grid_cut_factors`,
+`slice_face_by_pixel_grid`, `is_uv_collapsed`, `is_orthogonal_angle`, `detect_uv_rotation`,
+`straighten_uv`, `normalize_uv_for_atlas_tiling`, `uv_requires_atlas_tiling`,
+`restore_atlas_tiling_uv`, `repair_quad_fluid_uv`, `batch_repair_fluid_uv`,
+`repair_extruded_side_uv`, `sample_uv_alpha_f32`, `is_face_transparent_f32`,
+`encode_*`, `voxel_dirty_section_count`, `voxel_set_section_snapshot`, `voxel_get_all_blocks`。
 
 ---
 

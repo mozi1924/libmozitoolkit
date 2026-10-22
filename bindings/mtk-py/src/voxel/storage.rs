@@ -111,11 +111,6 @@ impl PyVoxelStorage {
         self.inner.set_block(x, y, z, state, biome)
     }
 
-    /// Gets current generation counter value atomically.
-    pub fn get_generation(&self) -> u64 {
-        self.inner.get_generation()
-    }
-
     #[getter]
     pub fn min_x(&self) -> i32 {
         self.inner.min_x
@@ -146,23 +141,6 @@ impl PyVoxelStorage {
         self.inner.size_z
     }
 
-    /// Returns the number of currently dirty sections requiring remeshing.
-    pub fn dirty_section_count(&self) -> usize {
-        self.inner.dirty_sections.len()
-    }
-
-    /// Clears all dirty section markers.
-    pub fn clear_dirty_sections(&mut self) {
-        self.inner.dirty_sections.clear();
-    }
-
-    /// Marks a specific section as dirty.
-    pub fn mark_section_dirty(&mut self, sec_x: i32, sec_y: i32, sec_z: i32) {
-        self.inner
-            .dirty_sections
-            .insert(glam::IVec3::new(sec_x, sec_y, sec_z));
-    }
-
     /// Marks all existing sections dirty for a full rebuild.
     pub fn mark_all_sections_dirty(&mut self) {
         self.inner.mark_all_sections_dirty();
@@ -183,63 +161,12 @@ impl PyVoxelStorage {
         self.inner.get_biome(x, y, z)
     }
 
-    /// Ingests a single 16x16x16 section snapshot packet and marks dirty sections.
-    #[pyo3(signature = (sec_x, sec_y, sec_z, start_x, start_y, start_z, size_x, size_y, size_z, palette, grid_indices, biome_palette=None, biome_indices=None))]
-    pub fn set_section_snapshot(
-        &mut self,
-        sec_x: i32,
-        sec_y: i32,
-        sec_z: i32,
-        start_x: i32,
-        start_y: i32,
-        start_z: i32,
-        size_x: i32,
-        size_y: i32,
-        size_z: i32,
-        palette: Vec<String>,
-        grid_indices: Vec<u16>,
-        biome_palette: Option<Vec<String>>,
-        biome_indices: Option<Vec<u16>>,
-    ) -> bool {
-        self.inner.set_section_snapshot(
-            sec_x,
-            sec_y,
-            sec_z,
-            start_x,
-            start_y,
-            start_z,
-            size_x,
-            size_y,
-            size_z,
-            &palette,
-            &grid_indices,
-            biome_palette.as_deref(),
-            biome_indices.as_deref(),
-        )
-    }
-
-    /// Computes and caches CRC32 for a single section.
-    pub fn calculate_and_store_section_crc(&mut self, sec_x: i32, sec_y: i32, sec_z: i32) -> u32 {
-        self.inner
-            .calculate_and_store_section_crc(glam::IVec3::new(sec_x, sec_y, sec_z))
-    }
-
     /// Returns a list of all non-empty section coordinate tuples `(sx, sy, sz)`.
     pub fn get_non_empty_sections<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
         let list = PyList::empty(py);
         for coord in self.inner.get_all_non_empty_sections() {
             let tup = (coord.x, coord.y, coord.z);
             let _ = list.append(tup);
-        }
-        list
-    }
-
-    /// Returns a list of all populated non-air blocks as `((x, y, z), blockstate)`.
-    pub fn get_all_blocks<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
-        let list = PyList::empty(py);
-        for (x, y, z, state) in self.inner.get_all_blocks() {
-            let item = ((x, y, z), state);
-            let _ = list.append(item);
         }
         list
     }

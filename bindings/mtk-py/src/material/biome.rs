@@ -185,20 +185,6 @@ pub fn sample_colormap_colors(
     Ok(dict.into())
 }
 
-/// Retrieve the hardcoded linear color for a block or texture stem, if any.
-#[pyfunction]
-#[pyo3(signature = (name))]
-pub fn get_hardcoded_tint(name: &str) -> Option<[f32; 4]> {
-    mtk_material::get_hardcoded_tint(name)
-}
-
-/// Retrieve the hardcoded hex string for a block or texture stem, if any.
-#[pyfunction]
-#[pyo3(signature = (name))]
-pub fn get_hardcoded_tint_hex(name: &str) -> Option<&'static str> {
-    mtk_material::get_hardcoded_tint_hex(name)
-}
-
 /// Standalone batch function to compute mesh biome attributes in Rust parallel Rayon.
 #[pyfunction]
 #[pyo3(signature = (
@@ -545,23 +531,4 @@ pub fn compute_mesh_biome_attributes_from_storage(
     dict.set_item("packed_tint_data", packed_tint_data)?;
     dict.set_item("tint_colors", tint_colors)?;
     Ok(dict.into())
-}
-
-/// Classify a texture stem and/or block name into an authoritative tint category:
-/// "grass", "foliage", "dry_foliage", "water", "hardcoded", or "none".
-#[pyfunction]
-#[pyo3(signature = (clean_stem, block_name=None, tint_index=None))]
-pub fn classify_tint_category(
-    clean_stem: &str,
-    block_name: Option<&str>,
-    tint_index: Option<i32>,
-) -> &'static str {
-    mtk_material::classify_tint_category(clean_stem, block_name, tint_index)
-}
-
-/// Returns the swamp grass linear RGBA color at world coordinates `(x, z)` based on Perlin noise.
-#[pyfunction]
-#[pyo3(signature = (x, z))]
-pub fn get_swamp_grass_color(x: f32, z: f32) -> [f32; 4] {
-    mtk_material::get_swamp_grass_color(x, z)
 }

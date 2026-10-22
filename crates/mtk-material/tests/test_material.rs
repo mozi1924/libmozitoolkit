@@ -165,7 +165,6 @@ fn test_parallel_batch_mesh_remap() {
     assert_eq!(multi_res.face_count, 2);
     assert_eq!(multi_res.local_uvs.len(), 8);
     assert_eq!(multi_res.atlas_uvs.len(), 8);
-    assert_eq!(multi_res.face_uv_modes, vec![0, 0]);
 }
 
 #[test]

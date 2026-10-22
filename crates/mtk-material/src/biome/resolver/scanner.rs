@@ -205,6 +205,12 @@ impl BiomeResolver {
                 }
             }
         }
+
+        // The raw JSON trees are only needed while deriving overlay/tint maps.
+        // Keeping them would serialize the entire resource-pack model set into
+        // every `.mtkcache`, so release them once analysis is complete.
+        self.models.clear();
+        self.models_by_stem.clear();
     }
 
     /// Parse block models from a directory containing `assets/minecraft/models/block/*.json`.
