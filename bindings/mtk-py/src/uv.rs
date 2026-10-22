@@ -448,7 +448,7 @@ pub fn repair_mesh_fluid_uv_inplace<'py>(
             let uvs_mut: &mut [f32] = unsafe {
                 std::slice::from_raw_parts_mut(buf.buf_ptr() as *mut f32, buf.item_count())
             };
-            let count = py.allow_threads(|| {
+            let count = py.detach(|| {
                 mtk_voxel::fluid::uv::repair_mesh_fluid_uv_inplace(
                     &pos_slice,
                     &loop_slice,
@@ -472,7 +472,7 @@ pub fn repair_mesh_fluid_uv_inplace<'py>(
         if !buf.readonly() && is_aligned && is_len_valid && buf.is_c_contiguous() {
             let uvs_mut: &mut [f32] =
                 unsafe { std::slice::from_raw_parts_mut(ptr as *mut f32, len_bytes / 4) };
-            let count = py.allow_threads(|| {
+            let count = py.detach(|| {
                 mtk_voxel::fluid::uv::repair_mesh_fluid_uv_inplace(
                     &pos_slice,
                     &loop_slice,

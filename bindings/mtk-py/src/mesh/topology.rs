@@ -116,7 +116,7 @@ pub fn analyze_mesh_hard_edges<'py>(
         None
     };
 
-    let mask = py.allow_threads(|| {
+    let mask = py.detach(|| {
         mtk_core::mesh::topology::analyze_hard_edges(
             &pos_slice,
             &edges_slice,

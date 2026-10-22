@@ -59,7 +59,7 @@ pub fn slice_face_by_pixel_grid(
     pixels_per_face: f32,
     max_subdivisions: u32,
 ) -> (Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<Vec<u32>>, Vec<[f32; 2]>) {
-    let res = py.allow_threads(|| {
+    let res = py.detach(|| {
         mtk_core::subdivide::slice_face_by_pixel_grid(
             &positions,
             &uvs,
@@ -87,7 +87,7 @@ pub fn adaptive_pixel_split_mesh(
     let empty_vec = Vec::new();
     let res_slice = face_resolutions.as_deref().unwrap_or(&empty_vec);
     let mut profiler = mtk_core::ExecutionProfiler::start();
-    let output_mesh = py.allow_threads(|| {
+    let output_mesh = py.detach(|| {
         let face_count = mesh.inner.indices.len() / 6;
         let mut split =
             profiler.measure_with_count("split_faces_to_pixel_grid", face_count, || {

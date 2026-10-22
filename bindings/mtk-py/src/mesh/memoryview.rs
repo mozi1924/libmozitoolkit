@@ -159,7 +159,7 @@ pub fn loop_uvs_memoryview<'py>(
         return create_zerocopy_memoryview(py, ptr, len, mesh.as_any());
     }
 
-    let loop_uvs = py.allow_threads(|| inner.loop_uvs_expanded());
+    let loop_uvs = py.detach(|| inner.loop_uvs_expanded());
     let mut flat = Vec::with_capacity(loop_uvs.len() * 2);
     for uv in loop_uvs {
         flat.push(uv[0]);

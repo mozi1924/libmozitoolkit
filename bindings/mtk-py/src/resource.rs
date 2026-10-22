@@ -345,7 +345,7 @@ pub fn precompile_all_assets<'py>(
     compile_atlas: bool,
     compile_models: bool,
     num_threads: Option<usize>,
-    callback: Option<PyObject>,
+    callback: Option<Py<PyAny>>,
 ) -> PyResult<PyPrecompileResult> {
     let cfg = libmtk::PrecompileConfig {
         max_atlas_width,
@@ -359,7 +359,7 @@ pub fn precompile_all_assets<'py>(
     let cb_opt = callback.as_ref();
     let on_progress = cb_opt.map(|cb| {
         move |prog: mtk_core::progress::ProgressReport| {
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 let dict = PyDict::new(py);
                 let _ = dict.set_item("stage", prog.stage);
                 let _ = dict.set_item("current", prog.current);
@@ -375,7 +375,7 @@ pub fn precompile_all_assets<'py>(
         .map(|f| f as &(dyn Fn(mtk_core::progress::ProgressReport) + Send + Sync));
 
     let res = py
-        .allow_threads(|| {
+        .detach(|| {
             libmtk::precompile_all_assets_with_progress(&stack.inner, cache_dir, &cfg, progress_ref)
         })
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;

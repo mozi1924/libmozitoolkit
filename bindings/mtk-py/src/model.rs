@@ -56,7 +56,7 @@ impl PyBakedModelDatabase {
     /// Remaps all models in the database to the specified atlas coordinates.
     pub fn remap_to_atlas(&mut self, py: Python<'_>, atlas: &crate::texture::PyBakedAtlas) {
         let atlas_map = &atlas.inner.address_map;
-        py.allow_threads(|| {
+        py.detach(|| {
             if let Some(db) = Arc::get_mut(&mut self.inner) {
                 db.remap_to_atlas_with(|tex| {
                     mtk_material::MaterialResolver::resolve(tex, None, atlas_map)
@@ -76,7 +76,7 @@ impl PyBakedModelDatabase {
     /// Eliminates overlapping, duplicate, and interior contacting faces across all models in the database.
     pub fn deduplicate_all(&mut self, py: Python<'_>) -> usize {
         let db = Arc::make_mut(&mut self.inner);
-        py.allow_threads(|| db.deduplicate_all())
+        py.detach(|| db.deduplicate_all())
     }
 }
 
@@ -113,7 +113,7 @@ impl PyModelBaker {
     ) -> PyResult<PyBakedModelDatabase> {
         let atlas_map = atlas.map(|a| &a.inner.address_map);
         let db = py
-            .allow_threads(|| libmtk::prebake_all_models(&stack.inner, atlas_map))
+            .detach(|| libmtk::prebake_all_models(&stack.inner, atlas_map))
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
         Ok(PyBakedModelDatabase {
@@ -139,7 +139,7 @@ impl PyModelBaker {
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
         let (mesh, textures) = py
-            .allow_threads(
+            .detach(
                 || -> Result<(mtk_core::mesh::MeshData, Vec<String>), String> {
                     let bs_def = {
                         let bs_path =

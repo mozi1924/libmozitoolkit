@@ -154,8 +154,8 @@ impl PyMaterialResolver {
         atlas: &PyBakedAtlas,
         aliases: Option<HashMap<String, Vec<String>>>,
         enable_animated_textures: bool,
-    ) -> PyResult<PyObject> {
-        let routes = py.allow_threads(|| {
+    ) -> PyResult<Py<PyAny>> {
+        let routes = py.detach(|| {
             resolve_mesh_material_routes(
                 &face_texture_keys,
                 aliases.as_ref(),
@@ -204,14 +204,14 @@ impl PyMaterialResolver {
         atlas: &PyBakedAtlas,
         aliases: Option<HashMap<String, Vec<String>>>,
         enable_animated_textures: bool,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let loop_count = uvs.len() / 2;
         let mut uv_pairs: Vec<[f32; 2]> = Vec::with_capacity(loop_count);
         for i in 0..loop_count {
             uv_pairs.push([uvs[i * 2], uvs[i * 2 + 1]]);
         }
 
-        let result = py.allow_threads(|| {
+        let result = py.detach(|| {
             reroute_mesh_animation(
                 &uv_pairs,
                 &face_loop_ranges,
@@ -268,7 +268,7 @@ impl PyMaterialResolver {
         existing_key_palette: Option<Vec<String>>,
         existing_key_indices: Option<&Bound<'_, PyAny>>,
         enable_animated_textures: bool,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let loop_count = uvs.len() / 2;
         let mut uv_pairs: Vec<[f32; 2]> = Vec::with_capacity(loop_count);
         for i in 0..loop_count {
@@ -470,7 +470,7 @@ impl PyBiomeResolver {
         texture_name: &str,
         block_name: Option<&str>,
         tint_index: Option<i32>,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let info = self
             .inner
             .get_tint_info(texture_name, block_name, tint_index);

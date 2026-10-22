@@ -68,7 +68,7 @@ pub fn process_flat_mesh_extrude_repair(
         only_collapsed,
     };
 
-    let out = py.allow_threads(|| {
+    let out = py.detach(|| {
         mtk_core::extrude::process_flat_mesh_extrude_repair(
             &flat_mesh,
             &selected_faces,

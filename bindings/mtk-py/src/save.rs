@@ -132,7 +132,7 @@ pub fn load_and_mesh_minecraft_save(
     culler: Option<&PyFaceCuller>,
     model_db: Option<&PyBakedModelDatabase>,
     num_threads: Option<usize>,
-    callback: Option<PyObject>,
+    callback: Option<Py<PyAny>>,
 ) -> PyResult<(PyMeshData, PyLevelData, PyVoxelStorage)> {
     let mut profiler = mtk_core::ExecutionProfiler::start();
 
@@ -150,7 +150,7 @@ pub fn load_and_mesh_minecraft_save(
     let cb_opt = callback.as_ref();
     let on_progress = cb_opt.map(|cb| {
         move |prog: mtk_core::progress::ProgressReport| {
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 let dict = PyDict::new(py);
                 let _ = dict.set_item("stage", prog.stage);
                 let _ = dict.set_item("current", prog.current);
@@ -202,7 +202,7 @@ pub fn load_and_mesh_minecraft_save(
     let mut world = VoxelWorld::from_storage_with_threads(storage.clone(), cfg, cul, mdb, threads);
 
     let (mesh, world_profile) = py
-        .allow_threads(|| {
+        .detach(|| {
             let m = world.rebuild_all_with_progress(progress_ref)?.clone();
             let p = world.last_profile.clone();
             Ok::<_, mtk_voxel::VoxelError>((m, p))

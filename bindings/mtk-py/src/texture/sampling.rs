@@ -59,7 +59,7 @@ pub fn batch_analyze_transparent_faces_f32(
         .map(|uvs| uvs.iter().map(|(u, v)| glam::Vec2::new(*u, *v)).collect())
         .collect();
     let sample_mode = mtk_texture::SampleMode::from_str(mode);
-    py.allow_threads(|| {
+    py.detach(|| {
         mtk_texture::batch_analyze_transparent_faces_f32(
             &faces_vecs,
             width,

@@ -307,7 +307,7 @@ impl PyAtlasBuilder {
 
         let builder = AtlasBuilder::new(self.config.clone());
         let mut baked = py
-            .allow_threads(|| builder.build_category(&stack.inner, &cat))
+            .detach(|| builder.build_category(&stack.inner, &cat))
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
         mtk_material::pbr::decode_baked_atlas(&mut baked)

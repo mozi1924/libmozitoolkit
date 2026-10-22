@@ -202,8 +202,8 @@ mod tests {
 
     #[test]
     fn test_python_mesh_data_inner() {
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::initialize();
+        Python::attach(|py| {
             let mesh_data = PyMeshData::from_flat_polygons(
                 vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0],
                 vec![0, 1, 2, 3],
@@ -233,8 +233,8 @@ mod tests {
 
     #[test]
     fn test_python_voxel_storage_and_world_mesher() {
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::initialize();
+        Python::attach(|py| {
             let mut storage = PyVoxelStorage::new();
             storage.set_bounds(0, 0, 0, 16, 16, 16);
             storage.set_block(0, 0, 0, "minecraft:stone", None);
@@ -274,8 +274,8 @@ mod tests {
 
     #[test]
     fn test_python_ctm_bindings() {
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|_py| {
+        Python::initialize();
+        Python::attach(|_py| {
             let stack = PyResourcePackStack::new();
             assert_eq!(stack.get_ctm_rule_count(), 0);
             let solver = stack.build_ctm_solver();
@@ -290,8 +290,8 @@ mod tests {
 
     #[test]
     fn test_python_live_sync_session_and_protocol() {
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::initialize();
+        Python::attach(|py| {
             // Test packet decode (Ping 0x0E)
             let pkt_bytes = [
                 0x4D, 0x54, 0x03, 0x0E, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -374,8 +374,8 @@ mod tests {
         assert!((side_uvs[0].1 - 0.1).abs() < 1e-6);
 
         // Test batch_repair_fluid_uv with Python list & zero-copy buffer
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::initialize();
+        Python::attach(|py| {
             let verts_flat = pyo3::types::PyList::new(
                 py,
                 [
@@ -435,8 +435,8 @@ mod tests {
 
     #[test]
     fn test_python_slice_face_by_pixel_grid() {
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::initialize();
+        Python::attach(|py| {
             let positions = vec![
                 [-1.0, -1.0, 0.0],
                 [1.0, -1.0, 0.0],
@@ -454,8 +454,8 @@ mod tests {
 
     #[test]
     fn test_python_save_bindings() {
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|_py| {
+        Python::initialize();
+        Python::attach(|_py| {
             let Some(test_save_path) = mtk_testkit::save_world() else {
                 eprintln!("Skipping: no Minecraft save available (set MTK_TEST_SAVE)");
                 return;
@@ -471,8 +471,8 @@ mod tests {
 
     #[test]
     fn test_python_analyze_mesh_hard_edges() {
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::initialize();
+        Python::attach(|py| {
             let positions = vec![
                 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0,
                 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0,
@@ -511,8 +511,8 @@ mod tests {
 
     #[test]
     fn test_python_repair_mesh_fluid_uv_inplace() {
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::initialize();
+        Python::attach(|py| {
             let positions = vec![
                 0.0, 0.0, 1.0, // 0: Bottom right
                 0.0, 0.0, 0.0, // 1: Bottom left

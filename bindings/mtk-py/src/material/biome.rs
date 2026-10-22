@@ -85,7 +85,7 @@ impl BorrowedU32Buffer {
 /// Retrieve canonical metadata and colors for a single biome.
 #[pyfunction]
 #[pyo3(signature = (biome_name))]
-pub fn get_biome_meta(py: Python<'_>, biome_name: &str) -> PyResult<PyObject> {
+pub fn get_biome_meta(py: Python<'_>, biome_name: &str) -> PyResult<Py<PyAny>> {
     if biome_name.eq_ignore_ascii_case("custom") {
         let dict = PyDict::new(py);
         dict.set_item("id", "custom")?;
@@ -136,7 +136,7 @@ pub fn get_biome_meta(py: Python<'_>, biome_name: &str) -> PyResult<PyObject> {
 
 /// Retrieve a list of all canonical vanilla biomes.
 #[pyfunction]
-pub fn get_all_biomes(py: Python<'_>) -> PyResult<PyObject> {
+pub fn get_all_biomes(py: Python<'_>) -> PyResult<Py<PyAny>> {
     let list = pyo3::types::PyList::empty(py);
     for pal in mtk_material::CANONICAL_BIOMES {
         let dict = PyDict::new(py);
@@ -175,7 +175,7 @@ pub fn sample_colormap_colors(
     py: Python<'_>,
     temperature: f32,
     humidity: f32,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let cms = mtk_material::get_default_colormaps();
     let dict = PyDict::new(py);
     dict.set_item(
@@ -241,11 +241,11 @@ pub fn compute_biome_tint_attributes(
     has_custom_foliage: bool,
     has_custom_dry_foliage: bool,
     face_biomes: Option<Vec<String>>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let default_resolver = mtk_material::BiomeResolver::new();
     let res_ref = resolver.map(|r| &r.inner).unwrap_or(&default_resolver);
 
-    let res = py.allow_threads(|| {
+    let res = py.detach(|| {
         if let Some(ref biomes) = face_biomes {
             mtk_material::compute_mesh_biome_attributes_per_face(
                 &face_texture_keys,
@@ -360,7 +360,7 @@ pub fn compute_biome_tint_attributes_paletted<'py>(
 
     let (colors, cg, cf, cdf) =
         mtk_material::resolve_biome_color_set(biome_name, multi_biomes.as_deref(), custom.as_ref());
-    let result = py.allow_threads(|| {
+    let result = py.detach(|| {
         mtk_material::compute_mesh_biome_attributes_paletted_flat(
             &palette,
             indices.as_slice(),
@@ -485,12 +485,12 @@ pub fn compute_mesh_biome_attributes_from_storage(
     storage: &PyVoxelStorage,
     resolver: Option<&PyBiomeResolver>,
     smooth: bool,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let face_count = face_texture_keys.len();
     let default_resolver = mtk_material::BiomeResolver::new();
     let res_ref = resolver.map(|r| &r.inner).unwrap_or(&default_resolver);
 
-    let (packed_tint_data, tint_colors, colormap_uvs) = py.allow_threads(|| {
+    let (packed_tint_data, tint_colors, colormap_uvs) = py.detach(|| {
         let mut packed = Vec::with_capacity(face_count);
         let mut cols = Vec::with_capacity(face_count);
         let mut uvs = Vec::with_capacity(face_count);

@@ -101,14 +101,14 @@ impl PyVoxelWorld {
     pub fn rebuild_all(
         &mut self,
         py: Python<'_>,
-        callback: Option<PyObject>,
+        callback: Option<Py<PyAny>>,
     ) -> PyResult<crate::mesh::PyMeshData> {
         let mesh = if let Some(cb) = callback {
             let cb_ref = &cb;
-            py.allow_threads(|| {
+            py.detach(|| {
                 self.inner
                     .rebuild_all_with_progress(Some(&|prog| {
-                        Python::with_gil(|py| {
+                        Python::attach(|py| {
                             let dict = pyo3::types::PyDict::new(py);
                             let _ = dict.set_item("stage", prog.stage);
                             let _ = dict.set_item("current", prog.current);
@@ -121,7 +121,7 @@ impl PyVoxelWorld {
                     .cloned()
             })
         } else {
-            py.allow_threads(|| self.inner.rebuild_all().cloned())
+            py.detach(|| self.inner.rebuild_all().cloned())
         }
         .map_err(map_voxel_err)?;
         let profile = self.inner.last_profile.clone();
@@ -143,7 +143,7 @@ impl PyVoxelWorld {
         py: Python<'py>,
     ) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
         let rebuilt = py
-            .allow_threads(|| self.inner.rebuild_dirty())
+            .detach(|| self.inner.rebuild_dirty())
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         let dict = pyo3::types::PyDict::new(py);
         for (coord, mesh) in rebuilt {

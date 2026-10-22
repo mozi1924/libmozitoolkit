@@ -92,7 +92,7 @@ pub fn create_zerocopy_memoryview<'py>(
         if py_mv_ptr.is_null() {
             return Err(PyErr::fetch(py));
         }
-        Ok(Bound::from_owned_ptr(py, py_mv_ptr).downcast_into::<PyMemoryView>()?)
+        Ok(Bound::from_owned_ptr(py, py_mv_ptr).cast_into::<PyMemoryView>()?)
     }
 }
 
@@ -121,7 +121,7 @@ pub fn create_owned_bytes_memoryview<'py>(
         if py_mv_ptr.is_null() {
             return Err(PyErr::fetch(py));
         }
-        Ok(Bound::from_owned_ptr(py, py_mv_ptr).downcast_into::<PyMemoryView>()?)
+        Ok(Bound::from_owned_ptr(py, py_mv_ptr).cast_into::<PyMemoryView>()?)
     }
 }
 
@@ -150,7 +150,7 @@ pub fn create_owned_f32_memoryview<'py>(
         if py_mv_ptr.is_null() {
             return Err(PyErr::fetch(py));
         }
-        Ok(Bound::from_owned_ptr(py, py_mv_ptr).downcast_into::<PyMemoryView>()?)
+        Ok(Bound::from_owned_ptr(py, py_mv_ptr).cast_into::<PyMemoryView>()?)
     }
 }
 
@@ -179,7 +179,7 @@ pub fn create_owned_u32_memoryview<'py>(
         if py_mv_ptr.is_null() {
             return Err(PyErr::fetch(py));
         }
-        Ok(Bound::from_owned_ptr(py, py_mv_ptr).downcast_into::<PyMemoryView>()?)
+        Ok(Bound::from_owned_ptr(py, py_mv_ptr).cast_into::<PyMemoryView>()?)
     }
 }
 
@@ -208,6 +208,6 @@ pub fn create_owned_i32_memoryview<'py>(
         if py_mv_ptr.is_null() {
             return Err(PyErr::fetch(py));
         }
-        Ok(Bound::from_owned_ptr(py, py_mv_ptr).downcast_into::<PyMemoryView>()?)
+        Ok(Bound::from_owned_ptr(py, py_mv_ptr).cast_into::<PyMemoryView>()?)
     }
 }
