@@ -47,6 +47,20 @@ class TestLibMtkPy(unittest.TestCase):
         )
         self.assertAlmostEqual(mesh.get_attribute_data("mtk_emission")[0], 1.0)
 
+    def test_add_string_attribute_from_palette(self):
+        import numpy as np
+
+        mesh = quad_mesh()
+        palette = ["minecraft:block/stone", "minecraft:block/dirt"]
+        indices = np.array([1], dtype=np.uint32)
+        mesh.add_string_attribute_from_palette(
+            "mtk_source_texture_key", "face", palette, indices
+        )
+        self.assertEqual(
+            mesh.get_string_attribute("mtk_source_texture_key"),
+            ["minecraft:block/dirt"],
+        )
+
     def test_mesh_data_memoryviews(self):
         import numpy as np
 

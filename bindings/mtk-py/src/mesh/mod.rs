@@ -303,6 +303,17 @@ impl PyMeshData {
         attributes::add_string_attribute(self, name, domain, values)
     }
 
+    /// Add a string custom attribute from a compact palette + u32 index buffer.
+    pub fn add_string_attribute_from_palette(
+        &mut self,
+        name: &str,
+        domain: &str,
+        palette: Vec<String>,
+        indices: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        attributes::add_string_attribute_from_palette(self, name, domain, palette, indices)
+    }
+
     /// Retrieve a string custom attribute's values.
     pub fn get_string_attribute(&self, name: &str) -> Option<Vec<String>> {
         attributes::get_string_attribute(self, name)

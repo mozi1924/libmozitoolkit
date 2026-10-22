@@ -50,7 +50,8 @@ Python 模块名：`libmtk_py`
   - 内存视图（标准零拷贝通道，推荐）：`positions_memoryview()`, `normals_memoryview()`, `uvs_memoryview()`, `indices_memoryview()`, `quad_indices_memoryview()`, `loop_uvs_memoryview()`, `loop_starts_memoryview()`, `loop_totals_memoryview()`, `face_materials_memoryview()`
   - 核心 wheel 不再包含 Blender 指针写入代码。零拷贝宿主写入由独立 `libmtk_blender_dna` wheel 提供，通过 `memoryview` 接收核心 buffer，再写入 Blender 指针；核心不需要知道适配器的存在。
   - 次级 UV / 面 tint：`get_flat_secondary_uvs()`, `face_tint_indices_memoryview()`
-  - 顶点与面自定义属性：`add_string_attribute(name, domain, values)`, `add_attribute_from_buffer(name, domain, data_type, buffer)`, `get_attribute_data(name)`, `has_attribute(name)`, `attribute_names()`
+  - 顶点与面自定义属性：`add_string_attribute(name, domain, values)`, `add_string_attribute_from_palette(name, domain, palette, indices)`, `add_attribute_from_buffer(name, domain, data_type, buffer)`, `get_attribute_data(name)`, `has_attribute(name)`, `attribute_names()`
+  - `add_string_attribute_from_palette(...)`：从 palette + u32 索引缓冲区在 Rust 内展开字符串，宿主无需为每个面创建 Python 字符串对象。
   - 来源贴图调色板：`source_texture_palette_indices() -> (palette, u32 memoryview)`，把逐面 `mtk_source_texture_key` 压缩成 palette + 索引，供 Live Sync 等跳过逐面字符串的宿主保留完整 provenance。
 - **`AttributeDomain`**：属性域枚举，支持 `"point"` (顶点) 与 `"face"` (面)。
 - **`mesh_attribute_schema() -> list[tuple[str, str, str, str]]`**：返回规范网格属性 `(name, domain, data_type, role)` 列表，是宿主唯一权威的属性契约来源。
