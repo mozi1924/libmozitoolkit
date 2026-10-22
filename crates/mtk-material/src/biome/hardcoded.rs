@@ -299,33 +299,6 @@ pub fn is_dry_foliage(stem: &str) -> bool {
         || s.starts_with("dry_")
 }
 
-/// Returns true if the stem represents grass-tinted vegetation.
-pub fn is_grass(stem: &str) -> bool {
-    let clean = stem.trim().to_ascii_lowercase();
-    let unname = clean.strip_prefix("minecraft:").unwrap_or(&clean);
-    let s = unname.strip_prefix("block/").unwrap_or(unname);
-
-    if is_explicit_none_tint(s) || is_dry_foliage(s) {
-        return false;
-    }
-
-    s == "grass"
-        || s == "bush"
-        || s == "short_grass"
-        || s == "fern"
-        || s == "sugar_cane"
-        || s == "grass_block_top"
-        || s == "grass_block_side_overlay"
-        || s == "grass_side_overlay"
-        || s.contains("short_grass")
-        || s.contains("tall_grass")
-        || s.contains("fern")
-        || s.contains("sugar_cane")
-        || s.contains("pink_petals_stem")
-        || s.contains("wildflowers_stem")
-        || s.contains("potted_fern")
-}
-
 /// Returns true if the stem represents water.
 pub fn is_water(stem: &str) -> bool {
     let clean = stem.trim().to_ascii_lowercase();

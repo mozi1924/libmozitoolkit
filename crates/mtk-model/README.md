@@ -131,7 +131,6 @@ pub struct BakedModel {
     pub is_cube: bool,
     pub is_opaque: bool,
     pub is_emissive: bool,
-    pub emissive_level: f32,
     pub cull_meta: Option<mtk_cull::BlockCullMeta>,
     pub culled_faces: [Vec<BakedFace>; 6],
     pub unculled_faces: Vec<BakedFace>,
@@ -196,7 +195,6 @@ pub struct BakedVariantGroup {
 | `baker.bake_blockstate(state_str, def, model_loader) -> Result<BakedModel, ModelError>` | 端到端烘焙指定方块状态为 `BakedModel`。 |
 | `baker.bake_blockstate_variants(state_str, def, model_loader) -> Result<BakedVariantGroup, ModelError>` | 端到端烘焙离散变体分支组为 `BakedVariantGroup`。 |
 | `is_block_emissive(state: &BlockState) -> bool` | 判断方块是否为自发光方块。 |
-| `get_block_emissive_level(state: &BlockState) -> f32` | 计算发光方块与红石引线（`power / 15.0`）的发光强度等级。 |
 | `WavefrontObjParser::parse_str(text, filter) -> Vec<ObjRawFace>` | 解析通用 Wavefront OBJ 文本。 |
 
 ---
@@ -328,7 +326,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     assert!(baked.is_emissive);
-    assert_eq!(baked.emissive_level, 1.0);
 
     let (mesh, _) = baked.to_mesh_with_textures(false);
     assert!(mesh.has_custom_attribute(ATTR_UV_TRANSFORM));

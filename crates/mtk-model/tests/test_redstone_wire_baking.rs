@@ -56,7 +56,6 @@ fn test_bake_redstone_wire_vanilla_resolution() {
 
     assert!(!baked.is_cube);
     assert!(baked.is_emissive);
-    assert!((baked.emissive_level - 1.0).abs() < 1e-4);
 
     let (mesh, textures) = baked.to_mesh_with_textures(false);
     assert!(!mesh.positions.is_empty());
@@ -86,7 +85,6 @@ fn test_bake_redstone_wire_straight_line_z() {
         .unwrap();
 
     assert!(!baked_z.is_emissive);
-    assert_eq!(baked_z.emissive_level, 0.0);
 
     let (_mesh, textures) = baked_z.to_mesh_with_textures(false);
     assert!(textures.iter().any(|t| t.contains("redstone_dust_line0")));

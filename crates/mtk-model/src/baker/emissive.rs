@@ -71,30 +71,6 @@ pub fn is_block_emissive(blockstate: &BlockState) -> bool {
     false
 }
 
-/// Returns the normalized emission level (0.0 .. 1.0) for a blockstate.
-pub fn get_block_emissive_level(blockstate: &BlockState) -> f32 {
-    let short_name = blockstate.name.as_str();
-    let p = &blockstate.properties;
-
-    if short_name == "redstone_wire" {
-        if let Some(power) = p.get("power").and_then(|s| s.parse::<f32>().ok()) {
-            return (power / 15.0).clamp(0.0, 1.0);
-        }
-        return 0.0;
-    }
-    if short_name == "respawn_anchor" {
-        if let Some(charges) = p.get("charges").and_then(|s| s.parse::<f32>().ok()) {
-            return (charges / 4.0).clamp(0.0, 1.0);
-        }
-        return 0.0;
-    }
-    if is_block_emissive(blockstate) {
-        1.0
-    } else {
-        0.0
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -103,11 +79,9 @@ mod tests {
     fn test_emissive_detection() {
         let glowstone = BlockState::parse("minecraft:glowstone").unwrap();
         assert!(is_block_emissive(&glowstone));
-        assert_eq!(get_block_emissive_level(&glowstone), 1.0);
 
         let dirt = BlockState::parse("minecraft:dirt").unwrap();
         assert!(!is_block_emissive(&dirt));
-        assert_eq!(get_block_emissive_level(&dirt), 0.0);
 
         let lit_furnace = BlockState::parse("minecraft:furnace[lit=true]").unwrap();
         assert!(is_block_emissive(&lit_furnace));
@@ -117,10 +91,5 @@ mod tests {
 
         let redstone_wire = BlockState::parse("minecraft:redstone_wire[power=15]").unwrap();
         assert!(is_block_emissive(&redstone_wire));
-        assert_eq!(get_block_emissive_level(&redstone_wire), 1.0);
-
-        let redstone_wire_half = BlockState::parse("minecraft:redstone_wire[power=7]").unwrap();
-        assert!(is_block_emissive(&redstone_wire_half));
-        assert!((get_block_emissive_level(&redstone_wire_half) - (7.0 / 15.0)).abs() < 1e-5);
     }
 }

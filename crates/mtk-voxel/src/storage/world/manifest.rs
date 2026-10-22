@@ -48,15 +48,6 @@ impl VoxelStorage {
         crc
     }
 
-    /// Recomputes CRC32 for all sections currently loaded.
-    pub fn recalculate_all_section_crcs(&mut self) {
-        self.section_crc_map.clear();
-        let coords: Vec<IVec3> = self.sections.keys().copied().collect();
-        for coord in coords {
-            self.calculate_and_store_section_crc(coord);
-        }
-    }
-
     /// Returns bounding box coordinates and sizes for a given section clamped to world selection.
     pub fn get_section_block_bounds(&self, coord: IVec3) -> (i32, i32, i32, i32, i32, i32) {
         if self.size_x <= 0 || self.size_y <= 0 || self.size_z <= 0 {

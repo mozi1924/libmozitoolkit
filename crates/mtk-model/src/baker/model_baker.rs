@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use glam::{Vec2, Vec3};
 use mtk_core::direction::Direction;
 
-use super::emissive::{get_block_emissive_level, is_block_emissive};
+use super::emissive::is_block_emissive;
 use super::planar::should_skip_zero_thickness_face;
 use super::rules::{is_known_non_cube, is_opaque_block};
 use crate::baker::baked_model::{BakedElement, BakedFace, BakedModel, BakedVariantGroup};
@@ -373,7 +373,6 @@ impl ModelBaker {
         let is_opaque = is_opaque_block(short_name);
 
         let emissive = is_block_emissive(blockstate);
-        let emissive_level = get_block_emissive_level(blockstate);
 
         let mut quads: Vec<([glam::Vec3; 4], Direction)> = Vec::new();
         if !baked_elements.is_empty() {
@@ -403,7 +402,6 @@ impl ModelBaker {
             is_cube,
             is_opaque,
             is_emissive: emissive,
-            emissive_level,
             cull_meta: Some(cull_meta),
             culled_faces: Default::default(),
             unculled_faces: Default::default(),

@@ -122,7 +122,7 @@ pub struct AtlasBuilderConfig {
     pub padding: u32,
 }
 
-// v5: 模型数据库使用 Postcard + Zstd（更小）；v4: PBR 伴生图在预编译期解码为 MtkPackedV1。
+// v6: 移除模型缓存中的 emissive_level；v5: 模型数据库使用 Postcard + Zstd（更小）；v4: PBR 伴生图在预编译期解码为 MtkPackedV1。
 // normal_gl = OpenGL 法线 RGB + 高度 A；orm = AO/roughness/metallic/emission；
 // aux = encoded IOR/porosity/SSS/transmission。normal/specular 仅保留为 legacy 内存字段。
 pub struct BakedAtlasChunk {

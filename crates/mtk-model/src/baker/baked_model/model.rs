@@ -123,7 +123,7 @@ impl Default for ModelMeshOptions {
 }
 
 /// Fully baked model containing all elements, directional faces summary, and metadata.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize)]
 pub struct BakedModel {
     pub block_state: String,
     pub elements: Vec<BakedElement>,
@@ -133,7 +133,6 @@ pub struct BakedModel {
     pub is_cube: bool,
     pub is_opaque: bool,
     pub is_emissive: bool,
-    pub emissive_level: f32,
     #[serde(default)]
     pub cull_meta: Option<mtk_cull::BlockCullMeta>,
     #[serde(skip)]
@@ -157,7 +156,6 @@ impl<'de> Deserialize<'de> for BakedModel {
             is_cube: bool,
             is_opaque: bool,
             is_emissive: bool,
-            emissive_level: f32,
             #[serde(default)]
             cull_meta: Option<mtk_cull::BlockCullMeta>,
         }
@@ -171,7 +169,6 @@ impl<'de> Deserialize<'de> for BakedModel {
             is_cube: helper.is_cube,
             is_opaque: helper.is_opaque,
             is_emissive: helper.is_emissive,
-            emissive_level: helper.emissive_level,
             cull_meta: helper.cull_meta,
             culled_faces: Default::default(),
             unculled_faces: Default::default(),
@@ -205,38 +202,6 @@ impl BakedModel {
         }
         self.culled_faces = culled;
         self.unculled_faces = unculled;
-    }
-}
-
-impl Default for BakedModel {
-    fn default() -> Self {
-        Self {
-            block_state: String::new(),
-            elements: Vec::new(),
-            obj_faces: Vec::new(),
-            faces: [
-                BakedFace::default(),
-                BakedFace::default(),
-                BakedFace::default(),
-                BakedFace::default(),
-                BakedFace::default(),
-                BakedFace::default(),
-            ],
-            is_cube: false,
-            is_opaque: false,
-            is_emissive: false,
-            emissive_level: 0.0,
-            cull_meta: None,
-            culled_faces: [
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-            ],
-            unculled_faces: Vec::new(),
-        }
     }
 }
 

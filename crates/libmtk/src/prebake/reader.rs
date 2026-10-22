@@ -18,7 +18,7 @@ use crate::MtkError;
 ///     producing smaller `models.bin` payloads; older caches are invalidated.
 /// v4: LabPBR is decoded at precompile time; atlas chunks carry `_n` (GL normal + height),
 ///     `_orm` (AO/roughness/metallic/emission) and `_aux` (IOR/porosity/SSS/transmission).
-pub const ASSET_CACHE_FORMAT_VERSION: u32 = 5;
+pub const ASSET_CACHE_FORMAT_VERSION: u32 = 6;
 
 /// Converts a string fingerprint (e.g. `"mtk_fp_1234abcd5678ef00"`) to a 16-byte array.
 pub fn fingerprint_str_to_bytes16(fp: &str) -> [u8; 16] {

@@ -85,14 +85,6 @@ impl Default for MesherConfig {
 }
 
 impl MesherConfig {
-    /// Ensures `selection_bounds` is initialized from `storage` if `origin_centered` is true and `selection_bounds` is None.
-    #[inline]
-    pub fn ensure_selection_bounds(&mut self, storage: &crate::storage::VoxelStorage) {
-        if self.origin_centered && self.selection_bounds.is_none() {
-            self.selection_bounds = storage.default_selection_bounds();
-        }
-    }
-
     /// Converts a 3D vertex position in Minecraft coordinates `(x, y, z)`
     /// to the configured target coordinate system, taking into account origin centering.
     #[inline]

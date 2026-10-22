@@ -10,7 +10,7 @@ use crate::error::ModelError;
 use crate::parser::blockstate::BlockState;
 use crate::parser::obj::{ModObjLoader, WavefrontObjParser};
 
-use super::emissive::{get_block_emissive_level, is_block_emissive};
+use super::emissive::is_block_emissive;
 
 /// Bakes a Wavefront OBJ mesh into a `BakedModel`.
 #[allow(clippy::too_many_arguments)]
@@ -99,7 +99,6 @@ pub fn bake_obj_model_impl(
         properties: std::collections::BTreeMap::new(),
     });
     let emissive = is_block_emissive(&blockstate);
-    let emissive_level = get_block_emissive_level(&blockstate);
     let cull_meta = mtk_cull::compute_block_cull_meta(block_state, None, Some(false));
 
     let mut baked_model = BakedModel {
@@ -110,7 +109,6 @@ pub fn bake_obj_model_impl(
         is_cube: false,
         is_opaque: false,
         is_emissive: emissive,
-        emissive_level,
         cull_meta: Some(cull_meta),
         culled_faces: Default::default(),
         unculled_faces: Default::default(),

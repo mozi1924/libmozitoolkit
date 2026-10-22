@@ -1,7 +1,5 @@
 use serde_json::Value;
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
 use std::path::Path;
 
 use super::super::hardcoded::classify_tint_category;
@@ -213,33 +211,6 @@ impl BiomeResolver {
         self.models_by_stem.clear();
     }
 
-    /// Parse block models from a directory containing `assets/minecraft/models/block/*.json`.
-    pub fn load_from_directory<P: AsRef<Path>>(&mut self, root: P) -> std::io::Result<()> {
-        let models_dir = root.as_ref().join("assets/minecraft/models/block");
-        if !models_dir.exists() {
-            return Ok(());
-        }
-        for entry in std::fs::read_dir(models_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
-                if let Ok(mut f) = File::open(&path) {
-                    let mut s = String::new();
-                    if f.read_to_string(&mut s).is_ok() {
-                        if let Ok(val) = serde_json::from_str::<Value>(&s) {
-                            let stem = path.file_stem().and_then(|st| st.to_str()).unwrap_or("");
-                            self.models.insert(format!("block/{}", stem), val.clone());
-                            self.models.insert(stem.to_string(), val);
-                        }
-                    }
-                }
-            }
-        }
-        self.update_models_index();
-        self.analyze_models();
-        Ok(())
-    }
-
     /// Parse block models from any `ResourcePack` implementation.
     pub fn load_from_pack(&mut self, pack: &dyn mtk_resource::ResourcePack) {
         let files = pack.list_files("assets/minecraft/models/block/");
@@ -266,35 +237,5 @@ impl BiomeResolver {
         for pack in stack.packs() {
             self.load_from_pack(pack.as_ref());
         }
-    }
-
-    /// Parse block models from a .jar or .zip resource pack.
-    pub fn load_from_zip<P: AsRef<Path>>(
-        &mut self,
-        zip_path: P,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let file = File::open(zip_path)?;
-        let mut archive = zip::ZipArchive::new(file)?;
-
-        for i in 0..archive.len() {
-            let mut file = archive.by_index(i)?;
-            let name = file.name()?.to_string();
-            if name.starts_with("assets/minecraft/models/block/") && name.ends_with(".json") {
-                let mut s = String::new();
-                if file.read_to_string(&mut s).is_ok() {
-                    if let Ok(val) = serde_json::from_str::<Value>(&s) {
-                        let stem = Path::new(&name)
-                            .file_stem()
-                            .and_then(|st| st.to_str())
-                            .unwrap_or("");
-                        self.models.insert(format!("block/{}", stem), val.clone());
-                        self.models.insert(stem.to_string(), val);
-                    }
-                }
-            }
-        }
-        self.update_models_index();
-        self.analyze_models();
-        Ok(())
     }
 }
