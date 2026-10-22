@@ -1,7 +1,7 @@
 # mtk-core
 
 [![Crate](https://img.shields.io/badge/crate-mtk--core-blue.svg)](Cargo.toml)
-[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/Rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
 **`mtk-core`** 是 MoziToolKit (`libmtk`) 体系的底层几何计算核心与标准数据契约底座。该 Crate 纯 Rust 实现，严格遵循 **Host-Agnostic（宿主无关）** 与 **Data-In / Data-Out（纯数据输入输出）** 原则，为上层体素化、模型烘焙、材质映射与 DCC 宿主（如 Blender 扩展 `MoziToolKit`）提供高性能网格缓冲、6 向拓扑、自适应像素网格切分以及智能挤出侧面 UV 修复算子。

@@ -1,7 +1,7 @@
 # mtk-cli (`mtk`)
 
 [![Crate](https://img.shields.io/badge/crate-mtk--cli-blue.svg)](Cargo.toml)
-[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/Rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
 [![CLI](https://img.shields.io/badge/CLI-Clap%20v4-blue.svg)](https://docs.rs/clap)
 [![Status](https://img.shields.io/badge/Roadmap%20Priority-P1%20Tooling-yellow.svg)]()
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)

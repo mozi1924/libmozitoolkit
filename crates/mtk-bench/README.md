@@ -1,7 +1,7 @@
 # mtk-bench
 
 [![Crate](https://img.shields.io/badge/crate-mtk--bench-blue.svg)](Cargo.toml)
-[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/Rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
 [![Rayon](https://img.shields.io/badge/Rayon-Parallel-red.svg)](https://github.com/rayon-rs/rayon)
 [![Status](https://img.shields.io/badge/Roadmap%20Priority-P1%20Benchmark-yellow.svg)]()
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)

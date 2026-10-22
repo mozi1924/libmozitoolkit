@@ -29,7 +29,7 @@ authors = ["Mozi <mozi1924@arasaka.ltd>"]
 license = "GPL-3.0-or-later"
 repository = "https://github.com/mozi1924/libmozitoolkit"
 readme = "README.md"
-rust-version = "1.80.0"
+rust-version = "1.88.0"
 [workspace.dependencies]
 clap = { version = "4.6.7", default-features = false, features = ["derive", "std", "help", "usage", "error-context"] }
 glam = { version = "0.34.1", default-features = false, features = ["libm", "serde", "all-types"] }
@@ -82,7 +82,7 @@ mtk-host-memory = { path = "crates/mtk-host-memory", version = "0.1.0" }
 too_many_arguments = "allow"
 # Parallel batch APIs return nested Rayon tuple results (e.g. `Vec<(Vec<f32>, Vec<u16>)>`).
 type_complexity = "allow"
-# `is_multiple_of` was stabilized in Rust 1.87, above our declared 1.80 MSRV.
+# `is_multiple_of` was stabilized in Rust 1.87; kept allowed until the codebase migrates.
 manual_is_multiple_of = "allow"
 # Deliberate domain-prefixed enum variants and the historical `stitcher::stitcher` layout.
 enum_variant_names = "allow"

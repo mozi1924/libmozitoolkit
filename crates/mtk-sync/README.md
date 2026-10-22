@@ -10,7 +10,7 @@
 > 本文件待随 v2.1 一并重写。
 
 [![Crate](https://img.shields.io/badge/crate-mtk--sync-blue.svg)](Cargo.toml)
-[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/Rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
 **`mtk-sync`** 是 `libmozitoolkit` (`libmtk`) 套件中的实时网络协同与二进制增量流客户端 Crate。遵循 **无宿主依赖 (Host-Agnostic)** 原则，专为建立 Minecraft（伴随模组/插件如 Yefira）与 3D DCC 宿主（如 Blender MoziToolKit 插件、WebGPU 视口或独立渲染器）之间的高性能双向二进制实时通信通道而设计。

@@ -1,7 +1,7 @@
 # mtk-wasm
 
 [![Crate](https://img.shields.io/badge/crate-mtk--wasm-blue.svg)](Cargo.toml)
-[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/Rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
 [![WebAssembly](https://img.shields.io/badge/WASM-wasm--bindgen-blue.svg)](https://rustwasm.github.io/docs/wasm-bindgen/)
 [![WebGPU](https://img.shields.io/badge/WebGPU-Ready-green.svg)](https://www.w3.org/TR/webgpu/)
 [![Status](https://img.shields.io/badge/Roadmap%20Priority-P2%20Future%20Prep-blueviolet.svg)]()

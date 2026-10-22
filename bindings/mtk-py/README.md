@@ -1,7 +1,7 @@
 # mtk-py (`libmtk_py`)
 
 [![Crate](https://img.shields.io/badge/crate-mtk--py-blue.svg)](Cargo.toml)
-[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/Rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
 [![Python](https://img.shields.io/badge/Python-3.11%2B%20%28ABI3%29-blue.svg)](https://www.python.org)
 [![PyO3](https://img.shields.io/badge/PyO3-0.30%2B-green.svg)](https://pyo3.rs)
 [![Status](https://img.shields.io/badge/Roadmap%20Priority-P0%20Core-brightgreen.svg)]()

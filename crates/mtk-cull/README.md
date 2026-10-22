@@ -1,7 +1,7 @@
 # mtk-cull
 
 [![Crate](https://img.shields.io/badge/crate-mtk--cull-blue.svg)](Cargo.toml)
-[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/Rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
 **`mtk-cull`** 是 MoziToolKit (`libmtk`) 体系的微观遮挡剔除与几何消重引擎。专注于 Minecraft 邻域面遮挡判定、2D 矩形差集切分（Occlusion Boolean Operations）、隐藏体素体裁剪，以及对外部导入网格（如 Mineways、jmc2obj、Blockbench OBJ）进行高精度的共面叠面消除与不可见面剔除。

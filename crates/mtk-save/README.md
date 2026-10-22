@@ -1,7 +1,7 @@
 # mtk-save
 
 [![Crate](https://img.shields.io/badge/crate-mtk--save-blue.svg)](Cargo.toml)
-[![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/Rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
 [![NBT](https://img.shields.io/badge/NBT-Zero--Copy%20Builtin-brightgreen.svg)](src/nbt/mod.rs)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
