@@ -306,7 +306,6 @@ fn test_reapply_uniform_biome_tint_preserves_hardcoded_and_custom_override() {
         foliage: [0.1, 0.6, 0.1, 1.0],
         dry_foliage: [0.5, 0.4, 0.1, 1.0],
         water: [0.1, 0.2, 0.9, 1.0],
-        colormap_uv: [0.2, 0.32],
     };
 
     let out = reapply_uniform_biome_tint(&base, &packed, &existing, colors, false, false, false);
@@ -318,7 +317,6 @@ fn test_reapply_uniform_biome_tint_preserves_hardcoded_and_custom_override() {
     // Hardcoded color is preserved.
     assert_eq!(out.tint_colors[4], existing[4]);
     assert_eq!(out.packed_tint_data[4][3], TINT_TYPE_HARDCODED as f32);
-    assert_eq!(out.colormap_uvs[0], [0.2, 0.32, 0.0]);
 
     // Custom grass override keeps the new grass color but routes to HARDCODED.
     let custom = reapply_uniform_biome_tint(&base, &packed, &existing, colors, true, false, false);

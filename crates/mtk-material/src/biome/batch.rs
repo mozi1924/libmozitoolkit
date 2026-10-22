@@ -6,7 +6,7 @@ use rayon::prelude::*;
 use super::hardcoded::{
     TINT_TYPE_DRY_FOLIAGE, TINT_TYPE_FOLIAGE, TINT_TYPE_GRASS, TINT_TYPE_HARDCODED, TINT_TYPE_WATER,
 };
-use super::palettes::{blend_biome_colors, get_biome_palette, get_colormap_uv};
+use super::palettes::{blend_biome_colors, get_biome_palette};
 use super::resolver::BiomeResolver;
 
 /// Custom user-defined biome settings for temperature, humidity, and direct color overrides.
@@ -46,7 +46,6 @@ pub struct BiomeColorSet {
     pub foliage: [f32; 4],
     pub dry_foliage: [f32; 4],
     pub water: [f32; 4],
-    pub colormap_uv: [f32; 2],
 }
 
 /// Resolves the four tint channels and custom flags for a biome preset.
@@ -70,7 +69,6 @@ pub fn resolve_biome_color_set(
                 water: settings
                     .water_color
                     .unwrap_or_else(|| default_pal.water_linear()),
-                colormap_uv: get_colormap_uv(settings.temperature, settings.humidity),
             },
             settings.has_custom_grass,
             settings.has_custom_foliage,
@@ -80,30 +78,12 @@ pub fn resolve_biome_color_set(
 
     if let Some(mb) = multi_biomes.filter(|mb| !mb.is_empty()) {
         let weights: Vec<(&str, f32)> = mb.iter().map(|(n, w)| (n.as_str(), *w)).collect();
-        let mut total_w = 0.0f32;
-        let mut sum_u = 0.0f32;
-        let mut sum_v = 0.0f32;
-        for &(b_name, wt) in &weights {
-            if wt <= 0.0 {
-                continue;
-            }
-            let pal = get_biome_palette(b_name);
-            let uv = pal.colormap_uv();
-            total_w += wt;
-            sum_u += uv[0] * wt;
-            sum_v += uv[1] * wt;
-        }
         return (
             BiomeColorSet {
                 grass: blend_biome_colors(&weights, "grass"),
                 foliage: blend_biome_colors(&weights, "foliage"),
                 dry_foliage: blend_biome_colors(&weights, "dry_foliage"),
                 water: blend_biome_colors(&weights, "water"),
-                colormap_uv: if total_w > 0.0 {
-                    [sum_u / total_w, sum_v / total_w]
-                } else {
-                    [0.2, 0.32]
-                },
             },
             false,
             false,
@@ -118,7 +98,6 @@ pub fn resolve_biome_color_set(
             foliage: pal.foliage_linear(),
             dry_foliage: pal.dry_foliage_linear(),
             water: pal.water_linear(),
-            colormap_uv: pal.colormap_uv(),
         },
         pal.has_custom_grass,
         pal.has_custom_foliage,
@@ -133,8 +112,6 @@ pub struct MeshBiomeAttributesResult {
     pub packed_tint_data: Vec<[f32; 4]>,
     /// `mtk_biome_tint_color`: `(r, g, b, a)` Linear RGBA
     pub tint_colors: Vec<[f32; 4]>,
-    /// `mtk_colormap_uv`: `(u, v, 0.0)`
-    pub colormap_uvs: Vec<[f32; 3]>,
 }
 
 /// Compute biome tinting attributes in parallel across all mesh faces with custom biome settings.
@@ -148,7 +125,6 @@ pub fn compute_mesh_biome_attributes_custom(
         return MeshBiomeAttributesResult {
             packed_tint_data: Vec::new(),
             tint_colors: Vec::new(),
-            colormap_uvs: Vec::new(),
         };
     }
 
@@ -164,15 +140,12 @@ pub fn compute_mesh_biome_attributes_custom(
     let water_col = custom
         .water_color
         .unwrap_or_else(|| default_pal.water_linear());
-    let base_uv = get_colormap_uv(custom.temperature, custom.humidity);
 
     let has_cg = custom.has_custom_grass;
     let has_cf = custom.has_custom_foliage;
     let has_cdf = custom.has_custom_dry_foliage;
 
-    let colormap_uv_3 = [base_uv[0], base_uv[1], 0.0f32];
-
-    let compute_face = |key: &String| -> ([f32; 4], [f32; 4], [f32; 3]) {
+    let compute_face = |key: &String| -> ([f32; 4], [f32; 4]) {
         let tint_info = resolver.get_tint_info(key, None, None);
         let tw = tint_info.tint_weight;
         let base_w = tint_info.base_tint_weight;
@@ -210,31 +183,27 @@ pub fn compute_mesh_biome_attributes_custom(
             }
         };
 
-        (packed_data, final_col, colormap_uv_3)
+        (packed_data, final_col)
     };
 
     #[cfg(feature = "parallel")]
-    let results: Vec<([f32; 4], [f32; 4], [f32; 3])> =
+    let results: Vec<([f32; 4], [f32; 4])> =
         face_texture_keys.par_iter().map(compute_face).collect();
 
     #[cfg(not(feature = "parallel"))]
-    let results: Vec<([f32; 4], [f32; 4], [f32; 3])> =
-        face_texture_keys.iter().map(compute_face).collect();
+    let results: Vec<([f32; 4], [f32; 4])> = face_texture_keys.iter().map(compute_face).collect();
 
     let mut packed_tint_data = Vec::with_capacity(face_count);
     let mut tint_colors = Vec::with_capacity(face_count);
-    let mut colormap_uvs = Vec::with_capacity(face_count);
 
-    for (p, c, u) in results {
+    for (p, c) in results {
         packed_tint_data.push(p);
         tint_colors.push(c);
-        colormap_uvs.push(u);
     }
 
     MeshBiomeAttributesResult {
         packed_tint_data,
         tint_colors,
-        colormap_uvs,
     }
 }
 
@@ -250,38 +219,22 @@ pub fn compute_mesh_biome_attributes(
         return MeshBiomeAttributesResult {
             packed_tint_data: Vec::new(),
             tint_colors: Vec::new(),
-            colormap_uvs: Vec::new(),
         };
     }
 
-    // Compute standard global biome colors and colormap UVs
-    let (grass_col, foliage_col, dry_foliage_col, water_col, base_uv, has_cg, has_cf, has_cdf) =
+    // Resolve the global biome color channels (the resolved Linear RGBA is authoritative).
+    let (grass_col, foliage_col, dry_foliage_col, water_col, has_cg, has_cf, has_cdf) =
         if let Some(mb) = multi_biomes.filter(|mb| !mb.is_empty()) {
             let weights: Vec<(&str, f32)> = mb.iter().map(|(n, w)| (n.as_str(), *w)).collect();
-            let g = blend_biome_colors(&weights, "grass");
-            let f = blend_biome_colors(&weights, "foliage");
-            let df = blend_biome_colors(&weights, "dry_foliage");
-            let w = blend_biome_colors(&weights, "water");
-
-            let mut total_w = 0.0f32;
-            let mut sum_u = 0.0f32;
-            let mut sum_v = 0.0f32;
-            for &(b_name, wt) in &weights {
-                if wt <= 0.0 {
-                    continue;
-                }
-                let pal = get_biome_palette(b_name);
-                let uv = pal.colormap_uv();
-                total_w += wt;
-                sum_u += uv[0] * wt;
-                sum_v += uv[1] * wt;
-            }
-            let uv = if total_w > 0.0 {
-                [sum_u / total_w, sum_v / total_w]
-            } else {
-                [0.2, 0.32]
-            };
-            (g, f, df, w, uv, false, false, false)
+            (
+                blend_biome_colors(&weights, "grass"),
+                blend_biome_colors(&weights, "foliage"),
+                blend_biome_colors(&weights, "dry_foliage"),
+                blend_biome_colors(&weights, "water"),
+                false,
+                false,
+                false,
+            )
         } else {
             let pal = get_biome_palette(biome_name);
             (
@@ -289,16 +242,13 @@ pub fn compute_mesh_biome_attributes(
                 pal.foliage_linear(),
                 pal.dry_foliage_linear(),
                 pal.water_linear(),
-                pal.colormap_uv(),
                 pal.has_custom_grass,
                 pal.has_custom_foliage,
                 pal.has_custom_dry_foliage,
             )
         };
 
-    let colormap_uv_3 = [base_uv[0], base_uv[1], 0.0f32];
-
-    let compute_face = |key: &String| -> ([f32; 4], [f32; 4], [f32; 3]) {
+    let compute_face = |key: &String| -> ([f32; 4], [f32; 4]) {
         let tint_info = resolver.get_tint_info(key, None, None);
         let tw = tint_info.tint_weight;
         let base_w = tint_info.base_tint_weight;
@@ -336,31 +286,27 @@ pub fn compute_mesh_biome_attributes(
             }
         };
 
-        (packed_data, final_col, colormap_uv_3)
+        (packed_data, final_col)
     };
 
     #[cfg(feature = "parallel")]
-    let results: Vec<([f32; 4], [f32; 4], [f32; 3])> =
+    let results: Vec<([f32; 4], [f32; 4])> =
         face_texture_keys.par_iter().map(compute_face).collect();
 
     #[cfg(not(feature = "parallel"))]
-    let results: Vec<([f32; 4], [f32; 4], [f32; 3])> =
-        face_texture_keys.iter().map(compute_face).collect();
+    let results: Vec<([f32; 4], [f32; 4])> = face_texture_keys.iter().map(compute_face).collect();
 
     let mut packed_tint_data = Vec::with_capacity(face_count);
     let mut tint_colors = Vec::with_capacity(face_count);
-    let mut colormap_uvs = Vec::with_capacity(face_count);
 
-    for (p, c, u) in results {
+    for (p, c) in results {
         packed_tint_data.push(p);
         tint_colors.push(c);
-        colormap_uvs.push(u);
     }
 
     MeshBiomeAttributesResult {
         packed_tint_data,
         tint_colors,
-        colormap_uvs,
     }
 }
 
@@ -375,19 +321,17 @@ pub fn compute_mesh_biome_attributes_per_face(
         return MeshBiomeAttributesResult {
             packed_tint_data: Vec::new(),
             tint_colors: Vec::new(),
-            colormap_uvs: Vec::new(),
         };
     }
 
     let default_biome = "plains".to_string();
 
-    let compute_face = |(key, b_name): (&String, &String)| -> ([f32; 4], [f32; 4], [f32; 3]) {
+    let compute_face = |(key, b_name): (&String, &String)| -> ([f32; 4], [f32; 4]) {
         let pal = get_biome_palette(b_name);
         let grass_col = pal.grass_linear();
         let foliage_col = pal.foliage_linear();
         let dry_foliage_col = pal.dry_foliage_linear();
         let water_col = pal.water_linear();
-        let base_uv = pal.colormap_uv();
 
         let tint_info = resolver.get_tint_info(key, None, None);
         let tw = tint_info.tint_weight;
@@ -426,8 +370,7 @@ pub fn compute_mesh_biome_attributes_per_face(
             }
         };
 
-        let colormap_uv_3 = [base_uv[0], base_uv[1], 0.0f32];
-        (packed_data, final_col, colormap_uv_3)
+        (packed_data, final_col)
     };
 
     let pairs: Vec<(&String, &String)> = face_texture_keys
@@ -437,27 +380,22 @@ pub fn compute_mesh_biome_attributes_per_face(
         .collect();
 
     #[cfg(feature = "parallel")]
-    let results: Vec<([f32; 4], [f32; 4], [f32; 3])> =
-        pairs.into_par_iter().map(compute_face).collect();
+    let results: Vec<([f32; 4], [f32; 4])> = pairs.into_par_iter().map(compute_face).collect();
 
     #[cfg(not(feature = "parallel"))]
-    let results: Vec<([f32; 4], [f32; 4], [f32; 3])> =
-        pairs.into_iter().map(compute_face).collect();
+    let results: Vec<([f32; 4], [f32; 4])> = pairs.into_iter().map(compute_face).collect();
 
     let mut packed_tint_data = Vec::with_capacity(face_count);
     let mut tint_colors = Vec::with_capacity(face_count);
-    let mut colormap_uvs = Vec::with_capacity(face_count);
 
-    for (p, c, u) in results {
+    for (p, c) in results {
         packed_tint_data.push(p);
         tint_colors.push(c);
-        colormap_uvs.push(u);
     }
 
     MeshBiomeAttributesResult {
         packed_tint_data,
         tint_colors,
-        colormap_uvs,
     }
 }
 
@@ -468,8 +406,6 @@ pub struct BiomeTintFlatBuffers {
     pub packed_tint_data: Vec<f32>,
     /// `mtk_biome_tint_color` as flat RGBA floats.
     pub tint_colors: Vec<f32>,
-    /// `mtk_colormap_uv` as flat RGB floats.
-    pub colormap_uvs: Vec<f32>,
 }
 
 /// Re-apply a uniform biome palette to mesh faces without re-resolving texture keys.
@@ -495,10 +431,8 @@ pub fn reapply_uniform_biome_tint_flat(
 
     let mut packed_out = vec![0.0f32; face_count * 4];
     let mut colors_out = vec![0.0f32; face_count * 4];
-    let mut uvs_out = vec![0.0f32; face_count * 3];
-    let uv = [colors.colormap_uv[0], colors.colormap_uv[1], 0.0f32];
 
-    let write_face = |i: usize, packed: &mut [f32], color: &mut [f32], uv_out: &mut [f32]| {
+    let write_face = |i: usize, packed: &mut [f32], color: &mut [f32]| {
         let base = base_tint_types[i];
         let target_tt = match base {
             TINT_TYPE_GRASS if has_custom_grass => TINT_TYPE_HARDCODED,
@@ -525,7 +459,6 @@ pub fn reapply_uniform_biome_tint_flat(
             _ => [1.0, 1.0, 1.0, 1.0],
         };
         color.copy_from_slice(&c);
-        uv_out.copy_from_slice(&uv);
     };
 
     #[cfg(feature = "parallel")]
@@ -533,9 +466,8 @@ pub fn reapply_uniform_biome_tint_flat(
         packed_out
             .par_chunks_mut(4)
             .zip(colors_out.par_chunks_mut(4))
-            .zip(uvs_out.par_chunks_mut(3))
             .enumerate()
-            .for_each(|(i, ((packed, color), uv_out))| write_face(i, packed, color, uv_out));
+            .for_each(|(i, (packed, color))| write_face(i, packed, color));
     }
 
     #[cfg(not(feature = "parallel"))]
@@ -545,7 +477,6 @@ pub fn reapply_uniform_biome_tint_flat(
                 i,
                 &mut packed_out[i * 4..i * 4 + 4],
                 &mut colors_out[i * 4..i * 4 + 4],
-                &mut uvs_out[i * 3..i * 3 + 3],
             );
         }
     }
@@ -553,7 +484,6 @@ pub fn reapply_uniform_biome_tint_flat(
     BiomeTintFlatBuffers {
         packed_tint_data: packed_out,
         tint_colors: colors_out,
-        colormap_uvs: uvs_out,
     }
 }
 
@@ -579,7 +509,6 @@ pub fn reapply_uniform_biome_tint(
     let face_count = base_tint_types.len();
     let mut packed_tint_data = Vec::with_capacity(face_count);
     let mut tint_colors = Vec::with_capacity(face_count);
-    let mut colormap_uvs = Vec::with_capacity(face_count);
     for i in 0..face_count {
         packed_tint_data.push([
             flat.packed_tint_data[i * 4],
@@ -593,23 +522,17 @@ pub fn reapply_uniform_biome_tint(
             flat.tint_colors[i * 4 + 2],
             flat.tint_colors[i * 4 + 3],
         ]);
-        colormap_uvs.push([
-            flat.colormap_uvs[i * 3],
-            flat.colormap_uvs[i * 3 + 1],
-            flat.colormap_uvs[i * 3 + 2],
-        ]);
     }
     MeshBiomeAttributesResult {
         packed_tint_data,
         tint_colors,
-        colormap_uvs,
     }
 }
 
 /// Palette-native full biome attribute computation.
 ///
 /// Resolves tint metadata once per unique palette entry, then writes flat
-/// `packed_tint_data` / `tint_colors` / `colormap_uvs` for every face. This is
+/// `packed_tint_data` / `tint_colors` for every face. This is
 /// the palette counterpart of `compute_mesh_biome_attributes_custom` and avoids
 /// materializing one `String` per face.
 pub fn compute_mesh_biome_attributes_paletted_flat(
@@ -630,13 +553,10 @@ pub fn compute_mesh_biome_attributes_paletted_flat(
         .iter()
         .map(|key| resolver.get_tint_info(key, None, None))
         .collect();
-    let uv = [colors.colormap_uv[0], colors.colormap_uv[1], 0.0f32];
-
     let mut packed_out = vec![0.0f32; face_count * 4];
     let mut colors_out = vec![0.0f32; face_count * 4];
-    let mut uvs_out = vec![0.0f32; face_count * 3];
 
-    let compute = |i: usize| -> ([f32; 4], [f32; 4], [f32; 3]) {
+    let compute = |i: usize| -> ([f32; 4], [f32; 4]) {
         let info = face_indices
             .get(i)
             .and_then(|idx| palette_infos.get(*idx as usize))
@@ -674,25 +594,22 @@ pub fn compute_mesh_biome_attributes_paletted_flat(
                 }
             }
         };
-        (packed, color, uv)
+        (packed, color)
     };
 
     #[cfg(feature = "parallel")]
-    let results: Vec<([f32; 4], [f32; 4], [f32; 3])> =
-        (0..face_count).into_par_iter().map(compute).collect();
+    let results: Vec<([f32; 4], [f32; 4])> = (0..face_count).into_par_iter().map(compute).collect();
 
     #[cfg(not(feature = "parallel"))]
-    let results: Vec<([f32; 4], [f32; 4], [f32; 3])> = (0..face_count).map(compute).collect();
+    let results: Vec<([f32; 4], [f32; 4])> = (0..face_count).map(compute).collect();
 
-    for (i, (packed, color, uv)) in results.into_iter().enumerate() {
+    for (i, (packed, color)) in results.into_iter().enumerate() {
         packed_out[i * 4..i * 4 + 4].copy_from_slice(&packed);
         colors_out[i * 4..i * 4 + 4].copy_from_slice(&color);
-        uvs_out[i * 3..i * 3 + 3].copy_from_slice(&uv);
     }
 
     BiomeTintFlatBuffers {
         packed_tint_data: packed_out,
         tint_colors: colors_out,
-        colormap_uvs: uvs_out,
     }
 }

@@ -288,7 +288,6 @@ pub fn compute_biome_tint_attributes(
     let dict = PyDict::new(py);
     dict.set_item("packed_tint_data", res.packed_tint_data)?;
     dict.set_item("tint_colors", res.tint_colors)?;
-    dict.set_item("colormap_uvs", res.colormap_uvs)?;
     Ok(dict.into())
 }
 
@@ -326,11 +325,7 @@ pub fn compute_biome_tint_attributes_paletted<'py>(
     has_custom_grass: bool,
     has_custom_foliage: bool,
     has_custom_dry_foliage: bool,
-) -> PyResult<(
-    Bound<'py, PyMemoryView>,
-    Bound<'py, PyMemoryView>,
-    Bound<'py, PyMemoryView>,
-)> {
+) -> PyResult<(Bound<'py, PyMemoryView>, Bound<'py, PyMemoryView>)> {
     let indices = BorrowedU32Buffer::extract(face_indices)?;
     let default_resolver = mtk_material::BiomeResolver::new();
     let res_ref = resolver.map(|r| &r.inner).unwrap_or(&default_resolver);
@@ -375,7 +370,6 @@ pub fn compute_biome_tint_attributes_paletted<'py>(
     Ok((
         create_owned_f32_memoryview(py, result.packed_tint_data)?,
         create_owned_f32_memoryview(py, result.tint_colors)?,
-        create_owned_f32_memoryview(py, result.colormap_uvs)?,
     ))
 }
 
@@ -386,8 +380,8 @@ pub fn compute_biome_tint_attributes_paletted<'py>(
 /// - `packed_tint_data`: `float32` x 4 per face
 /// - `existing_tint_colors`: `float32` x 4 per face (empty buffer allowed; hardcoded faces then use white)
 ///
-/// Returns three zero-copy memoryviews over Rust-owned buffers:
-/// `(packed_tint_data, tint_colors, colormap_uvs)`.
+/// Returns two zero-copy memoryviews over Rust-owned buffers:
+/// `(packed_tint_data, tint_colors)`.
 #[pyfunction]
 #[pyo3(signature = (
     base_tint_types,
@@ -397,7 +391,6 @@ pub fn compute_biome_tint_attributes_paletted<'py>(
     foliage_color,
     dry_foliage_color,
     water_color,
-    colormap_uv,
     has_custom_grass=false,
     has_custom_foliage=false,
     has_custom_dry_foliage=false,
@@ -411,15 +404,10 @@ pub fn reapply_uniform_biome_tint<'py>(
     foliage_color: [f32; 4],
     dry_foliage_color: [f32; 4],
     water_color: [f32; 4],
-    colormap_uv: [f32; 2],
     has_custom_grass: bool,
     has_custom_foliage: bool,
     has_custom_dry_foliage: bool,
-) -> PyResult<(
-    Bound<'py, PyMemoryView>,
-    Bound<'py, PyMemoryView>,
-    Bound<'py, PyMemoryView>,
-)> {
+) -> PyResult<(Bound<'py, PyMemoryView>, Bound<'py, PyMemoryView>)> {
     let base = BorrowedU8Buffer::extract(base_tint_types)?;
     let packed = BorrowedF32Buffer::extract(packed_tint_data)?;
     let existing = BorrowedF32Buffer::extract(existing_tint_colors)?;
@@ -452,7 +440,6 @@ pub fn reapply_uniform_biome_tint<'py>(
             foliage: foliage_color,
             dry_foliage: dry_foliage_color,
             water: water_color,
-            colormap_uv,
         },
         has_custom_grass,
         has_custom_foliage,
@@ -461,8 +448,7 @@ pub fn reapply_uniform_biome_tint<'py>(
 
     let packed_mv = create_owned_f32_memoryview(py, result.packed_tint_data)?;
     let colors_mv = create_owned_f32_memoryview(py, result.tint_colors)?;
-    let uvs_mv = create_owned_f32_memoryview(py, result.colormap_uvs)?;
-    Ok((packed_mv, colors_mv, uvs_mv))
+    Ok((packed_mv, colors_mv))
 }
 
 /// Compute 3D coordinate-aware biome tinting attributes using a VoxelStorage container.
@@ -490,10 +476,9 @@ pub fn compute_mesh_biome_attributes_from_storage(
     let default_resolver = mtk_material::BiomeResolver::new();
     let res_ref = resolver.map(|r| &r.inner).unwrap_or(&default_resolver);
 
-    let (packed_tint_data, tint_colors, colormap_uvs) = py.detach(|| {
+    let (packed_tint_data, tint_colors) = py.detach(|| {
         let mut packed = Vec::with_capacity(face_count);
         let mut cols = Vec::with_capacity(face_count);
-        let mut uvs = Vec::with_capacity(face_count);
 
         for i in 0..face_count {
             let key = &face_texture_keys[i];
@@ -501,7 +486,7 @@ pub fn compute_mesh_biome_attributes_from_storage(
             let by = block_ys.get(i).copied().unwrap_or(0);
             let bz = block_zs.get(i).copied().unwrap_or(0);
 
-            let (col, uv, has_cg, has_cf, has_cdf) = if smooth {
+            let (col, has_cg, has_cf, has_cdf) = if smooth {
                 let sm = mtk_voxel::biome::get_smoothed_column_biome(
                     |x, y, z| storage.inner.get_biome(x, y, z),
                     bx,
@@ -510,7 +495,6 @@ pub fn compute_mesh_biome_attributes_from_storage(
                 );
                 (
                     sm,
-                    [sm.colormap_uv[0], sm.colormap_uv[1], 0.0],
                     sm.has_custom_grass,
                     sm.has_custom_foliage,
                     sm.has_custom_dry_foliage,
@@ -520,7 +504,6 @@ pub fn compute_mesh_biome_attributes_from_storage(
                 let sm = mtk_voxel::biome::get_point_column_biome(b_name, bx, bz);
                 (
                     sm,
-                    [sm.colormap_uv[0], sm.colormap_uv[1], 0.0],
                     sm.has_custom_grass,
                     sm.has_custom_foliage,
                     sm.has_custom_dry_foliage,
@@ -561,16 +544,14 @@ pub fn compute_mesh_biome_attributes_from_storage(
                 tint_type_val,
             ]);
             cols.push(c);
-            uvs.push(uv);
         }
 
-        (packed, cols, uvs)
+        (packed, cols)
     });
 
     let dict = PyDict::new(py);
     dict.set_item("packed_tint_data", packed_tint_data)?;
     dict.set_item("tint_colors", tint_colors)?;
-    dict.set_item("colormap_uvs", colormap_uvs)?;
     Ok(dict.into())
 }
 
