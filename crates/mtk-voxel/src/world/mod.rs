@@ -345,10 +345,11 @@ impl VoxelWorld {
                 MeshData::merge_welded_sections_filtered(&meshes, 1e-4, seam)
             }
         };
-        let merged = match profiler.as_deref_mut() {
+        let mut merged = match profiler.as_deref_mut() {
             Some(p) => p.measure("merge_welded_seams", merge),
             None => merge(),
         };
+        prune_static_animation_attributes(&mut merged);
 
         let compact = |this: &mut Self, merged: MeshData| {
             this.used_chunk_ids = merged
@@ -598,5 +599,77 @@ impl VoxelWorld {
 impl Default for VoxelWorld {
     fn default() -> Self {
         Self::new(None, None, None)
+    }
+}
+
+/// Removes face-level animation attributes when the merged world contains no
+/// animated faces. Section meshes intentionally carry a homogeneous attribute
+/// set so merging never drops per-face data; this is the only safe level for
+/// optional attribute pruning.
+fn prune_static_animation_attributes(mesh: &mut MeshData) {
+    let static_only = mesh
+        .get_custom_attribute(mtk_core::attributes::constants::ATTR_ANIM_TIMING)
+        .and_then(|attr| match &attr.data {
+            mtk_core::attributes::AttributeData::Float3(values) => {
+                Some(values.iter().all(|timing| timing[0] <= 1.0))
+            }
+            _ => None,
+        })
+        .unwrap_or(false);
+    if static_only {
+        mesh.remove_custom_attribute(mtk_core::attributes::constants::ATTR_ANIM_TIMING);
+        mesh.remove_custom_attribute(mtk_core::attributes::constants::ATTR_ANIM_FRAME_SIZE);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mesher::collector::FaceAttributesCollector;
+    use mtk_core::attributes::constants::{ATTR_ANIM_FRAME_SIZE, ATTR_ANIM_TIMING};
+
+    fn mesh_with_timing(timing: [f32; 3]) -> MeshData {
+        let mut collector = FaceAttributesCollector::with_capacity(1);
+        collector.push_face(
+            "minecraft:block/stone".to_string(),
+            0,
+            [1.0, 1.0, 0.0, 0.0],
+            0.0,
+            [1.0, 0.0, 0.0, 0.0],
+            [1.0, 1.0, 1.0, 1.0],
+            glam::IVec3::ZERO,
+            timing,
+            [16.0, 16.0, 0.0],
+        );
+        let mut mesh = MeshData::new();
+        collector.attach_to_mesh(&mut mesh);
+        mesh
+    }
+
+    #[test]
+    fn mixed_static_and_animated_sections_merge_and_prune() {
+        let static_mesh = mesh_with_timing([1.0, 1.0, 0.0]);
+        let animated_mesh = mesh_with_timing([4.0, 2.0, 1.0]);
+        let mut merged = MeshData::merge_all_refs(&[&static_mesh, &animated_mesh]);
+        assert_eq!(
+            merged
+                .get_custom_attribute(ATTR_ANIM_TIMING)
+                .expect("merged animation attribute")
+                .len(),
+            2
+        );
+        prune_static_animation_attributes(&mut merged);
+        assert!(merged.get_custom_attribute(ATTR_ANIM_TIMING).is_some());
+        assert!(merged.get_custom_attribute(ATTR_ANIM_FRAME_SIZE).is_some());
+    }
+
+    #[test]
+    fn static_world_prunes_animation_attributes() {
+        let a = mesh_with_timing([1.0, 1.0, 0.0]);
+        let b = mesh_with_timing([1.0, 1.0, 0.0]);
+        let mut merged = MeshData::merge_all_refs(&[&a, &b]);
+        prune_static_animation_attributes(&mut merged);
+        assert!(merged.get_custom_attribute(ATTR_ANIM_TIMING).is_none());
+        assert!(merged.get_custom_attribute(ATTR_ANIM_FRAME_SIZE).is_none());
     }
 }

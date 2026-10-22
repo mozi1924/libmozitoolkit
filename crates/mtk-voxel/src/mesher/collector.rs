@@ -113,18 +113,19 @@ impl FaceAttributesCollector {
             AttributeDomain::Face,
             AttributeData::Int32(self.block_zs),
         ));
-        if self.anim_timings.iter().any(|timing| timing[0] > 1.0) {
-            mesh.add_custom_attribute(MeshAttribute::new(
-                ATTR_ANIM_TIMING,
-                AttributeDomain::Face,
-                AttributeData::Float3(self.anim_timings),
-            ));
-            mesh.add_custom_attribute(MeshAttribute::new(
-                ATTR_ANIM_FRAME_SIZE,
-                AttributeDomain::Face,
-                AttributeData::Float3(self.anim_frame_sizes),
-            ));
-        }
+        // Keep the attribute set homogeneous across every Section. Static
+        // sections carry default timing values; the merged world mesh prunes
+        // these attributes once if nothing in the world is animated.
+        mesh.add_custom_attribute(MeshAttribute::new(
+            ATTR_ANIM_TIMING,
+            AttributeDomain::Face,
+            AttributeData::Float3(self.anim_timings),
+        ));
+        mesh.add_custom_attribute(MeshAttribute::new(
+            ATTR_ANIM_FRAME_SIZE,
+            AttributeDomain::Face,
+            AttributeData::Float3(self.anim_frame_sizes),
+        ));
     }
 }
 
@@ -152,19 +153,24 @@ mod tests {
     }
 
     #[test]
-    fn static_faces_skip_animation_attributes() {
+    fn static_faces_keep_animation_attributes_for_merge() {
         let mut mesh = MeshData::new();
         collector_with([1.0, 1.0, 0.0]).attach_to_mesh(&mut mesh);
 
-        assert!(mesh.get_custom_attribute(ATTR_ANIM_TIMING).is_none());
-        assert!(mesh.get_custom_attribute(ATTR_ANIM_FRAME_SIZE).is_none());
+        assert_eq!(
+            mesh.get_custom_attribute(ATTR_ANIM_TIMING)
+                .expect("static section must carry default timing")
+                .len(),
+            1
+        );
+        assert!(mesh.get_custom_attribute(ATTR_ANIM_FRAME_SIZE).is_some());
         assert!(mesh.get_custom_attribute(ATTR_BLOCK_X).is_some());
         assert!(mesh.get_custom_attribute(ATTR_BLOCK_Y).is_some());
         assert!(mesh.get_custom_attribute(ATTR_BLOCK_Z).is_some());
     }
 
     #[test]
-    fn animated_faces_emit_animation_attributes() {
+    fn static_faces_keep_animation_attributes() {
         let mut mesh = MeshData::new();
         collector_with([4.0, 2.0, 1.0]).attach_to_mesh(&mut mesh);
 
