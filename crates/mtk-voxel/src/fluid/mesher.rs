@@ -175,7 +175,7 @@ where
             still_sprite.as_ref().or(flow_sprite.as_ref())
         };
 
-        let (final_mat_slot, uvs, chunk_id, tex_id, source_key, anim_timing, anim_frame_size) =
+        let (final_mat_slot, uvs, chunk_id, _tex_id, source_key, anim_timing, anim_frame_size) =
             if let Some((res_name, cid, tid, bounds, timing, fsize)) = target_sprite {
                 let u_min = bounds[0];
                 let v_min = bounds[1];
@@ -273,7 +273,7 @@ where
             });
 
         if let Some(ref mut col) = collector {
-            let (f_tint_data, f_tint_color, f_colormap_uv) = if fluid_type == FluidType::Water {
+            let (f_tint_data, f_tint_color, _f_colormap_uv) = if fluid_type == FluidType::Water {
                 (
                     [1.0, 1.0, 1.0, 3.0],
                     tint_color.unwrap_or([0.24, 0.44, 0.99, 1.0]),
@@ -290,15 +290,11 @@ where
             };
             col.push_face(
                 source_key,
-                final_mat_slot as i32,
                 chunk_id,
-                tex_id,
                 [1.0, 1.0, 0.0, 0.0],
                 0.0,
-                0,
                 f_tint_data,
                 f_tint_color,
-                f_colormap_uv,
                 emission,
                 glam::IVec3::new(x, y, z),
                 dir_code,

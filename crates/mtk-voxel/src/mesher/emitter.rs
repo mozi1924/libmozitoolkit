@@ -28,7 +28,6 @@ pub fn emit_baked_face(
     shading: &ResolvedFaceShading,
     final_tint_data: [f32; 4],
     final_tint_color: [f32; 4],
-    final_colormap_uv: [f32; 3],
     block_pos: IVec3,
     dir: Direction,
 ) {
@@ -82,15 +81,11 @@ pub fn emit_baked_face(
 
     collector.push_face(
         shading.texture_key.clone(),
-        shading.mat_slot as i32,
         shading.chunk_id,
-        shading.tex_id,
         [1.0, 1.0, 0.0, 0.0],
         face.uv_rot,
-        0,
         final_tint_data,
         final_tint_color,
-        final_colormap_uv,
         shading.emission,
         block_pos,
         dir.to_index() as u8,
@@ -115,7 +110,6 @@ pub fn emit_unit_cube_face(
     shading: &ResolvedFaceShading,
     final_tint_data: [f32; 4],
     final_tint_color: [f32; 4],
-    final_colormap_uv: [f32; 3],
     block_pos: IVec3,
     mut grid_context: Option<(&mut GridVertexPool, [usize; 3], Vec3)>,
 ) {
@@ -258,15 +252,11 @@ pub fn emit_unit_cube_face(
 
     collector.push_face(
         shading.texture_key.clone(),
-        shading.mat_slot as i32,
         shading.chunk_id,
-        shading.tex_id,
         [1.0, 1.0, 0.0, 0.0],
         0.0,
-        0,
         final_tint_data,
         final_tint_color,
-        final_colormap_uv,
         shading.emission,
         block_pos,
         dir.to_index() as u8,

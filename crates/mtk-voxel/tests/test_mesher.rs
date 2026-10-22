@@ -100,15 +100,11 @@ fn test_mesher_custom_attributes() {
 
     let expected_attrs = [
         "mtk_source_texture_key",
-        "mtk_material_slot",
         "mtk_atlas_chunk_id",
-        "mtk_atlas_texture_id",
         "mtk_uv_transform",
         "mtk_uv_rotation",
-        "mtk_uv_mode",
         "mtk_biome_tint_data",
         "mtk_biome_tint_color",
-        "mtk_colormap_uv",
         "mtk_block_x",
         "mtk_block_y",
         "mtk_block_z",
@@ -119,6 +115,21 @@ fn test_mesher_custom_attributes() {
         assert!(
             mesh.has_custom_attribute(attr_name),
             "Mesh should contain custom attribute: {}",
+            attr_name
+        );
+    }
+
+    let obsolete_attrs = [
+        "mtk_material_slot",
+        "mtk_atlas_texture_id",
+        "mtk_uv_mode",
+        "mtk_colormap_uv",
+        "mtk_anim_total_frames",
+    ];
+    for attr_name in &obsolete_attrs {
+        assert!(
+            !mesh.has_custom_attribute(attr_name),
+            "Mesh should NOT contain obsolete attribute: {}",
             attr_name
         );
     }
@@ -332,19 +343,15 @@ fn test_biome_transition_smoothing() {
     assert!(col_trans_7.colormap_uv[0] >= col_trans_8.colormap_uv[0] - 1e-4);
     assert!(col_trans_8.colormap_uv[0] >= col_desert.colormap_uv[0] - 1e-4);
 
-    // Mesh the section and verify mtk_colormap_uv and mtk_biome_tint_color
+    // Mesh the section and verify mtk_biome_tint_color
     let culler = FaceCuller::default();
     let config = MesherConfig::default();
     let mesh = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
 
-    let cm_attr = mesh
-        .get_custom_attribute("mtk_colormap_uv")
-        .expect("Must have mtk_colormap_uv");
-    let cm_uvs = match &cm_attr.data {
-        mtk_core::attributes::AttributeData::Float3(v) => v,
-        _ => panic!("Expected Float3"),
-    };
-    assert!(!cm_uvs.is_empty());
+    assert!(
+        mesh.get_custom_attribute("mtk_colormap_uv").is_none(),
+        "mtk_colormap_uv must be retired"
+    );
 
     let color_attr = mesh
         .get_custom_attribute("mtk_biome_tint_color")
@@ -355,13 +362,16 @@ fn test_biome_transition_smoothing() {
     };
     assert!(!colors.is_empty());
 
-    // Verify there are multiple distinct intermediate values in mtk_colormap_uv across the transition!
-    let mut distinct_u = std::collections::HashSet::new();
-    for uv in cm_uvs {
-        distinct_u.insert((uv[0] * 100.0).round() as i32);
+    // Verify there are multiple distinct intermediate values in mtk_biome_tint_color across the transition!
+    let mut distinct_col = std::collections::HashSet::new();
+    for col in colors {
+        distinct_col.insert((
+            (col[0] * 100.0).round() as i32,
+            (col[1] * 100.0).round() as i32,
+        ));
     }
     assert!(
-        distinct_u.len() > 2,
+        distinct_col.len() > 2,
         "Transition zone must produce continuous blended gradient values, not a binary step!"
     );
 }

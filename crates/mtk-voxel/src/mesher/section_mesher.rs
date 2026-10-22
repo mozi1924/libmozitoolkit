@@ -299,16 +299,15 @@ impl SectionMesher {
                                 get_padded_neighbor_state,
                             );
 
-                            let (final_tint_data, final_tint_color, final_colormap_uv) =
-                                sample_biome_tint(
-                                    padded.biome_data.as_deref(),
-                                    lx,
-                                    ly,
-                                    lz,
-                                    shading.tint_data,
-                                    shading.tint_color,
-                                    shading.colormap_uv,
-                                );
+                            let (final_tint_data, final_tint_color, _) = sample_biome_tint(
+                                padded.biome_data.as_deref(),
+                                lx,
+                                ly,
+                                lz,
+                                shading.tint_data,
+                                shading.tint_color,
+                                shading.colormap_uv,
+                            );
 
                             emit_baked_face(
                                 &mut mesh,
@@ -322,7 +321,6 @@ impl SectionMesher {
                                 &shading,
                                 final_tint_data,
                                 final_tint_color,
-                                final_colormap_uv,
                                 block_pos,
                                 face_dir,
                             );
@@ -430,16 +428,15 @@ impl SectionMesher {
                                 get_padded_neighbor_state,
                             );
 
-                            let (final_tint_data, final_tint_color, final_colormap_uv) =
-                                sample_biome_tint(
-                                    padded.biome_data.as_deref(),
-                                    lx,
-                                    ly,
-                                    lz,
-                                    shading.tint_data,
-                                    shading.tint_color,
-                                    shading.colormap_uv,
-                                );
+                            let (final_tint_data, final_tint_color, _) = sample_biome_tint(
+                                padded.biome_data.as_deref(),
+                                lx,
+                                ly,
+                                lz,
+                                shading.tint_data,
+                                shading.tint_color,
+                                shading.colormap_uv,
+                            );
 
                             let grid_ctx = grid_pool
                                 .as_mut()
@@ -457,7 +454,6 @@ impl SectionMesher {
                                 &shading,
                                 final_tint_data,
                                 final_tint_color,
-                                final_colormap_uv,
                                 block_pos,
                                 grid_ctx,
                             );

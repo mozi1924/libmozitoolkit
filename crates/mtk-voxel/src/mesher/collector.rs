@@ -10,15 +10,11 @@ use mtk_core::mesh::MeshData;
 #[derive(Debug, Clone, Default)]
 pub struct FaceAttributesCollector {
     pub source_texture_keys: Vec<String>,
-    pub material_slots: Vec<i32>,
     pub atlas_chunk_ids: Vec<i32>,
-    pub atlas_texture_ids: Vec<u32>,
     pub uv_transforms: Vec<[f32; 4]>,
     pub uv_rotations: Vec<f32>,
-    pub uv_modes: Vec<u8>,
     pub biome_tint_data: Vec<[f32; 4]>,
     pub biome_tint_colors: Vec<[f32; 4]>,
-    pub colormap_uvs: Vec<[f32; 3]>,
     pub emissions: Vec<f32>,
     pub block_xs: Vec<i32>,
     pub block_ys: Vec<i32>,
@@ -32,15 +28,11 @@ impl FaceAttributesCollector {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             source_texture_keys: Vec::with_capacity(capacity),
-            material_slots: Vec::with_capacity(capacity),
             atlas_chunk_ids: Vec::with_capacity(capacity),
-            atlas_texture_ids: Vec::with_capacity(capacity),
             uv_transforms: Vec::with_capacity(capacity),
             uv_rotations: Vec::with_capacity(capacity),
-            uv_modes: Vec::with_capacity(capacity),
             biome_tint_data: Vec::with_capacity(capacity),
             biome_tint_colors: Vec::with_capacity(capacity),
-            colormap_uvs: Vec::with_capacity(capacity),
             emissions: Vec::with_capacity(capacity),
             block_xs: Vec::with_capacity(capacity),
             block_ys: Vec::with_capacity(capacity),
@@ -56,15 +48,11 @@ impl FaceAttributesCollector {
     pub fn push_face(
         &mut self,
         source_texture_key: String,
-        material_slot: i32,
         atlas_chunk_id: i32,
-        atlas_texture_id: u32,
         uv_transform: [f32; 4],
         uv_rotation: f32,
-        uv_mode: u8,
         tint_data: [f32; 4],
         tint_color: [f32; 4],
-        colormap_uv: [f32; 3],
         emission: f32,
         block_pos: IVec3,
         face_dir: u8,
@@ -72,15 +60,11 @@ impl FaceAttributesCollector {
         anim_frame_size: [f32; 3],
     ) {
         self.source_texture_keys.push(source_texture_key);
-        self.material_slots.push(material_slot);
         self.atlas_chunk_ids.push(atlas_chunk_id);
-        self.atlas_texture_ids.push(atlas_texture_id);
         self.uv_transforms.push(uv_transform);
         self.uv_rotations.push(uv_rotation);
-        self.uv_modes.push(uv_mode);
         self.biome_tint_data.push(tint_data);
         self.biome_tint_colors.push(tint_color);
-        self.colormap_uvs.push(colormap_uv);
         self.emissions.push(emission);
         self.block_xs.push(block_pos.x);
         self.block_ys.push(block_pos.y);
@@ -97,19 +81,9 @@ impl FaceAttributesCollector {
             AttributeData::String(self.source_texture_keys),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_material_slot",
-            AttributeDomain::Face,
-            AttributeData::Int32(self.material_slots),
-        ));
-        mesh.add_custom_attribute(MeshAttribute::new(
             "mtk_atlas_chunk_id",
             AttributeDomain::Face,
             AttributeData::Int32(self.atlas_chunk_ids),
-        ));
-        mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_atlas_texture_id",
-            AttributeDomain::Face,
-            AttributeData::UInt32(self.atlas_texture_ids),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
             "mtk_uv_transform",
@@ -122,11 +96,6 @@ impl FaceAttributesCollector {
             AttributeData::Float(self.uv_rotations),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_uv_mode",
-            AttributeDomain::Face,
-            AttributeData::UInt8(self.uv_modes),
-        ));
-        mesh.add_custom_attribute(MeshAttribute::new(
             "mtk_biome_tint_data",
             AttributeDomain::Face,
             AttributeData::Float4(self.biome_tint_data),
@@ -135,11 +104,6 @@ impl FaceAttributesCollector {
             "mtk_biome_tint_color",
             AttributeDomain::Face,
             AttributeData::Float4(self.biome_tint_colors),
-        ));
-        mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_colormap_uv",
-            AttributeDomain::Face,
-            AttributeData::Float3(self.colormap_uvs),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
             "mtk_block_x",
@@ -166,14 +130,6 @@ impl FaceAttributesCollector {
             AttributeDomain::Face,
             AttributeData::Float(self.emissions),
         ));
-
-        // Animation timing and metrics attributes
-        let anim_total_frames: Vec<f32> = self.anim_timings.iter().map(|t| t[0]).collect();
-        let anim_frametimes: Vec<f32> = self.anim_timings.iter().map(|t| t[1]).collect();
-        let anim_interpolates: Vec<f32> = self.anim_timings.iter().map(|t| t[2]).collect();
-        let anim_frame_widths: Vec<f32> = self.anim_frame_sizes.iter().map(|s| s[0]).collect();
-        let anim_frame_heights: Vec<f32> = self.anim_frame_sizes.iter().map(|s| s[1]).collect();
-
         mesh.add_custom_attribute(MeshAttribute::new(
             "mtk_anim_timing",
             AttributeDomain::Face,
@@ -183,31 +139,6 @@ impl FaceAttributesCollector {
             "mtk_anim_frame_size",
             AttributeDomain::Face,
             AttributeData::Float3(self.anim_frame_sizes),
-        ));
-        mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_anim_total_frames",
-            AttributeDomain::Face,
-            AttributeData::Float(anim_total_frames),
-        ));
-        mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_anim_frametime",
-            AttributeDomain::Face,
-            AttributeData::Float(anim_frametimes),
-        ));
-        mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_anim_interpolate",
-            AttributeDomain::Face,
-            AttributeData::Float(anim_interpolates),
-        ));
-        mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_anim_frame_width",
-            AttributeDomain::Face,
-            AttributeData::Float(anim_frame_widths),
-        ));
-        mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_anim_frame_height",
-            AttributeDomain::Face,
-            AttributeData::Float(anim_frame_heights),
         ));
     }
 }
