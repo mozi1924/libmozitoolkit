@@ -123,7 +123,7 @@ def build_wheels(
 
     manifests = [
         repo_root / "bindings" / "mtk-py" / "Cargo.toml",
-        repo_root / "bindings" / "mtk-blender-dna-py" / "Cargo.toml",
+        repo_root / "adapters" / "blender" / "mtk-blender-dna-py" / "Cargo.toml",
     ]
     before = set(out_dir.glob("*.whl")) if out_dir.exists() else set()
     for manifest in manifests:

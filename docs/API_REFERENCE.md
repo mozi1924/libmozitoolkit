@@ -25,7 +25,7 @@
 | **Layer 3: 独立命令行** | **[`mtk-cli`](../crates/mtk-cli/README.md)** | **P1 核心工具**：独立无头命令行终端工具 (`mtk`)，支持图集烘焙、模型导出、CTM 求解与遮挡校验 | [查看 API 手册 ↗](../crates/mtk-cli/README.md) |
 | **Layer 3: 性能基准测试** | **[`mtk-bench`](../crates/mtk-bench/README.md)** | **P1 压测套件**：4000+ 区块段多核网格化与数百万次遮挡剔除压力基准套件 | [查看 API 手册 ↗](../crates/mtk-bench/README.md) |
 | **Layer 3: WebAssembly** | **[`mtk-wasm`](../bindings/mtk-wasm/README.md)** | **P2 远期预备**：wasm-bindgen WebAssembly 绑定，暴露线性内存 TypedArray 视图，面向 WebGPU / Three.js 网页预览 | [查看 API 手册 ↗](../bindings/mtk-wasm/README.md) |
-| **Layer 3: 宿主内存适配** | **[`mtk-host-memory`](../crates/mtk-host-memory/README.md)** / **[`mtk-blender-dna`](../bindings/mtk-blender-dna/README.md)** | **P0 DNA 适配**：通用 raw slice → pointer 复制 + Blender 语义包装；独立 `libmtk_blender_dna` wheel，核心不依赖它 | [查看 API 手册 ↗](../bindings/mtk-blender-dna/README.md) |
+| **Layer 3: 宿主内存适配** | **[`mtk-host-memory`](../adapters/mtk-host-memory/README.md)** / **[`mtk-blender-dna`](../adapters/blender/mtk-blender-dna/README.md)** | **P0 DNA 适配**：通用 raw slice → pointer 复制 + Blender 语义包装；独立 `libmtk_blender_dna` wheel，核心不依赖它 | [查看 API 手册 ↗](../adapters/blender/mtk-blender-dna/README.md) |
 
 ---
 

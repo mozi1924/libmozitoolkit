@@ -43,7 +43,7 @@
 ### 规则 6：双轮子体系与双态开发构建规范 (Dual-Wheel & Dual-Mode Build Policy)
 - **双轮子划分**：
   - `bindings/mtk-py`：编译产出通用的 `libmtk_py` 扩展；
-  - `bindings/mtk-blender-dna`：编译产出专为 Blender C++ 内存直写打造的独立 `libmtk_blender_dna` 适配器扩展。
+  - `adapters/blender/mtk-blender-dna-py`：编译产出专为 Blender C++ 内存直写打造的独立 `libmtk_blender_dna` 适配器扩展。
 - **工作区虚拟环境约束**：编译与调试 Python 绑定轮子时，必须严格使用工作区内的虚拟环境（`./.venv`），严禁污染全局环境。
 - **开发态直通与发布态隔离 (Dev Direct-Link vs Release Wheel Isolation)**：
   - **日常开发态 (Dev Direct Link)**：使用 `cargo build-py` 产出动态库，通过软链接（`MoziToolKit/dev/lib/`）直通 Blender 插件前端，修改编译后即时生效，开发期严禁频繁构建安装轮子。
@@ -66,7 +66,7 @@
 - 公共 API 变更时必须同步维护该 Crate 自身的 `README.md` 与根目录 `docs/API_REFERENCE.md`。
 
 ### 规则 10：内存安全、可见性与 Panic 防御规约 (Safety, Visibility & Panic Defense)
-- **禁止在生产代码中滥用 Panic**：胶水层（`bindings/mtk-py`, `bindings/mtk-blender-dna`）严禁在非测试代码中随意调用 `.unwrap()` / `.expect()`；必须通过 `Result` / `PyResult` 进行优雅的错误向上传播。
+- **禁止在生产代码中滥用 Panic**：胶水层与适配层（`bindings/mtk-py`, `adapters/blender/mtk-blender-dna` 等）严禁在非测试代码中随意调用 `.unwrap()` / `.expect()`；必须通过 `Result` / `PyResult` 进行优雅的错误向上传播。
 - **最小可见性原则**：严格控制结构体字段与内部辅助函数的可见性，严禁为了跨模块调用方便而滥用 `pub`。
 
 ### 规则 11：全链路性能探针规范 (mtk-profile Probes)
@@ -109,10 +109,12 @@ libmozitoolkit/
 │   ├── mtk-bench/      -> 性能压测与基准测试套件
 │   ├── mtk-cli/        -> 独立命令行工具 (mtk)
 │   └── mtk-testkit/    -> 仅测试用资产解析器与内置 JSON fixtures (publish = false)
-└── bindings/
-    ├── mtk-py/          -> 宿主无关 PyO3 + maturin Python 绑定 (libmtk_py)
-    ├── mtk-blender-dna/ -> 专为 Blender 打造的 C++ 连续内存直接写入适配器 (libmtk_blender_dna)
-    └── mtk-wasm/        -> wasm-bindgen WebAssembly 绑定
+├── bindings/
+│   ├── mtk-py/          -> 宿主无关 PyO3 + maturin Python 绑定 (libmtk_py)
+│   └── mtk-wasm/        -> wasm-bindgen WebAssembly 绑定
+└── adapters/
+    ├── mtk-host-memory/ -> 宿主硬件内存指针检查与原始切片复制基础底座
+    └── blender/         -> 专为 Blender 打造的 C++ 连续内存直接写入适配器 (mtk-blender-dna / libmtk_blender_dna)
 ```
 
 ---

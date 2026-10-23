@@ -94,7 +94,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux || 'off' }}
-          args: --release --out dist -m bindings/mtk-blender-dna-py/Cargo.toml
+          args: --release --out dist -m adapters/blender/mtk-blender-dna-py/Cargo.toml
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
