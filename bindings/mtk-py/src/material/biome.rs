@@ -160,7 +160,7 @@ pub fn get_all_biomes(py: Python<'_>) -> PyResult<Py<PyAny>> {
     Ok(list.into())
 }
 
-/// Sample resident vanilla colormap linear RGBA colors from temperature and humidity.
+/// Sample resident vanilla colormap linear RGBA colors and hex strings from temperature and humidity.
 #[pyfunction]
 #[pyo3(signature = (temperature, humidity))]
 pub fn sample_colormap_colors(
@@ -181,6 +181,21 @@ pub fn sample_colormap_colors(
     dict.set_item(
         "dry_foliage_linear",
         cms.sample_dry_foliage_linear(temperature, humidity),
+    )?;
+    dict.set_item("grass_srgb", cms.sample_grass_srgb(temperature, humidity))?;
+    dict.set_item(
+        "foliage_srgb",
+        cms.sample_foliage_srgb(temperature, humidity),
+    )?;
+    dict.set_item(
+        "dry_foliage_srgb",
+        cms.sample_dry_foliage_srgb(temperature, humidity),
+    )?;
+    dict.set_item("grass_hex", cms.sample_grass_hex(temperature, humidity))?;
+    dict.set_item("foliage_hex", cms.sample_foliage_hex(temperature, humidity))?;
+    dict.set_item(
+        "dry_foliage_hex",
+        cms.sample_dry_foliage_hex(temperature, humidity),
     )?;
     Ok(dict.into())
 }

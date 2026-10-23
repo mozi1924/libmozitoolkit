@@ -9,7 +9,7 @@
 
 use std::sync::{Arc, OnceLock, RwLock};
 
-use super::palettes::{sample_colormap_pixel, srgb_to_linear};
+use super::palettes::{sample_colormap_hex, sample_colormap_pixel, srgb_to_linear};
 
 const GRASS_PNG: &[u8] = include_bytes!("../../assets/colormap/grass.png");
 const FOLIAGE_PNG: &[u8] = include_bytes!("../../assets/colormap/foliage.png");
@@ -170,6 +170,45 @@ impl VanillaColormaps {
             1.0,
         ]
     }
+
+    /// Sample grass color directly as uppercase hex string `#RRGGBB`.
+    #[inline]
+    pub fn sample_grass_hex(&self, temperature: f32, downfall: f32) -> String {
+        sample_colormap_hex(
+            &self.grass_pixels,
+            self.grass_width as u32,
+            self.grass_height as u32,
+            temperature,
+            downfall,
+            3,
+        )
+    }
+
+    /// Sample foliage color directly as uppercase hex string `#RRGGBB`.
+    #[inline]
+    pub fn sample_foliage_hex(&self, temperature: f32, downfall: f32) -> String {
+        sample_colormap_hex(
+            &self.foliage_pixels,
+            self.foliage_width as u32,
+            self.foliage_height as u32,
+            temperature,
+            downfall,
+            3,
+        )
+    }
+
+    /// Sample dry foliage color directly as uppercase hex string `#RRGGBB`.
+    #[inline]
+    pub fn sample_dry_foliage_hex(&self, temperature: f32, downfall: f32) -> String {
+        sample_colormap_hex(
+            &self.dry_foliage_pixels,
+            self.dry_foliage_width as u32,
+            self.dry_foliage_height as u32,
+            temperature,
+            downfall,
+            3,
+        )
+    }
 }
 
 /// Embedded vanilla fallback, decoded once.
@@ -222,7 +261,7 @@ pub fn clear_cached_colormaps() {
 }
 
 /// Applies the vanilla `GrassColorModifier.DARK_FOREST` to a base sRGB grass color:
-/// `((baseColor & 0xFEFEFE) + 0x28340A) >> 1`
+/// `((baseColor & 0xFEFEFE) + 0x28340A) >> 1` (where 0x28340A is 2634762)
 /// Returns the resulting Linear RGBA.
 pub fn apply_dark_forest_grass_modifier(base_srgb: [f32; 3]) -> [f32; 4] {
     let r = (base_srgb[0] * 255.0).round().clamp(0.0, 255.0) as u32;

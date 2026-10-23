@@ -407,10 +407,11 @@ fn test_resident_colormap_sampling_and_modifiers() {
     let df_b = (linear_to_srgb(df_grass[2]) * 255.0).round() as u8;
     assert_eq!((df_r, df_g, df_b), (80, 122, 50));
 
-    // 3. Foliage sample in dark forest directly from colormap: (88, 174, 49)
+    // 3. Foliage sample in dark forest directly from colormap: (89, 174, 48)
+    // In vanilla ColorMapColorUtil, temp=0.7, downfall=0.8 truncates to x=76, y=112 -> (89, 174, 48)
     let fol_srgb = cms.sample_foliage_srgb(0.7, 0.8);
     let fol_r = (fol_srgb[0] * 255.0).round() as u8;
     let fol_g = (fol_srgb[1] * 255.0).round() as u8;
     let fol_b = (fol_srgb[2] * 255.0).round() as u8;
-    assert_eq!((fol_r, fol_g, fol_b), (88, 174, 49));
+    assert_eq!((fol_r, fol_g, fol_b), (89, 174, 48));
 }

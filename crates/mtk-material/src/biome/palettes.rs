@@ -98,7 +98,8 @@ impl BiomePalette {
         let base = CANONICAL_BIOMES.as_ptr() as usize;
         let cur = self as *const BiomePalette as usize;
         let stride = std::mem::size_of::<BiomePalette>();
-        let total_bytes = std::mem::size_of_val(CANONICAL_BIOMES);
+        #[allow(clippy::manual_slice_size_calculation)]
+        let total_bytes = CANONICAL_BIOMES.len() * stride;
         if cur >= base && cur < base + total_bytes && (cur - base) % stride == 0 {
             Some((cur - base) / stride)
         } else {
@@ -217,9 +218,16 @@ pub fn blend_biome_colors(biome_weights: &[(&str, f32)], channel: &str) -> [f32;
     }
 }
 
-/// Sample an sRGB color [r, g, b] from 2D colormap image bytes using canonical Minecraft coordinates:
-/// i = (1.0 - temp) * 255
-/// j = (1.0 - (downfall * temp)) * 255
+/// Sample normalized sRGB float components `[r, g, b]` from 2D colormap image bytes.
+///
+/// Strictly aligns with Minecraft's `net.minecraft.world.level.ColorMapColorUtil.get`:
+/// ```text
+/// rain = rain * temp;
+/// int x = (int)((1.0 - temp) * 255.0);
+/// int y = (int)((1.0 - rain) * 255.0);
+/// int index = (y << 8) | x;
+/// ```
+#[inline]
 pub fn sample_colormap_pixel(
     image_pixels: &[u8],
     width: u32,
@@ -228,29 +236,57 @@ pub fn sample_colormap_pixel(
     downfall: f32,
     channels: usize,
 ) -> [f32; 3] {
-    if width == 0 || height == 0 || image_pixels.is_empty() || channels < 3 {
-        return [1.0, 1.0, 1.0];
-    }
-    let temp = temperature.clamp(0.0, 1.0);
-    let hum = downfall.clamp(0.0, 1.0);
-    let adj_downfall = hum * temp;
-    let i = ((1.0 - temp) * (width as f32 - 1.0))
-        .round()
-        .clamp(0.0, width as f32 - 1.0) as usize;
-    let j = ((1.0 - adj_downfall) * (height as f32 - 1.0))
-        .round()
-        .clamp(0.0, height as f32 - 1.0) as usize;
+    let [r, g, b] =
+        sample_colormap_pixel_u8(image_pixels, width, height, temperature, downfall, channels);
+    [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0]
+}
 
-    let idx = (j * width as usize + i) * channels;
+/// Sample raw sRGB bytes `[r, g, b]` from a colormap buffer using authoritative Minecraft truncation.
+#[inline]
+pub fn sample_colormap_pixel_u8(
+    image_pixels: &[u8],
+    width: u32,
+    height: u32,
+    temperature: f32,
+    downfall: f32,
+    channels: usize,
+) -> [u8; 3] {
+    if width == 0 || height == 0 || image_pixels.is_empty() || channels < 3 {
+        return [255, 255, 255];
+    }
+    let temp = (temperature as f64).clamp(0.0, 1.0);
+    let hum = (downfall as f64).clamp(0.0, 1.0);
+    let rain = hum * temp;
+
+    // Strict alignment with Java (int)((1.0 - temp) * 255.0) truncation
+    let x = (((1.0 - temp) * (width as f64 - 1.0)) as usize).min(width as usize - 1);
+    let y = (((1.0 - rain) * (height as f64 - 1.0)) as usize).min(height as usize - 1);
+
+    let idx = (y * width as usize + x) * channels;
     if idx + 2 < image_pixels.len() {
         [
-            image_pixels[idx] as f32 / 255.0,
-            image_pixels[idx + 1] as f32 / 255.0,
-            image_pixels[idx + 2] as f32 / 255.0,
+            image_pixels[idx],
+            image_pixels[idx + 1],
+            image_pixels[idx + 2],
         ]
     } else {
-        [1.0, 1.0, 1.0]
+        [255, 255, 255]
     }
+}
+
+/// Sample colormap color and format directly as uppercase hex string (e.g. `"#91BD59"`).
+#[inline]
+pub fn sample_colormap_hex(
+    image_pixels: &[u8],
+    width: u32,
+    height: u32,
+    temperature: f32,
+    downfall: f32,
+    channels: usize,
+) -> String {
+    let [r, g, b] =
+        sample_colormap_pixel_u8(image_pixels, width, height, temperature, downfall, channels);
+    format!("#{r:02X}{g:02X}{b:02X}")
 }
 
 #[cfg(test)]
