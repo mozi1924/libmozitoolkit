@@ -75,25 +75,71 @@ pub struct BiomePalette {
     pub has_custom_dry_foliage: bool,
 }
 
+use std::sync::LazyLock;
+
+static CANONICAL_LINEAR_COLORS: LazyLock<Vec<([f32; 4], [f32; 4], [f32; 4], [f32; 4])>> =
+    LazyLock::new(|| {
+        CANONICAL_BIOMES
+            .iter()
+            .map(|b| {
+                (
+                    hex_to_linear_rgba(b.grass_hex),
+                    hex_to_linear_rgba(b.foliage_hex),
+                    hex_to_linear_rgba(b.dry_foliage_hex),
+                    hex_to_linear_rgba(b.water_hex),
+                )
+            })
+            .collect()
+    });
+
 impl BiomePalette {
     #[inline]
+    fn precomputed_index(&self) -> Option<usize> {
+        let base = CANONICAL_BIOMES.as_ptr() as usize;
+        let cur = self as *const BiomePalette as usize;
+        let stride = std::mem::size_of::<BiomePalette>();
+        let total_bytes = std::mem::size_of_val(CANONICAL_BIOMES);
+        if cur >= base && cur < base + total_bytes && (cur - base) % stride == 0 {
+            Some((cur - base) / stride)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
     pub fn grass_linear(&self) -> [f32; 4] {
-        hex_to_linear_rgba(self.grass_hex)
+        if let Some(idx) = self.precomputed_index() {
+            CANONICAL_LINEAR_COLORS[idx].0
+        } else {
+            hex_to_linear_rgba(self.grass_hex)
+        }
     }
 
     #[inline]
     pub fn foliage_linear(&self) -> [f32; 4] {
-        hex_to_linear_rgba(self.foliage_hex)
+        if let Some(idx) = self.precomputed_index() {
+            CANONICAL_LINEAR_COLORS[idx].1
+        } else {
+            hex_to_linear_rgba(self.foliage_hex)
+        }
     }
 
     #[inline]
     pub fn dry_foliage_linear(&self) -> [f32; 4] {
-        hex_to_linear_rgba(self.dry_foliage_hex)
+        if let Some(idx) = self.precomputed_index() {
+            CANONICAL_LINEAR_COLORS[idx].2
+        } else {
+            hex_to_linear_rgba(self.dry_foliage_hex)
+        }
     }
 
     #[inline]
     pub fn water_linear(&self) -> [f32; 4] {
-        hex_to_linear_rgba(self.water_hex)
+        if let Some(idx) = self.precomputed_index() {
+            CANONICAL_LINEAR_COLORS[idx].3
+        } else {
+            hex_to_linear_rgba(self.water_hex)
+        }
     }
 
     #[inline]

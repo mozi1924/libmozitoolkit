@@ -19,10 +19,14 @@ use crate::parser::model_json::{BlockModelJson, ResolvedBlockModel};
 ///
 /// Bakes arbitrary BlockStates and models (both native Minecraft JSON models and Mod Wavefront OBJ meshes)
 /// into fully realized geometry completely independent of Blender or any external 3D runtime.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ModelBaker {
     /// In-memory cache for baked models keyed by canonical BlockState string.
     bake_cache: HashMap<String, BakedModel>,
+    /// Thread-local cache for dynamically resolved model hierarchies.
+    resolved_cache: HashMap<String, std::sync::Arc<ResolvedBlockModel>>,
+    /// Shared pre-resolved model database (zero-copy read across threads).
+    shared_resolved: Option<std::sync::Arc<HashMap<String, std::sync::Arc<ResolvedBlockModel>>>>,
 }
 
 impl ModelBaker {
@@ -31,9 +35,21 @@ impl ModelBaker {
         Self::default()
     }
 
-    /// Clears the internal bake cache.
+    /// Creates a new `ModelBaker` sharing a pre-resolved model database.
+    pub fn with_shared_resolved(
+        shared: std::sync::Arc<HashMap<String, std::sync::Arc<ResolvedBlockModel>>>,
+    ) -> Self {
+        Self {
+            bake_cache: HashMap::new(),
+            resolved_cache: HashMap::new(),
+            shared_resolved: Some(shared),
+        }
+    }
+
+    /// Clears the internal bake cache and resolved model cache.
     pub fn clear_cache(&mut self) {
         self.bake_cache.clear();
+        self.resolved_cache.clear();
     }
 
     /// Bakes a BlockState into a `BakedModel` using supplied JSON definitions and model loaders.
@@ -129,77 +145,12 @@ impl ModelBaker {
         let allow_blockstate_builtin = variant_matches.len() == 1;
 
         for variant in variant_matches {
-            let resolved = if let Some(external) = model_loader(&variant.model_id) {
-                let r = external.resolve_hierarchy(&variant.model_id, |id| {
-                    model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
-                })?;
-                let clean_block = blockstate
-                    .name
-                    .strip_prefix("minecraft:")
-                    .unwrap_or(&blockstate.name);
-                let is_missing_bell_body =
-                    clean_block == "bell" && !r.textures.contains_key("bell_body");
-                if r.elements.is_empty() || is_missing_bell_body {
-                    // External model is empty (e.g. vanilla Java BER dummy block/skull.json or chest).
-                    // Fallback to builtin model for this blockstate (if single variant) or variant ID.
-                    if allow_blockstate_builtin {
-                        if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(blockstate) {
-                            builtin.resolve_hierarchy(&variant.model_id, |id| {
-                                model_loader(id)
-                                    .or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
-                            })?
-                        } else if let Some(builtin) =
-                            BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id)
-                        {
-                            builtin.resolve_hierarchy(&variant.model_id, |id| {
-                                model_loader(id)
-                                    .or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
-                            })?
-                        } else {
-                            r
-                        }
-                    } else if let Some(builtin) =
-                        BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id)
-                    {
-                        builtin.resolve_hierarchy(&variant.model_id, |id| {
-                            model_loader(id)
-                                .or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
-                        })?
-                    } else {
-                        r
-                    }
-                } else {
-                    r
-                }
-            } else {
-                // No external model found for variant.model_id.
-                if allow_blockstate_builtin {
-                    if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(blockstate) {
-                        builtin.resolve_hierarchy(&variant.model_id, |id| {
-                            model_loader(id)
-                                .or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
-                        })?
-                    } else if let Some(builtin) =
-                        BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id)
-                    {
-                        builtin.resolve_hierarchy(&variant.model_id, |id| {
-                            model_loader(id)
-                                .or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
-                        })?
-                    } else {
-                        ResolvedBlockModel::default()
-                    }
-                } else if let Some(builtin) =
-                    BuiltinModelRegistry::get_builtin_model_by_id(&variant.model_id)
-                {
-                    builtin.resolve_hierarchy(&variant.model_id, |id| {
-                        model_loader(id)
-                            .or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
-                    })?
-                } else {
-                    ResolvedBlockModel::default()
-                }
-            };
+            let resolved = self.resolve_variant_model(
+                &variant.model_id,
+                blockstate,
+                allow_blockstate_builtin,
+                model_loader,
+            )?;
 
             for elem in &resolved.elements {
                 let from_pos = elem.from;
@@ -409,6 +360,102 @@ impl ModelBaker {
         baked_model.rebuild_face_buckets();
 
         Ok(baked_model)
+    }
+
+    fn resolve_variant_model<F>(
+        &mut self,
+        model_id: &str,
+        blockstate: &BlockState,
+        allow_blockstate_builtin: bool,
+        model_loader: &mut F,
+    ) -> Result<std::sync::Arc<ResolvedBlockModel>, ModelError>
+    where
+        F: FnMut(&str) -> Option<BlockModelJson>,
+    {
+        let clean_block = blockstate
+            .name
+            .strip_prefix("minecraft:")
+            .unwrap_or(&blockstate.name);
+        let is_bell = clean_block == "bell";
+
+        // Fast path: check shared pre-resolved cache and local cache
+        if !is_bell {
+            if let Some(ref shared) = self.shared_resolved {
+                if let Some(r) = shared.get(model_id) {
+                    if !r.elements.is_empty() {
+                        return Ok(std::sync::Arc::clone(r));
+                    }
+                }
+            }
+            if let Some(r) = self.resolved_cache.get(model_id) {
+                if !r.elements.is_empty() {
+                    return Ok(std::sync::Arc::clone(r));
+                }
+            }
+        }
+
+        // Full resolution path
+        let r = if let Some(external) = model_loader(model_id) {
+            let res = external.resolve_hierarchy(model_id, |id| {
+                model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+            })?;
+            let is_missing_bell_body = is_bell && !res.textures.contains_key("bell_body");
+            if res.elements.is_empty() || is_missing_bell_body {
+                if allow_blockstate_builtin {
+                    if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(blockstate) {
+                        builtin.resolve_hierarchy(model_id, |id| {
+                            model_loader(id)
+                                .or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                        })?
+                    } else if let Some(builtin) =
+                        BuiltinModelRegistry::get_builtin_model_by_id(model_id)
+                    {
+                        builtin.resolve_hierarchy(model_id, |id| {
+                            model_loader(id)
+                                .or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                        })?
+                    } else {
+                        res
+                    }
+                } else if let Some(builtin) =
+                    BuiltinModelRegistry::get_builtin_model_by_id(model_id)
+                {
+                    builtin.resolve_hierarchy(model_id, |id| {
+                        model_loader(id)
+                            .or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                    })?
+                } else {
+                    res
+                }
+            } else {
+                res
+            }
+        } else if allow_blockstate_builtin {
+            if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(blockstate) {
+                builtin.resolve_hierarchy(model_id, |id| {
+                    model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                })?
+            } else if let Some(builtin) = BuiltinModelRegistry::get_builtin_model_by_id(model_id) {
+                builtin.resolve_hierarchy(model_id, |id| {
+                    model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+                })?
+            } else {
+                ResolvedBlockModel::default()
+            }
+        } else if let Some(builtin) = BuiltinModelRegistry::get_builtin_model_by_id(model_id) {
+            builtin.resolve_hierarchy(model_id, |id| {
+                model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
+            })?
+        } else {
+            ResolvedBlockModel::default()
+        };
+
+        let arc_r = std::sync::Arc::new(r);
+        if !is_bell && !arc_r.elements.is_empty() {
+            self.resolved_cache
+                .insert(model_id.to_string(), std::sync::Arc::clone(&arc_r));
+        }
+        Ok(arc_r)
     }
 
     /// Bakes a Wavefront OBJ mesh into a `BakedModel`.

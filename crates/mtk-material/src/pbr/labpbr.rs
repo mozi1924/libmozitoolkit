@@ -10,7 +10,12 @@
 //! All arithmetic is `f32`; the packed output is 8-bit. The formulas are the
 //! canonical contract documented in `pbr_channel_spec.md`.
 
+use std::sync::LazyLock;
+
 use mtk_texture::RgbaBuffer;
+
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
 
 use crate::error::MaterialError;
 use crate::pbr::types::{DecodedPbr, PbrMeta};
@@ -20,6 +25,38 @@ use crate::pbr::types::{DecodedPbr, PbrMeta};
 const DEFAULT_SMOOTHNESS: f32 = 0.292_893;
 const DEFAULT_IOR: f32 = 1.5;
 const MAX_IOR: f32 = 8.0;
+
+static IOR_LUT: LazyLock<[u8; 256]> = LazyLock::new(|| {
+    let mut table = [0u8; 256];
+    for (i, val) in table.iter_mut().enumerate() {
+        *val = encode_ior(ior_from_specular_scalar(i as u8));
+    }
+    table
+});
+
+static EMISSION_LUT: LazyLock<[u8; 256]> = LazyLock::new(|| {
+    let mut table = [0u8; 256];
+    for (i, val) in table.iter_mut().enumerate() {
+        *val = emission_byte_scalar(i as u8);
+    }
+    table
+});
+
+static POROSITY_LUT: LazyLock<[u8; 256]> = LazyLock::new(|| {
+    let mut table = [0u8; 256];
+    for (i, val) in table.iter_mut().enumerate() {
+        *val = porosity_byte_scalar(i as u8);
+    }
+    table
+});
+
+static SSS_LUT: LazyLock<[u8; 256]> = LazyLock::new(|| {
+    let mut table = [0u8; 256];
+    for (i, val) in table.iter_mut().enumerate() {
+        *val = sss_byte_scalar(i as u8);
+    }
+    table
+});
 
 /// Decode a LabPBR 1.3 `_n` / `_s` pair into canonical packed channels.
 ///
@@ -60,43 +97,100 @@ pub fn decode_labpbr13(
         });
     }
 
-    let mut normal_gl = normal.map(|_| RgbaBuffer::new(width, height));
-    let mut orm = Some(RgbaBuffer::new(width, height));
-    let mut aux = specular.map(|_| RgbaBuffer::new(width, height));
+    let default_roughness = encode_unit(1.0 - DEFAULT_SMOOTHNESS);
+    let total_bytes = (width as usize) * (height as usize) * 4;
+    let row_stride = (width as usize) * 4;
 
-    // Defaults are written once so a normal-only chunk still gets a sane ORM sheet.
-    if let Some(buffer) = orm.as_mut() {
-        let default_roughness = encode_unit(1.0 - DEFAULT_SMOOTHNESS);
-        for pixel in buffer.pixels.as_chunks_mut::<4>().0 {
-            pixel[0] = 255;
-            pixel[1] = default_roughness;
-            pixel[2] = 0;
-            pixel[3] = 0;
-        }
-    }
-    if let Some(buffer) = aux.as_mut() {
-        let default_ior = encode_ior(DEFAULT_IOR);
-        for pixel in buffer.pixels.as_chunks_mut::<4>().0 {
-            pixel[0] = default_ior;
-            pixel[1] = 0;
-            pixel[2] = 0;
-            pixel[3] = 0;
-        }
-    }
+    let mut normal_gl_pixels = normal.map(|_| vec![0u8; total_bytes]);
+    let mut orm_pixels = vec![0u8; total_bytes];
+    let mut aux_pixels = specular.map(|_| vec![0u8; total_bytes]);
 
-    let width_usize = width as usize;
-    let row_stride = width_usize * 4;
+    if let (Some(n_src), Some(s_src)) = (normal, specular) {
+        let n_dst = normal_gl_pixels.as_mut().unwrap();
+        let a_dst = aux_pixels.as_mut().unwrap();
 
-    for y in 0..height as usize {
-        let row_start = y * row_stride;
-        for x in 0..width_usize {
-            let offset = row_start + x * 4;
+        let process_row =
+            |n_in: &[u8], s_in: &[u8], n_out: &mut [u8], o_out: &mut [u8], a_out: &mut [u8]| {
+                for ((((n_px, s_px), n_o), o_o), a_o) in n_in
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .zip(s_in.as_chunks::<4>().0.iter())
+                    .zip(n_out.as_chunks_mut::<4>().0.iter_mut())
+                    .zip(o_out.as_chunks_mut::<4>().0.iter_mut())
+                    .zip(a_out.as_chunks_mut::<4>().0.iter_mut())
+                {
+                    let red = n_px[0];
+                    let green = n_px[1];
+                    let blue = n_px[2];
+                    let alpha = n_px[3];
 
-            if let Some(source) = normal {
-                let red = source.pixels[offset];
-                let green = source.pixels[offset + 1];
-                let blue = source.pixels[offset + 2];
-                let alpha = source.pixels[offset + 3];
+                    let normal_x = 2.0 * (red as f32 / 255.0) - 1.0;
+                    let normal_y = 1.0 - 2.0 * (green as f32 / 255.0);
+                    let normal_z = (1.0 - normal_x * normal_x - normal_y * normal_y)
+                        .max(0.0)
+                        .sqrt();
+
+                    n_o[0] = red;
+                    n_o[1] = 255 - green;
+                    n_o[2] = encode_unit(0.5 * normal_z + 0.5);
+                    n_o[3] = alpha;
+
+                    let s_red = s_px[0];
+                    let s_green = s_px[1];
+                    let s_blue = s_px[2];
+                    let s_alpha = s_px[3];
+
+                    o_o[0] = blue; // AO from normal.B
+                    o_o[1] = 255 - s_red; // Roughness from 1.0 - Smoothness
+                    o_o[2] = if s_green >= 230 { 255 } else { 0 }; // Metal
+                    o_o[3] = EMISSION_LUT[s_alpha as usize];
+
+                    a_o[0] = IOR_LUT[s_green as usize];
+                    a_o[1] = POROSITY_LUT[s_blue as usize];
+                    a_o[2] = SSS_LUT[s_blue as usize];
+                    a_o[3] = 0;
+                }
+            };
+
+        #[cfg(feature = "parallel")]
+        n_src
+            .pixels
+            .par_chunks_exact(row_stride)
+            .zip(s_src.pixels.par_chunks_exact(row_stride))
+            .zip(n_dst.par_chunks_exact_mut(row_stride))
+            .zip(orm_pixels.par_chunks_exact_mut(row_stride))
+            .zip(a_dst.par_chunks_exact_mut(row_stride))
+            .for_each(|((((n_in, s_in), n_out), o_out), a_out)| {
+                process_row(n_in, s_in, n_out, o_out, a_out);
+            });
+
+        #[cfg(not(feature = "parallel"))]
+        n_src
+            .pixels
+            .chunks_exact(row_stride)
+            .zip(s_src.pixels.chunks_exact(row_stride))
+            .zip(n_dst.chunks_exact_mut(row_stride))
+            .zip(orm_pixels.chunks_exact_mut(row_stride))
+            .zip(a_dst.chunks_exact_mut(row_stride))
+            .for_each(|((((n_in, s_in), n_out), o_out), a_out)| {
+                process_row(n_in, s_in, n_out, o_out, a_out);
+            });
+    } else if let Some(n_src) = normal {
+        let n_dst = normal_gl_pixels.as_mut().unwrap();
+
+        let process_row = |n_in: &[u8], n_out: &mut [u8], o_out: &mut [u8]| {
+            for ((n_px, n_o), o_o) in n_in
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .zip(n_out.as_chunks_mut::<4>().0.iter_mut())
+                .zip(o_out.as_chunks_mut::<4>().0.iter_mut())
+            {
+                let red = n_px[0];
+                let green = n_px[1];
+                let blue = n_px[2];
+                let alpha = n_px[3];
 
                 let normal_x = 2.0 * (red as f32 / 255.0) - 1.0;
                 let normal_y = 1.0 - 2.0 * (green as f32 / 255.0);
@@ -104,37 +198,101 @@ pub fn decode_labpbr13(
                     .max(0.0)
                     .sqrt();
 
-                if let Some(target) = normal_gl.as_mut() {
-                    target.pixels[offset] = red;
-                    target.pixels[offset + 1] = 255 - green;
-                    target.pixels[offset + 2] = encode_unit(0.5 * normal_z + 0.5);
-                    target.pixels[offset + 3] = alpha;
-                }
-                if let Some(target) = orm.as_mut() {
-                    target.pixels[offset] = blue;
-                }
-            }
+                n_o[0] = red;
+                n_o[1] = 255 - green;
+                n_o[2] = encode_unit(0.5 * normal_z + 0.5);
+                n_o[3] = alpha;
 
-            if let Some(source) = specular {
-                let red = source.pixels[offset];
-                let green = source.pixels[offset + 1];
-                let blue = source.pixels[offset + 2];
-                let alpha = source.pixels[offset + 3];
-
-                if let Some(target) = orm.as_mut() {
-                    target.pixels[offset + 1] = 255 - red;
-                    target.pixels[offset + 2] = if green >= 230 { 255 } else { 0 };
-                    target.pixels[offset + 3] = emission_byte(alpha);
-                }
-                if let Some(target) = aux.as_mut() {
-                    target.pixels[offset] = encode_ior(ior_from_specular(green));
-                    target.pixels[offset + 1] = porosity_byte(blue);
-                    target.pixels[offset + 2] = sss_byte(blue);
-                    target.pixels[offset + 3] = 0;
-                }
+                o_o[0] = blue;
+                o_o[1] = default_roughness;
+                o_o[2] = 0;
+                o_o[3] = 0;
             }
-        }
+        };
+
+        #[cfg(feature = "parallel")]
+        n_src
+            .pixels
+            .par_chunks_exact(row_stride)
+            .zip(n_dst.par_chunks_exact_mut(row_stride))
+            .zip(orm_pixels.par_chunks_exact_mut(row_stride))
+            .for_each(|((n_in, n_out), o_out)| {
+                process_row(n_in, n_out, o_out);
+            });
+
+        #[cfg(not(feature = "parallel"))]
+        n_src
+            .pixels
+            .chunks_exact(row_stride)
+            .zip(n_dst.chunks_exact_mut(row_stride))
+            .zip(orm_pixels.chunks_exact_mut(row_stride))
+            .for_each(|((n_in, n_out), o_out)| {
+                process_row(n_in, n_out, o_out);
+            });
+    } else if let Some(s_src) = specular {
+        let a_dst = aux_pixels.as_mut().unwrap();
+
+        let process_row = |s_in: &[u8], o_out: &mut [u8], a_out: &mut [u8]| {
+            for ((s_px, o_o), a_o) in s_in
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .zip(o_out.as_chunks_mut::<4>().0.iter_mut())
+                .zip(a_out.as_chunks_mut::<4>().0.iter_mut())
+            {
+                let s_red = s_px[0];
+                let s_green = s_px[1];
+                let s_blue = s_px[2];
+                let s_alpha = s_px[3];
+
+                o_o[0] = 255;
+                o_o[1] = 255 - s_red;
+                o_o[2] = if s_green >= 230 { 255 } else { 0 };
+                o_o[3] = EMISSION_LUT[s_alpha as usize];
+
+                a_o[0] = IOR_LUT[s_green as usize];
+                a_o[1] = POROSITY_LUT[s_blue as usize];
+                a_o[2] = SSS_LUT[s_blue as usize];
+                a_o[3] = 0;
+            }
+        };
+
+        #[cfg(feature = "parallel")]
+        s_src
+            .pixels
+            .par_chunks_exact(row_stride)
+            .zip(orm_pixels.par_chunks_exact_mut(row_stride))
+            .zip(a_dst.par_chunks_exact_mut(row_stride))
+            .for_each(|((s_in, o_out), a_out)| {
+                process_row(s_in, o_out, a_out);
+            });
+
+        #[cfg(not(feature = "parallel"))]
+        s_src
+            .pixels
+            .chunks_exact(row_stride)
+            .zip(orm_pixels.chunks_exact_mut(row_stride))
+            .zip(a_dst.chunks_exact_mut(row_stride))
+            .for_each(|((s_in, o_out), a_out)| {
+                process_row(s_in, o_out, a_out);
+            });
     }
+
+    let normal_gl = normal_gl_pixels.map(|pixels| RgbaBuffer {
+        width,
+        height,
+        pixels,
+    });
+    let orm = Some(RgbaBuffer {
+        width,
+        height,
+        pixels: orm_pixels,
+    });
+    let aux = aux_pixels.map(|pixels| RgbaBuffer {
+        width,
+        height,
+        pixels,
+    });
 
     Ok(DecodedPbr {
         normal_gl,
@@ -166,7 +324,7 @@ fn ensure_size(buffer: &RgbaBuffer, width: u32, height: u32) -> Result<(), Mater
 
 /// LabPBR dielectric F0 / metal threshold -> IOR.
 #[inline]
-fn ior_from_specular(green: u8) -> f32 {
+fn ior_from_specular_scalar(green: u8) -> f32 {
     if green >= 230 {
         return DEFAULT_IOR;
     }
@@ -181,7 +339,7 @@ fn ior_from_specular(green: u8) -> f32 {
 
 /// LabPBR `_s.A`: 255 means "no data", 254 means 100%.
 #[inline]
-fn emission_byte(alpha: u8) -> u8 {
+fn emission_byte_scalar(alpha: u8) -> u8 {
     if alpha == 255 {
         0
     } else {
@@ -191,7 +349,7 @@ fn emission_byte(alpha: u8) -> u8 {
 
 /// LabPBR `_s.B` 0..64 is porosity (64 = 100%).
 #[inline]
-fn porosity_byte(blue: u8) -> u8 {
+fn porosity_byte_scalar(blue: u8) -> u8 {
     if blue <= 64 {
         encode_unit(blue as f32 / 64.0)
     } else {
@@ -201,7 +359,7 @@ fn porosity_byte(blue: u8) -> u8 {
 
 /// LabPBR `_s.B` 65..255 is SSS (65 = 0%, 255 = 100%).
 #[inline]
-fn sss_byte(blue: u8) -> u8 {
+fn sss_byte_scalar(blue: u8) -> u8 {
     if blue >= 65 {
         encode_unit((blue - 65) as f32 / 190.0)
     } else {

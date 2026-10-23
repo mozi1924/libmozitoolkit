@@ -5,6 +5,50 @@ use mtk_cull::engine::parse_block_name_and_props;
 
 pub use mtk_core::constants::fluid::MAX_FLUID_HEIGHT;
 
+/// Fast zero-allocation extraction of fluid properties from a blockstate string.
+#[inline]
+pub(crate) fn parse_fluid_info(state_str: &str) -> (Option<FluidType>, bool, u32) {
+    if state_str.is_empty() {
+        return (None, false, 0);
+    }
+    let clean_str = state_str.strip_prefix("minecraft:").unwrap_or(state_str);
+    let (name, props_str) = match clean_str.find('[') {
+        Some(idx) => (
+            &clean_str[..idx],
+            &clean_str[idx + 1..clean_str.len().saturating_sub(1)],
+        ),
+        None => (clean_str, ""),
+    };
+
+    let is_waterlogged = if props_str.contains("waterlogged=true") {
+        true
+    } else {
+        name == "seagrass" || name == "tall_seagrass" || name == "kelp" || name == "kelp_plant"
+    };
+
+    let base_name = name.strip_prefix("flowing_").unwrap_or(name);
+    let fluid_type = if base_name == "water" || is_waterlogged {
+        Some(FluidType::Water)
+    } else if base_name == "lava" {
+        Some(FluidType::Lava)
+    } else {
+        None
+    };
+
+    let mut level = 0;
+    if !props_str.is_empty() {
+        if let Some(pos) = props_str.find("level=") {
+            let after = &props_str[pos + 6..];
+            let end = after.find(',').unwrap_or(after.len());
+            if let Ok(lvl) = after[..end].parse::<u32>() {
+                level = lvl;
+            }
+        }
+    }
+
+    (fluid_type, is_waterlogged, level)
+}
+
 /// Identifies supported Minecraft fluid types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FluidType {
@@ -14,9 +58,12 @@ pub enum FluidType {
 
 impl FluidType {
     pub fn from_name(name: &str) -> Option<Self> {
-        let (raw_name, _) = parse_block_name_and_props(name);
-        let clean = raw_name.strip_prefix("minecraft:").unwrap_or(&raw_name);
-        let clean = clean.strip_prefix("flowing_").unwrap_or(clean);
+        let clean = name.strip_prefix("minecraft:").unwrap_or(name);
+        let name_only = match clean.find('[') {
+            Some(idx) => &clean[..idx],
+            None => clean,
+        };
+        let clean = name_only.strip_prefix("flowing_").unwrap_or(name_only);
         if clean == "water" {
             Some(Self::Water)
         } else if clean == "lava" {
@@ -36,24 +83,13 @@ impl FluidType {
 
 /// Computes fluid height in `[0..1]` for a single fluid or waterlogged blockstate string.
 pub fn get_fluid_base_height(state_str: &str) -> f32 {
-    if state_str.is_empty() {
-        return 0.0;
-    }
-
-    let (name, props) = parse_block_name_and_props(state_str);
-    let clean = name.strip_prefix("minecraft:").unwrap_or(&name);
-    let is_waterlogged = props.get("waterlogged").map(|v| v.as_str()) == Some("true");
+    let (fluid, is_waterlogged, level_int) = parse_fluid_info(state_str);
     if is_waterlogged {
         return MAX_FLUID_HEIGHT;
     }
-
-    let clean = clean.strip_prefix("flowing_").unwrap_or(clean);
-
-    if clean != "water" && clean != "lava" {
+    if fluid.is_none() {
         return 0.0;
     }
-
-    let level_int: u32 = props.get("level").and_then(|l| l.parse().ok()).unwrap_or(0);
 
     if level_int >= 8 {
         MAX_FLUID_HEIGHT
@@ -84,26 +120,15 @@ where
         return 0.0;
     }
 
-    let (name, props) = parse_block_name_and_props(&state_str);
-    let clean = name.strip_prefix("minecraft:").unwrap_or(&name);
-    let is_waterlogged = props.get("waterlogged").map(|v| v.as_str()) == Some("true");
-    let clean = clean.strip_prefix("flowing_").unwrap_or(clean);
-
-    let is_fluid_match =
-        (clean == fluid_type.name_str()) || (fluid_type == FluidType::Water && is_waterlogged);
+    let (f_type, is_waterlogged, level) = parse_fluid_info(&state_str);
+    let is_fluid_match = f_type == Some(fluid_type);
 
     if is_fluid_match {
         // Check if block directly above is also the same fluid / waterlogged
         let above_state = get_state(x, y + 1, z);
         if !above_state.is_empty() && above_state != "minecraft:air" {
-            let (a_name, a_props) = parse_block_name_and_props(&above_state);
-            let a_clean = a_name.strip_prefix("minecraft:").unwrap_or(&a_name);
-            let a_waterlogged = a_props.get("waterlogged").map(|v| v.as_str()) == Some("true");
-            let a_clean = a_clean.strip_prefix("flowing_").unwrap_or(a_clean);
-
-            if (a_clean == fluid_type.name_str())
-                || (fluid_type == FluidType::Water && a_waterlogged)
-            {
+            let (a_type, _, _) = parse_fluid_info(&above_state);
+            if a_type == Some(fluid_type) {
                 return 1.0;
             }
         }
@@ -112,22 +137,32 @@ where
             return MAX_FLUID_HEIGHT;
         }
 
-        return get_fluid_base_height(&state_str);
+        if level >= 8 {
+            MAX_FLUID_HEIGHT
+        } else if level > 0 {
+            (8.0 - level as f32) / 9.0
+        } else {
+            MAX_FLUID_HEIGHT
+        }
+    } else {
+        if is_waterlogged {
+            return 0.0;
+        }
+
+        let clean = state_str.strip_prefix("minecraft:").unwrap_or(&state_str);
+        let name = match clean.find('[') {
+            Some(idx) => &clean[..idx],
+            None => clean,
+        };
+        let is_solid_cube = mtk_model::baker::rules::is_opaque_block(name)
+            && !mtk_model::baker::rules::is_known_non_cube(name, false);
+
+        if is_solid_cube {
+            return -1.0;
+        }
+
+        0.0
     }
-
-    // Solid opaque block detection: never classify waterlogged blocks as solid cube boundaries
-    if is_waterlogged {
-        return 0.0;
-    }
-
-    let is_solid_cube = mtk_model::baker::rules::is_opaque_block(clean)
-        && !mtk_model::baker::rules::is_known_non_cube(clean, false);
-
-    if is_solid_cube {
-        return -1.0;
-    }
-
-    0.0
 }
 
 /// Calculates the averaged fluid height for one corner between center, two adjacent neighbors,
@@ -145,12 +180,18 @@ pub fn calculate_corner_average(
 
     // Still source block surface tension: maintain 8/9 unless bordering lower fluid
     if is_source {
-        let fluid_samples: Vec<f32> = [h_adj1, h_adj2, h_diag]
-            .iter()
-            .copied()
-            .filter(|&h| h > 0.0)
-            .collect();
-        if fluid_samples.is_empty() || fluid_samples.iter().all(|&h| h >= 0.8) {
+        let samples = [h_adj1, h_adj2, h_diag];
+        let mut count = 0;
+        let mut all_ge_08 = true;
+        for &h in &samples {
+            if h > 0.0 {
+                count += 1;
+                if h < 0.8 {
+                    all_ge_08 = false;
+                }
+            }
+        }
+        if count == 0 || all_ge_08 {
             return MAX_FLUID_HEIGHT;
         }
     }
@@ -221,21 +262,15 @@ where
     // Submerged check
     let above_state = get_state(x, y + 1, z);
     if !above_state.is_empty() && above_state != "minecraft:air" {
-        let (a_name, a_props) = parse_block_name_and_props(&above_state);
-        let a_clean = a_name.strip_prefix("minecraft:").unwrap_or(&a_name);
-        let a_waterlogged = a_props.get("waterlogged").map(|v| v.as_str()) == Some("true");
-        let a_clean = a_clean.strip_prefix("flowing_").unwrap_or(a_clean);
-
-        if (a_clean == fluid_type.name_str()) || (fluid_type == FluidType::Water && a_waterlogged) {
+        let (a_type, _, _) = parse_fluid_info(&above_state);
+        if a_type == Some(fluid_type) {
             return (1.0, 1.0, 1.0, 1.0);
         }
     }
 
     let state_str = get_state(x, y, z);
-    let (_, props) = parse_block_name_and_props(&state_str);
-    let is_source = props.get("waterlogged").map(|v| v.as_str()) == Some("true")
-        || (!state_str.contains("flowing_")
-            && props.get("level").map(|l| l.as_str()).unwrap_or("0") == "0");
+    let (_, is_waterlogged, level) = parse_fluid_info(&state_str);
+    let is_source = is_waterlogged || (!state_str.contains("flowing_") && level == 0);
 
     let h_center = sample_fluid_height(&mut get_state, x, y, z, fluid_type);
     let h_n = sample_fluid_height(&mut get_state, x, y, z - 1, fluid_type);

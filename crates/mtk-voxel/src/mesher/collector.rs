@@ -10,7 +10,8 @@ use mtk_core::mesh::MeshData;
 
 #[derive(Debug, Clone, Default)]
 pub struct FaceAttributesCollector {
-    pub source_texture_keys: Vec<String>,
+    pub source_texture_palette: Vec<String>,
+    pub source_texture_indices: Vec<u16>,
     pub atlas_chunk_ids: Vec<i32>,
     pub uv_transforms: Vec<[f32; 4]>,
     pub uv_rotations: Vec<f32>,
@@ -26,7 +27,8 @@ pub struct FaceAttributesCollector {
 impl FaceAttributesCollector {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            source_texture_keys: Vec::with_capacity(capacity),
+            source_texture_palette: Vec::with_capacity(16),
+            source_texture_indices: Vec::with_capacity(capacity),
             atlas_chunk_ids: Vec::with_capacity(capacity),
             uv_transforms: Vec::with_capacity(capacity),
             uv_rotations: Vec::with_capacity(capacity),
@@ -44,7 +46,7 @@ impl FaceAttributesCollector {
     #[allow(clippy::too_many_arguments)]
     pub fn push_face(
         &mut self,
-        source_texture_key: String,
+        source_texture_key: &str,
         atlas_chunk_id: i32,
         uv_transform: [f32; 4],
         uv_rotation: f32,
@@ -54,7 +56,19 @@ impl FaceAttributesCollector {
         anim_timing: [f32; 3],
         anim_frame_size: [f32; 3],
     ) {
-        self.source_texture_keys.push(source_texture_key);
+        let pal_idx = if let Some(idx) = self
+            .source_texture_palette
+            .iter()
+            .position(|k| k == source_texture_key)
+        {
+            idx as u16
+        } else {
+            let idx = self.source_texture_palette.len() as u16;
+            self.source_texture_palette
+                .push(source_texture_key.to_string());
+            idx
+        };
+        self.source_texture_indices.push(pal_idx);
         self.atlas_chunk_ids.push(atlas_chunk_id);
         self.uv_transforms.push(uv_transform);
         self.uv_rotations.push(uv_rotation);
@@ -68,10 +82,14 @@ impl FaceAttributesCollector {
     }
 
     pub fn attach_to_mesh(self, mesh: &mut MeshData) {
+        let mut keys = Vec::with_capacity(self.source_texture_indices.len());
+        for &idx in &self.source_texture_indices {
+            keys.push(self.source_texture_palette[idx as usize].clone());
+        }
         mesh.add_custom_attribute(MeshAttribute::new(
             ATTR_SOURCE_TEXTURE_KEY,
             AttributeDomain::Face,
-            AttributeData::String(self.source_texture_keys),
+            AttributeData::String(keys),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
             ATTR_ATLAS_CHUNK_ID,
@@ -139,7 +157,7 @@ mod tests {
     fn collector_with(anim_timing: [f32; 3]) -> FaceAttributesCollector {
         let mut collector = FaceAttributesCollector::with_capacity(1);
         collector.push_face(
-            "minecraft:block/stone".to_string(),
+            "minecraft:block/stone",
             0,
             [1.0, 1.0, 0.0, 0.0],
             0.0,

@@ -75,7 +75,34 @@ pub fn prebake_all_models_with_progress(
         None
     };
 
-    // 2. Pre-load BlockStateDefinitions for all discovered locations
+    // 2. Pre-resolve all discovered model JSON definitions into an immutable shared map
+    #[cfg(feature = "parallel")]
+    let resolved_map: HashMap<String, std::sync::Arc<mtk_model::ResolvedBlockModel>> = {
+        model_cache
+            .par_iter()
+            .filter_map(|(id, model)| {
+                model
+                    .resolve_hierarchy(id, |parent_id| get_model(parent_id))
+                    .ok()
+                    .map(|r| (id.clone(), std::sync::Arc::new(r)))
+            })
+            .collect()
+    };
+
+    #[cfg(not(feature = "parallel"))]
+    let resolved_map: HashMap<String, std::sync::Arc<mtk_model::ResolvedBlockModel>> = model_cache
+        .iter()
+        .filter_map(|(id, model)| {
+            model
+                .resolve_hierarchy(id, |parent_id| get_model(parent_id))
+                .ok()
+                .map(|r| (id.clone(), std::sync::Arc::new(r)))
+        })
+        .collect();
+
+    let shared_resolved = std::sync::Arc::new(resolved_map);
+
+    // 3. Pre-load BlockStateDefinitions for all discovered locations
     let mut blockstate_defs: Vec<(ResourceLocation, BlockStateDefinition)> = Vec::new();
     for loc in &blockstate_locs {
         let path = loc.to_asset_path("blockstates", "json");
@@ -90,13 +117,15 @@ pub fn prebake_all_models_with_progress(
     let throttler = ProgressThrottler::new("prebake_models", total_defs.max(1), progress_callback)
         .with_prefix("Baking block models");
 
-    // 3. Bake all states concurrently
+    // 4. Bake all states concurrently
     #[cfg(feature = "parallel")]
     let baked_pairs: Vec<(String, mtk_model::BakedVariantGroup)> = blockstate_defs
         .par_iter()
         .flat_map(|(loc, def)| {
             let states = def.enumerate_all_states(&loc.as_string());
-            let mut local_baker = ModelBaker::new();
+            let mut local_baker =
+                ModelBaker::with_shared_resolved(std::sync::Arc::clone(&shared_resolved));
+            let mut remap_cache: HashMap<String, Option<([f32; 4], u16, u32)>> = HashMap::new();
             let mut pairs = Vec::new();
             for state_str in states {
                 if let Ok(mut group) =
@@ -104,10 +133,19 @@ pub fn prebake_all_models_with_progress(
                 {
                     if let Some(atlas) = atlas_map {
                         group.remap_to_atlas_with(|tex| {
-                            MaterialResolver::resolve(tex, None, atlas)
-                                .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
+                            if let Some(hit) = remap_cache.get(tex) {
+                                *hit
+                            } else {
+                                let resolved =
+                                    MaterialResolver::resolve(tex, None, atlas).map(|(_, sp)| {
+                                        (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id)
+                                    });
+                                remap_cache.insert(tex.to_string(), resolved);
+                                resolved
+                            }
                         });
                     }
+                    group.deduplicate_faces();
                     pairs.push((state_str, group));
                 }
             }
@@ -121,7 +159,9 @@ pub fn prebake_all_models_with_progress(
         .iter()
         .flat_map(|(loc, def)| {
             let states = def.enumerate_all_states(&loc.as_string());
-            let mut local_baker = ModelBaker::new();
+            let mut local_baker =
+                ModelBaker::with_shared_resolved(std::sync::Arc::clone(&shared_resolved));
+            let mut remap_cache: HashMap<String, Option<([f32; 4], u16, u32)>> = HashMap::new();
             let mut pairs = Vec::new();
             for state_str in states {
                 if let Ok(mut group) =
@@ -129,10 +169,19 @@ pub fn prebake_all_models_with_progress(
                 {
                     if let Some(atlas) = atlas_map {
                         group.remap_to_atlas_with(|tex| {
-                            MaterialResolver::resolve(tex, None, atlas)
-                                .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
+                            if let Some(hit) = remap_cache.get(tex) {
+                                *hit
+                            } else {
+                                let resolved =
+                                    MaterialResolver::resolve(tex, None, atlas).map(|(_, sp)| {
+                                        (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id)
+                                    });
+                                remap_cache.insert(tex.to_string(), resolved);
+                                resolved
+                            }
                         });
                     }
+                    group.deduplicate_faces();
                     pairs.push((state_str, group));
                 }
             }

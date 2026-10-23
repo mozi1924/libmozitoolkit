@@ -12,16 +12,26 @@ use crate::types::{is_empty_rect, is_full_rect};
 /// If `occluder` does not intersect `source`, returns `vec![source]`.
 /// If `occluder` completely covers `source`, returns `vec![]`.
 pub fn subtract_rect(source: &Aabb2d, occluder: &Aabb2d) -> Vec<Aabb2d> {
+    let mut out = [Aabb2d::ZERO; 4];
+    let n = subtract_rect_into(source, occluder, &mut out);
+    out[..n].to_vec()
+}
+
+/// Zero-allocation rectangle subtraction writing up to 4 disjoint fragments directly into stack buffer.
+/// Returns the number of resulting fragments (0..=4).
+#[inline]
+pub fn subtract_rect_into(source: &Aabb2d, occluder: &Aabb2d, out: &mut [Aabb2d; 4]) -> usize {
     if !source.intersects(occluder) {
-        return alloc::vec![*source];
+        out[0] = *source;
+        return 1;
     }
 
     // If occluder completely covers source, nothing remains
     if occluder.contains_rect(source, EPS) {
-        return Vec::new();
+        return 0;
     }
 
-    let mut result = Vec::with_capacity(4);
+    let mut count = 0;
 
     // Bounding bounds of the intersection
     let inter_min_x = source.min.x.max(occluder.min.x);
@@ -31,45 +41,29 @@ pub fn subtract_rect(source: &Aabb2d, occluder: &Aabb2d) -> Vec<Aabb2d> {
 
     // 1. Bottom slice: [source.min.x .. source.max.x] x [source.min.y .. inter_min_y]
     if inter_min_y - source.min.y > EPS {
-        result.push(Aabb2d::from_min_max(
-            source.min.x,
-            source.min.y,
-            source.max.x,
-            inter_min_y,
-        ));
+        out[count] = Aabb2d::from_min_max(source.min.x, source.min.y, source.max.x, inter_min_y);
+        count += 1;
     }
 
     // 2. Top slice: [source.min.x .. source.max.x] x [inter_max_y .. source.max.y]
     if source.max.y - inter_max_y > EPS {
-        result.push(Aabb2d::from_min_max(
-            source.min.x,
-            inter_max_y,
-            source.max.x,
-            source.max.y,
-        ));
+        out[count] = Aabb2d::from_min_max(source.min.x, inter_max_y, source.max.x, source.max.y);
+        count += 1;
     }
 
     // 3. Left slice: [source.min.x .. inter_min_x] x [inter_min_y .. inter_max_y]
     if inter_min_x - source.min.x > EPS {
-        result.push(Aabb2d::from_min_max(
-            source.min.x,
-            inter_min_y,
-            inter_min_x,
-            inter_max_y,
-        ));
+        out[count] = Aabb2d::from_min_max(source.min.x, inter_min_y, inter_min_x, inter_max_y);
+        count += 1;
     }
 
     // 4. Right slice: [inter_max_x .. source.max.x] x [inter_min_y .. inter_max_y]
     if source.max.x - inter_max_x > EPS {
-        result.push(Aabb2d::from_min_max(
-            inter_max_x,
-            inter_min_y,
-            source.max.x,
-            inter_max_y,
-        ));
+        out[count] = Aabb2d::from_min_max(inter_max_x, inter_min_y, source.max.x, inter_max_y);
+        count += 1;
     }
 
-    result
+    count
 }
 
 /// Checks if all rectangles in `target_rects` are completely covered by `neighbor_occluders`.
@@ -91,21 +85,28 @@ pub fn is_face_completely_occluded(target_rects: &[Aabb2d], neighbor_occluders: 
         }
     }
 
+    let mut pieces = Vec::with_capacity(8);
+    let mut next_pieces = Vec::with_capacity(8);
+    let mut buf = [Aabb2d::ZERO; 4];
+
     // Detailed 2D polygon subtraction for each target piece
     for target in target_rects {
         if is_empty_rect(target, EPS) {
             continue;
         }
-        let mut pieces = alloc::vec![*target];
+        pieces.clear();
+        pieces.push(*target);
+
         for occ in neighbor_occluders {
             if is_empty_rect(occ, EPS) {
                 continue;
             }
-            let mut next_pieces = Vec::new();
+            next_pieces.clear();
             for p in &pieces {
-                next_pieces.extend(subtract_rect(p, occ));
+                let n = subtract_rect_into(p, occ, &mut buf);
+                next_pieces.extend_from_slice(&buf[..n]);
             }
-            pieces = next_pieces;
+            core::mem::swap(&mut pieces, &mut next_pieces);
             if pieces.is_empty() {
                 break;
             }

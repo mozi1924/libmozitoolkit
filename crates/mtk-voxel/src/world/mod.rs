@@ -631,7 +631,7 @@ mod tests {
     fn mesh_with_timing(timing: [f32; 3]) -> MeshData {
         let mut collector = FaceAttributesCollector::with_capacity(1);
         collector.push_face(
-            "minecraft:block/stone".to_string(),
+            "minecraft:block/stone",
             0,
             [1.0, 1.0, 0.0, 0.0],
             0.0,

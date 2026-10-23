@@ -269,7 +269,7 @@ where
                     ([1.0, 1.0, 0.0, 0.0], [1.0, 1.0, 1.0, 1.0])
                 };
                 col.push_face(
-                    source_key,
+                    &source_key,
                     chunk_id,
                     [1.0, 1.0, 0.0, 0.0],
                     0.0,

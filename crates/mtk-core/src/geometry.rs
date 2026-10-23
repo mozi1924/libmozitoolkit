@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::direction::Direction;
 
 /// 2D Axis-Aligned Bounding Box (AABB) in normalized [0, 1] or pixel space.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Aabb2d {
     pub min: Vec2,

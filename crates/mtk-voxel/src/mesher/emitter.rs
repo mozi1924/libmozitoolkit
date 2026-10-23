@@ -79,7 +79,7 @@ pub fn emit_baked_face(
     mesh.face_tint_indices.push(face.tint_index);
 
     collector.push_face(
-        shading.texture_key.clone(),
+        &shading.texture_key,
         shading.chunk_id,
         [1.0, 1.0, 0.0, 0.0],
         face.uv_rot,
@@ -248,7 +248,7 @@ pub fn emit_unit_cube_face(
     mesh.face_tint_indices.push(-1);
 
     collector.push_face(
-        shading.texture_key.clone(),
+        &shading.texture_key,
         shading.chunk_id,
         [1.0, 1.0, 0.0, 0.0],
         0.0,

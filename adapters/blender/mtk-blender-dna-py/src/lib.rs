@@ -30,7 +30,21 @@ macro_rules! impl_copy_fn {
                 return Ok(0);
             }
 
-            // Fast path: a typed, C-contiguous buffer (NumPy / typed memoryview).
+            // Direct Fast Path: raw bytes buffer view (PyBufferOwner, memoryview, bytes)
+            if let Ok(buf) = PyBuffer::<u8>::get(src) {
+                let expected = count * size_of::<$ty>();
+                if buf.is_c_contiguous() && buf.len_bytes() == expected {
+                    let raw_ptr = buf.buf_ptr() as usize;
+                    if raw_ptr % align_of::<$ty>() == 0 {
+                        let slice =
+                            unsafe { std::slice::from_raw_parts(raw_ptr as *const $ty, count) };
+                        return unsafe { $copy_fn(slice, dst_ptr, max_bytes) }
+                            .map_err(map_memory_err);
+                    }
+                }
+            }
+
+            // Fast Path for typed buffers (NumPy arrays or typed memoryviews)
             if let Ok(buf) = PyBuffer::<$ty>::get(src) {
                 if buf.is_c_contiguous() && buf.item_count() == count {
                     let slice =
@@ -39,36 +53,11 @@ macro_rules! impl_copy_fn {
                 }
             }
 
-            // Fallback: raw bytes view (`memoryview(...).cast("B")` / bytes).
-            let buf = PyBuffer::<u8>::get(src).map_err(|_| {
-                PyValueError::new_err(format!(
-                    "source buffer is not a compatible {} array of {} element(s)",
-                    stringify!($ty),
-                    count
-                ))
-            })?;
-            let expected = count * size_of::<$ty>();
-            if buf.len_bytes() != expected {
-                return Err(PyValueError::new_err(format!(
-                    "source buffer is {} bytes, expected {} bytes for {} {} element(s)",
-                    buf.len_bytes(),
-                    expected,
-                    count,
-                    stringify!($ty)
-                )));
-            }
-            if !buf.is_c_contiguous() {
-                return Err(PyValueError::new_err("source buffer must be C-contiguous"));
-            }
-            let raw_ptr = buf.buf_ptr() as usize;
-            if raw_ptr % align_of::<$ty>() != 0 {
-                return Err(PyValueError::new_err(format!(
-                    "source buffer pointer 0x{raw_ptr:x} is not aligned to {} bytes",
-                    align_of::<$ty>()
-                )));
-            }
-            let slice = unsafe { std::slice::from_raw_parts(raw_ptr as *const $ty, count) };
-            unsafe { $copy_fn(slice, dst_ptr, max_bytes) }.map_err(map_memory_err)
+            Err(PyValueError::new_err(format!(
+                "source buffer is not a compatible C-contiguous aligned {} array of {} element(s)",
+                stringify!($ty),
+                count
+            )))
         }
     };
 }

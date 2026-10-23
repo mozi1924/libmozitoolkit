@@ -171,18 +171,23 @@ impl BlockStateResolver {
                 continue;
             }
 
-            let mut v_props: HashMap<&str, &str> = HashMap::new();
+            let mut v_props: [(&str, &str); 16] = [("", ""); 16];
+            let mut v_props_count = 0;
             for pair in v_key.split(',') {
                 if let Some((k, v)) = pair.split_once('=') {
-                    v_props.insert(k.trim(), v.trim());
+                    if v_props_count < 16 {
+                        v_props[v_props_count] = (k.trim(), v.trim());
+                        v_props_count += 1;
+                    }
                 }
             }
+            let v_props_slice = &v_props[..v_props_count];
 
             // Compatibility: every property in props must match v_props if present in v_props
             let mut compatible = true;
             let mut matched_keys = 0i32;
             for (k, v) in props {
-                if let Some(&vv) = v_props.get(k.as_str()) {
+                if let Some(&(_, vv)) = v_props_slice.iter().find(|(vk, _)| *vk == k.as_str()) {
                     if vv != v.as_str() {
                         compatible = false;
                         break;
@@ -196,15 +201,15 @@ impl BlockStateResolver {
             }
 
             let mut score = matched_keys * 100;
-            if v_props.len() == props.len() {
+            if v_props_count == props.len() {
                 score += 1000;
             }
 
             // Score keys in v_props that are not specified in props: prefer standard default states
-            for (vk, vv) in &v_props {
-                if !props.contains_key(*vk) {
+            for &(vk, vv) in v_props_slice {
+                if !props.contains_key(vk) {
                     if matches!(
-                        *vv,
+                        vv,
                         "false"
                             | "0"
                             | "none"
@@ -220,7 +225,7 @@ impl BlockStateResolver {
                     ) {
                         score += 10;
                     } else if matches!(
-                        *vv,
+                        vv,
                         "true"
                             | "1"
                             | "top"

@@ -235,27 +235,74 @@ impl SectionStorage {
 
         let mut padded = vec![0u16; PADDED_VOLUME];
 
-        for px in 0..PADDED_SIZE {
+        // 1. Bulk copy the core 16x16x16 voxels row by row (256 copy_from_slice operations)
+        for x in 0..16 {
+            let px = x + 1;
+            for y in 0..16 {
+                let py = y + 1;
+                let src_start = (x << 8) | (y << 4);
+                let dst_start = px * (PADDED_SIZE * PADDED_SIZE) + py * PADDED_SIZE + 1;
+                padded[dst_start..dst_start + 16]
+                    .copy_from_slice(&self.voxels[src_start..src_start + 16]);
+            }
+        }
+
+        // 2. Populate only the apron (the outer 1-voxel thick boundary, 1736 voxels)
+        // Face -X (px = 0)
+        for py in 0..PADDED_SIZE {
+            let ly = py as i32 - 1;
+            for pz in 0..PADDED_SIZE {
+                let lz = pz as i32 - 1;
+                let pad_idx = py * PADDED_SIZE + pz; // px = 0
+                let n_state = get_neighbor(-1, ly, lz);
+                padded[pad_idx] = get_or_insert(extract_canonical_state_str(n_state));
+            }
+        }
+
+        // Face +X (px = 17)
+        for py in 0..PADDED_SIZE {
+            let ly = py as i32 - 1;
+            for pz in 0..PADDED_SIZE {
+                let lz = pz as i32 - 1;
+                let pad_idx = 17 * (PADDED_SIZE * PADDED_SIZE) + py * PADDED_SIZE + pz; // px = 17
+                let n_state = get_neighbor(16, ly, lz);
+                padded[pad_idx] = get_or_insert(extract_canonical_state_str(n_state));
+            }
+        }
+
+        // Intermediate X (px = 1..17)
+        for px in 1..17 {
             let lx = px as i32 - 1;
-            for py in 0..PADDED_SIZE {
+            let px_offset = px * (PADDED_SIZE * PADDED_SIZE);
+
+            // Face -Y (py = 0)
+            for pz in 0..PADDED_SIZE {
+                let lz = pz as i32 - 1;
+                let pad_idx = px_offset + pz; // py = 0
+                let n_state = get_neighbor(lx, -1, lz);
+                padded[pad_idx] = get_or_insert(extract_canonical_state_str(n_state));
+            }
+
+            // Face +Y (py = 17)
+            for pz in 0..PADDED_SIZE {
+                let lz = pz as i32 - 1;
+                let pad_idx = px_offset + 17 * PADDED_SIZE + pz; // py = 17
+                let n_state = get_neighbor(lx, 16, lz);
+                padded[pad_idx] = get_or_insert(extract_canonical_state_str(n_state));
+            }
+
+            // Face -Z and +Z (py = 1..17, pz = 0 and pz = 17)
+            for py in 1..17 {
                 let ly = py as i32 - 1;
-                for pz in 0..PADDED_SIZE {
-                    let lz = pz as i32 - 1;
-                    let pad_idx = padded_index(px, py, pz);
+                let py_offset = px_offset + py * PADDED_SIZE;
 
-                    let pal_idx = if (0..16).contains(&lx)
-                        && (0..16).contains(&ly)
-                        && (0..16).contains(&lz)
-                    {
-                        let core_idx = block_index(lx as usize, ly as usize, lz as usize);
-                        self.voxels[core_idx]
-                    } else {
-                        let n_state = get_neighbor(lx, ly, lz);
-                        get_or_insert(extract_canonical_state_str(n_state))
-                    };
+                // pz = 0
+                let n_state_z0 = get_neighbor(lx, ly, -1);
+                padded[py_offset] = get_or_insert(extract_canonical_state_str(n_state_z0));
 
-                    padded[pad_idx] = pal_idx;
-                }
+                // pz = 17
+                let n_state_z17 = get_neighbor(lx, ly, 16);
+                padded[py_offset + 17] = get_or_insert(extract_canonical_state_str(n_state_z17));
             }
         }
 

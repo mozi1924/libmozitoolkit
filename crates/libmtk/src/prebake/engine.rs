@@ -17,6 +17,9 @@ use crate::prebake::reader::{
 };
 use crate::MtkError;
 
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
 /// Configuration for unified asset precompilation.
 #[derive(Debug, Clone)]
 pub struct PrecompileConfig {
@@ -242,55 +245,45 @@ fn precompile_all_assets_inner(
                     .with_step(1)
                     .with_prefix("Packaging atlas chunk textures");
 
+            let mut texture_tasks = Vec::new();
             for chunk in &baked_atlas.chunks {
                 let stem = chunk.file_stem();
-                let albedo_bytes = chunk.albedo.to_png_bytes()?;
-                writer.add_chunk(
-                    *b"ATLS",
-                    format!("atlas/textures/{}.png", stem),
-                    &albedo_bytes,
-                    &ChunkWriteOptions::raw(),
-                )?;
-
+                texture_tasks.push((format!("atlas/textures/{}.png", stem), &chunk.albedo));
                 if let Some(ref normal) = chunk.normal_gl {
-                    let normal_bytes = normal.to_png_bytes()?;
-                    writer.add_chunk(
-                        *b"ATLS",
-                        format!("atlas/textures/{}_n.png", stem),
-                        &normal_bytes,
-                        &ChunkWriteOptions::raw(),
-                    )?;
+                    texture_tasks.push((format!("atlas/textures/{}_n.png", stem), normal));
                 }
-
                 if let Some(ref orm) = chunk.orm {
-                    let orm_bytes = orm.to_png_bytes()?;
-                    writer.add_chunk(
-                        *b"ATLS",
-                        format!("atlas/textures/{}_orm.png", stem),
-                        &orm_bytes,
-                        &ChunkWriteOptions::raw(),
-                    )?;
+                    texture_tasks.push((format!("atlas/textures/{}_orm.png", stem), orm));
                 }
-
                 if let Some(ref aux) = chunk.aux {
-                    let aux_bytes = aux.to_png_bytes()?;
-                    writer.add_chunk(
-                        *b"ATLS",
-                        format!("atlas/textures/{}_aux.png", stem),
-                        &aux_bytes,
-                        &ChunkWriteOptions::raw(),
-                    )?;
+                    texture_tasks.push((format!("atlas/textures/{}_aux.png", stem), aux));
                 }
-
                 if let Some(ref overlay) = chunk.overlay {
-                    let overlay_bytes = overlay.to_png_bytes()?;
-                    writer.add_chunk(
-                        *b"ATLS",
-                        format!("atlas/textures/{}_overlay.png", stem),
-                        &overlay_bytes,
-                        &ChunkWriteOptions::raw(),
-                    )?;
+                    texture_tasks.push((format!("atlas/textures/{}_overlay.png", stem), overlay));
                 }
+            }
+
+            #[cfg(feature = "parallel")]
+            let encoded_results: Result<Vec<(String, Vec<u8>)>, MtkError> = texture_tasks
+                .into_par_iter()
+                .map(|(path, buf)| {
+                    let bytes = buf.to_png_bytes().map_err(MtkError::Texture)?;
+                    Ok((path, bytes))
+                })
+                .collect();
+
+            #[cfg(not(feature = "parallel"))]
+            let encoded_results: Result<Vec<(String, Vec<u8>)>, MtkError> = texture_tasks
+                .into_iter()
+                .map(|(path, buf)| {
+                    let bytes = buf.to_png_bytes().map_err(MtkError::Texture)?;
+                    Ok((path, bytes))
+                })
+                .collect();
+
+            let encoded_textures = encoded_results?;
+            for (path, bytes) in encoded_textures {
+                writer.add_chunk(*b"ATLS", path, &bytes, &ChunkWriteOptions::raw())?;
                 atlas_throttler.inc();
             }
 
@@ -313,7 +306,7 @@ fn precompile_all_assets_inner(
             *b"MODL",
             "models/database",
             &bin_bytes,
-            &ChunkWriteOptions::zstd_fast(),
+            &ChunkWriteOptions::raw(),
         )?;
     }
 

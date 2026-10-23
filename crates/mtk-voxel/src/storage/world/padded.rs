@@ -13,11 +13,54 @@ impl VoxelStorage {
         let sec_wy = coord.y * 16;
         let sec_wz = coord.z * 16;
 
+        // Pre-lookup the 27 neighborhood sections to avoid 1,736 HashMap queries
+        let mut neighbors = [None; 27];
+        for dx in -1i32..=1 {
+            for dy in -1i32..=1 {
+                for dz in -1i32..=1 {
+                    let n_coord = IVec3::new(coord.x + dx, coord.y + dy, coord.z + dz);
+                    let idx = ((dx + 1) * 9 + (dy + 1) * 3 + (dz + 1)) as usize;
+                    neighbors[idx] = self.sections.get(&n_coord);
+                }
+            }
+        }
+
+        let has_bounds = self.has_explicit_bounds;
         let mut padded = sec.build_padded_array(|lx, ly, lz| {
-            let wx = sec_wx + lx;
-            let wy = sec_wy + ly;
-            let wz = sec_wz + lz;
-            self.get_block(wx, wy, wz)
+            if has_bounds && !self.contains(sec_wx + lx, sec_wy + ly, sec_wz + lz) {
+                return "minecraft:air";
+            }
+            let dx = if lx < 0 {
+                -1
+            } else if lx >= 16 {
+                1
+            } else {
+                0
+            };
+            let dy = if ly < 0 {
+                -1
+            } else if ly >= 16 {
+                1
+            } else {
+                0
+            };
+            let dz = if lz < 0 {
+                -1
+            } else if lz >= 16 {
+                1
+            } else {
+                0
+            };
+            let n_idx = ((dx + 1) * 9 + (dy + 1) * 3 + (dz + 1)) as usize;
+
+            if let Some(n_sec) = neighbors[n_idx] {
+                let local_x = (lx & 15) as usize;
+                let local_y = (ly & 15) as usize;
+                let local_z = (lz & 15) as usize;
+                n_sec.get_local_state(local_x, local_y, local_z)
+            } else {
+                "minecraft:air"
+            }
         });
 
         if self.has_explicit_bounds {
