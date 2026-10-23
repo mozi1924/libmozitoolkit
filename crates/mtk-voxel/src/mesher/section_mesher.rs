@@ -14,7 +14,7 @@ use mtk_model::parser::blockstate::BlockState;
 use std::sync::Arc;
 
 use crate::fluid::emit_fluid_geometry;
-use crate::mesher::ao::calculate_face_ao;
+use crate::mesher::ao::{calculate_face_ao, calculate_face_ao_with_inset, is_face_inset};
 use crate::storage::{padded_index, PaddedVoxelArray, SECTION_SIZE};
 use crate::types::{MesherConfig, VoxelError};
 
@@ -287,9 +287,10 @@ impl SectionMesher {
                             let face = &mf.face;
                             let face_dir = face.direction;
 
-                            // Calculate 4-corner AO for face.direction
+                            // Calculate 4-corner AO for face.direction (with inset detection)
                             let ao_levels = if config.enable_ao && !is_emissive {
-                                calculate_face_ao(face_dir, |dx, dy, dz| {
+                                let is_inset = is_face_inset(face_dir, &face.vertices);
+                                calculate_face_ao_with_inset(face_dir, is_inset, |dx, dy, dz| {
                                     let sx = (px as i32 + dx) as usize;
                                     let sy = (py as i32 + dy) as usize;
                                     let sz = (pz as i32 + dz) as usize;

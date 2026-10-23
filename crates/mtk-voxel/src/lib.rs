@@ -25,8 +25,8 @@ pub use fluid::{
     MAX_FLUID_HEIGHT,
 };
 pub use mesher::{
-    ao_level_to_brightness, calculate_face_ao, should_flip_quad_diagonal, vertex_ao, DeltaMesher,
-    SectionMesher,
+    ao_level_to_brightness, calculate_face_ao, calculate_face_ao_with_inset, is_face_inset,
+    should_flip_quad_diagonal, vertex_ao, DeltaMesher, SectionMesher,
 };
 pub use source::{ingest_from_source, VoxelReader, VoxelSource, VoxelWriter};
 pub use storage::{
