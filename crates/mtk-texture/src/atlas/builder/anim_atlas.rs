@@ -214,6 +214,7 @@ pub fn build_anim_atlas_chunks(
             has_overlay,
             has_orm: false,
             has_aux: false,
+            has_tint: category_name == "blocks",
             pbr: None,
         });
 

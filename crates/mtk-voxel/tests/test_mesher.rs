@@ -818,6 +818,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
         has_overlay: false,
         has_orm: false,
         has_aux: false,
+        has_tint: false,
         pbr: None,
     });
     address_map.chunks.push(AtlasChunkMeta {
@@ -832,6 +833,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
         has_overlay: false,
         has_orm: false,
         has_aux: false,
+        has_tint: false,
         pbr: None,
     });
 

@@ -196,9 +196,23 @@ impl MeshData {
                 sec.extend_from_slice(other_sec);
             }
 
-            if let Some(ref other_col) = m.colors {
+            if has_colors {
                 let col = merged.colors.get_or_insert_with(Vec::new);
-                col.extend_from_slice(other_col);
+                let expected_count = if let Some(ref q) = m.quad_indices {
+                    q.len()
+                } else if !m.uvs.is_empty() {
+                    m.uvs.len()
+                } else {
+                    m.positions.len()
+                };
+                if let Some(ref other_col) = m.colors {
+                    col.extend_from_slice(other_col);
+                    while col.len() < merged.uvs.len().max(merged.positions.len()) {
+                        col.push([1.0, 1.0, 1.0, 1.0]);
+                    }
+                } else {
+                    col.resize(col.len() + expected_count, [1.0, 1.0, 1.0, 1.0]);
+                }
             }
 
             if has_custom_attrs {
@@ -396,9 +410,23 @@ impl MeshData {
                 sec.extend_from_slice(other_sec);
             }
 
-            if let Some(ref other_col) = m.colors {
+            if has_colors {
                 let col = merged.colors.get_or_insert_with(Vec::new);
-                col.extend_from_slice(other_col);
+                let expected_count = if let Some(ref q) = m.quad_indices {
+                    q.len()
+                } else if !m.uvs.is_empty() {
+                    m.uvs.len()
+                } else {
+                    m.positions.len()
+                };
+                if let Some(ref other_col) = m.colors {
+                    col.extend_from_slice(other_col);
+                    while col.len() < merged.uvs.len().max(merged.positions.len()) {
+                        col.push([1.0, 1.0, 1.0, 1.0]);
+                    }
+                } else {
+                    col.resize(col.len() + expected_count, [1.0, 1.0, 1.0, 1.0]);
+                }
             }
 
             if has_custom_attrs {

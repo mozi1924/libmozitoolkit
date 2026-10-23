@@ -428,9 +428,32 @@ impl MeshData {
             sec.extend_from_slice(other_sec);
         }
 
-        if let Some(ref other_col) = other.colors {
+        if self.colors.is_some() || other.colors.is_some() {
             let col = self.colors.get_or_insert_with(Vec::new);
-            col.extend_from_slice(other_col);
+            let prev_target = if let Some(ref q) = self.quad_indices {
+                let other_q_len = other.quad_indices.as_ref().map_or(0, |v| v.len());
+                q.len().saturating_sub(other_q_len)
+            } else if !self.uvs.is_empty() {
+                self.uvs.len().saturating_sub(other.uvs.len())
+            } else {
+                base_idx as usize
+            };
+            while col.len() < prev_target {
+                col.push([1.0, 1.0, 1.0, 1.0]);
+            }
+            if let Some(ref other_col) = other.colors {
+                col.extend_from_slice(other_col);
+            }
+            let total_target = if let Some(ref q) = self.quad_indices {
+                q.len()
+            } else if !self.uvs.is_empty() {
+                self.uvs.len()
+            } else {
+                self.positions.len()
+            };
+            while col.len() < total_target {
+                col.push([1.0, 1.0, 1.0, 1.0]);
+            }
         }
 
         Self::extend_custom_attributes(&mut self.custom_attributes, &other.custom_attributes);

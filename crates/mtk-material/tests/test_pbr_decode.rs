@@ -139,6 +139,7 @@ fn decode_baked_atlas_updates_mapping_metadata() {
         has_overlay: false,
         has_orm: false,
         has_aux: false,
+        has_tint: false,
         pbr: None,
     });
 
@@ -205,6 +206,7 @@ fn decode_baked_atlas_without_companions_leaves_metadata_empty() {
         has_overlay: false,
         has_orm: false,
         has_aux: false,
+        has_tint: false,
         pbr: None,
     });
     let mut atlas = BakedAtlas {

@@ -54,6 +54,7 @@ impl PyBakedAtlas {
             dict.set_item("has_orm", cm.has_orm)?;
             dict.set_item("has_aux", cm.has_aux)?;
             dict.set_item("has_overlay", cm.has_overlay)?;
+            dict.set_item("has_tint", cm.has_tint)?;
             dict.set_item("file_stem", cm.file_stem())?;
             dict.set_item(
                 "pbr",
@@ -88,6 +89,7 @@ impl PyBakedAtlas {
             dict.set_item("has_orm", cm.has_orm)?;
             dict.set_item("has_aux", cm.has_aux)?;
             dict.set_item("has_overlay", cm.has_overlay)?;
+            dict.set_item("has_tint", cm.has_tint)?;
             dict.set_item("file_stem", cm.file_stem())?;
             dict.set_item(
                 "pbr",

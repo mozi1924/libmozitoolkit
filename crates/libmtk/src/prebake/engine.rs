@@ -130,40 +130,41 @@ fn precompile_all_assets_inner(
         ));
     }
 
-    profiler.measure("prebake_biome", || -> Result<(), MtkError> {
-        let mut biome_resolver = BiomeResolver::new();
-        biome_resolver.load_from_pack_stack(stack);
-        if let Some(overrides) = config.resolver_overrides.as_ref() {
-            biome_resolver.apply_overrides(overrides);
-            let overrides_json = serde_json::to_string(overrides)?;
-            writer.add_str_chunk(
-                *b"COMP",
-                "resolver/overrides",
-                &overrides_json,
-                &ChunkWriteOptions::zstd_fast(),
-            )?;
-        }
-        let biome_json = biome_resolver.to_json()?;
-        writer.add_str_chunk(
-            *b"BIOM",
-            "biome/mapping",
-            &biome_json,
-            &ChunkWriteOptions::zstd_fast(),
-        )?;
-
-        for cm_name in &["grass", "foliage", "dry_foliage"] {
-            let asset_path = format!("assets/minecraft/textures/colormap/{}.png", cm_name);
-            if let Some(bytes) = stack.open_asset_raw(&asset_path) {
-                writer.add_chunk(
-                    *b"BIOM",
-                    format!("biome/colormap/{}", cm_name),
-                    &bytes,
-                    &ChunkWriteOptions::raw(),
+    let biome_resolver =
+        profiler.measure("prebake_biome", || -> Result<BiomeResolver, MtkError> {
+            let mut biome_resolver = BiomeResolver::new();
+            biome_resolver.load_from_pack_stack(stack);
+            if let Some(overrides) = config.resolver_overrides.as_ref() {
+                biome_resolver.apply_overrides(overrides);
+                let overrides_json = serde_json::to_string(overrides)?;
+                writer.add_str_chunk(
+                    *b"COMP",
+                    "resolver/overrides",
+                    &overrides_json,
+                    &ChunkWriteOptions::zstd_fast(),
                 )?;
             }
-        }
-        Ok(())
-    })?;
+            let biome_json = biome_resolver.to_json()?;
+            writer.add_str_chunk(
+                *b"BIOM",
+                "biome/mapping",
+                &biome_json,
+                &ChunkWriteOptions::zstd_fast(),
+            )?;
+
+            for cm_name in &["grass", "foliage", "dry_foliage"] {
+                let asset_path = format!("assets/minecraft/textures/colormap/{}.png", cm_name);
+                if let Some(bytes) = stack.open_asset_raw(&asset_path) {
+                    writer.add_chunk(
+                        *b"BIOM",
+                        format!("biome/colormap/{}", cm_name),
+                        &bytes,
+                        &ChunkWriteOptions::raw(),
+                    )?;
+                }
+            }
+            Ok(biome_resolver)
+        })?;
 
     if let Some(cb) = progress_callback {
         cb(ProgressReport::new(
@@ -230,6 +231,37 @@ fn precompile_all_assets_inner(
             // Decode raw LabPBR companions into canonical MtkPackedV1 channels before the
             // address map is serialized, so has_orm/has_aux/pbr metadata is authoritative.
             mtk_material::pbr::decode_baked_atlas(&mut baked_atlas)?;
+
+            // Determine authoritative has_tint for each chunk
+            for chunk_meta in &mut baked_atlas.address_map.chunks {
+                if chunk_meta.category != "blocks" {
+                    chunk_meta.has_tint = false;
+                    continue;
+                }
+                let mut chunk_has_tint = false;
+                for (res, loc) in &baked_atlas.address_map.sprites {
+                    if loc.chunk_id == chunk_meta.chunk_id {
+                        let tint_info = biome_resolver.get_tint_info(&res.path, None, None);
+                        if tint_info.tint_type != mtk_material::biome::TINT_TYPE_NONE {
+                            chunk_has_tint = true;
+                            break;
+                        }
+                    }
+                }
+                if !chunk_has_tint {
+                    for (res, loc) in &baked_atlas.address_map.anim_sprites {
+                        if loc.chunk_id == chunk_meta.chunk_id {
+                            let tint_info = biome_resolver.get_tint_info(&res.path, None, None);
+                            if tint_info.tint_type != mtk_material::biome::TINT_TYPE_NONE {
+                                chunk_has_tint = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                chunk_meta.has_tint = chunk_has_tint;
+            }
+
             let total_chunks = baked_atlas.chunks.len();
 
             let mapping_json = baked_atlas.address_map.to_json()?;

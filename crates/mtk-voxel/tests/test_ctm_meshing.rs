@@ -46,6 +46,7 @@ tiles=0-3
         has_overlay: false,
         has_orm: false,
         has_aux: false,
+        has_tint: false,
         pbr: None,
     });
 

@@ -99,6 +99,23 @@ pub struct AtlasSpriteLocation {
     pub has_overlay: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AtlasChunkMeta {
+    pub chunk_id: u16,
+    pub category: String,
+    pub is_animated: bool,
+    pub category_chunk_index: usize,
+    pub width: u32,
+    pub height: u32,
+    pub has_normal: bool,
+    pub has_specular: bool,
+    pub has_overlay: bool,
+    pub has_orm: bool,
+    pub has_aux: bool,
+    pub has_tint: bool,
+    pub pbr: Option<PbrMeta>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct AtlasAddressMap {
     pub chunks: Vec<AtlasChunkMeta>,

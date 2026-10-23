@@ -209,6 +209,7 @@ pub fn build_static_atlas_chunks(
             has_overlay,
             has_orm: false,
             has_aux: false,
+            has_tint: category_name == "blocks",
             pbr: None,
         });
 

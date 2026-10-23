@@ -229,14 +229,17 @@ where
                     )
                 };
 
+            let colors = mesh.colors.get_or_insert_with(Vec::new);
+            while colors.len() < mesh.positions.len() {
+                colors.push([1.0, 1.0, 1.0, 1.0]);
+            }
+
             for i in 0..4 {
                 let p = config.transform_position(verts[i]);
                 mesh.positions.push([p.x, p.y, p.z]);
                 mesh.normals.push(n);
                 mesh.uvs.push(uvs[i]);
-                if let Some(ref mut colors) = mesh.colors {
-                    colors.push([1.0, 1.0, 1.0, 1.0]);
-                }
+                colors.push([1.0, 1.0, 1.0, 1.0]);
             }
 
             mesh.quad_indices
