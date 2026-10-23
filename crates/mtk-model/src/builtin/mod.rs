@@ -24,10 +24,20 @@ pub struct BuiltinModelRegistry;
 impl BuiltinModelRegistry {
     /// Attempts to provide a builtin fallback `BlockModelJson` using upstream MiEx JSON templates.
     pub fn get_builtin_model(blockstate: &BlockState) -> Option<BlockModelJson> {
-        if let Some(model) = MiExModelLoader::load_for_blockstate(blockstate) {
-            return Some(model);
+        Self::get_builtin_model_with_entity(blockstate, None)
+    }
+
+    /// Attempts to provide a builtin fallback `BlockModelJson` using optional `BlockEntityData`.
+    pub fn get_builtin_model_with_entity(
+        blockstate: &BlockState,
+        entity: Option<&crate::entity::BlockEntityData>,
+    ) -> Option<BlockModelJson> {
+        if entity.is_none() {
+            if let Some(model) = MiExModelLoader::load_for_blockstate(blockstate) {
+                return Some(model);
+            }
         }
-        vanilla::get_builtin_model_for_state(blockstate)
+        vanilla::get_builtin_model_for_state_and_entity(blockstate, entity)
     }
 
     /// Attempts to provide a builtin fallback `BlockStateDefinition` by block name.

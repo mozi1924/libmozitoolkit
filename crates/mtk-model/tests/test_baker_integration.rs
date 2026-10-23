@@ -1205,6 +1205,31 @@ fn test_end_portal_gateway_conduit_and_banner_builtins() {
     );
     assert!(pot_tex.contains(&"minecraft:entity/decorated_pot/decorated_pot_side".to_string()));
     assert!(pot_tex.contains(&"minecraft:entity/decorated_pot/decorated_pot_base".to_string()));
+
+    // 6.1 Decorated Pot with RFC v3.2 Sherds BlockEntityData
+    let pot_entity = mtk_model::BlockEntityData::DecoratedPot {
+        sherds: [
+            Some("minecraft:angler_pottery_sherd".to_string()), // back
+            None,                                               // left (blank brick)
+            Some("miner".to_string()),                          // right
+            Some("blade_pottery_sherd".to_string()),            // front
+        ],
+    };
+    let decorated_model = baker
+        .bake_blockstate_with_entity(
+            "minecraft:decorated_pot[facing=north]",
+            Some(&pot_entity),
+            None,
+            empty_loader,
+        )
+        .expect("Should bake decorated pot with BlockEntityData");
+    let (dec_mesh, dec_tex) = decorated_model.to_mesh_with_textures(false);
+    assert_eq!(dec_mesh.face_count(), pot_mesh.face_count());
+    assert!(dec_tex.contains(&"minecraft:entity/decorated_pot/angler_pottery_pattern".to_string()));
+    assert!(dec_tex.contains(&"minecraft:entity/decorated_pot/miner_pottery_pattern".to_string()));
+    assert!(dec_tex.contains(&"minecraft:entity/decorated_pot/blade_pottery_pattern".to_string()));
+    assert!(dec_tex.contains(&"minecraft:entity/decorated_pot/decorated_pot_side".to_string()));
+    assert!(dec_tex.contains(&"minecraft:entity/decorated_pot/decorated_pot_base".to_string()));
     for uv in &pot_mesh.uvs {
         assert!(
             uv[0] >= -1e-4 && uv[0] <= 1.0 + 1e-4,

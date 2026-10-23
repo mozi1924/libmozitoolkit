@@ -157,3 +157,45 @@ fn test_legacy_replay_deltas_decision_is_rejected() {
         Some(SyncDecision::FullBaselineRequired)
     );
 }
+
+#[test]
+fn test_baseline_entities_and_delta_entity_roundtrip() {
+    let pot_entity = mtk_model::BlockEntityData::DecoratedPot {
+        sherds: [
+            Some("minecraft:angler_pottery_sherd".to_string()),
+            Some("minecraft:blade_pottery_sherd".to_string()),
+            Some("minecraft:brewer_pottery_sherd".to_string()),
+            Some("minecraft:burn_pottery_sherd".to_string()),
+        ],
+    };
+    let entities = vec![
+        (IVec3::new(1, 2, 3), pot_entity.clone()),
+        (
+            IVec3::new(4, 5, 6),
+            mtk_model::BlockEntityData::DecoratedPot {
+                sherds: [None, None, None, None],
+            },
+        ),
+    ];
+
+    let baseline_entities = Packet::BaselineEntities {
+        epoch: 7,
+        snapshot_uuid: [9u8; 16],
+        entities,
+    };
+
+    let encoded = encode_packet(&baseline_entities);
+    let decoded = decode_packet(&encoded).expect("Failed decoding BaselineEntities");
+    assert_eq!(decoded, baseline_entities);
+
+    let delta_entity = Packet::DeltaEntity {
+        epoch: 7,
+        seq_id: 1024,
+        rel_pos: IVec3::new(4, 5, 6),
+        entity: Some(pot_entity),
+    };
+
+    let encoded_delta = encode_packet(&delta_entity);
+    let decoded_delta = decode_packet(&encoded_delta).expect("Failed decoding DeltaEntity");
+    assert_eq!(decoded_delta, delta_entity);
+}

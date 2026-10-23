@@ -274,6 +274,54 @@ impl ChunkParser {
             }
         }
 
+        // RFC v3.2: Parse sparse block entities (Decorated Pots, Banners, etc.)
+        if let Some(be_list) = chunk.list("block_entities").and_then(|l| l.compounds()) {
+            for be_comp in be_list {
+                let id = be_comp
+                    .string("id")
+                    .map(|s| s.to_string_lossy())
+                    .unwrap_or_default();
+                let x = be_comp.int("x").unwrap_or(0);
+                let y = be_comp.int("y").unwrap_or(0);
+                let z = be_comp.int("z").unwrap_or(0);
+                let sec_y = y.div_euclid(16);
+
+                if sec_y >= min_section_y && sec_y <= max_section_y {
+                    let local_x = (x.rem_euclid(16)) as usize;
+                    let local_y = (y.rem_euclid(16)) as usize;
+                    let local_z = (z.rem_euclid(16)) as usize;
+                    let local_idx = block_index(local_x, local_y, local_z) as u16;
+
+                    let entity_data = if id == "minecraft:decorated_pot" || id == "decorated_pot" {
+                        let mut sherds = [None, None, None, None];
+                        if let Some(sherd_list) = be_comp.list("sherds").and_then(|l| l.strings()) {
+                            for (i, s) in sherd_list.iter().enumerate() {
+                                if i >= 4 {
+                                    break;
+                                }
+                                let s_str = s.to_string_lossy();
+                                if s_str != "minecraft:brick"
+                                    && s_str != "brick"
+                                    && !s_str.is_empty()
+                                {
+                                    sherds[i] = Some(s_str.into_owned());
+                                }
+                            }
+                        }
+                        Some(mtk_voxel::BlockEntityData::DecoratedPot { sherds })
+                    } else {
+                        None
+                    };
+
+                    if let Some(ed) = entity_data {
+                        if let Some(sec) = sections.iter_mut().find(|s| s.coord.y == sec_y) {
+                            sec.block_entities.insert(local_idx, ed);
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(ParsedChunk { sections, biomes })
     }
 
@@ -344,6 +392,140 @@ mod tests {
             let qz = (i >> 2) & 3;
             let qy = (i >> 4) & 3;
             assert_eq!(parsed.get_quart_biome(qx, qy, qz), Some(expected));
+        }
+    }
+
+    #[test]
+    fn test_parse_chunk_with_decorated_pot() {
+        use crate::nbt::reader::*;
+        let mut buf = Vec::new();
+        // Root compound
+        buf.push(TAG_COMPOUND);
+        buf.extend_from_slice(&0u16.to_be_bytes()); // empty name
+
+        // int xPos = 0
+        buf.push(TAG_INT);
+        buf.extend_from_slice(&(4u16).to_be_bytes());
+        buf.extend_from_slice(b"xPos");
+        buf.extend_from_slice(&0i32.to_be_bytes());
+
+        // int zPos = 0
+        buf.push(TAG_INT);
+        buf.extend_from_slice(&(4u16).to_be_bytes());
+        buf.extend_from_slice(b"zPos");
+        buf.extend_from_slice(&0i32.to_be_bytes());
+
+        // sections list: [ compound with Y=0, block_states with single-element palette "minecraft:decorated_pot" ]
+        buf.push(TAG_LIST);
+        buf.extend_from_slice(&(8u16).to_be_bytes());
+        buf.extend_from_slice(b"sections");
+        buf.push(TAG_COMPOUND);
+        buf.extend_from_slice(&1i32.to_be_bytes()); // 1 section
+
+        // Section 0
+        // byte Y = 0
+        buf.push(TAG_BYTE);
+        buf.extend_from_slice(&(1u16).to_be_bytes());
+        buf.extend_from_slice(b"Y");
+        buf.push(0);
+
+        // compound block_states
+        buf.push(TAG_COMPOUND);
+        buf.extend_from_slice(&(12u16).to_be_bytes());
+        buf.extend_from_slice(b"block_states");
+
+        // list palette of compounds
+        buf.push(TAG_LIST);
+        buf.extend_from_slice(&(7u16).to_be_bytes());
+        buf.extend_from_slice(b"palette");
+        buf.push(TAG_COMPOUND);
+        buf.extend_from_slice(&1i32.to_be_bytes()); // 1 palette entry
+
+        // Palette entry 0: string Name = "minecraft:decorated_pot"
+        buf.push(TAG_STRING);
+        buf.extend_from_slice(&(4u16).to_be_bytes());
+        buf.extend_from_slice(b"Name");
+        let pot_name = b"minecraft:decorated_pot";
+        buf.extend_from_slice(&(pot_name.len() as u16).to_be_bytes());
+        buf.extend_from_slice(pot_name);
+        buf.push(TAG_END); // end of palette entry 0
+
+        buf.push(TAG_END); // end of block_states compound
+        buf.push(TAG_END); // end of section 0 compound
+
+        // block_entities list: 1 compound
+        buf.push(TAG_LIST);
+        buf.extend_from_slice(&(14u16).to_be_bytes());
+        buf.extend_from_slice(b"block_entities");
+        buf.push(TAG_COMPOUND);
+        buf.extend_from_slice(&1i32.to_be_bytes()); // 1 block entity
+
+        // Block Entity 0
+        // string id = "minecraft:decorated_pot"
+        buf.push(TAG_STRING);
+        buf.extend_from_slice(&(2u16).to_be_bytes());
+        buf.extend_from_slice(b"id");
+        buf.extend_from_slice(&(pot_name.len() as u16).to_be_bytes());
+        buf.extend_from_slice(pot_name);
+
+        // int x = 3
+        buf.push(TAG_INT);
+        buf.extend_from_slice(&(1u16).to_be_bytes());
+        buf.extend_from_slice(b"x");
+        buf.extend_from_slice(&3i32.to_be_bytes());
+
+        // int y = 2
+        buf.push(TAG_INT);
+        buf.extend_from_slice(&(1u16).to_be_bytes());
+        buf.extend_from_slice(b"y");
+        buf.extend_from_slice(&2i32.to_be_bytes());
+
+        // int z = 5
+        buf.push(TAG_INT);
+        buf.extend_from_slice(&(1u16).to_be_bytes());
+        buf.extend_from_slice(b"z");
+        buf.extend_from_slice(&5i32.to_be_bytes());
+
+        // list sherds: [angler, brick, miner, blade]
+        buf.push(TAG_LIST);
+        buf.extend_from_slice(&(6u16).to_be_bytes());
+        buf.extend_from_slice(b"sherds");
+        buf.push(TAG_STRING);
+        buf.extend_from_slice(&4i32.to_be_bytes());
+        let sherds: [&[u8]; 4] = [
+            b"minecraft:angler_pottery_sherd",
+            b"minecraft:brick",
+            b"miner_pottery_sherd",
+            b"minecraft:blade_pottery_sherd",
+        ];
+        for s in sherds {
+            buf.extend_from_slice(&(s.len() as u16).to_be_bytes());
+            buf.extend_from_slice(s);
+        }
+
+        buf.push(TAG_END); // end of block entity 0
+        buf.push(TAG_END); // end of root compound
+
+        let parsed = ChunkParser::parse_chunk(&buf, -4, 20).expect("Should parse chunk");
+        assert_eq!(parsed.sections.len(), 1);
+        let sec = &parsed.sections[0];
+        assert_eq!(sec.coord.y, 0);
+
+        let local_idx = block_index(3, 2, 5) as u16;
+        let be = sec
+            .get_block_entity(local_idx)
+            .expect("Must contain block entity");
+        match be {
+            mtk_voxel::BlockEntityData::DecoratedPot { sherds } => {
+                assert_eq!(
+                    sherds[0],
+                    Some("minecraft:angler_pottery_sherd".to_string())
+                );
+                assert_eq!(sherds[1], None);
+                assert_eq!(sherds[2], Some("miner_pottery_sherd".to_string()));
+                assert_eq!(sherds[3], Some("minecraft:blade_pottery_sherd".to_string()));
+            }
+            _ => panic!("Expected DecoratedPot"),
         }
     }
 }

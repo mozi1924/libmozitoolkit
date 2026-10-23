@@ -330,6 +330,46 @@ pub fn encode_packet(packet: &Packet) -> Vec<u8> {
             buf.extend_from_slice(&(*error_code as u16).to_le_bytes());
             write_str(&mut buf, message);
         }
+
+        Packet::BaselineEntities {
+            epoch,
+            snapshot_uuid,
+            entities,
+        } => {
+            buf.push(Opcode::BaselineEntities as u8);
+            buf.extend_from_slice(&epoch.to_le_bytes());
+            buf.extend_from_slice(snapshot_uuid);
+            buf.extend_from_slice(&(entities.len() as u32).to_le_bytes());
+            for (pos, ed) in entities {
+                buf.extend_from_slice(&(pos.x as u32).to_le_bytes());
+                buf.extend_from_slice(&(pos.y as u32).to_le_bytes());
+                buf.extend_from_slice(&(pos.z as u32).to_le_bytes());
+                let ed_bytes = serde_json::to_vec(ed).unwrap_or_default();
+                buf.extend_from_slice(&(ed_bytes.len() as u32).to_le_bytes());
+                buf.extend_from_slice(&ed_bytes);
+            }
+        }
+
+        Packet::DeltaEntity {
+            epoch,
+            seq_id,
+            rel_pos,
+            entity,
+        } => {
+            buf.push(Opcode::DeltaEntity as u8);
+            buf.extend_from_slice(&epoch.to_le_bytes());
+            buf.extend_from_slice(&seq_id.to_le_bytes());
+            buf.extend_from_slice(&(rel_pos.x as u32).to_le_bytes());
+            buf.extend_from_slice(&(rel_pos.y as u32).to_le_bytes());
+            buf.extend_from_slice(&(rel_pos.z as u32).to_le_bytes());
+            if let Some(ed) = entity {
+                let ed_bytes = serde_json::to_vec(ed).unwrap_or_default();
+                buf.extend_from_slice(&(ed_bytes.len() as u32).to_le_bytes());
+                buf.extend_from_slice(&ed_bytes);
+            } else {
+                buf.extend_from_slice(&0u32.to_le_bytes());
+            }
+        }
     }
 
     buf
@@ -869,5 +909,139 @@ pub fn decode_packet(buf: &[u8]) -> Result<Packet, ProtocolError> {
                 message,
             })
         }
+
+        Opcode::BaselineEntities => {
+            if offset + 28 > buf.len() {
+                return Err(ProtocolError::TruncatedPayload {
+                    field: "BaselineEntities header",
+                });
+            }
+            let epoch = u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap());
+            let snapshot_uuid: [u8; 16] = buf[offset + 8..offset + 24].try_into().unwrap();
+            let count =
+                u32::from_le_bytes(buf[offset + 24..offset + 28].try_into().unwrap()) as usize;
+            offset += 28;
+
+            let mut entities = Vec::with_capacity(count);
+            for _ in 0..count {
+                if offset + 16 > buf.len() {
+                    return Err(ProtocolError::TruncatedPayload {
+                        field: "BaselineEntities entry coords & len",
+                    });
+                }
+                let rx = u32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap()) as i32;
+                let ry = u32::from_le_bytes(buf[offset + 4..offset + 8].try_into().unwrap()) as i32;
+                let rz =
+                    u32::from_le_bytes(buf[offset + 8..offset + 12].try_into().unwrap()) as i32;
+                let payload_len =
+                    u32::from_le_bytes(buf[offset + 12..offset + 16].try_into().unwrap()) as usize;
+                offset += 16;
+                if offset + payload_len > buf.len() {
+                    return Err(ProtocolError::TruncatedPayload {
+                        field: "BaselineEntities entry payload",
+                    });
+                }
+                let payload_slice = &buf[offset..offset + payload_len];
+                offset += payload_len;
+
+                if let Some(ed) = decode_entity_payload(payload_slice) {
+                    entities.push((IVec3::new(rx, ry, rz), ed));
+                }
+            }
+
+            Ok(Packet::BaselineEntities {
+                epoch,
+                snapshot_uuid,
+                entities,
+            })
+        }
+
+        Opcode::DeltaEntity => {
+            if offset + 32 > buf.len() {
+                return Err(ProtocolError::TruncatedPayload {
+                    field: "DeltaEntity header",
+                });
+            }
+            let epoch = u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap());
+            let seq_id = u64::from_le_bytes(buf[offset + 8..offset + 16].try_into().unwrap());
+            let rx = u32::from_le_bytes(buf[offset + 16..offset + 20].try_into().unwrap()) as i32;
+            let ry = u32::from_le_bytes(buf[offset + 20..offset + 24].try_into().unwrap()) as i32;
+            let rz = u32::from_le_bytes(buf[offset + 24..offset + 28].try_into().unwrap()) as i32;
+            let payload_len =
+                u32::from_le_bytes(buf[offset + 28..offset + 32].try_into().unwrap()) as usize;
+            offset += 32;
+
+            let entity = if payload_len > 0 {
+                if offset + payload_len > buf.len() {
+                    return Err(ProtocolError::TruncatedPayload {
+                        field: "DeltaEntity payload",
+                    });
+                }
+                let payload_slice = &buf[offset..offset + payload_len];
+                decode_entity_payload(payload_slice)
+            } else {
+                None
+            };
+
+            Ok(Packet::DeltaEntity {
+                epoch,
+                seq_id,
+                rel_pos: IVec3::new(rx, ry, rz),
+                entity,
+            })
+        }
     }
+}
+
+fn decode_entity_payload(bytes: &[u8]) -> Option<mtk_model::BlockEntityData> {
+    if bytes.is_empty() {
+        return None;
+    }
+    // 1. JSON path
+    if bytes[0] == b'{' {
+        if let Ok(val) = serde_json::from_slice::<serde_json::Value>(bytes) {
+            let id = val.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+            if id == "minecraft:decorated_pot" || id == "decorated_pot" {
+                let mut sherds: [Option<String>; 4] = [None, None, None, None];
+                if let Some(s_arr) = val.get("sherds").and_then(|v| v.as_array()) {
+                    for (i, s_val) in s_arr.iter().take(4).enumerate() {
+                        if let Some(s) = s_val.as_str() {
+                            if !s.is_empty() && s != "minecraft:brick" && s != "brick" {
+                                sherds[i] = Some(s.to_string());
+                            }
+                        }
+                    }
+                }
+                return Some(mtk_model::BlockEntityData::DecoratedPot { sherds });
+            }
+        }
+        if let Ok(data) = serde_json::from_slice::<mtk_model::BlockEntityData>(bytes) {
+            return Some(data);
+        }
+    }
+    // 2. Binary NBT Compound path
+    let mut cursor = std::io::Cursor::new(bytes);
+    if let Ok(mtk_save::nbt::Nbt::Some(base)) = mtk_save::nbt::read(&mut cursor) {
+        let comp = base.as_compound();
+        let id = comp
+            .string("id")
+            .map(|s| s.to_string_lossy())
+            .unwrap_or_default();
+        if id == "minecraft:decorated_pot" || id == "decorated_pot" {
+            let mut sherds = [None, None, None, None];
+            if let Some(sherd_list) = comp.list("sherds").and_then(|l| l.strings()) {
+                for (i, s) in sherd_list.iter().enumerate() {
+                    if i >= 4 {
+                        break;
+                    }
+                    let s_str = s.to_string_lossy();
+                    if s_str != "minecraft:brick" && s_str != "brick" && !s_str.is_empty() {
+                        sherds[i] = Some(s_str.into_owned());
+                    }
+                }
+            }
+            return Some(mtk_model::BlockEntityData::DecoratedPot { sherds });
+        }
+    }
+    None
 }

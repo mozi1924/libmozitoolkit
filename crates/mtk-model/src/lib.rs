@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 pub mod baker;
 pub mod builtin;
+pub mod entity;
 pub mod error;
 pub mod parser;
 
@@ -12,6 +13,7 @@ pub use baker::{
     BakedFaceGeometry, BakedModel, BakedModelDatabase, BakedVariantGroup, ModelBaker,
     ModelMeshOptions,
 };
+pub use entity::BlockEntityData;
 pub use error::ModelError;
 pub use parser::{
     mesh_to_obj_string, BakedObjFace, BlockModelJson, BlockState, BlockStateDefinition,

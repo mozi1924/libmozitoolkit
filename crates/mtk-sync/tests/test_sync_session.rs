@@ -262,3 +262,166 @@ fn test_delta_staging_and_replay_after_baseline() {
     let blk = session.world.read().unwrap().get_block(1, 1, 1).to_string();
     assert_eq!(blk, "minecraft:dirt");
 }
+
+#[test]
+fn test_baseline_and_delta_entity_integration() {
+    let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None);
+
+    let min_pos = IVec3::new(0, 0, 0);
+    let size = IVec3::new(2, 2, 2);
+    let raw_voxels = vec![1u8; 8]; // all decorated pots (state 1)
+
+    let mut encoder = zstd::stream::Encoder::new(Vec::new(), 1).unwrap();
+    encoder.write_all(&raw_voxels).unwrap();
+    let compressed = encoder.finish().unwrap();
+
+    let mut chunk_hasher = xxhash_rust::xxh64::Xxh64::new(0);
+    chunk_hasher.update(&compressed);
+    let chunk_hash = chunk_hasher.digest();
+
+    let pot_state = "minecraft:decorated_pot[facing=north]";
+    let expected_state_hash = compute_canonical_state_hash(
+        min_pos,
+        size,
+        "minecraft:overworld",
+        |_, _, _| pot_state.to_string(),
+        |_, _, _| "minecraft:plains".to_string(),
+    );
+
+    // 1. Welcome
+    session.process_packet_direct(Packet::Welcome {
+        negotiated_version: 3,
+        server_uuid: [6u8; 16],
+        epoch: 1,
+        server_seq: 10,
+        current_min: min_pos,
+        current_size: size,
+        current_state_hash: expected_state_hash,
+        decision: SyncDecision::FullBaselineRequired,
+        message_or_dimension: "minecraft:overworld".to_string(),
+    });
+
+    // 2. BaselineBegin
+    session.process_packet_direct(Packet::BaselineBegin {
+        epoch: 1,
+        snapshot_uuid: [7u8; 16],
+        snapshot_seq: 10,
+        min_pos,
+        size,
+        state_hash: expected_state_hash,
+        palette_revision: 1,
+        total_chunks: 1,
+        total_encoded_bytes: compressed.len() as u64,
+        total_decoded_bytes: 8,
+        compression_mode: 1,
+        palette_bits_per_block: 8,
+        biome_bits_per_quart: 8,
+        dimension: "minecraft:overworld".to_string(),
+        block_palette: vec!["minecraft:air".to_string(), pot_state.to_string()],
+        biome_palette: vec!["minecraft:plains".to_string()],
+    });
+
+    // 3. BaselineEntities
+    let pot_data = mtk_model::BlockEntityData::DecoratedPot {
+        sherds: [
+            Some("minecraft:archer_pottery_sherd".to_string()),
+            Some("minecraft:prize_pottery_sherd".to_string()),
+            None,
+            None,
+        ],
+    };
+    session.process_packet_direct(Packet::BaselineEntities {
+        epoch: 1,
+        snapshot_uuid: [7u8; 16],
+        entities: vec![(IVec3::new(0, 0, 0), pot_data.clone())],
+    });
+
+    // 4. BaselineChunk
+    session.process_packet_direct(Packet::BaselineChunk {
+        epoch: 1,
+        snapshot_uuid: [7u8; 16],
+        chunk_index: 0,
+        total_chunks: 1,
+        first_voxel_index: 0,
+        voxel_count: 8,
+        payload_len: compressed.len() as u32,
+        decoded_target_bytes: 8,
+        chunk_xxhash64: chunk_hash,
+        payload: compressed,
+    });
+
+    // 5. BaselineEnd
+    session.process_packet_direct(Packet::BaselineEnd {
+        epoch: 1,
+        snapshot_uuid: [7u8; 16],
+        snapshot_seq: 10,
+        total_chunks_sent: 1,
+        final_state_hash: expected_state_hash,
+        status: 0,
+    });
+
+    assert_eq!(session.lifecycle(), SyncLifecycle::Live);
+
+    // Verify baseline entity is loaded in section (0, 0, 0)
+    {
+        let world = session.world.read().unwrap();
+        let sec = world
+            .storage
+            .sections
+            .get(&IVec3::new(0, 0, 0))
+            .expect("Section (0,0,0) must exist");
+        let entity = sec
+            .get_block_entity(0)
+            .expect("Entity at local 0 must exist");
+        assert_eq!(*entity, pot_data);
+    }
+
+    // 6. Send DeltaEntity for (1, 1, 1)
+    let new_pot_data = mtk_model::BlockEntityData::DecoratedPot {
+        sherds: [
+            Some("minecraft:miner_pottery_sherd".to_string()),
+            None,
+            None,
+            None,
+        ],
+    };
+    session.process_packet_direct(Packet::DeltaEntity {
+        epoch: 1,
+        seq_id: 11,
+        rel_pos: IVec3::new(1, 1, 1),
+        entity: Some(new_pot_data.clone()),
+    });
+
+    // Verify DeltaEntity updated section
+    {
+        let world = session.world.read().unwrap();
+        let sec = world
+            .storage
+            .sections
+            .get(&IVec3::new(0, 0, 0))
+            .expect("Section (0,0,0) must exist");
+        let local_1_1_1 = 1 | (1 << 8) | (1 << 4); // x + y*256 + z*16
+        let entity = sec
+            .get_block_entity(local_1_1_1)
+            .expect("Entity at (1,1,1) must exist");
+        assert_eq!(*entity, new_pot_data);
+    }
+
+    // 7. Send DeltaEntity with None to delete entity at (0, 0, 0)
+    session.process_packet_direct(Packet::DeltaEntity {
+        epoch: 1,
+        seq_id: 12,
+        rel_pos: IVec3::new(0, 0, 0),
+        entity: None,
+    });
+
+    {
+        let world = session.world.read().unwrap();
+        let sec = world
+            .storage
+            .sections
+            .get(&IVec3::new(0, 0, 0))
+            .expect("Section (0,0,0) must exist");
+        assert_eq!(sec.get_block_entity(0), None);
+    }
+}

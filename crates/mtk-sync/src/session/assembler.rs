@@ -111,6 +111,7 @@ pub struct BaselineAssembler {
     pub expected_next_voxel_index: u64,
     pub raw_voxel_indices: Vec<u16>,
     pub raw_quart_biome_indices: Vec<u16>,
+    pub block_entities: HashMap<IVec3, mtk_model::BlockEntityData>,
 }
 
 impl BaselineAssembler {
@@ -205,6 +206,7 @@ impl BaselineAssembler {
             expected_next_voxel_index: 0,
             raw_voxel_indices: Vec::with_capacity(total_voxels as usize),
             raw_quart_biome_indices: Vec::new(),
+            block_entities: HashMap::new(),
         })
     }
 
@@ -481,6 +483,23 @@ impl BaselineAssembler {
             // Derive the shared biome metadata (surface column map + dominant primary)
             // through the same implementation the save loader uses.
             storage.finalize_biome_metadata();
+        }
+
+        // Apply RFC v3.2 Sparse Block Entities
+        for (rel_pos, entity) in &self.block_entities {
+            let wx = self.min_pos.x + rel_pos.x;
+            let wy = self.min_pos.y + rel_pos.y;
+            let wz = self.min_pos.z + rel_pos.z;
+            let sec_coord = IVec3::new(wx >> 4, wy >> 4, wz >> 4);
+            let sec = storage
+                .sections
+                .entry(sec_coord)
+                .or_insert_with(|| SectionStorage::new(sec_coord));
+            let blx = (wx & 15) as usize;
+            let bly = (wy & 15) as usize;
+            let blz = (wz & 15) as usize;
+            let local_idx = mtk_voxel::storage::block_index(blx, bly, blz) as u16;
+            sec.set_block_entity(local_idx, Some(entity.clone()));
         }
 
         // Validate state_hash SSOT

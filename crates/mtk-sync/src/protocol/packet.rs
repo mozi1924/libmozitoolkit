@@ -163,4 +163,19 @@ pub enum Packet {
         error_code: ErrorCode,
         message: String,
     },
+
+    /// 0x11: Sparse BlockEntity Stream (RFC v3.2, S -> C)
+    BaselineEntities {
+        epoch: u64,
+        snapshot_uuid: [u8; 16],
+        entities: Vec<(IVec3, mtk_model::BlockEntityData)>,
+    },
+
+    /// 0x12: Sparse BlockEntity Delta Update (RFC v3.2, S -> C)
+    DeltaEntity {
+        epoch: u64,
+        seq_id: u64,
+        rel_pos: IVec3,
+        entity: Option<mtk_model::BlockEntityData>,
+    },
 }

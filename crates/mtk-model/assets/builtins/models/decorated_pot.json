@@ -2,7 +2,11 @@
   "textures": {
     "particle": "minecraft:entity/decorated_pot/decorated_pot_base",
     "base": "minecraft:entity/decorated_pot/decorated_pot_base",
-    "side": "minecraft:entity/decorated_pot/decorated_pot_side"
+    "side": "minecraft:entity/decorated_pot/decorated_pot_side",
+    "front": "minecraft:entity/decorated_pot/decorated_pot_side",
+    "back": "minecraft:entity/decorated_pot/decorated_pot_side",
+    "left": "minecraft:entity/decorated_pot/decorated_pot_side",
+    "right": "minecraft:entity/decorated_pot/decorated_pot_side"
   },
   "elements": [
     {
@@ -19,19 +23,19 @@
         },
         "north": {
           "uv": [ 1.0, 0.0, 15.0, 16.0 ],
-          "texture": "#side"
+          "texture": "#front"
         },
         "south": {
           "uv": [ 1.0, 0.0, 15.0, 16.0 ],
-          "texture": "#side"
+          "texture": "#back"
         },
         "east": {
           "uv": [ 1.0, 0.0, 15.0, 16.0 ],
-          "texture": "#side"
+          "texture": "#right"
         },
         "west": {
           "uv": [ 1.0, 0.0, 15.0, 16.0 ],
-          "texture": "#side"
+          "texture": "#left"
         }
       }
     },

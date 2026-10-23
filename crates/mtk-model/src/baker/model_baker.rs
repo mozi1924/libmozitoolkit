@@ -61,6 +61,20 @@ impl ModelBaker {
         &mut self,
         state_str: &str,
         blockstate_def: Option<&BlockStateDefinition>,
+        model_loader: F,
+    ) -> Result<BakedModel, ModelError>
+    where
+        F: FnMut(&str) -> Option<BlockModelJson>,
+    {
+        self.bake_blockstate_with_entity(state_str, None, blockstate_def, model_loader)
+    }
+
+    /// Bakes a BlockState with optional `BlockEntityData` into a `BakedModel`.
+    pub fn bake_blockstate_with_entity<F>(
+        &mut self,
+        state_str: &str,
+        entity: Option<&crate::entity::BlockEntityData>,
+        blockstate_def: Option<&BlockStateDefinition>,
         mut model_loader: F,
     ) -> Result<BakedModel, ModelError>
     where
@@ -68,8 +82,12 @@ impl ModelBaker {
     {
         let blockstate = BlockState::parse(state_str)?;
         let canonical_str = blockstate.to_canonical_string();
+        let cache_key = match entity {
+            Some(e) => format!("{}:{:?}", canonical_str, e),
+            None => canonical_str.clone(),
+        };
 
-        if let Some(cached) = self.bake_cache.get(&canonical_str) {
+        if let Some(cached) = self.bake_cache.get(&cache_key) {
             return Ok(cached.clone());
         }
 
@@ -83,13 +101,14 @@ impl ModelBaker {
             vec![BlockStateResolver::heuristic_match(&blockstate)]
         };
 
-        let baked_model = self.bake_matches(
+        let baked_model = self.bake_matches_with_entity(
             &canonical_str,
             &blockstate,
+            entity,
             &variant_matches,
             &mut model_loader,
         )?;
-        self.bake_cache.insert(canonical_str, baked_model.clone());
+        self.bake_cache.insert(cache_key, baked_model.clone());
         Ok(baked_model)
     }
 
@@ -139,15 +158,36 @@ impl ModelBaker {
     where
         F: FnMut(&str) -> Option<BlockModelJson>,
     {
+        self.bake_matches_with_entity(
+            canonical_str,
+            blockstate,
+            None,
+            variant_matches,
+            model_loader,
+        )
+    }
+
+    fn bake_matches_with_entity<F>(
+        &mut self,
+        canonical_str: &str,
+        blockstate: &BlockState,
+        entity: Option<&crate::entity::BlockEntityData>,
+        variant_matches: &[VariantMatch],
+        model_loader: &mut F,
+    ) -> Result<BakedModel, ModelError>
+    where
+        F: FnMut(&str) -> Option<BlockModelJson>,
+    {
         let mut baked_elements = Vec::new();
         let mut six_faces: [Option<BakedFace>; 6] = [None, None, None, None, None, None];
 
         let allow_blockstate_builtin = variant_matches.len() == 1;
 
         for variant in variant_matches {
-            let resolved = self.resolve_variant_model(
+            let resolved = self.resolve_variant_model_with_entity(
                 &variant.model_id,
                 blockstate,
+                entity,
                 allow_blockstate_builtin,
                 model_loader,
             )?;
@@ -362,10 +402,11 @@ impl ModelBaker {
         Ok(baked_model)
     }
 
-    fn resolve_variant_model<F>(
+    fn resolve_variant_model_with_entity<F>(
         &mut self,
         model_id: &str,
         blockstate: &BlockState,
+        entity: Option<&crate::entity::BlockEntityData>,
         allow_blockstate_builtin: bool,
         model_loader: &mut F,
     ) -> Result<std::sync::Arc<ResolvedBlockModel>, ModelError>
@@ -377,9 +418,10 @@ impl ModelBaker {
             .strip_prefix("minecraft:")
             .unwrap_or(&blockstate.name);
         let is_bell = clean_block == "bell";
+        let has_entity = entity.is_some();
 
-        // Fast path: check shared pre-resolved cache and local cache
-        if !is_bell {
+        // Fast path: check shared pre-resolved cache and local cache (only when no entity data)
+        if !is_bell && !has_entity {
             if let Some(ref shared) = self.shared_resolved {
                 if let Some(r) = shared.get(model_id) {
                     if !r.elements.is_empty() {
@@ -403,7 +445,9 @@ impl ModelBaker {
             let is_missing_bell_body = is_bell && !res.textures.contains_key("bell_body");
             if res.elements.is_empty() || is_missing_bell_body {
                 if allow_blockstate_builtin {
-                    if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(blockstate) {
+                    if let Some(builtin) =
+                        BuiltinModelRegistry::get_builtin_model_with_entity(blockstate, entity)
+                    {
                         builtin.resolve_hierarchy(model_id, |id| {
                             model_loader(id)
                                 .or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
@@ -433,7 +477,9 @@ impl ModelBaker {
                 res
             }
         } else if allow_blockstate_builtin {
-            if let Some(builtin) = BuiltinModelRegistry::get_builtin_model(blockstate) {
+            if let Some(builtin) =
+                BuiltinModelRegistry::get_builtin_model_with_entity(blockstate, entity)
+            {
                 builtin.resolve_hierarchy(model_id, |id| {
                     model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
                 })?

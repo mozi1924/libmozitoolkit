@@ -278,6 +278,45 @@ pub fn decode_packet<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, P
             dict.set_item("sequence", sequence)?;
             dict.set_item("is_match", is_match)?;
         }
+        Packet::BaselineEntities {
+            epoch,
+            snapshot_uuid,
+            entities,
+        } => {
+            dict.set_item("type", "BASELINE_ENTITIES")?;
+            dict.set_item("epoch", epoch)?;
+            dict.set_item("snapshot_uuid", PyBytes::new(py, &snapshot_uuid))?;
+            let ent_list = pyo3::types::PyList::empty(py);
+            for (pos, ed) in entities {
+                let item = PyDict::new(py);
+                item.set_item("rel_x", pos.x)?;
+                item.set_item("rel_y", pos.y)?;
+                item.set_item("rel_z", pos.z)?;
+                let json_str = serde_json::to_string(&ed).unwrap_or_default();
+                item.set_item("entity", json_str)?;
+                ent_list.append(item)?;
+            }
+            dict.set_item("entities", ent_list)?;
+        }
+        Packet::DeltaEntity {
+            epoch,
+            seq_id,
+            rel_pos,
+            entity,
+        } => {
+            dict.set_item("type", "DELTA_ENTITY")?;
+            dict.set_item("epoch", epoch)?;
+            dict.set_item("seq_id", seq_id)?;
+            dict.set_item("rel_x", rel_pos.x)?;
+            dict.set_item("rel_y", rel_pos.y)?;
+            dict.set_item("rel_z", rel_pos.z)?;
+            if let Some(ed) = entity {
+                let json_str = serde_json::to_string(&ed).unwrap_or_default();
+                dict.set_item("entity", json_str)?;
+            } else {
+                dict.set_item("entity", py.None())?;
+            }
+        }
     }
 
     Ok(dict)

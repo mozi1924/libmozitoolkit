@@ -105,6 +105,13 @@ impl PyVoxelStorage {
         self.inner.get_block(x, y, z)
     }
 
+    /// Gets the JSON representation of the block entity at world coordinate `(x, y, z)`, if any.
+    pub fn get_block_entity_json(&self, x: i32, y: i32, z: i32) -> Option<String> {
+        self.inner
+            .get_block_entity(x, y, z)
+            .and_then(|be| serde_json::to_string(be).ok())
+    }
+
     /// Sets the blockstate at world coordinate `(x, y, z)` and marks dirty sections.
     #[pyo3(signature = (x, y, z, state, biome=None))]
     pub fn set_block(&mut self, x: i32, y: i32, z: i32, state: &str, biome: Option<&str>) -> bool {

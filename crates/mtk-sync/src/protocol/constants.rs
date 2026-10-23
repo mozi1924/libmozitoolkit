@@ -56,6 +56,10 @@ pub enum Opcode {
     Pong = 0x0F,
     /// 0x10: Diagnostic Error Response (Bidirectional)
     Error = 0x10,
+    /// 0x11: Sparse BlockEntity Stream (RFC v3.2, S -> C)
+    BaselineEntities = 0x11,
+    /// 0x12: Sparse BlockEntity Delta Update (RFC v3.2, S -> C)
+    DeltaEntity = 0x12,
 }
 
 impl Opcode {
@@ -76,6 +80,8 @@ impl Opcode {
             0x0E => Some(Opcode::Ping),
             0x0F => Some(Opcode::Pong),
             0x10 => Some(Opcode::Error),
+            0x11 => Some(Opcode::BaselineEntities),
+            0x12 => Some(Opcode::DeltaEntity),
             _ => None,
         }
     }

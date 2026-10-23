@@ -11,6 +11,7 @@ use mtk_cull::types::BlockCullMeta;
 use mtk_cull::FaceCuller;
 use mtk_model::baker::is_block_emissive;
 use mtk_model::parser::blockstate::BlockState;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::fluid::emit_fluid_geometry;
@@ -146,6 +147,34 @@ impl SectionMesher {
             }
         };
 
+        // RFC v3.2: Pre-resolve dynamic model data for any sparse block entities in this section
+        let mut entity_meshing_entries = HashMap::new();
+        if !padded.block_entities.is_empty() {
+            let mut baker = mtk_model::ModelBaker::new();
+            for (&local_idx, be) in &padded.block_entities {
+                let lx = (local_idx >> 8) as usize;
+                let ly = ((local_idx >> 4) & 15) as usize;
+                let lz = (local_idx & 15) as usize;
+                let px = lx + 1;
+                let py = ly + 1;
+                let pz = lz + 1;
+                let pal_idx = padded.get_padded_idx(px, py, pz) as usize;
+                if pal_idx < padded.palette.len() {
+                    let state_str = &padded.palette[pal_idx];
+                    if let Ok(baked) =
+                        baker.bake_blockstate_with_entity(state_str, Some(be), None, |_| None)
+                    {
+                        let source = crate::mesher::shading::types::ModelSource::Single(&baked);
+                        let m_data =
+                            crate::mesher::shading::palette::resolve_palette_meshing_data_for_state(
+                                state_str, &source, config,
+                            );
+                        entity_meshing_entries.insert(local_idx, std::sync::Arc::new(m_data));
+                    }
+                }
+            }
+        }
+
         for lx in 0..SECTION_SIZE {
             let px = lx + 1;
             let wx = world_offset_x + lx as f32;
@@ -253,34 +282,47 @@ impl SectionMesher {
                         }
                     };
 
-                    if entry.has_model {
+                    let local_idx = ((lx << 8) | (ly << 4) | lz) as u16;
+                    let entity_data = entity_meshing_entries.get(&local_idx);
+
+                    if entity_data.is_some() || entry.has_model {
                         has_non_grid_geometry = true;
-                        let (culled_faces, unculled_faces) = match &*entry.meshing_data {
-                            PaletteMeshingData::Model {
-                                culled_faces,
-                                unculled_faces,
-                            } => (culled_faces, unculled_faces),
-                            PaletteMeshingData::VariantModel {
-                                variants,
-                                weights,
-                                total_weight,
-                            } => {
-                                let seed =
-                                    mc_coordinate_seed(block_pos.x, block_pos.y, block_pos.z);
-                                let mut rng = JavaRandom::new(seed);
-                                let mut target = rng.next_int(*total_weight);
-                                let mut chosen = 0;
-                                for (i, &w) in weights.iter().enumerate() {
-                                    if target < w {
-                                        chosen = i;
-                                        break;
-                                    }
-                                    target = target.saturating_sub(w);
-                                }
-                                let b = &variants[chosen];
-                                (&b.culled_faces, &b.unculled_faces)
+                        let (culled_faces, unculled_faces) = if let Some(emd) = entity_data {
+                            match &**emd {
+                                PaletteMeshingData::Model {
+                                    ref culled_faces,
+                                    ref unculled_faces,
+                                } => (culled_faces, unculled_faces),
+                                _ => unreachable!(),
                             }
-                            PaletteMeshingData::UnitCube { .. } => unreachable!(),
+                        } else {
+                            match &*entry.meshing_data {
+                                PaletteMeshingData::Model {
+                                    ref culled_faces,
+                                    ref unculled_faces,
+                                } => (culled_faces, unculled_faces),
+                                PaletteMeshingData::VariantModel {
+                                    ref variants,
+                                    ref weights,
+                                    total_weight,
+                                } => {
+                                    let seed =
+                                        mc_coordinate_seed(block_pos.x, block_pos.y, block_pos.z);
+                                    let mut rng = JavaRandom::new(seed);
+                                    let mut target = rng.next_int(*total_weight);
+                                    let mut chosen = 0;
+                                    for (i, &w) in weights.iter().enumerate() {
+                                        if target < w {
+                                            chosen = i;
+                                            break;
+                                        }
+                                        target = target.saturating_sub(w);
+                                    }
+                                    let b = &variants[chosen];
+                                    (&b.culled_faces, &b.unculled_faces)
+                                }
+                                PaletteMeshingData::UnitCube { .. } => unreachable!(),
+                            }
                         };
 
                         let mut emit_model_face = |mf: &PreResolvedModelFace| {

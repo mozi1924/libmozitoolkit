@@ -584,6 +584,18 @@ pub fn handle_packet(
             }
         }
 
+        Packet::BaselineEntities {
+            epoch,
+            snapshot_uuid,
+            entities,
+        } => {
+            if let Some(assembler) = state.assembler.as_mut() {
+                if epoch == assembler.epoch && snapshot_uuid == assembler.snapshot_uuid {
+                    assembler.block_entities.extend(entities);
+                }
+            }
+        }
+
         Packet::BaselineEnd {
             epoch,
             snapshot_uuid,
@@ -856,6 +868,30 @@ pub fn handle_packet(
                 state.palette_revision = new_revision;
                 for (id, str_val) in entries {
                     state.palette_map.insert(id, str_val);
+                }
+            }
+        }
+
+        Packet::DeltaEntity {
+            epoch,
+            rel_pos,
+            ref entity,
+            ..
+        } => {
+            if epoch == state.epoch {
+                let wx = state.min_pos.x + rel_pos.x;
+                let wy = state.min_pos.y + rel_pos.y;
+                let wz = state.min_pos.z + rel_pos.z;
+                let sec_coord = IVec3::new(wx >> 4, wy >> 4, wz >> 4);
+                let mut w = lock_world_write(world);
+                if let Some(sec) = w.storage.sections.get_mut(&sec_coord) {
+                    let blx = (wx & 15) as usize;
+                    let bly = (wy & 15) as usize;
+                    let blz = (wz & 15) as usize;
+                    let local_idx = mtk_voxel::storage::block_index(blx, bly, blz) as u16;
+                    sec.set_block_entity(local_idx, entity.clone());
+                    w.clear_cache();
+                    state.pending_dirty_rebuild = true;
                 }
             }
         }

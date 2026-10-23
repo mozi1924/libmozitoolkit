@@ -1214,3 +1214,48 @@ fn test_dirt_path_mesh_ao_neighbor_shading() {
 
     assert!(found_top_face, "Dirt path top face must be emitted");
 }
+
+#[test]
+fn test_decorated_pot_block_entity_meshing() {
+    let mut sec = mtk_voxel::storage::SectionStorage::new(IVec3::new(0, 0, 0));
+    let local_idx = mtk_voxel::storage::block_index(2, 2, 2) as u16;
+
+    // Register decorated pot in palette
+    let pal_idx = sec.palette.len() as u16;
+    sec.palette
+        .push("minecraft:decorated_pot[facing=north]".to_string());
+    sec.voxels[local_idx as usize] = pal_idx;
+    sec.non_air_count = 1;
+
+    // Attach BlockEntityData
+    let pot_entity = mtk_voxel::BlockEntityData::DecoratedPot {
+        sherds: [
+            Some("minecraft:angler_pottery_sherd".to_string()),
+            None,
+            Some("miner".to_string()),
+            Some("blade_pottery_sherd".to_string()),
+        ],
+    };
+    sec.set_block_entity(local_idx, Some(pot_entity));
+
+    let padded = sec.build_padded_array(|_, _, _| "minecraft:air");
+    assert!(padded.block_entities.contains_key(&local_idx));
+
+    let culler = FaceCuller::default();
+    let config = MesherConfig::default();
+
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
+
+    assert!(
+        mesh.face_count() >= 16,
+        "Decorated pot must have all faces emitted (got {})",
+        mesh.face_count()
+    );
+
+    // Verify positions are centered around (2, 2, 2)
+    for pos in &mesh.positions {
+        assert!(pos[0] >= 2.0 && pos[0] <= 3.0);
+        assert!(pos[1] >= 2.0 && pos[1] <= 3.3); // Rim goes slightly above Y=3.0 (up to 20/16 = 1.25)
+        assert!(pos[2] >= 2.0 && pos[2] <= 3.0);
+    }
+}

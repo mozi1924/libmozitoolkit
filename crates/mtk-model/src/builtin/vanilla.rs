@@ -212,7 +212,7 @@ pub fn get_builtin_model_by_id(model_id: &str) -> Option<BlockModelJson> {
     }
 
     if stem == "decorated_pot" {
-        return serde_json::from_str(MODEL_DECORATED_POT).ok();
+        return create_builtin_decorated_pot_model(None);
     }
     if stem == "end_portal" {
         return serde_json::from_str(MODEL_END_PORTAL).ok();
@@ -391,14 +391,43 @@ fn create_builtin_banner_model(blockstate: &BlockState) -> Option<BlockModelJson
     })
 }
 
+/// Constructs a decorated pot model, optionally overriding the 4 sides with sherd patterns.
+pub fn create_builtin_decorated_pot_model(
+    entity: Option<&crate::entity::BlockEntityData>,
+) -> Option<BlockModelJson> {
+    let mut model: BlockModelJson = serde_json::from_str(MODEL_DECORATED_POT).ok()?;
+    if let Some(crate::entity::BlockEntityData::DecoratedPot { sherds }) = entity {
+        if let Some(ref mut textures) = model.textures {
+            // [back, left, right, front]
+            let back_tex = crate::entity::BlockEntityData::sherd_texture(sherds[0].as_deref());
+            let left_tex = crate::entity::BlockEntityData::sherd_texture(sherds[1].as_deref());
+            let right_tex = crate::entity::BlockEntityData::sherd_texture(sherds[2].as_deref());
+            let front_tex = crate::entity::BlockEntityData::sherd_texture(sherds[3].as_deref());
+            textures.insert("back".to_string(), TextureValue::Path(back_tex));
+            textures.insert("left".to_string(), TextureValue::Path(left_tex));
+            textures.insert("right".to_string(), TextureValue::Path(right_tex));
+            textures.insert("front".to_string(), TextureValue::Path(front_tex));
+        }
+    }
+    Some(model)
+}
+
 /// Fallback model for a blockstate when no external model was discovered.
 pub fn get_builtin_model_for_state(blockstate: &BlockState) -> Option<BlockModelJson> {
+    get_builtin_model_for_state_and_entity(blockstate, None)
+}
+
+/// Fallback model for a blockstate and optional block entity data.
+pub fn get_builtin_model_for_state_and_entity(
+    blockstate: &BlockState,
+    entity: Option<&crate::entity::BlockEntityData>,
+) -> Option<BlockModelJson> {
     let clean = blockstate
         .name
         .strip_prefix("minecraft:")
         .unwrap_or(&blockstate.name);
     if clean == "decorated_pot" {
-        return get_builtin_model_by_id("decorated_pot");
+        return create_builtin_decorated_pot_model(entity);
     }
     if clean == "end_portal" {
         return get_builtin_model_by_id("end_portal");

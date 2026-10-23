@@ -29,6 +29,10 @@ pub struct SectionStorage {
     /// Optional 3D 4x4x4 quart paletted biomes for this section.
     #[cfg_attr(feature = "serde", serde(default))]
     pub biomes: Option<super::biome::SectionBiomes>,
+    /// RFC v3.2: Sparse block entities in this 16x16x16 section.
+    /// Key is local block index (0..4095: lx * 256 + ly * 16 + lz).
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub block_entities: HashMap<u16, mtk_model::BlockEntityData>,
 }
 
 #[cfg(feature = "serde")]
@@ -80,6 +84,7 @@ impl SectionStorage {
             non_air_count: 0,
             cached_crc: Some(EMPTY_SECTION_CRC),
             biomes: None,
+            block_entities: HashMap::new(),
         }
     }
 
@@ -90,6 +95,24 @@ impl SectionStorage {
         self.non_air_count = 0;
         self.cached_crc = Some(EMPTY_SECTION_CRC);
         self.biomes = None;
+        self.block_entities.clear();
+    }
+
+    /// Retrieves the optional block entity associated with a local voxel index (0..4095).
+    #[inline]
+    pub fn get_block_entity(&self, local_idx: u16) -> Option<&mtk_model::BlockEntityData> {
+        self.block_entities.get(&local_idx)
+    }
+
+    /// Sets or removes a block entity at a local voxel index (0..4095).
+    #[inline]
+    pub fn set_block_entity(&mut self, local_idx: u16, data: Option<mtk_model::BlockEntityData>) {
+        if let Some(d) = data {
+            self.block_entities.insert(local_idx, d);
+        } else {
+            self.block_entities.remove(&local_idx);
+        }
+        self.cached_crc = None;
     }
 
     /// Creates a section pre-populated from a 4096-element blockstate slice.
@@ -312,6 +335,7 @@ impl SectionStorage {
             padded_voxels: padded,
             is_empty: self.is_empty(),
             biome_data: None,
+            block_entities: self.block_entities.clone(),
         }
     }
 }
@@ -331,6 +355,9 @@ pub struct PaddedVoxelArray {
     /// Precomputed smoothed biome columns (lx * 16 + lz in 0..256), if available.
     #[cfg_attr(feature = "serde", serde(default))]
     pub biome_data: Option<Vec<crate::biome::SmoothedBiomeColumn>>,
+    /// RFC v3.2: Sparse block entities from the core 16x16x16 section.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub block_entities: HashMap<u16, mtk_model::BlockEntityData>,
 }
 
 impl PaddedVoxelArray {

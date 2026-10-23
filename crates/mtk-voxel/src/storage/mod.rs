@@ -6,6 +6,7 @@ pub mod world;
 
 pub use biome::*;
 pub use crc::*;
+pub use mtk_model::BlockEntityData;
 pub use point_cloud::*;
 pub use section::*;
 pub use world::*;
