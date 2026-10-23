@@ -1230,18 +1230,84 @@ fn test_end_portal_gateway_conduit_and_banner_builtins() {
     assert!(dec_tex.contains(&"minecraft:entity/decorated_pot/blade_pottery_pattern".to_string()));
     assert!(dec_tex.contains(&"minecraft:entity/decorated_pot/decorated_pot_side".to_string()));
     assert!(dec_tex.contains(&"minecraft:entity/decorated_pot/decorated_pot_base".to_string()));
-    for uv in &pot_mesh.uvs {
-        assert!(
-            uv[0] >= -1e-4 && uv[0] <= 1.0 + 1e-4,
-            "Decorated pot U coordinate out of bounds: {}",
-            uv[0]
-        );
-        assert!(
-            uv[1] >= -1e-4 && uv[1] <= 1.0 + 1e-4,
-            "Decorated pot V coordinate out of bounds: {}",
-            uv[1]
-        );
-    }
+    // 6.2 Verify directional textures on sides match vanilla DecoratedPotRenderer
+    // facing=north: South (+Z) is front (blade), North (-Z) is back (angler),
+    // West (-X) is left (side), East (+X) is right (miner).
+    let pot_body = decorated_model
+        .elements
+        .iter()
+        .find(|el| {
+            (el.from_pos[0] - 1.0).abs() < 1e-3 || (el.from_pos[0] - 1.0 / 16.0).abs() < 1e-3
+        })
+        .expect("Pot body element must exist");
+
+    let north_face = pot_body
+        .faces
+        .get(&mtk_core::direction::Direction::North)
+        .expect("North face exists");
+    assert!(
+        north_face.texture.contains("angler_pottery_pattern"),
+        "North face must be back pattern (angler), got {}",
+        north_face.texture
+    );
+
+    let south_face = pot_body
+        .faces
+        .get(&mtk_core::direction::Direction::South)
+        .expect("South face exists");
+    assert!(
+        south_face.texture.contains("blade_pottery_pattern"),
+        "South face must be front pattern (blade), got {}",
+        south_face.texture
+    );
+
+    let west_face = pot_body
+        .faces
+        .get(&mtk_core::direction::Direction::West)
+        .expect("West face exists");
+    assert!(
+        west_face.texture.contains("decorated_pot_side"),
+        "West face must be left pattern (default side), got {}",
+        west_face.texture
+    );
+
+    let east_face = pot_body
+        .faces
+        .get(&mtk_core::direction::Direction::East)
+        .expect("East face exists");
+    assert!(
+        east_face.texture.contains("miner_pottery_pattern"),
+        "East face must be right pattern (miner), got {}",
+        east_face.texture
+    );
+
+    // Verify top and bottom UV assignment
+    let top_face = pot_body
+        .faces
+        .get(&mtk_core::direction::Direction::Up)
+        .expect("Up face exists");
+    // uvs: [North-West, South-West, South-East, North-East]
+    assert!((top_face.uvs[0].x - 7.0 / 16.0).abs() < 1e-4);
+    assert!((top_face.uvs[0].y - 13.5 / 16.0).abs() < 1e-4);
+    assert!((top_face.uvs[1].x - 7.0 / 16.0).abs() < 1e-4);
+    assert!((top_face.uvs[1].y - 6.5 / 16.0).abs() < 1e-4);
+    assert!((top_face.uvs[2].x - 14.0 / 16.0).abs() < 1e-4);
+    assert!((top_face.uvs[2].y - 6.5 / 16.0).abs() < 1e-4);
+    assert!((top_face.uvs[3].x - 14.0 / 16.0).abs() < 1e-4);
+    assert!((top_face.uvs[3].y - 13.5 / 16.0).abs() < 1e-4);
+
+    let down_face = pot_body
+        .faces
+        .get(&mtk_core::direction::Direction::Down)
+        .expect("Down face exists");
+    assert!((down_face.uvs[0].x - 0.0 / 16.0).abs() < 1e-4);
+    assert!((down_face.uvs[0].y - 6.5 / 16.0).abs() < 1e-4);
+    assert!((down_face.uvs[1].x - 0.0 / 16.0).abs() < 1e-4);
+    assert!((down_face.uvs[1].y - 13.5 / 16.0).abs() < 1e-4);
+    assert!((down_face.uvs[2].x - 7.0 / 16.0).abs() < 1e-4);
+    assert!((down_face.uvs[2].y - 13.5 / 16.0).abs() < 1e-4);
+    assert!((down_face.uvs[3].x - 7.0 / 16.0).abs() < 1e-4);
+    assert!((down_face.uvs[3].y - 6.5 / 16.0).abs() < 1e-4);
 
     // Verify decorated pot neck (Y in [16/16, 17/16]) and rim (Y in [17/16, 20/16])
     let max_y = pot_mesh
