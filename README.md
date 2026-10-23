@@ -74,12 +74,22 @@ cargo build --release -p mtk-cli
 cargo check -p mtk-wasm --target wasm32-unknown-unknown
 ```
 
-### 4. Python 扩展构建 (需工作区专属虚拟环境)
-```bash
-source .venv/bin/activate
-maturin build --release -m bindings/mtk-py/Cargo.toml
-maturin build --release -m adapters/blender/mtk-blender-dna-py/Cargo.toml
-```
+### 4. Python 扩展构建
+
+- **开发态直通构建（Dev Direct-Link，推荐日常开发）**：
+  ```bash
+  cargo build-all-py      # 一键编译 mtk-py 与 mtk-blender-dna-py（自动注入 extension-module）
+  cargo build-py          # 仅编译通用计算内核 mtk-py
+  cargo build-dna         # 仅编译 Blender DNA 适配器 mtk-blender-dna-py
+  ```
+  产物输出至 `target/release/`，通过软链接由 `MoziToolKit/dev/loader.py` 即时载入 Blender。
+
+- **发布态 Wheel 构建（Release Packaging，需专属虚拟环境）**：
+  ```bash
+  source .venv/bin/activate
+  maturin build --release -m bindings/mtk-py/Cargo.toml
+  maturin build --release -m adapters/blender/mtk-blender-dna-py/Cargo.toml
+  ```
 
 ### 5. 持续集成 (GitHub Actions)
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) 在 push/PR 时执行：`fmt --check`、`clippy -D warnings`、`cargo test --workspace`（从临时 Release 注入真包）、`wasm32-unknown-unknown` 兼容性检查与 abi3 Python wheel 构建。

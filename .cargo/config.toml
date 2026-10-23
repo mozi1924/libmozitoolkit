@@ -36,3 +36,12 @@ rustflags = ["--cfg", 'getrandom_backend="wasm_js"']
 build-py = "build --release -p mtk-py --features extension-module"
 build-py-dev = "build -p mtk-py --features extension-module"
 
+# Standalone Blender DNA adapter module
+build-dna = "build --release -p mtk-blender-dna-py --features extension-module"
+build-dna-dev = "build -p mtk-blender-dna-py --features extension-module"
+
+# One-step build for all dev-mode Python extension modules (mtk-py + mtk-blender-dna-py)
+build-all-py = "build --release -p mtk-py -p mtk-blender-dna-py --features mtk-py/extension-module,mtk-blender-dna-py/extension-module"
+build-all-py-dev = "build -p mtk-py -p mtk-blender-dna-py --features mtk-py/extension-module,mtk-blender-dna-py/extension-module"
+
+

@@ -46,7 +46,9 @@
   - `adapters/blender/mtk-blender-dna-py`：编译产出专为 Blender C++ 内存直写打造的独立 `libmtk_blender_dna` 适配器扩展。
 - **工作区虚拟环境约束**：编译与调试 Python 绑定轮子时，必须严格使用工作区内的虚拟环境（`./.venv`），严禁污染全局环境。
 - **开发态直通与发布态隔离 (Dev Direct-Link vs Release Wheel Isolation)**：
-  - **日常开发态 (Dev Direct Link)**：使用 `cargo build-py` 产出动态库，通过软链接（`MoziToolKit/dev/lib/`）直通 Blender 插件前端，修改编译后即时生效，开发期严禁频繁构建安装轮子。
+  - **日常开发态 (Dev Direct Link)**：使用 Cargo 标准别名直通构建（推荐 `cargo build-all-py` 一键构建双动态库，或分别使用 `cargo build-py` 与 `cargo build-dna`；Debug 版对应 `-dev` 后缀）。别名已默认且必须附带 `--features extension-module`，以杜绝 Blender 动态载入时的双 Python 运行时符号冲突与段错误崩溃。
+  - **严禁在 `Cargo.toml` 的 `default` 中开启 `extension-module`**：由于 Rust `cargo test` 会编译独立可执行测试二进制，默认开启会导致测试二进制因缺失 `libpython` 符号而无法链接，破坏 `cargo test --workspace` 门禁。因此 `extension-module` 只能通过 Cargo 别名（开发态）或 `maturin` / `pyproject.toml`（发布态）按需激活。
+  - **软链接直通**：构建产物通过软链接（`MoziToolKit/dev/lib/`）直通 Blender 插件前端，修改编译后即时生效，开发期严禁频繁构建安装轮子。
   - **发布态 (Release Packaging)**：通过 `maturin build --release` 产出符合 CPython 3.11+ 标准 ABI (`abi3`) 的跨平台 Wheels（支持 6 平台矩阵），由发布流水线统一装配。
   - **严禁全局安装**：严禁通过 `pip install` 将轮子安装到宿主系统的全局 Python 或 Blender 全局 `bpy` 环境中。
 

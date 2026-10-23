@@ -150,7 +150,21 @@ Python 模块名：`libmtk_py`
 > [!IMPORTANT]
 > 必须严格在当前工作区的虚拟环境 (`./.venv`) 中执行构建，严禁使用全局 Python 或 `pip install` 污染全局 `bpy`！
 
-### 3.1 激活虚拟环境并编译 Python 模块
+### 3.1 本地极速直连开发（Dev Direct-Link，推荐）
+```bash
+cd <libmozitoolkit 工作区根目录>
+
+# 一键编译所有供 Blender 使用的原生扩展（mtk-py + mtk-blender-dna-py）
+# 自动启用 --features extension-module 杜绝 Blender 载入段错误
+cargo build-all-py
+
+# 或仅构建 mtk-py:
+cargo build-py
+
+# 构建产物位于 target/release/，已由 MoziToolKit/dev/loader.py 自动软链直通
+```
+
+### 3.2 生产环境 Wheel 打包构建（Release Packaging）
 ```bash
 cd <libmozitoolkit 工作区根目录>
 source .venv/bin/activate
@@ -158,17 +172,17 @@ source .venv/bin/activate
 # 本地开发模式构建 (生成动态库供测试)
 maturin develop -m bindings/mtk-py/Cargo.toml
 
-# 生产 Release 轮子构建 (产出至 target/wheels/)
+# 生产 Release 轮子构建 (产出至 target/wheels/，maturin 自动注入 extension-module)
 maturin build --release -m bindings/mtk-py/Cargo.toml
 ```
 
-### 3.2 同步至 Blender 插件前端 (`MoziToolKit`)
+### 3.3 同步至 Blender 插件前端 (`MoziToolKit`)
 ```bash
-# 将编译生成的 .whl 拷贝到 MoziToolKit 的 wheels 目录
+# 将编译生成的 .whl 拷贝到 MoziToolKit 的 wheels 目录（仅发布打包时需要）
 cp target/wheels/libmtk_py-*.whl ../MoziToolKit/wheels/
 ```
 
-### 3.3 运行 Python 绑定测试
+### 3.4 运行 Python 绑定测试
 ```bash
 # 运行 mtk-py 专属单元测试
 pytest bindings/mtk-py/tests/
@@ -232,7 +246,7 @@ print("Vertices:", mesh.vertex_count, "Quads:", mesh.quad_count)
 
 | Feature | 默认启用 | 描述 |
 | :--- | :---: | :--- |
-| `extension-module` | 否 | 由 `maturin` 在构建 Python C 扩展动态链接库时启用。 |
+| `extension-module` | 否 | 严禁设为默认（否则 `cargo test` 会因缺失 `libpython` 符号报错）。由 `cargo build-py` / `cargo build-all-py` 或 `maturin` 在构建 Python C 扩展动态链接库时启用。 |
 | `zip` | 是 | 传递给 `mtk-resource`，支持直接读取 `.zip` / `.jar` 资源包。 |
 | `parallel` | 是 | 启用 `rayon` 多线程并发加速（模型展开、体素网格化、图像处理）。 |
 
