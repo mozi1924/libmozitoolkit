@@ -165,6 +165,22 @@ fn test_builtin_chest_and_bell_fallback() {
         "Single chest should have base, lid, and latch"
     );
 
+    // Left double chest baked with same baker must resolve to normal_left, not cached single chest
+    let chest_left = baker
+        .bake_blockstate(
+            "minecraft:chest[facing=north,type=left]",
+            None,
+            empty_loader,
+        )
+        .expect("Should bake left chest using builtin model");
+    assert!(
+        chest_left
+            .elements
+            .iter()
+            .any(|e| { e.faces.values().any(|f| f.texture.contains("normal_left")) }),
+        "Left chest must resolve to normal_left texture"
+    );
+
     // Bell with vanilla-like frame-only elements (missing bell_body texture/elements)
     // should trigger fallback to builtin bell model and include the golden bell body
     let vanilla_bell_loader = |id: &str| {

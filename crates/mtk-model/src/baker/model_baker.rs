@@ -395,6 +395,7 @@ impl ModelBaker {
         }
 
         // Full resolution path
+        let mut can_cache = false;
         let r = if let Some(external) = model_loader(model_id) {
             let res = external.resolve_hierarchy(model_id, |id| {
                 model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
@@ -428,6 +429,7 @@ impl ModelBaker {
                     res
                 }
             } else {
+                can_cache = true;
                 res
             }
         } else if allow_blockstate_builtin {
@@ -451,7 +453,7 @@ impl ModelBaker {
         };
 
         let arc_r = std::sync::Arc::new(r);
-        if !is_bell && !arc_r.elements.is_empty() {
+        if can_cache && !is_bell && !arc_r.elements.is_empty() {
             self.resolved_cache
                 .insert(model_id.to_string(), std::sync::Arc::clone(&arc_r));
         }
