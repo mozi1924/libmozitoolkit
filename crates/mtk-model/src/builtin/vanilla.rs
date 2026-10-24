@@ -391,22 +391,38 @@ fn create_builtin_banner_model(blockstate: &BlockState) -> Option<BlockModelJson
     })
 }
 
+static DECORATED_POT_TEMPLATE: std::sync::OnceLock<BlockModelJson> = std::sync::OnceLock::new();
+
+#[inline]
+fn get_decorated_pot_template() -> &'static BlockModelJson {
+    DECORATED_POT_TEMPLATE.get_or_init(|| {
+        serde_json::from_str(MODEL_DECORATED_POT)
+            .expect("Builtin decorated pot model template must be valid JSON")
+    })
+}
+
 /// Constructs a decorated pot model, optionally overriding the 4 sides with sherd patterns.
 pub fn create_builtin_decorated_pot_model(
     entity: Option<&crate::entity::BlockEntityData>,
 ) -> Option<BlockModelJson> {
-    let mut model: BlockModelJson = serde_json::from_str(MODEL_DECORATED_POT).ok()?;
+    let mut model = get_decorated_pot_template().clone();
     if let Some(crate::entity::BlockEntityData::DecoratedPot { sherds }) = entity {
         if let Some(ref mut textures) = model.textures {
             // [back, left, right, front]
-            let back_tex = crate::entity::BlockEntityData::sherd_texture(sherds[0].as_deref());
-            let left_tex = crate::entity::BlockEntityData::sherd_texture(sherds[1].as_deref());
-            let right_tex = crate::entity::BlockEntityData::sherd_texture(sherds[2].as_deref());
-            let front_tex = crate::entity::BlockEntityData::sherd_texture(sherds[3].as_deref());
-            textures.insert("back".to_string(), TextureValue::Path(back_tex));
-            textures.insert("left".to_string(), TextureValue::Path(left_tex));
-            textures.insert("right".to_string(), TextureValue::Path(right_tex));
-            textures.insert("front".to_string(), TextureValue::Path(front_tex));
+            let back_tex = crate::entity::BlockEntityData::sherd_texture_ref(sherds[0].as_deref());
+            let left_tex = crate::entity::BlockEntityData::sherd_texture_ref(sherds[1].as_deref());
+            let right_tex = crate::entity::BlockEntityData::sherd_texture_ref(sherds[2].as_deref());
+            let front_tex = crate::entity::BlockEntityData::sherd_texture_ref(sherds[3].as_deref());
+            textures.insert("back".to_string(), TextureValue::Path(back_tex.to_string()));
+            textures.insert("left".to_string(), TextureValue::Path(left_tex.to_string()));
+            textures.insert(
+                "right".to_string(),
+                TextureValue::Path(right_tex.to_string()),
+            );
+            textures.insert(
+                "front".to_string(),
+                TextureValue::Path(front_tex.to_string()),
+            );
         }
     }
     Some(model)

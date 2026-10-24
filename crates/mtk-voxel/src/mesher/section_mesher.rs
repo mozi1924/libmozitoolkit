@@ -175,6 +175,8 @@ impl SectionMesher {
             }
         }
 
+        let has_block_entities = !entity_meshing_entries.is_empty();
+
         for lx in 0..SECTION_SIZE {
             let px = lx + 1;
             let wx = world_offset_x + lx as f32;
@@ -282,8 +284,12 @@ impl SectionMesher {
                         }
                     };
 
-                    let local_idx = ((lx << 8) | (ly << 4) | lz) as u16;
-                    let entity_data = entity_meshing_entries.get(&local_idx);
+                    let entity_data = if has_block_entities {
+                        let local_idx = ((lx << 8) | (ly << 4) | lz) as u16;
+                        entity_meshing_entries.get(&local_idx)
+                    } else {
+                        None
+                    };
 
                     if entity_data.is_some() || entry.has_model {
                         has_non_grid_geometry = true;

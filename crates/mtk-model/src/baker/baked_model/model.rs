@@ -186,17 +186,19 @@ impl BakedModel {
         let mut unculled = Vec::new();
 
         for el in &self.elements {
-            for face in el.faces.values() {
-                if face.texture.ends_with("_overlay")
-                    || face.texture.ends_with("_OVERLAY")
-                    || face.texture.contains("side_overlay")
-                {
-                    continue;
-                }
-                if let Some(cull_dir) = face.cullface {
-                    culled[cull_dir.to_index()].push(face.clone());
-                } else {
-                    unculled.push(face.clone());
+            for dir in mtk_core::direction::Direction::ALL {
+                if let Some(face) = el.faces.get(&dir) {
+                    if face.texture.ends_with("_overlay")
+                        || face.texture.ends_with("_OVERLAY")
+                        || face.texture.contains("side_overlay")
+                    {
+                        continue;
+                    }
+                    if let Some(cull_dir) = face.cullface {
+                        culled[cull_dir.to_index()].push(face.clone());
+                    } else {
+                        unculled.push(face.clone());
+                    }
                 }
             }
         }
@@ -330,17 +332,19 @@ impl BakedModel {
         let mut culled: [Vec<BakedFace>; 6] = Default::default();
         let mut unculled = Vec::new();
         for el in &self.elements {
-            for face in el.faces.values() {
-                if face.texture.ends_with("_overlay")
-                    || face.texture.ends_with("_OVERLAY")
-                    || face.texture.contains("side_overlay")
-                {
-                    continue;
-                }
-                if let Some(cull_dir) = face.cullface {
-                    culled[cull_dir.to_index()].push(face.clone());
-                } else {
-                    unculled.push(face.clone());
+            for dir in mtk_core::direction::Direction::ALL {
+                if let Some(face) = el.faces.get(&dir) {
+                    if face.texture.ends_with("_overlay")
+                        || face.texture.ends_with("_OVERLAY")
+                        || face.texture.contains("side_overlay")
+                    {
+                        continue;
+                    }
+                    if let Some(cull_dir) = face.cullface {
+                        culled[cull_dir.to_index()].push(face.clone());
+                    } else {
+                        unculled.push(face.clone());
+                    }
                 }
             }
         }

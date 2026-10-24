@@ -201,6 +201,9 @@ impl SectionStorage {
         }
 
         self.voxels[idx] = new_pal_idx;
+        if !self.block_entities.is_empty() {
+            self.block_entities.remove(&(idx as u16));
+        }
         self.cached_crc = None;
         true
     }

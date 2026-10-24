@@ -32,5 +32,9 @@ harness = false
 name = "bench_debug_world"
 harness = false
 
+[[bench]]
+name = "bench_block_entity"
+harness = false
+
 [lints]
 workspace = true
