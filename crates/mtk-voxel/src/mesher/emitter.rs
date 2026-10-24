@@ -35,8 +35,6 @@ pub fn emit_baked_face(
     let norm = config.transform_direction(face.normal);
     let n = [norm.x, norm.y, norm.z];
 
-    let colors = mesh.colors.get_or_insert_with(Vec::new);
-
     for i in 0..4 {
         let v = face.vertices[i];
         let p = config.transform_position(Vec3::new(wx + v.x, wy + v.y, wz + v.z));
@@ -49,7 +47,7 @@ pub fn emit_baked_face(
         }
 
         let ao_b = ao_level_to_brightness(ao_levels[i]);
-        colors.push([ao_b, ao_b, ao_b, 1.0]);
+        collector.ao_values.push(ao_b);
     }
 
     mesh.quad_indices
@@ -204,11 +202,9 @@ pub fn emit_unit_cube_face(
             (base_idx, base_idx + 1, base_idx + 2, base_idx + 3)
         };
 
-    let colors = mesh.colors.get_or_insert_with(Vec::new);
-
     for i in 0..4 {
         let ao_b = ao_level_to_brightness(ao_levels[i]);
-        colors.push([ao_b, ao_b, ao_b, 1.0]);
+        collector.ao_values.push(ao_b);
     }
 
     mesh.quad_indices

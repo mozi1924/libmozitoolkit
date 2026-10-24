@@ -229,17 +229,11 @@ where
                     )
                 };
 
-            let colors = mesh.colors.get_or_insert_with(Vec::new);
-            while colors.len() < mesh.positions.len() {
-                colors.push([1.0, 1.0, 1.0, 1.0]);
-            }
-
             for i in 0..4 {
                 let p = config.transform_position(verts[i]);
                 mesh.positions.push([p.x, p.y, p.z]);
                 mesh.normals.push(n);
                 mesh.uvs.push(uvs[i]);
-                colors.push([1.0, 1.0, 1.0, 1.0]);
             }
 
             mesh.quad_indices
@@ -263,6 +257,7 @@ where
                 });
 
             if let Some(ref mut col) = collector {
+                col.ao_values.extend_from_slice(&[1.0, 1.0, 1.0, 1.0]);
                 let (f_tint_data, f_tint_color) = if fluid_type == FluidType::Water {
                     (
                         [1.0, 1.0, 1.0, 3.0],

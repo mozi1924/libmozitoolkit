@@ -216,6 +216,9 @@ pub mod constants {
     /// Animation frame size (Domain: Face, Type: Float3 [frame_width, frame_height, 0]).
     pub const ATTR_ANIM_FRAME_SIZE: &str = "mtk_anim_frame_size";
 
+    /// Corner ambient occlusion / smooth lighting factor (Domain: Corner, Type: Float32 [0.0..1.0]).
+    pub const ATTR_AO: &str = "mtk_ao";
+
     /// Resolved linear RGBA biome tint color (Domain: Face/Corner, Type: Float4).
     pub const ATTR_BIOME_TINT_COLOR: &str = "mtk_biome_tint_color";
     /// Packed biome tint data and weights (Domain: Face, Type: Float4 [base_weight, overlay_weight, tint_weight, tint_type]).
@@ -323,6 +326,12 @@ pub const MESH_ATTRIBUTE_SPECS: &[MeshAttributeSpec] = &[
         constants::ATTR_ANIM_FRAME_SIZE,
         AttributeDomain::Face,
         "float3",
+        AttributeRole::Material,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_AO,
+        AttributeDomain::Corner,
+        "float",
         AttributeRole::Material,
     ),
     MeshAttributeSpec::new(

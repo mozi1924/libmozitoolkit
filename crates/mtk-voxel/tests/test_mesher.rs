@@ -1153,10 +1153,13 @@ fn test_dirt_path_mesh_ao_neighbor_shading() {
         &config,
     );
 
-    let colors = mesh
-        .colors
-        .as_ref()
-        .expect("Colors must be emitted when enable_ao is true");
+    let ao_attr = mesh
+        .get_custom_attribute(mtk_core::attributes::constants::ATTR_AO)
+        .expect("mtk_ao must be emitted when enable_ao is true");
+    let ao_values = match &ao_attr.data {
+        mtk_core::attributes::AttributeData::Float(v) => v,
+        other => panic!("Expected Float for mtk_ao, got {:?}", other),
+    };
     assert!(!mesh.positions.is_empty());
 
     // Find the dirt_path top face at Y = 2.0 + 15/16 = 2.9375
@@ -1175,10 +1178,10 @@ fn test_dirt_path_mesh_ao_neighbor_shading() {
             && (v3[1] - (2.0 + top_y)).abs() < 1e-3
         {
             found_top_face = true;
-            let c0 = colors[base][0];
-            let c1 = colors[base + 1][0];
-            let c2 = colors[base + 2][0];
-            let c3 = colors[base + 3][0];
+            let c0 = ao_values[base];
+            let c1 = ao_values[base + 1];
+            let c2 = ao_values[base + 2];
+            let c3 = ao_values[base + 3];
 
             // v0 (-X, -Z) and v1 (-X, +Z) are away from East neighbor -> brightness 1.0 (AO 3)
             let exp_ao3 = mtk_voxel::ao_level_to_brightness(3);

@@ -22,6 +22,7 @@ pub struct FaceAttributesCollector {
     pub block_zs: Vec<i32>,
     pub anim_timings: Vec<[f32; 3]>,
     pub anim_frame_sizes: Vec<[f32; 3]>,
+    pub ao_values: Vec<f32>,
     pub last_texture_idx: Option<u16>,
 }
 
@@ -40,6 +41,7 @@ impl FaceAttributesCollector {
             block_zs: Vec::with_capacity(capacity),
             anim_timings: Vec::with_capacity(capacity),
             anim_frame_sizes: Vec::with_capacity(capacity),
+            ao_values: Vec::with_capacity(capacity * 4),
             last_texture_idx: None,
         }
     }
@@ -181,6 +183,13 @@ impl FaceAttributesCollector {
             AttributeDomain::Face,
             AttributeData::Float3(self.anim_frame_sizes),
         ));
+        if !self.ao_values.is_empty() {
+            mesh.add_custom_attribute(MeshAttribute::new(
+                ATTR_AO,
+                AttributeDomain::Corner,
+                AttributeData::Float(self.ao_values),
+            ));
+        }
     }
 }
 
