@@ -49,6 +49,10 @@ pub struct SessionState {
     pub assembler: Option<BaselineAssembler>,
     pub last_mesh_time: Option<Instant>,
     pub pending_dirty_rebuild: bool,
+    /// Timestamp of the most recent delta event received (for channel quiet debounce).
+    pub last_delta_at: Option<Instant>,
+    /// Timestamp when world first became dirty since last mesh emission.
+    pub dirty_since: Option<Instant>,
     /// Last time any baseline/connection progress was observed (baseline watchdog).
     pub last_progress_at: Instant,
     /// Rate-limiter so a corrupt stream cannot trigger a RESYNC storm.
@@ -76,6 +80,8 @@ impl SessionState {
             assembler: None,
             last_mesh_time: None,
             pending_dirty_rebuild: false,
+            last_delta_at: None,
+            dirty_since: None,
             last_progress_at: Instant::now(),
             resync_last_sent: None,
             validation_failures: 0,
@@ -161,102 +167,46 @@ pub fn event_worker_loop(
     };
 
     while running.load(Ordering::Relaxed) {
-        match msg_receiver.recv_timeout(Duration::from_millis(20)) {
-            Ok(ClientMessage::Status(status)) => {
-                let conn = status == "CONNECTED";
-                is_connected.store(conn, Ordering::SeqCst);
-                {
-                    let mut guard = status_lock.write().unwrap_or_else(|e| e.into_inner());
-                    *guard = status.clone();
+        match msg_receiver.recv_timeout(Duration::from_millis(15)) {
+            Ok(msg) => {
+                let should_continue = dispatch_single_client_message(
+                    msg,
+                    &state_lock,
+                    &status_lock,
+                    &is_connected,
+                    &running,
+                    &world,
+                    &cmd_sender,
+                    &event_sender,
+                    &generation_atomic,
+                    &initial_hello,
+                );
+                if !should_continue {
+                    break;
                 }
-                let _ = event_sender.send(SyncEvent::StatusChange(status));
 
-                if conn {
-                    {
-                        let mut state = lock_state(&state_lock);
-                        state.lifecycle = SyncLifecycle::Negotiating;
-                        state.last_progress_at = Instant::now();
-                    }
-                    // Every worker start supplies a HELLO carrying the session auth token.
-                    let hello_pkt = initial_hello.clone();
-                    let bytes = encode_packet(&hello_pkt);
-                    let _ = cmd_sender.send(ClientCommand::Send(bytes));
-                }
-            }
-            Ok(ClientMessage::Warning(message)) => {
-                // Non-fatal transport diagnostics (e.g. a corrupt frame) must never
-                // downgrade the connection status: the socket is still alive.
-                let _ = event_sender.send(SyncEvent::Warning(message));
-            }
-            Ok(ClientMessage::ConnectionLost) => {
-                // The socket died but the client thread is retrying. Drop any
-                // partially received baseline so the next stream starts cleanly.
-                is_connected.store(false, Ordering::SeqCst);
-                {
-                    let mut state = lock_state(&state_lock);
-                    state.awaiting_baseline();
-                    state.lifecycle = SyncLifecycle::Connecting;
-                }
-            }
-            Ok(ClientMessage::Disconnected) => {
-                is_connected.store(false, Ordering::SeqCst);
-                {
-                    let mut guard = status_lock.write().unwrap_or_else(|e| e.into_inner());
-                    *guard = "DISCONNECTED".to_string();
-                }
-                running.store(false, Ordering::SeqCst);
-                {
-                    let mut state = lock_state(&state_lock);
-                    state.awaiting_baseline();
-                    state.lifecycle = SyncLifecycle::Disconnected;
-                }
-                let _ = event_sender.send(SyncEvent::StatusChange("DISCONNECTED".to_string()));
-                break;
-            }
-            Ok(ClientMessage::PacketReceived { packet, bytes }) => {
-                let mut state = lock_state(&state_lock);
-                // A panic in a single packet handler (or in the mesher) must not kill
-                // the worker thread and silently freeze synchronization forever.
-                let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    handle_packet(
-                        packet,
-                        bytes,
-                        &mut state,
+                // Drain all immediately available queued messages from the network channel
+                // before evaluating debounced remeshing (ensures companion DeltaEntity packets
+                // are applied in the same cycle as DeltaOp).
+                while let Ok(next_msg) = msg_receiver.try_recv() {
+                    let cont = dispatch_single_client_message(
+                        next_msg,
+                        &state_lock,
+                        &status_lock,
+                        &is_connected,
+                        &running,
                         &world,
                         &cmd_sender,
                         &event_sender,
                         &generation_atomic,
+                        &initial_hello,
                     );
-                }));
-                if outcome.is_err() {
-                    state.awaiting_baseline();
-                    let _ = event_sender.send(SyncEvent::Error(
-                        "Internal sync error while processing a packet".to_string(),
-                    ));
-                    send_resync_request(
-                        &mut state,
-                        &cmd_sender,
-                        &event_sender,
-                        ResyncReason::ChunkCorrupted,
-                        "Internal sync error; requesting a fresh snapshot...",
-                    );
+                    if !cont {
+                        break;
+                    }
                 }
             }
-            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
-                let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    let mut state = lock_state(&state_lock);
-                    check_baseline_watchdog(&mut state, &cmd_sender, &event_sender);
-                    check_debounced_remesh(&mut state, &world, &event_sender, &generation_atomic);
-                }));
-                if outcome.is_err() {
-                    let mut state = lock_state(&state_lock);
-                    state.awaiting_baseline();
-                    let _ = event_sender.send(SyncEvent::Error(
-                        "Internal sync error during remeshing".to_string(),
-                    ));
-                }
-                continue;
-            }
+            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
             Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
         }
 
@@ -271,6 +221,103 @@ pub fn event_worker_loop(
             let _ = event_sender.send(SyncEvent::Error(
                 "Internal sync error during remeshing".to_string(),
             ));
+        }
+    }
+}
+
+/// Dispatches a single client message, updating session state or routing network frames.
+/// Returns false if the connection was terminated.
+#[allow(clippy::too_many_arguments)]
+fn dispatch_single_client_message(
+    msg: ClientMessage,
+    state_lock: &Arc<Mutex<SessionState>>,
+    status_lock: &Arc<RwLock<String>>,
+    is_connected: &Arc<AtomicBool>,
+    running: &Arc<AtomicBool>,
+    world: &Arc<RwLock<VoxelWorld>>,
+    cmd_sender: &Sender<ClientCommand>,
+    event_sender: &Sender<SyncEvent>,
+    generation_atomic: &Arc<AtomicU64>,
+    initial_hello: &Packet,
+) -> bool {
+    match msg {
+        ClientMessage::Status(status) => {
+            let conn = status == "CONNECTED";
+            is_connected.store(conn, Ordering::SeqCst);
+            {
+                let mut guard = status_lock.write().unwrap_or_else(|e| e.into_inner());
+                *guard = status.clone();
+            }
+            let _ = event_sender.send(SyncEvent::StatusChange(status));
+
+            if conn {
+                {
+                    let mut state = lock_state(state_lock);
+                    state.lifecycle = SyncLifecycle::Negotiating;
+                    state.last_progress_at = Instant::now();
+                }
+                // Every worker start supplies a HELLO carrying the session auth token.
+                let hello_pkt = initial_hello.clone();
+                let bytes = encode_packet(&hello_pkt);
+                let _ = cmd_sender.send(ClientCommand::Send(bytes));
+            }
+            true
+        }
+        ClientMessage::Warning(message) => {
+            let _ = event_sender.send(SyncEvent::Warning(message));
+            true
+        }
+        ClientMessage::ConnectionLost => {
+            is_connected.store(false, Ordering::SeqCst);
+            {
+                let mut state = lock_state(state_lock);
+                state.awaiting_baseline();
+                state.lifecycle = SyncLifecycle::Connecting;
+            }
+            true
+        }
+        ClientMessage::Disconnected => {
+            is_connected.store(false, Ordering::SeqCst);
+            {
+                let mut guard = status_lock.write().unwrap_or_else(|e| e.into_inner());
+                *guard = "DISCONNECTED".to_string();
+            }
+            running.store(false, Ordering::SeqCst);
+            {
+                let mut state = lock_state(state_lock);
+                state.awaiting_baseline();
+                state.lifecycle = SyncLifecycle::Disconnected;
+            }
+            let _ = event_sender.send(SyncEvent::StatusChange("DISCONNECTED".to_string()));
+            false
+        }
+        ClientMessage::PacketReceived { packet, bytes } => {
+            let mut state = lock_state(state_lock);
+            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                handle_packet(
+                    packet,
+                    bytes,
+                    &mut state,
+                    world,
+                    cmd_sender,
+                    event_sender,
+                    generation_atomic,
+                );
+            }));
+            if outcome.is_err() {
+                state.awaiting_baseline();
+                let _ = event_sender.send(SyncEvent::Error(
+                    "Internal sync error while processing a packet".to_string(),
+                ));
+                send_resync_request(
+                    &mut state,
+                    cmd_sender,
+                    event_sender,
+                    ResyncReason::ChunkCorrupted,
+                    "Internal sync error; requesting a fresh snapshot...",
+                );
+            }
+            true
         }
     }
 }
@@ -350,7 +397,7 @@ fn check_baseline_watchdog(
     );
 }
 
-/// Checks and performs throttled incremental dirty remeshing.
+/// Checks and performs debounced incremental dirty remeshing.
 pub fn check_debounced_remesh(
     state: &mut SessionState,
     world: &Arc<RwLock<VoxelWorld>>,
@@ -361,13 +408,30 @@ pub fn check_debounced_remesh(
         return;
     }
 
-    let can_remesh = state
-        .last_mesh_time
-        .is_none_or(|t| t.elapsed() >= Duration::from_millis(60));
+    let now = Instant::now();
+    let quiet_elapsed = state
+        .last_delta_at
+        .map(|t| now.duration_since(t))
+        .unwrap_or(Duration::from_millis(100));
+    let dirty_elapsed = state
+        .dirty_since
+        .map(|t| now.duration_since(t))
+        .unwrap_or(Duration::from_millis(100));
 
-    if can_remesh {
+    // True debounce window: wait for 30ms of channel silence after the latest delta packet
+    // (allows companion DELTA_ENTITY packets and consecutive rapid block edits to settle).
+    // If continuous editing lasts > 100ms, flush to maintain interactive visual feedback.
+    let is_quiet = quiet_elapsed >= Duration::from_millis(30);
+    let max_deadline_hit = dirty_elapsed >= Duration::from_millis(100);
+
+    let min_mesh_interval_passed = state
+        .last_mesh_time
+        .is_none_or(|t| now.duration_since(t) >= Duration::from_millis(50));
+
+    if (is_quiet || max_deadline_hit) && min_mesh_interval_passed {
         state.pending_dirty_rebuild = false;
-        state.last_mesh_time = Some(Instant::now());
+        state.dirty_since = None;
+        state.last_mesh_time = Some(now);
 
         let mut w = lock_world_write(world);
         let _ = w.rebuild_dirty_in_place();
@@ -750,6 +814,10 @@ pub fn handle_packet(
                                                 world,
                                                 state.min_pos,
                                             );
+                                            if state.dirty_since.is_none() {
+                                                state.dirty_since = Some(Instant::now());
+                                            }
+                                            state.last_delta_at = Some(Instant::now());
                                             state.pending_dirty_rebuild = true;
                                         }
                                     }
@@ -833,6 +901,10 @@ pub fn handle_packet(
                 state.sequence = seq_id;
                 let affected =
                     apply_delta_entries_to_world(changes, &state.palette_map, world, state.min_pos);
+                if state.dirty_since.is_none() {
+                    state.dirty_since = Some(Instant::now());
+                }
+                state.last_delta_at = Some(Instant::now());
                 state.pending_dirty_rebuild = true;
                 state.last_progress_at = Instant::now();
                 let _ = event_sender.send(SyncEvent::DeltaApplied {
@@ -890,7 +962,11 @@ pub fn handle_packet(
                     let blz = (wz & 15) as usize;
                     let local_idx = mtk_voxel::storage::block_index(blx, bly, blz) as u16;
                     sec.set_block_entity(local_idx, entity.clone());
-                    w.clear_cache();
+                    w.storage.dirty_sections.insert(sec_coord);
+                    if state.dirty_since.is_none() {
+                        state.dirty_since = Some(Instant::now());
+                    }
+                    state.last_delta_at = Some(Instant::now());
                     state.pending_dirty_rebuild = true;
                 }
             }

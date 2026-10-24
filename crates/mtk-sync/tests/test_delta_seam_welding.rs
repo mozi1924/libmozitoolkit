@@ -80,3 +80,71 @@ fn test_live_delta_remesh_keeps_cross_section_seams_welded() {
     assert_eq!(emitted_mesh.vertex_count(), 20);
     assert_no_duplicate_positions(&emitted_mesh);
 }
+
+#[test]
+fn test_debounced_remesh_quiet_window_atomic_with_block_entity() {
+    use std::time::{Duration, Instant};
+
+    let mut world = VoxelWorld::new(None, None, None);
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+    world.set_block(0, 0, 0, "minecraft:stone", None);
+    let _ = world.rebuild_all().unwrap();
+
+    let world = Arc::new(RwLock::new(world));
+    let mut state = SessionState::new();
+    state.lifecycle = SyncLifecycle::Live;
+    state.pending_dirty_rebuild = true;
+    state.last_delta_at = Some(Instant::now()); // Delta just arrived!
+    state.dirty_since = Some(Instant::now());
+
+    let (event_sender, event_receiver) = unbounded();
+    let generation = Arc::new(AtomicU64::new(1));
+
+    // 1. Immediately after delta arrived (quiet window not passed), remesh must NOT fire.
+    check_debounced_remesh(&mut state, &world, &event_sender, &generation);
+    assert!(
+        state.pending_dirty_rebuild,
+        "Debounce must hold dirty state when quiet window has not elapsed"
+    );
+    assert!(
+        event_receiver.try_recv().is_err(),
+        "No WorldMeshReady should be emitted during quiet debounce window"
+    );
+
+    // 2. Attach the companion BlockEntity to section
+    {
+        let mut w = world.write().unwrap();
+        if let Some(sec) = w.storage.sections.get_mut(&glam::IVec3::ZERO) {
+            sec.set_block_entity(
+                0,
+                Some(mtk_model::BlockEntityData::DecoratedPot {
+                    sherds: [
+                        Some("minecraft:miner_pottery_sherd".to_string()),
+                        None,
+                        None,
+                        None,
+                    ],
+                }),
+            );
+            w.storage.dirty_sections.insert(glam::IVec3::ZERO);
+        }
+    }
+
+    // 3. Simulate quiet window expiring (> 30ms)
+    state.last_delta_at = Some(Instant::now() - Duration::from_millis(35));
+    check_debounced_remesh(&mut state, &world, &event_sender, &generation);
+
+    // 4. Now remesh should have fired and cleared pending_dirty_rebuild
+    assert!(
+        !state.pending_dirty_rebuild,
+        "Dirty flag must be cleared after successful remesh"
+    );
+    let event = event_receiver
+        .try_recv()
+        .expect("WorldMeshReady must be emitted once quiet window expires");
+    if let SyncEvent::WorldMeshReady { generation, .. } = event {
+        assert_eq!(generation, 2);
+    } else {
+        panic!("Expected WorldMeshReady event");
+    }
+}
