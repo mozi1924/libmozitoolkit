@@ -98,4 +98,60 @@ impl BlockEntityData {
     pub fn sherd_texture(pattern: Option<&str>) -> String {
         Self::sherd_texture_ref(pattern).to_string()
     }
+
+    /// Constructs a canonical `DecoratedPot` data struct, normalizing each sherd into a clean pattern stem.
+    pub fn new_decorated_pot(sherds: [Option<&str>; 4]) -> Self {
+        Self::DecoratedPot {
+            sherds: [
+                sherds[0]
+                    .and_then(Self::normalize_sherd_pattern)
+                    .map(str::to_string),
+                sherds[1]
+                    .and_then(Self::normalize_sherd_pattern)
+                    .map(str::to_string),
+                sherds[2]
+                    .and_then(Self::normalize_sherd_pattern)
+                    .map(str::to_string),
+                sherds[3]
+                    .and_then(Self::normalize_sherd_pattern)
+                    .map(str::to_string),
+            ],
+        }
+    }
+
+    /// Serializes to a clean, canonical Visual NBT JSON string suitable for point clouds,
+    /// `.mtkscene` files, and persistent state storage.
+    pub fn to_visual_json(&self) -> String {
+        serde_json::to_string(self).unwrap_or_default()
+    }
+
+    /// Deserializes from a Visual NBT JSON string.
+    pub fn from_visual_json(json_str: &str) -> Option<Self> {
+        serde_json::from_str(json_str).ok()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_canonical_visual_nbt_json_roundtrip() {
+        let pot = BlockEntityData::new_decorated_pot([
+            Some("minecraft:angler_pottery_sherd"),
+            Some("brick"),
+            Some("miner_pottery_pattern"),
+            Some("blade"),
+        ]);
+
+        let json = pot.to_visual_json();
+        assert!(json.contains("\"minecraft:decorated_pot\""));
+        assert!(json.contains("\"angler\""));
+        assert!(json.contains("\"miner\""));
+        assert!(json.contains("\"blade\""));
+        assert!(!json.contains("brick")); // Brick should normalize to null/None
+
+        let parsed = BlockEntityData::from_visual_json(&json).expect("Must parse visual json");
+        assert_eq!(pot, parsed);
+    }
 }

@@ -150,7 +150,11 @@ impl SectionMesher {
         // RFC v3.2: Pre-resolve dynamic model data for any sparse block entities in this section
         let mut entity_meshing_entries = HashMap::new();
         if !padded.block_entities.is_empty() {
-            let mut baker = mtk_model::ModelBaker::new();
+            let mut resolved_cache: HashMap<
+                (&str, &mtk_model::BlockEntityData),
+                Arc<crate::mesher::shading::types::PaletteMeshingData>,
+            > = HashMap::new();
+
             for (&local_idx, be) in &padded.block_entities {
                 let lx = (local_idx >> 8) as usize;
                 let ly = ((local_idx >> 4) & 15) as usize;
@@ -160,16 +164,42 @@ impl SectionMesher {
                 let pz = lz + 1;
                 let pal_idx = padded.get_padded_idx(px, py, pz) as usize;
                 if pal_idx < padded.palette.len() {
-                    let state_str = &padded.palette[pal_idx];
-                    if let Ok(baked) =
-                        baker.bake_blockstate_with_entity(state_str, Some(be), None, |_| None)
-                    {
-                        let source = crate::mesher::shading::types::ModelSource::Single(&baked);
-                        let m_data =
+                    let state_str = padded.palette[pal_idx].as_str();
+                    if let Some(cached) = resolved_cache.get(&(state_str, be)) {
+                        entity_meshing_entries.insert(local_idx, Arc::clone(cached));
+                        continue;
+                    }
+
+                    let baked = match be {
+                        mtk_model::BlockEntityData::DecoratedPot { sherds } => {
+                            let facing = if state_str.contains("facing=south") {
+                                mtk_core::direction::Direction::South
+                            } else if state_str.contains("facing=east") {
+                                mtk_core::direction::Direction::East
+                            } else if state_str.contains("facing=west") {
+                                mtk_core::direction::Direction::West
+                            } else {
+                                mtk_core::direction::Direction::North
+                            };
+                            Some(
+                                mtk_model::builtin::vanilla::create_decorated_pot_baked_model(
+                                    facing, sherds,
+                                ),
+                            )
+                        }
+                        _ => None,
+                    };
+
+                    if let Some(baked_model) = baked {
+                        let source =
+                            crate::mesher::shading::types::ModelSource::Single(&baked_model);
+                        let m_data = Arc::new(
                             crate::mesher::shading::palette::resolve_palette_meshing_data_for_state(
                                 state_str, &source, config,
-                            );
-                        entity_meshing_entries.insert(local_idx, std::sync::Arc::new(m_data));
+                            ),
+                        );
+                        resolved_cache.insert((state_str, be), Arc::clone(&m_data));
+                        entity_meshing_entries.insert(local_idx, m_data);
                     }
                 }
             }
