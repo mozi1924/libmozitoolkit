@@ -241,20 +241,30 @@ impl SectionStorage {
     where
         F: FnMut(i32, i32, i32) -> &'a str,
     {
-        let mut palette_map = HashMap::<String, u16>::new();
+        let mut palette_map = HashMap::<String, u16>::with_capacity(self.palette.len() + 16);
         let mut palette = self.palette.clone();
         for (i, st) in palette.iter().enumerate() {
             palette_map.insert(st.clone(), i as u16);
         }
 
+        let mut last_cached_id: Option<u16> = None;
         let mut get_or_insert = |st: &str| -> u16 {
+            if let Some(id) = last_cached_id {
+                if let Some(existing) = palette.get(id as usize) {
+                    if existing.as_str() == st {
+                        return id;
+                    }
+                }
+            }
             if let Some(&id) = palette_map.get(st) {
+                last_cached_id = Some(id);
                 id
             } else {
                 let id = palette.len() as u16;
                 let s = st.to_string();
                 palette.push(s.clone());
                 palette_map.insert(s, id);
+                last_cached_id = Some(id);
                 id
             }
         };

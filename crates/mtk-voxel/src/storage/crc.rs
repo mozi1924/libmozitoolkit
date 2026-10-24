@@ -78,8 +78,9 @@ pub const EMPTY_SECTION_CRC: u32 = EMPTY_CRC_TABLE[4096];
 
 /// Extracts canonical Minecraft blockstate identifier from raw state or JSON-wrapped string.
 /// Converts variants of air / structure_void / bubble_column to canonical "minecraft:air".
+#[inline]
 pub fn extract_canonical_state_str(raw_state: &str) -> &str {
-    if raw_state.is_empty() {
+    if raw_state.is_empty() || raw_state == "minecraft:air" {
         return "minecraft:air";
     }
 

@@ -22,6 +22,7 @@ pub struct FaceAttributesCollector {
     pub block_zs: Vec<i32>,
     pub anim_timings: Vec<[f32; 3]>,
     pub anim_frame_sizes: Vec<[f32; 3]>,
+    pub last_texture_idx: Option<u16>,
 }
 
 impl FaceAttributesCollector {
@@ -39,6 +40,7 @@ impl FaceAttributesCollector {
             block_zs: Vec::with_capacity(capacity),
             anim_timings: Vec::with_capacity(capacity),
             anim_frame_sizes: Vec::with_capacity(capacity),
+            last_texture_idx: None,
         }
     }
 
@@ -56,16 +58,42 @@ impl FaceAttributesCollector {
         anim_timing: [f32; 3],
         anim_frame_size: [f32; 3],
     ) {
-        let pal_idx = if let Some(idx) = self
+        let pal_idx = if let Some(last_idx) = self.last_texture_idx {
+            if self
+                .source_texture_palette
+                .get(last_idx as usize)
+                .map(|s| s.as_str())
+                == Some(source_texture_key)
+            {
+                last_idx
+            } else if let Some(idx) = self
+                .source_texture_palette
+                .iter()
+                .position(|k| k == source_texture_key)
+            {
+                let u = idx as u16;
+                self.last_texture_idx = Some(u);
+                u
+            } else {
+                let idx = self.source_texture_palette.len() as u16;
+                self.source_texture_palette
+                    .push(source_texture_key.to_string());
+                self.last_texture_idx = Some(idx);
+                idx
+            }
+        } else if let Some(idx) = self
             .source_texture_palette
             .iter()
             .position(|k| k == source_texture_key)
         {
-            idx as u16
+            let u = idx as u16;
+            self.last_texture_idx = Some(u);
+            u
         } else {
             let idx = self.source_texture_palette.len() as u16;
             self.source_texture_palette
                 .push(source_texture_key.to_string());
+            self.last_texture_idx = Some(idx);
             idx
         };
         self.source_texture_indices.push(pal_idx);
@@ -82,9 +110,18 @@ impl FaceAttributesCollector {
     }
 
     pub fn attach_to_mesh(self, mesh: &mut MeshData) {
+        if self.source_texture_indices.is_empty() {
+            return;
+        }
+
         let mut keys = Vec::with_capacity(self.source_texture_indices.len());
-        for &idx in &self.source_texture_indices {
-            keys.push(self.source_texture_palette[idx as usize].clone());
+        if self.source_texture_palette.len() == 1 {
+            let single = self.source_texture_palette[0].clone();
+            keys.resize(self.source_texture_indices.len(), single);
+        } else {
+            for &idx in &self.source_texture_indices {
+                keys.push(self.source_texture_palette[idx as usize].clone());
+            }
         }
         mesh.add_custom_attribute(MeshAttribute::new(
             ATTR_SOURCE_TEXTURE_KEY,

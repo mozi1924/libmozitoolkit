@@ -370,7 +370,7 @@ pub fn check_debounced_remesh(
         state.last_mesh_time = Some(Instant::now());
 
         let mut w = lock_world_write(world);
-        let _ = w.rebuild_dirty();
+        let _ = w.rebuild_dirty_in_place();
         if let Some(wm) = w.get_world_mesh().cloned() {
             let gen = generation_atomic.fetch_add(1, Ordering::SeqCst) + 1;
             let profile = w.last_profile.clone();

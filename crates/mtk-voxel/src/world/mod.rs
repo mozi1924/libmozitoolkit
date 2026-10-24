@@ -478,6 +478,52 @@ impl VoxelWorld {
         Ok(self.world_mesh.as_ref().unwrap())
     }
 
+    /// Incrementally rebuilds only the modified/dirty sections directly in-place into the
+    /// section cache without allocating or cloning redundant return buffers.
+    ///
+    /// Updates the unified assembled world mesh and returns the count of rebuilt sections.
+    pub fn rebuild_dirty_in_place(&mut self) -> Result<usize, VoxelError> {
+        if self.storage.dirty_sections.is_empty() {
+            return Ok(0);
+        }
+
+        let mut profiler = mtk_core::ExecutionProfiler::start();
+
+        profiler.measure("sync_selection_bounds", || {
+            self.sync_selection_bounds();
+        });
+
+        let db_opt = self.model_db.as_deref();
+        let model_lookup = |state: &str| Self::model_source_for_state(db_opt, state);
+
+        let dirty_count = self.storage.dirty_sections.len();
+        let rebuilt = profiler.measure_with_count("rebuild_dirty_sections", dirty_count, || {
+            DeltaMesher::rebuild_dirty_sections_with_source(
+                &mut self.storage,
+                &self.culler,
+                model_lookup,
+                &self.config,
+            )
+        });
+
+        let rebuilt_count = rebuilt.len();
+        profiler.measure("section_cache_insertion", || {
+            for (coord, mesh) in rebuilt {
+                if mesh.is_empty() {
+                    self.section_mesh_cache.remove(&coord);
+                } else {
+                    self.section_mesh_cache.insert(coord, mesh);
+                }
+            }
+        });
+
+        self.assemble_world_mesh(false, Some(&mut profiler));
+
+        self.last_profile = Some(profiler.finish());
+
+        Ok(rebuilt_count)
+    }
+
     /// Incrementally rebuilds only the modified/dirty sections and updates the section cache.
     /// Returns the list of updated `(section_coord, MeshData)`.
     pub fn rebuild_dirty(&mut self) -> Result<Vec<(IVec3, MeshData)>, VoxelError> {
