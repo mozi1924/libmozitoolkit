@@ -9,7 +9,7 @@ use mtk_core::direction::Direction;
 use mtk_core::mesh::{MeshData, UvLayout};
 use mtk_model::baker::baked_model::BakedFace;
 
-use crate::mesher::ao::{ao_level_to_brightness, should_flip_quad_diagonal};
+use crate::mesher::ao::should_flip_quad_diagonal;
 use crate::mesher::collector::FaceAttributesCollector;
 use crate::mesher::shading::ResolvedFaceShading;
 use crate::types::MesherConfig;
@@ -22,7 +22,7 @@ pub fn emit_baked_face(
     wx: f32,
     wy: f32,
     wz: f32,
-    ao_levels: [u8; 4],
+    ao_brightness: [f32; 4],
     config: &MesherConfig,
     collector: &mut FaceAttributesCollector,
     shading: &ResolvedFaceShading,
@@ -46,8 +46,7 @@ pub fn emit_baked_face(
             mesh.uvs.push([face.uvs[i].x, 1.0 - face.uvs[i].y]);
         }
 
-        let ao_b = ao_level_to_brightness(ao_levels[i]);
-        collector.ao_values.push(ao_b);
+        collector.ao_values.push(ao_brightness[i]);
     }
 
     mesh.quad_indices
@@ -55,7 +54,7 @@ pub fn emit_baked_face(
         .extend_from_slice(&[base_idx, base_idx + 1, base_idx + 2, base_idx + 3]);
 
     // Triangulate with anisotropy diagonal flip
-    if should_flip_quad_diagonal(ao_levels) {
+    if should_flip_quad_diagonal(ao_brightness) {
         mesh.indices.push(base_idx);
         mesh.indices.push(base_idx + 1);
         mesh.indices.push(base_idx + 2);
@@ -99,7 +98,7 @@ pub fn emit_unit_cube_face(
     wx: f32,
     wy: f32,
     wz: f32,
-    ao_levels: [u8; 4],
+    ao_brightness: [f32; 4],
     config: &MesherConfig,
     collector: &mut FaceAttributesCollector,
     shading: &ResolvedFaceShading,
@@ -203,8 +202,7 @@ pub fn emit_unit_cube_face(
         };
 
     for i in 0..4 {
-        let ao_b = ao_level_to_brightness(ao_levels[i]);
-        collector.ao_values.push(ao_b);
+        collector.ao_values.push(ao_brightness[i]);
     }
 
     mesh.quad_indices
@@ -222,7 +220,7 @@ pub fn emit_unit_cube_face(
         mesh.uvs.push([1.0, 1.0]);
     }
 
-    if should_flip_quad_diagonal(ao_levels) {
+    if should_flip_quad_diagonal(ao_brightness) {
         mesh.indices.push(v0_idx);
         mesh.indices.push(v1_idx);
         mesh.indices.push(v2_idx);

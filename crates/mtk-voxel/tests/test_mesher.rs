@@ -1183,39 +1183,132 @@ fn test_dirt_path_mesh_ao_neighbor_shading() {
             let c2 = ao_values[base + 2];
             let c3 = ao_values[base + 3];
 
-            // v0 (-X, -Z) and v1 (-X, +Z) are away from East neighbor -> brightness 1.0 (AO 3)
-            let exp_ao3 = mtk_voxel::ao_level_to_brightness(3);
-            let exp_ao2 = mtk_voxel::ao_level_to_brightness(2);
+            // v0 (-X, -Z) and v1 (-X, +Z) are away from East neighbor -> brightness 1.0
+            let exp_full = 1.0;
+            // v2 (+X, +Z) and v3 (+X, -Z) are adjacent to East solid stone -> brightness 0.8 (Minecraft BlockModelLighter)
+            let exp_shaded = 0.8;
             assert!(
-                (c0 - exp_ao3).abs() < 1e-3,
+                (c0 - exp_full).abs() < 1e-3,
                 "v0 should have full brightness {}, got {}",
-                exp_ao3,
+                exp_full,
                 c0
             );
             assert!(
-                (c1 - exp_ao3).abs() < 1e-3,
+                (c1 - exp_full).abs() < 1e-3,
                 "v1 should have full brightness {}, got {}",
-                exp_ao3,
+                exp_full,
                 c1
             );
 
-            // v2 (+X, +Z) and v3 (+X, -Z) are adjacent to East solid stone -> brightness 0.733 (AO 2)
+            // v2 (+X, +Z) and v3 (+X, -Z) are adjacent to East solid stone -> brightness 0.8
             assert!(
-                (c2 - exp_ao2).abs() < 1e-3,
+                (c2 - exp_shaded).abs() < 1e-3,
                 "v2 should have shaded brightness {}, got {}",
-                exp_ao2,
+                exp_shaded,
                 c2
             );
             assert!(
-                (c3 - exp_ao2).abs() < 1e-3,
+                (c3 - exp_shaded).abs() < 1e-3,
                 "v3 should have shaded brightness {}, got {}",
-                exp_ao2,
+                exp_shaded,
                 c3
             );
         }
     }
 
     assert!(found_top_face, "Dirt path top face must be emitted");
+}
+
+#[test]
+fn test_dirt_path_adjacent_no_occlusion() {
+    use glam::{Vec2, Vec3};
+    use mtk_core::direction::Direction;
+    use mtk_model::baker::{BakedElement, BakedFace, BakedModel};
+    use std::collections::HashMap;
+
+    let mut faces = HashMap::new();
+    let top_y = 15.0 / 16.0;
+    faces.insert(
+        Direction::Up,
+        BakedFace {
+            direction: Direction::Up,
+            texture: "minecraft:block/dirt_path_top".to_string(),
+            vertices: [
+                Vec3::new(0.0, top_y, 0.0),
+                Vec3::new(0.0, top_y, 1.0),
+                Vec3::new(1.0, top_y, 1.0),
+                Vec3::new(1.0, top_y, 0.0),
+            ],
+            uvs: [
+                Vec2::new(0.0, 0.0),
+                Vec2::new(0.0, 1.0),
+                Vec2::new(1.0, 1.0),
+                Vec2::new(1.0, 0.0),
+            ],
+            normal: Vec3::Y,
+            ..Default::default()
+        },
+    );
+
+    let mut model_dirt_path = BakedModel {
+        block_state: "minecraft:dirt_path".to_string(),
+        elements: vec![BakedElement {
+            from_pos: [0.0, 0.0, 0.0],
+            to_pos: [16.0, 15.0, 16.0],
+            faces,
+        }],
+        culled_faces: Default::default(),
+        unculled_faces: Vec::new(),
+        ..Default::default()
+    };
+    model_dirt_path.rebuild_face_buckets();
+
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+
+    // Place 2 adjacent dirt_path blocks at (2, 2, 2) and (3, 2, 2)
+    world.set_block(2, 2, 2, "minecraft:dirt_path", None);
+    world.set_block(3, 2, 2, "minecraft:dirt_path", None);
+
+    let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
+    let culler = FaceCuller::default();
+    let config = MesherConfig {
+        enable_ao: true,
+        weld_vertices: false,
+        ..Default::default()
+    };
+
+    let model_dirt_path_arc = std::sync::Arc::new(model_dirt_path);
+    let mesh = SectionMesher::mesh_section(
+        &padded,
+        &culler,
+        |st| {
+            if st.contains("dirt_path") {
+                ModelSource::from(Some(model_dirt_path_arc.clone()))
+            } else {
+                ModelSource::None
+            }
+        },
+        &config,
+    );
+
+    let ao_attr = mesh
+        .get_custom_attribute(mtk_core::attributes::constants::ATTR_AO)
+        .expect("mtk_ao must be emitted when enable_ao is true");
+    let ao_values = match &ao_attr.data {
+        mtk_core::attributes::AttributeData::Float(v) => v,
+        other => panic!("Expected Float for mtk_ao, got {:?}", other),
+    };
+
+    // Every emitted vertex on dirt_path top faces must be 1.0 (unoccluded by its path neighbor!)
+    for (quad_idx, &ao_val) in ao_values.iter().enumerate() {
+        assert!(
+            (ao_val - 1.0).abs() < 1e-3,
+            "Adjacent dirt_path vertex {} must have 1.0 brightness without black border, got {}",
+            quad_idx,
+            ao_val
+        );
+    }
 }
 
 #[test]

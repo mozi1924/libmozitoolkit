@@ -9,9 +9,23 @@ pub fn ao_level_to_brightness(level: u8) -> f32 {
     AO_LEVEL_MULTIPLIERS[idx]
 }
 
+/// Quantizes continuous AO float brightness `[0.2..=1.0]` into discrete level `0..=3`.
+#[inline]
+pub fn ao_brightness_to_level(brightness: f32) -> u8 {
+    if brightness >= 0.88 {
+        3
+    } else if brightness >= 0.6 {
+        2
+    } else if brightness >= 0.35 {
+        1
+    } else {
+        0
+    }
+}
+
 /// Computes the ambient occlusion level `0..=3` for a single vertex given its 2 adjacent side blocks and diagonal corner block.
 ///
-/// If both adjacent side blocks are solid opaque, light is completely blocked (corner is occluded, AO = 0).
+/// Kept for backward compatibility and fast discrete approximations.
 #[inline]
 pub fn vertex_ao(side1_opaque: bool, side2_opaque: bool, corner_opaque: bool) -> u8 {
     if side1_opaque && side2_opaque {
@@ -21,259 +35,234 @@ pub fn vertex_ao(side1_opaque: bool, side2_opaque: bool, corner_opaque: bool) ->
     }
 }
 
+/// Determines if a baked quad face is flush with the outer boundary of the unit cube in its direction.
+///
+/// Matching Minecraft Java `BlockModelLighter.faceCubic`:
+/// - UP: minY == maxY && (maxY > 1.0 - EPSILON || is_current_block_full_cube)
+/// - DOWN: minY == maxY && (minY < EPSILON || is_current_block_full_cube)
+/// - NORTH: minZ == maxZ && (minZ < EPSILON || is_current_block_full_cube)
+/// - SOUTH: minZ == maxZ && (maxZ > 1.0 - EPSILON || is_current_block_full_cube)
+/// - WEST: minX == maxX && (minX < EPSILON || is_current_block_full_cube)
+/// - EAST: minX == maxX && (maxX > 1.0 - EPSILON || is_current_block_full_cube)
+#[inline]
+pub fn is_face_cubic(
+    dir: Direction,
+    vertices: &[Vec3; 4],
+    is_current_block_full_cube: bool,
+) -> bool {
+    if is_current_block_full_cube {
+        return true;
+    }
+    const EPSILON: f32 = 1e-4;
+    match dir {
+        Direction::Down => vertices.iter().all(|v| v.y < EPSILON),
+        Direction::Up => vertices.iter().all(|v| v.y > 1.0 - EPSILON),
+        Direction::North => vertices.iter().all(|v| v.z < EPSILON),
+        Direction::South => vertices.iter().all(|v| v.z > 1.0 - EPSILON),
+        Direction::West => vertices.iter().all(|v| v.x < EPSILON),
+        Direction::East => vertices.iter().all(|v| v.x > 1.0 - EPSILON),
+    }
+}
+
 /// Determines if a baked quad face is inset from the outer boundary of its direction.
 ///
 /// For example, dirt path top face has Y = 15/16 < 1.0, slab top face has Y = 0.5 < 1.0.
 #[inline]
 pub fn is_face_inset(dir: Direction, vertices: &[Vec3; 4]) -> bool {
-    const EPSILON: f32 = 1e-4;
-    match dir {
-        Direction::Up => vertices.iter().all(|v| v.y < 1.0 - EPSILON),
-        Direction::Down => vertices.iter().all(|v| v.y > EPSILON),
-        Direction::North => vertices.iter().all(|v| v.z > EPSILON),
-        Direction::South => vertices.iter().all(|v| v.z < 1.0 - EPSILON),
-        Direction::West => vertices.iter().all(|v| v.x > EPSILON),
-        Direction::East => vertices.iter().all(|v| v.x < 1.0 - EPSILON),
-    }
+    !is_face_cubic(dir, vertices, false)
 }
 
-/// Computes 4-corner AO levels `[ao0, ao1, ao2, ao3]` for a face facing `dir`.
-///
-/// When `is_inset` is true (e.g. dirt path, slab, stairs whose face is inside the 1x1x1 unit cube),
-/// light occlusion is checked against both the in-plane neighbors (offset = 0) and exterior neighbors.
+#[inline(always)]
+fn add3(a: (i32, i32, i32), b: (i32, i32, i32)) -> (i32, i32, i32) {
+    (a.0 + b.0, a.1 + b.1, a.2 + b.2)
+}
+
+/// Computes 4-corner continuous AO brightness multipliers `[f32; 4]` in `[0.2..=1.0]`
+/// matching Minecraft Java `BlockModelLighter` smooth lighting.
 ///
 /// Vertex ordering strictly matches `UNIT_CUBE_CORNERS` and `BakedFace.vertices` [v0, v1, v2, v3].
-pub fn calculate_face_ao_with_inset<F>(dir: Direction, is_inset: bool, mut is_opaque: F) -> [u8; 4]
+pub fn calculate_face_ao_float<F>(
+    dir: Direction,
+    face_cubic: bool,
+    mut is_solid_opaque: F,
+) -> [f32; 4]
 where
     F: FnMut(i32, i32, i32) -> bool,
 {
+    let (c0, c1, c2, c3, dir_offset) = match dir {
+        Direction::Down => (
+            (-1, 0, 0), // WEST
+            (1, 0, 0),  // EAST
+            (0, 0, -1), // NORTH
+            (0, 0, 1),  // SOUTH
+            (0, -1, 0),
+        ),
+        Direction::Up => (
+            (1, 0, 0),  // EAST
+            (-1, 0, 0), // WEST
+            (0, 0, -1), // NORTH
+            (0, 0, 1),  // SOUTH
+            (0, 1, 0),
+        ),
+        Direction::North => (
+            (0, 1, 0),  // UP
+            (0, -1, 0), // DOWN
+            (1, 0, 0),  // EAST
+            (-1, 0, 0), // WEST
+            (0, 0, -1),
+        ),
+        Direction::South => (
+            (-1, 0, 0), // WEST
+            (1, 0, 0),  // EAST
+            (0, -1, 0), // DOWN
+            (0, 1, 0),  // UP
+            (0, 0, 1),
+        ),
+        Direction::West => (
+            (0, 1, 0),  // UP
+            (0, -1, 0), // DOWN
+            (0, 0, -1), // NORTH
+            (0, 0, 1),  // SOUTH
+            (-1, 0, 0),
+        ),
+        Direction::East => (
+            (0, -1, 0), // DOWN
+            (0, 1, 0),  // UP
+            (0, 0, -1), // NORTH
+            (0, 0, 1),  // SOUTH
+            (1, 0, 0),
+        ),
+    };
+
+    let base = if face_cubic { dir_offset } else { (0, 0, 0) };
+
+    let pos0 = add3(base, c0);
+    let pos1 = add3(base, c1);
+    let pos2 = add3(base, c2);
+    let pos3 = add3(base, c3);
+
+    let shade0 = if is_solid_opaque(pos0.0, pos0.1, pos0.2) {
+        0.2
+    } else {
+        1.0
+    };
+    let shade1 = if is_solid_opaque(pos1.0, pos1.1, pos1.2) {
+        0.2
+    } else {
+        1.0
+    };
+    let shade2 = if is_solid_opaque(pos2.0, pos2.1, pos2.2) {
+        0.2
+    } else {
+        1.0
+    };
+    let shade3 = if is_solid_opaque(pos3.0, pos3.1, pos3.2) {
+        0.2
+    } else {
+        1.0
+    };
+
+    let corner_pos0 = add3(pos0, dir_offset);
+    let corner_pos1 = add3(pos1, dir_offset);
+    let corner_pos2 = add3(pos2, dir_offset);
+    let corner_pos3 = add3(pos3, dir_offset);
+
+    let translucent0 = !is_solid_opaque(corner_pos0.0, corner_pos0.1, corner_pos0.2);
+    let translucent1 = !is_solid_opaque(corner_pos1.0, corner_pos1.1, corner_pos1.2);
+    let translucent2 = !is_solid_opaque(corner_pos2.0, corner_pos2.1, corner_pos2.2);
+    let translucent3 = !is_solid_opaque(corner_pos3.0, corner_pos3.1, corner_pos3.2);
+
+    let shade_corner02 = if !translucent2 && !translucent0 {
+        shade0
+    } else {
+        let p = add3(pos0, c2);
+        if is_solid_opaque(p.0, p.1, p.2) {
+            0.2
+        } else {
+            1.0
+        }
+    };
+
+    let shade_corner03 = if !translucent3 && !translucent0 {
+        shade0
+    } else {
+        let p = add3(pos0, c3);
+        if is_solid_opaque(p.0, p.1, p.2) {
+            0.2
+        } else {
+            1.0
+        }
+    };
+
+    let shade_corner12 = if !translucent2 && !translucent1 {
+        shade0
+    } else {
+        let p = add3(pos1, c2);
+        if is_solid_opaque(p.0, p.1, p.2) {
+            0.2
+        } else {
+            1.0
+        }
+    };
+
+    let shade_corner13 = if !translucent3 && !translucent1 {
+        shade0
+    } else {
+        let p = add3(pos1, c3);
+        if is_solid_opaque(p.0, p.1, p.2) {
+            0.2
+        } else {
+            1.0
+        }
+    };
+
+    let shade_center = if face_cubic {
+        if is_solid_opaque(base.0, base.1, base.2) {
+            0.2
+        } else {
+            1.0
+        }
+    } else if is_solid_opaque(0, 0, 0) {
+        0.2
+    } else {
+        1.0
+    };
+
+    let l1 = (shade3 + shade0 + shade_corner03 + shade_center) * 0.25;
+    let l2 = (shade2 + shade0 + shade_corner02 + shade_center) * 0.25;
+    let l3 = (shade2 + shade1 + shade_corner12 + shade_center) * 0.25;
+    let l4 = (shade3 + shade1 + shade_corner13 + shade_center) * 0.25;
+
     match dir {
-        Direction::Up => {
-            // v0: (-X, -Z)
-            // v1: (-X, +Z)
-            // v2: (+X, +Z)
-            // v3: (+X, -Z)
-            let (side_w, side_e, side_n, side_s, c_nw, c_sw, c_ne, c_se) = if is_inset {
-                (
-                    is_opaque(-1, 0, 0) || is_opaque(-1, 1, 0),
-                    is_opaque(1, 0, 0) || is_opaque(1, 1, 0),
-                    is_opaque(0, 0, -1) || is_opaque(0, 1, -1),
-                    is_opaque(0, 0, 1) || is_opaque(0, 1, 1),
-                    is_opaque(-1, 0, -1) || is_opaque(-1, 1, -1),
-                    is_opaque(-1, 0, 1) || is_opaque(-1, 1, 1),
-                    is_opaque(1, 0, -1) || is_opaque(1, 1, -1),
-                    is_opaque(1, 0, 1) || is_opaque(1, 1, 1),
-                )
-            } else {
-                (
-                    is_opaque(-1, 1, 0),
-                    is_opaque(1, 1, 0),
-                    is_opaque(0, 1, -1),
-                    is_opaque(0, 1, 1),
-                    is_opaque(-1, 1, -1),
-                    is_opaque(-1, 1, 1),
-                    is_opaque(1, 1, -1),
-                    is_opaque(1, 1, 1),
-                )
-            };
-
-            let ao0 = vertex_ao(side_w, side_n, c_nw);
-            let ao1 = vertex_ao(side_w, side_s, c_sw);
-            let ao2 = vertex_ao(side_e, side_s, c_se);
-            let ao3 = vertex_ao(side_e, side_n, c_ne);
-            [ao0, ao1, ao2, ao3]
-        }
-        Direction::Down => {
-            // v0: (-X, +Z)
-            // v1: (-X, -Z)
-            // v2: (+X, -Z)
-            // v3: (+X, +Z)
-            let (side_w, side_e, side_n, side_s, c_nw, c_sw, c_ne, c_se) = if is_inset {
-                (
-                    is_opaque(-1, 0, 0) || is_opaque(-1, -1, 0),
-                    is_opaque(1, 0, 0) || is_opaque(1, -1, 0),
-                    is_opaque(0, 0, -1) || is_opaque(0, -1, -1),
-                    is_opaque(0, 0, 1) || is_opaque(0, -1, 1),
-                    is_opaque(-1, 0, -1) || is_opaque(-1, -1, -1),
-                    is_opaque(-1, 0, 1) || is_opaque(-1, -1, 1),
-                    is_opaque(1, 0, -1) || is_opaque(1, -1, -1),
-                    is_opaque(1, 0, 1) || is_opaque(1, -1, 1),
-                )
-            } else {
-                (
-                    is_opaque(-1, -1, 0),
-                    is_opaque(1, -1, 0),
-                    is_opaque(0, -1, -1),
-                    is_opaque(0, -1, 1),
-                    is_opaque(-1, -1, -1),
-                    is_opaque(-1, -1, 1),
-                    is_opaque(1, -1, -1),
-                    is_opaque(1, -1, 1),
-                )
-            };
-
-            let ao0 = vertex_ao(side_w, side_s, c_sw);
-            let ao1 = vertex_ao(side_w, side_n, c_nw);
-            let ao2 = vertex_ao(side_e, side_n, c_ne);
-            let ao3 = vertex_ao(side_e, side_s, c_se);
-            [ao0, ao1, ao2, ao3]
-        }
-        Direction::North => {
-            // Face at Z = 0 (looking towards -Z)
-            // v0: (+X, +Y, -Z)
-            // v1: (+X, -Y, -Z)
-            // v2: (-X, -Y, -Z)
-            // v3: (-X, +Y, -Z)
-            let (side_e, side_w, side_up, side_dn, c_eu, c_ed, c_wd, c_wu) = if is_inset {
-                (
-                    is_opaque(1, 0, 0) || is_opaque(1, 0, -1),
-                    is_opaque(-1, 0, 0) || is_opaque(-1, 0, -1),
-                    is_opaque(0, 1, 0) || is_opaque(0, 1, -1),
-                    is_opaque(0, -1, 0) || is_opaque(0, -1, -1),
-                    is_opaque(1, 1, 0) || is_opaque(1, 1, -1),
-                    is_opaque(1, -1, 0) || is_opaque(1, -1, -1),
-                    is_opaque(-1, -1, 0) || is_opaque(-1, -1, -1),
-                    is_opaque(-1, 1, 0) || is_opaque(-1, 1, -1),
-                )
-            } else {
-                (
-                    is_opaque(1, 0, -1),
-                    is_opaque(-1, 0, -1),
-                    is_opaque(0, 1, -1),
-                    is_opaque(0, -1, -1),
-                    is_opaque(1, 1, -1),
-                    is_opaque(1, -1, -1),
-                    is_opaque(-1, -1, -1),
-                    is_opaque(-1, 1, -1),
-                )
-            };
-
-            let ao0 = vertex_ao(side_e, side_up, c_eu);
-            let ao1 = vertex_ao(side_e, side_dn, c_ed);
-            let ao2 = vertex_ao(side_w, side_dn, c_wd);
-            let ao3 = vertex_ao(side_w, side_up, c_wu);
-            [ao0, ao1, ao2, ao3]
-        }
-        Direction::South => {
-            // Face at Z = +1 (looking towards +Z)
-            // v0: (-X, +Y, +Z)
-            // v1: (-X, -Y, +Z)
-            // v2: (+X, -Y, +Z)
-            // v3: (+X, +Y, +Z)
-            let (side_w, side_e, side_up, side_dn, c_wu, c_wd, c_ed, c_eu) = if is_inset {
-                (
-                    is_opaque(-1, 0, 0) || is_opaque(-1, 0, 1),
-                    is_opaque(1, 0, 0) || is_opaque(1, 0, 1),
-                    is_opaque(0, 1, 0) || is_opaque(0, 1, 1),
-                    is_opaque(0, -1, 0) || is_opaque(0, -1, 1),
-                    is_opaque(-1, 1, 0) || is_opaque(-1, 1, 1),
-                    is_opaque(-1, -1, 0) || is_opaque(-1, -1, 1),
-                    is_opaque(1, -1, 0) || is_opaque(1, -1, 1),
-                    is_opaque(1, 1, 0) || is_opaque(1, 1, 1),
-                )
-            } else {
-                (
-                    is_opaque(-1, 0, 1),
-                    is_opaque(1, 0, 1),
-                    is_opaque(0, 1, 1),
-                    is_opaque(0, -1, 1),
-                    is_opaque(-1, 1, 1),
-                    is_opaque(-1, -1, 1),
-                    is_opaque(1, -1, 1),
-                    is_opaque(1, 1, 1),
-                )
-            };
-
-            let ao0 = vertex_ao(side_w, side_up, c_wu);
-            let ao1 = vertex_ao(side_w, side_dn, c_wd);
-            let ao2 = vertex_ao(side_e, side_dn, c_ed);
-            let ao3 = vertex_ao(side_e, side_up, c_eu);
-            [ao0, ao1, ao2, ao3]
-        }
-        Direction::West => {
-            // Face at X = 0 (looking towards -X)
-            // v0: (-X, +Y, -Z)
-            // v1: (-X, -Y, -Z)
-            // v2: (-X, -Y, +Z)
-            // v3: (-X, +Y, +Z)
-            let (side_n, side_s, side_up, side_dn, c_nu, c_nd, c_sd, c_su) = if is_inset {
-                (
-                    is_opaque(0, 0, -1) || is_opaque(-1, 0, -1),
-                    is_opaque(0, 0, 1) || is_opaque(-1, 0, 1),
-                    is_opaque(0, 1, 0) || is_opaque(-1, 1, 0),
-                    is_opaque(0, -1, 0) || is_opaque(-1, -1, 0),
-                    is_opaque(0, 1, -1) || is_opaque(-1, 1, -1),
-                    is_opaque(0, -1, -1) || is_opaque(-1, -1, -1),
-                    is_opaque(0, -1, 1) || is_opaque(-1, -1, 1),
-                    is_opaque(0, 1, 1) || is_opaque(-1, 1, 1),
-                )
-            } else {
-                (
-                    is_opaque(-1, 0, -1),
-                    is_opaque(-1, 0, 1),
-                    is_opaque(-1, 1, 0),
-                    is_opaque(-1, -1, 0),
-                    is_opaque(-1, 1, -1),
-                    is_opaque(-1, -1, -1),
-                    is_opaque(-1, -1, 1),
-                    is_opaque(-1, 1, 1),
-                )
-            };
-
-            let ao0 = vertex_ao(side_n, side_up, c_nu);
-            let ao1 = vertex_ao(side_n, side_dn, c_nd);
-            let ao2 = vertex_ao(side_s, side_dn, c_sd);
-            let ao3 = vertex_ao(side_s, side_up, c_su);
-            [ao0, ao1, ao2, ao3]
-        }
-        Direction::East => {
-            // Face at X = +1 (looking towards +X)
-            // v0: (+X, +Y, +Z)
-            // v1: (+X, -Y, +Z)
-            // v2: (+X, -Y, -Z)
-            // v3: (+X, +Y, -Z)
-            let (side_s, side_n, side_up, side_dn, c_su, c_sd, c_nd, c_nu) = if is_inset {
-                (
-                    is_opaque(0, 0, 1) || is_opaque(1, 0, 1),
-                    is_opaque(0, 0, -1) || is_opaque(1, 0, -1),
-                    is_opaque(0, 1, 0) || is_opaque(1, 1, 0),
-                    is_opaque(0, -1, 0) || is_opaque(1, -1, 0),
-                    is_opaque(0, 1, 1) || is_opaque(1, 1, 1),
-                    is_opaque(0, -1, 1) || is_opaque(1, -1, 1),
-                    is_opaque(0, -1, -1) || is_opaque(1, -1, -1),
-                    is_opaque(0, 1, -1) || is_opaque(1, 1, -1),
-                )
-            } else {
-                (
-                    is_opaque(1, 0, 1),
-                    is_opaque(1, 0, -1),
-                    is_opaque(1, 1, 0),
-                    is_opaque(1, -1, 0),
-                    is_opaque(1, 1, 1),
-                    is_opaque(1, -1, 1),
-                    is_opaque(1, -1, -1),
-                    is_opaque(1, 1, -1),
-                )
-            };
-
-            let ao0 = vertex_ao(side_s, side_up, c_su);
-            let ao1 = vertex_ao(side_s, side_dn, c_sd);
-            let ao2 = vertex_ao(side_n, side_dn, c_nd);
-            let ao3 = vertex_ao(side_n, side_up, c_nu);
-            [ao0, ao1, ao2, ao3]
-        }
+        Direction::Down => [l1, l2, l3, l4],
+        Direction::Up => [l3, l4, l1, l2],
+        Direction::North => [l2, l3, l4, l1],
+        Direction::South => [l1, l2, l3, l4],
+        Direction::West => [l2, l3, l4, l1],
+        Direction::East => [l4, l1, l2, l3],
     }
 }
 
-/// Computes 4-corner AO levels `[ao0, ao1, ao2, ao3]` for a face facing `dir`.
-///
-/// Convenience wrapper around `calculate_face_ao_with_inset` assuming a standard flush face.
+/// Convenience wrapper for calculating face AO with inset status.
 #[inline]
-pub fn calculate_face_ao<F>(dir: Direction, is_opaque: F) -> [u8; 4]
+pub fn calculate_face_ao_with_inset<F>(
+    dir: Direction,
+    is_inset: bool,
+    is_solid_opaque: F,
+) -> [f32; 4]
 where
     F: FnMut(i32, i32, i32) -> bool,
 {
-    calculate_face_ao_with_inset(dir, false, is_opaque)
+    calculate_face_ao_float(dir, !is_inset, is_solid_opaque)
+}
+
+/// Convenience wrapper for calculating standard flush face AO.
+#[inline]
+pub fn calculate_face_ao<F>(dir: Direction, is_solid_opaque: F) -> [f32; 4]
+where
+    F: FnMut(i32, i32, i32) -> bool,
+{
+    calculate_face_ao_float(dir, true, is_solid_opaque)
 }
 
 /// Determines whether a quad should flip its diagonal triangulation split (anisotropy flip)
@@ -281,8 +270,8 @@ where
 ///
 /// Returns `true` if triangulating as `(0-1-2, 0-2-3)` is optimal, or `false` if `(1-2-3, 0-1-3)` is optimal.
 #[inline]
-pub fn should_flip_quad_diagonal(ao: [u8; 4]) -> bool {
-    (ao[0] as i32 + ao[2] as i32) > (ao[1] as i32 + ao[3] as i32)
+pub fn should_flip_quad_diagonal(ao: [f32; 4]) -> bool {
+    (ao[0] + ao[2]) > (ao[1] + ao[3])
 }
 
 #[cfg(test)]
@@ -299,10 +288,8 @@ mod tests {
 
     #[test]
     fn test_anisotropy_flip() {
-        // ao0=3, ao1=0, ao2=3, ao3=0 => sum02=6, sum13=0 => true
-        assert!(should_flip_quad_diagonal([3, 0, 3, 0]));
-        // ao0=0, ao1=3, ao2=0, ao3=3 => sum02=0, sum13=6 => false
-        assert!(!should_flip_quad_diagonal([0, 3, 0, 3]));
+        assert!(should_flip_quad_diagonal([1.0, 0.2, 1.0, 0.2]));
+        assert!(!should_flip_quad_diagonal([0.2, 1.0, 0.2, 1.0]));
     }
 
     #[test]
@@ -334,28 +321,29 @@ mod tests {
 
     #[test]
     fn test_dirt_path_inset_ambient_occlusion() {
-        // Dirt path top face: when isolated, all vertices have AO = 3
+        // Dirt path top face: when isolated, all vertices have continuous brightness 1.0
         let ao_isolated = calculate_face_ao_with_inset(Direction::Up, true, |_dx, _dy, _dz| false);
-        assert_eq!(ao_isolated, [3, 3, 3, 3]);
+        assert_eq!(ao_isolated, [1.0, 1.0, 1.0, 1.0]);
 
-        // When a solid block is placed on the East side (dx=1, dy=0):
-        // v0 (-X, -Z) -> 3
-        // v1 (-X, +Z) -> 3
-        // v2 (+X, +Z) -> 2 (East neighbor occluded)
-        // v3 (+X, -Z) -> 2 (East neighbor occluded)
+        // When a solid block is placed on the East side (dx=1, dy=0, dz=0):
+        // East (+X) is shaded (0.2), other 3 sides are 1.0.
+        // v0 (-X, -Z) -> (1.0 + 1.0 + 1.0 + 1.0) / 4 = 1.0
+        // v1 (-X, +Z) -> (1.0 + 1.0 + 1.0 + 1.0) / 4 = 1.0
+        // v2 (+X, +Z) -> (1.0 + 0.2 + 1.0 + 1.0) / 4 = 0.8
+        // v3 (+X, -Z) -> (1.0 + 0.2 + 1.0 + 1.0) / 4 = 0.8
         let ao_east_neighbor = calculate_face_ao_with_inset(Direction::Up, true, |dx, dy, dz| {
             dx == 1 && dy == 0 && dz == 0
         });
-        assert_eq!(ao_east_neighbor, [3, 3, 2, 2]);
+        assert_eq!(ao_east_neighbor, [1.0, 1.0, 0.8, 0.8]);
 
         // When solid blocks are placed on both East (1, 0, 0) and South (0, 0, 1):
-        // v0 (-X, -Z) -> 3
-        // v1 (-X, +Z) -> 2 (South neighbor)
-        // v2 (+X, +Z) -> 0 (both East & South neighbors occluded -> corner fully blocked!)
-        // v3 (+X, -Z) -> 2 (East neighbor)
+        // v0 (-X, -Z) -> 1.0
+        // v1 (-X, +Z) -> 0.8 (South neighbor)
+        // v2 (+X, +Z) -> 0.6 (East 0.2 + South 0.2 + corner SE 1.0 + center 1.0 = 2.4 / 4 = 0.6)
+        // v3 (+X, -Z) -> 0.8 (East neighbor)
         let ao_east_south = calculate_face_ao_with_inset(Direction::Up, true, |dx, dy, dz| {
             (dx == 1 && dy == 0 && dz == 0) || (dx == 0 && dy == 0 && dz == 1)
         });
-        assert_eq!(ao_east_south, [3, 2, 0, 2]);
+        assert_eq!(ao_east_south, [1.0, 0.8, 0.6, 0.8]);
     }
 }

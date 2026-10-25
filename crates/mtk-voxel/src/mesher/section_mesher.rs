@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::fluid::emit_fluid_geometry;
-use crate::mesher::ao::{calculate_face_ao, calculate_face_ao_with_inset, is_face_inset};
+use crate::mesher::ao::{calculate_face_ao, calculate_face_ao_float, is_face_cubic};
 use crate::storage::{padded_index, PaddedVoxelArray, SECTION_SIZE};
 use crate::types::{MesherConfig, VoxelError};
 
@@ -138,10 +138,11 @@ impl SectionMesher {
         };
         let mut has_non_grid_geometry = false;
 
-        let is_opaque_fn = |px: usize, py: usize, pz: usize| -> bool {
+        let is_solid_opaque_fn = |px: usize, py: usize, pz: usize| -> bool {
             let idx = padded.get_padded_idx(px, py, pz) as usize;
             if idx < palette_entries.len() {
-                palette_entries[idx].meta.is_opaque
+                let meta = &palette_entries[idx].meta;
+                meta.is_full_cube && meta.is_opaque && !meta.is_air && !meta.is_fluid
             } else {
                 false
             }
@@ -365,21 +366,22 @@ impl SectionMesher {
                             let face = &mf.face;
                             let face_dir = face.direction;
 
-                            // Calculate 4-corner AO for face.direction (with inset detection)
-                            let ao_levels = if config.enable_ao && !is_emissive {
-                                let is_inset = is_face_inset(face_dir, &face.vertices);
-                                calculate_face_ao_with_inset(face_dir, is_inset, |dx, dy, dz| {
+                            // Calculate 4-corner AO for face.direction (matching Minecraft BlockModelLighter)
+                            let face_cubic =
+                                is_face_cubic(face_dir, &face.vertices, meta.is_full_cube);
+                            let ao_brightness = if config.enable_ao && !is_emissive {
+                                calculate_face_ao_float(face_dir, face_cubic, |dx, dy, dz| {
                                     let sx = (px as i32 + dx) as usize;
                                     let sy = (py as i32 + dy) as usize;
                                     let sz = (pz as i32 + dz) as usize;
                                     if sx < 18 && sy < 18 && sz < 18 {
-                                        is_opaque_fn(sx, sy, sz)
+                                        is_solid_opaque_fn(sx, sy, sz)
                                     } else {
                                         false
                                     }
                                 })
                             } else {
-                                [3, 3, 3, 3]
+                                [1.0, 1.0, 1.0, 1.0]
                             };
 
                             let shading = resolve_model_face_shading(
@@ -405,7 +407,7 @@ impl SectionMesher {
                                 wx + plant_offset.x,
                                 wy + plant_offset.y,
                                 wz + plant_offset.z,
-                                ao_levels,
+                                ao_brightness,
                                 config,
                                 &mut collector,
                                 &shading,
@@ -491,20 +493,20 @@ impl SectionMesher {
                                 continue;
                             }
 
-                            // Calculate 4-corner AO
-                            let ao_levels = if config.enable_ao && !is_emissive {
+                            // Calculate 4-corner AO (UnitCube is always face_cubic = true)
+                            let ao_brightness = if config.enable_ao && !is_emissive {
                                 calculate_face_ao(dir, |dx, dy, dz| {
                                     let sx = (px as i32 + dx) as usize;
                                     let sy = (py as i32 + dy) as usize;
                                     let sz = (pz as i32 + dz) as usize;
                                     if sx < 18 && sy < 18 && sz < 18 {
-                                        is_opaque_fn(sx, sy, sz)
+                                        is_solid_opaque_fn(sx, sy, sz)
                                     } else {
                                         false
                                     }
                                 })
                             } else {
-                                [3, 3, 3, 3]
+                                [1.0, 1.0, 1.0, 1.0]
                             };
 
                             let pre_face = &cube_faces[dir.to_index()];
@@ -536,7 +538,7 @@ impl SectionMesher {
                                 wx + plant_offset.x,
                                 wy + plant_offset.y,
                                 wz + plant_offset.z,
-                                ao_levels,
+                                ao_brightness,
                                 config,
                                 &mut collector,
                                 &shading,

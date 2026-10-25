@@ -49,6 +49,8 @@ pub const KNOWN_NON_CUBES: &[&str] = &[
     "amethyst",
     "sensor",
     "shrieker",
+    "path",
+    "farmland",
 ];
 
 pub const NON_OPAQUE_SUBSTRINGS: &[&str] = &[
@@ -57,6 +59,8 @@ pub const NON_OPAQUE_SUBSTRINGS: &[&str] = &[
     "ice",
     "water",
     "air",
+    "path",
+    "farmland",
     "pane",
     "fence",
     "door",

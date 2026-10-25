@@ -260,10 +260,13 @@ pub const PARTIAL_SHAPE_SUFFIXES: &[&str] = &[
     "_coral",
     "_fan",
     "_chain",
+    "_path",
 ];
 
 /// Exact names identifying partial non-full blocks.
 pub const PARTIAL_SHAPE_EXACT_NAMES: &[&str] = &[
+    "dirt_path",
+    "farmland",
     "bed",
     "piston_head",
     "moving_piston",
