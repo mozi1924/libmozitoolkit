@@ -228,6 +228,27 @@ pub mod constants {
     pub const ATTR_BLOCK_X: &str = "mtk_block_x";
     pub const ATTR_BLOCK_Y: &str = "mtk_block_y";
     pub const ATTR_BLOCK_Z: &str = "mtk_block_z";
+
+    /// Voxel point cloud block state index into [`ATTR_PALETTE`] (Domain: Point, Type: Int32).
+    pub const ATTR_STATE_IDX: &str = "mtk_state_idx";
+    /// Voxel point cloud block state string palette (Domain: Mesh, Type: String).
+    pub const ATTR_PALETTE: &str = "mtk_palette";
+
+    /// Voxel point cloud biome index into [`ATTR_BIOME_PALETTE`] (Domain: Point, Type: Int32).
+    pub const ATTR_BIOME_IDX: &str = "mtk_biome_idx";
+    /// Voxel point cloud biome string palette (Domain: Mesh, Type: String).
+    pub const ATTR_BIOME_PALETTE: &str = "mtk_biome_palette";
+
+    /// Voxel point cloud block entity index into [`ATTR_ENTITY_PALETTE`] (Domain: Point, Type: Int32, -1 for none).
+    pub const ATTR_ENTITY_IDX: &str = "mtk_entity_idx";
+    /// Voxel point cloud block entity NBT/JSON string palette (Domain: Mesh, Type: String).
+    pub const ATTR_ENTITY_PALETTE: &str = "mtk_entity_palette";
+
+    /// Voxel point cloud light level (Domain: Point, Type: UInt8).
+    pub const ATTR_LIGHT: &str = "mtk_light";
+
+    /// Voxel point cloud coordinate bounding box [min_x, min_y, min_z, max_x, max_y, max_z] (Domain: Mesh, Type: Int32 x 6).
+    pub const ATTR_BOUNDS: &str = "mtk_bounds";
 }
 
 /// High-level role of a canonical mesh attribute.
@@ -361,6 +382,54 @@ pub const MESH_ATTRIBUTE_SPECS: &[MeshAttributeSpec] = &[
     MeshAttributeSpec::new(
         constants::ATTR_BLOCK_Z,
         AttributeDomain::Face,
+        "int32",
+        AttributeRole::Metadata,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_STATE_IDX,
+        AttributeDomain::Point,
+        "int32",
+        AttributeRole::Metadata,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_PALETTE,
+        AttributeDomain::Mesh,
+        "string",
+        AttributeRole::Metadata,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_BIOME_IDX,
+        AttributeDomain::Point,
+        "int32",
+        AttributeRole::Metadata,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_BIOME_PALETTE,
+        AttributeDomain::Mesh,
+        "string",
+        AttributeRole::Metadata,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_ENTITY_IDX,
+        AttributeDomain::Point,
+        "int32",
+        AttributeRole::Metadata,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_ENTITY_PALETTE,
+        AttributeDomain::Mesh,
+        "string",
+        AttributeRole::Metadata,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_LIGHT,
+        AttributeDomain::Point,
+        "uint8",
+        AttributeRole::Metadata,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_BOUNDS,
+        AttributeDomain::Mesh,
         "int32",
         AttributeRole::Metadata,
     ),

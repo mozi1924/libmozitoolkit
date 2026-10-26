@@ -1,5 +1,9 @@
 //! Conversion between `VoxelPointCloud` and `mtk_core::mesh::MeshData`.
 
+use mtk_core::attributes::constants::{
+    ATTR_BIOME_IDX, ATTR_BIOME_PALETTE, ATTR_BLOCK_X, ATTR_BLOCK_Y, ATTR_BLOCK_Z, ATTR_BOUNDS,
+    ATTR_ENTITY_IDX, ATTR_ENTITY_PALETTE, ATTR_LIGHT, ATTR_PALETTE, ATTR_STATE_IDX,
+};
 use mtk_core::attributes::{AttributeData, AttributeDomain, MeshAttribute};
 use mtk_core::mesh::MeshData;
 
@@ -24,63 +28,63 @@ impl VoxelPointCloud {
         }
 
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_block_x",
+            ATTR_BLOCK_X,
             AttributeDomain::Point,
             AttributeData::Int32(self.block_x.clone()),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_block_y",
+            ATTR_BLOCK_Y,
             AttributeDomain::Point,
             AttributeData::Int32(self.block_y.clone()),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_block_z",
+            ATTR_BLOCK_Z,
             AttributeDomain::Point,
             AttributeData::Int32(self.block_z.clone()),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_state_idx",
+            ATTR_STATE_IDX,
             AttributeDomain::Point,
             AttributeData::Int32(self.state_indices.clone()),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_palette",
+            ATTR_PALETTE,
             AttributeDomain::Mesh,
             AttributeData::String(self.state_palette.clone()),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_biome_idx",
+            ATTR_BIOME_IDX,
             AttributeDomain::Point,
             AttributeData::Int32(self.biome_indices.clone()),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_biome_palette",
+            ATTR_BIOME_PALETTE,
             AttributeDomain::Mesh,
             AttributeData::String(self.biome_palette.clone()),
         ));
 
         if !self.entity_palette.is_empty() && self.entity_indices.len() == count {
             mesh.add_custom_attribute(MeshAttribute::new(
-                "mtk_entity_idx",
+                ATTR_ENTITY_IDX,
                 AttributeDomain::Point,
                 AttributeData::Int32(self.entity_indices.clone()),
             ));
             mesh.add_custom_attribute(MeshAttribute::new(
-                "mtk_entity_palette",
+                ATTR_ENTITY_PALETTE,
                 AttributeDomain::Mesh,
                 AttributeData::String(self.entity_palette.clone()),
             ));
         }
 
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_light",
+            ATTR_LIGHT,
             AttributeDomain::Point,
             AttributeData::UInt8(self.light_levels.clone()),
         ));
 
         if let Some(b) = self.bounds {
             mesh.add_custom_attribute(MeshAttribute::new(
-                "mtk_bounds",
+                ATTR_BOUNDS,
                 AttributeDomain::Mesh,
                 AttributeData::Int32(b.to_vec()),
             ));
@@ -102,75 +106,75 @@ impl VoxelPointCloud {
         }
 
         let block_x = mesh
-            .get_custom_attribute("mtk_block_x")
+            .get_custom_attribute(ATTR_BLOCK_X)
             .and_then(|a| match &a.data {
                 AttributeData::Int32(v) if v.len() == count => Some(v.clone()),
                 _ => None,
             })
             .ok_or_else(|| {
-                VoxelError::InvalidPointCloud(
-                    "Missing or malformed mtk_block_x attribute".to_string(),
-                )
+                VoxelError::InvalidPointCloud(format!(
+                    "Missing or malformed {ATTR_BLOCK_X} attribute"
+                ))
             })?;
 
         let block_y = mesh
-            .get_custom_attribute("mtk_block_y")
+            .get_custom_attribute(ATTR_BLOCK_Y)
             .and_then(|a| match &a.data {
                 AttributeData::Int32(v) if v.len() == count => Some(v.clone()),
                 _ => None,
             })
             .ok_or_else(|| {
-                VoxelError::InvalidPointCloud(
-                    "Missing or malformed mtk_block_y attribute".to_string(),
-                )
+                VoxelError::InvalidPointCloud(format!(
+                    "Missing or malformed {ATTR_BLOCK_Y} attribute"
+                ))
             })?;
 
         let block_z = mesh
-            .get_custom_attribute("mtk_block_z")
+            .get_custom_attribute(ATTR_BLOCK_Z)
             .and_then(|a| match &a.data {
                 AttributeData::Int32(v) if v.len() == count => Some(v.clone()),
                 _ => None,
             })
             .ok_or_else(|| {
-                VoxelError::InvalidPointCloud(
-                    "Missing or malformed mtk_block_z attribute".to_string(),
-                )
+                VoxelError::InvalidPointCloud(format!(
+                    "Missing or malformed {ATTR_BLOCK_Z} attribute"
+                ))
             })?;
 
         let state_indices = mesh
-            .get_custom_attribute("mtk_state_idx")
+            .get_custom_attribute(ATTR_STATE_IDX)
             .and_then(|a| match &a.data {
                 AttributeData::Int32(v) if v.len() == count => Some(v.clone()),
                 _ => None,
             })
             .ok_or_else(|| {
-                VoxelError::InvalidPointCloud(
-                    "Missing or malformed mtk_state_idx attribute".to_string(),
-                )
+                VoxelError::InvalidPointCloud(format!(
+                    "Missing or malformed {ATTR_STATE_IDX} attribute"
+                ))
             })?;
 
         let state_palette = mesh
-            .get_custom_attribute("mtk_palette")
+            .get_custom_attribute(ATTR_PALETTE)
             .and_then(|a| match &a.data {
                 AttributeData::String(v) if !v.is_empty() => Some(v.clone()),
                 _ => None,
             })
             .ok_or_else(|| {
-                VoxelError::InvalidPointCloud(
-                    "Missing or malformed mtk_palette attribute".to_string(),
-                )
+                VoxelError::InvalidPointCloud(format!(
+                    "Missing or malformed {ATTR_PALETTE} attribute"
+                ))
             })?;
         validate_palette_indices("state", &state_indices, &state_palette)?;
 
         let biome_indices = mesh
-            .get_custom_attribute("mtk_biome_idx")
+            .get_custom_attribute(ATTR_BIOME_IDX)
             .and_then(|a| match &a.data {
                 AttributeData::Int32(v) if v.len() == count => Some(v.clone()),
                 _ => None,
             })
             .unwrap_or_else(|| vec![0; count]);
         let biome_palette = mesh
-            .get_custom_attribute("mtk_biome_palette")
+            .get_custom_attribute(ATTR_BIOME_PALETTE)
             .and_then(|a| match &a.data {
                 AttributeData::String(v) if !v.is_empty() => Some(v.clone()),
                 _ => None,
@@ -179,10 +183,10 @@ impl VoxelPointCloud {
         validate_palette_indices("biome", &biome_indices, &biome_palette)?;
 
         let (entity_palette, entity_indices) =
-            if let Some(p_attr) = mesh.get_custom_attribute("mtk_entity_palette") {
+            if let Some(p_attr) = mesh.get_custom_attribute(ATTR_ENTITY_PALETTE) {
                 if let AttributeData::String(p) = &p_attr.data {
                     let indices = mesh
-                        .get_custom_attribute("mtk_entity_idx")
+                        .get_custom_attribute(ATTR_ENTITY_IDX)
                         .and_then(|a| match &a.data {
                             AttributeData::Int32(v) if v.len() == count => Some(v.clone()),
                             _ => None,
@@ -198,7 +202,7 @@ impl VoxelPointCloud {
             };
 
         let light_levels = mesh
-            .get_custom_attribute("mtk_light")
+            .get_custom_attribute(ATTR_LIGHT)
             .and_then(|a| match &a.data {
                 AttributeData::UInt8(v) if v.len() == count => Some(v.clone()),
                 _ => None,
@@ -206,7 +210,7 @@ impl VoxelPointCloud {
             .unwrap_or_else(|| vec![0u8; count]);
 
         let bounds = mesh
-            .get_custom_attribute("mtk_bounds")
+            .get_custom_attribute(ATTR_BOUNDS)
             .and_then(|a| match &a.data {
                 AttributeData::Int32(v) if v.len() == 6 => {
                     Some([v[0], v[1], v[2], v[3], v[4], v[5]])
