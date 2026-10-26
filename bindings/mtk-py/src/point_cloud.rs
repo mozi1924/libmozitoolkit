@@ -154,7 +154,7 @@ impl PyVoxelPointCloud {
 
     /// High-performance batch constructor from palette indices using buffer protocol / memoryview.
     #[staticmethod]
-    #[pyo3(signature = (positions, block_x, block_y, block_z, state_indices, state_palette, biome_indices=None, biome_palette=None, light_levels=None, bounds=None))]
+    #[pyo3(signature = (positions, block_x, block_y, block_z, state_indices, state_palette, biome_indices=None, biome_palette=None, light_levels=None, bounds=None, entity_indices=None, entity_palette=None))]
     pub fn from_indexed_arrays(
         positions: &Bound<'_, PyAny>,
         block_x: &Bound<'_, PyAny>,
@@ -166,6 +166,8 @@ impl PyVoxelPointCloud {
         biome_palette: Option<Vec<String>>,
         light_levels: Option<Vec<u8>>,
         bounds: Option<[i32; 6]>,
+        entity_indices: Option<&Bound<'_, PyAny>>,
+        entity_palette: Option<Vec<String>>,
     ) -> PyResult<Self> {
         let pos_buf = BorrowedF32Buffer::extract(positions)?;
         let bx_buf = BorrowedI32Buffer::extract(block_x)?;
@@ -178,12 +180,18 @@ impl PyVoxelPointCloud {
             None => None,
         };
 
+        let ent_buf = match entity_indices {
+            Some(obj) => Some(BorrowedI32Buffer::extract(obj)?),
+            None => None,
+        };
+
         let pos_slice = pos_buf.as_slice();
         let bx_slice = bx_buf.as_slice();
         let by_slice = by_buf.as_slice();
         let bz_slice = bz_buf.as_slice();
         let st_slice = st_buf.as_slice();
         let bm_slice = bm_buf.as_ref().map(|b| b.as_slice());
+        let ent_slice = ent_buf.as_ref().map(|b| b.as_slice());
 
         let cloud = VoxelPointCloud::from_indexed_arrays(
             pos_slice.to_vec(),
@@ -196,6 +204,8 @@ impl PyVoxelPointCloud {
             biome_palette.as_deref(),
             light_levels,
             bounds,
+            ent_slice,
+            entity_palette.as_deref(),
         )
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
@@ -262,6 +272,31 @@ impl PyVoxelPointCloud {
     /// Returns the unique canonical biome palette.
     pub fn get_biome_palette(&self) -> Vec<String> {
         self.inner.biome_palette.clone()
+    }
+
+    /// Checks if this point cloud carries any block entities.
+    pub fn has_entities(&self) -> bool {
+        self.inner.has_entities()
+    }
+
+    /// Returns the unique canonical block entity (Visual NBT JSON) palette.
+    pub fn get_entity_palette(&self) -> Vec<String> {
+        self.inner.entity_palette.clone()
+    }
+
+    /// Read-only memoryview of per-point block entity palette indices (`int32`, -1 for none).
+    pub fn entity_indices_memoryview<'py>(
+        slf: &Bound<'py, Self>,
+    ) -> PyResult<Bound<'py, PyMemoryView>> {
+        let py = slf.py();
+        let inner = &slf.borrow().inner;
+        if inner.entity_indices.is_empty() {
+            let bytes = PyBytes::new(py, &[]);
+            return PyMemoryView::from(&bytes);
+        }
+        let ptr = inner.entity_indices.as_ptr() as *const u8;
+        let len = inner.entity_indices.len() * std::mem::size_of::<i32>();
+        crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
     }
 
     /// Read-only memoryview of per-point light levels (`uint8`).

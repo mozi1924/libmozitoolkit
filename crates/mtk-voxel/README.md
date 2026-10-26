@@ -150,16 +150,18 @@ pub struct VoxelPointCloud {
     pub block_y: Vec<i32>,
     pub block_z: Vec<i32>,
     pub state_palette: Vec<String>, // 唯一方块状态调色板
-    pub state_indices: Vec<i32>,    // 逐点调色板索引
+    pub state_indices: Vec<i32>,    // 逐点状态调色板索引
     pub biome_palette: Vec<String>, // 唯一生物群系调色板
-    pub biome_indices: Vec<i32>,    // 逐点调色板索引
+    pub biome_indices: Vec<i32>,    // 逐点群系调色板索引
+    pub entity_palette: Vec<String>, // 唯一方块实体 (Visual NBT JSON) 调色板
+    pub entity_indices: Vec<i32>,    // 逐点实体调色板索引 (-1 为普通无 NBT 方块)
     pub light_levels: Vec<u8>,      // 复合光照等级
 }
 ```
-- `to_point_cloud(config) -> VoxelPointCloud`：全量提取所有非空体素（**绝对不参与任何面遮挡剔除**，内部实心方块 100% 完整保留）。
-- `from_point_cloud(cloud) -> VoxelStorage`：从点云无损重建 `VoxelStorage`，支持用户手动删除局部点后自动生成空腔和露出内表面。
+- `to_point_cloud(config) -> VoxelPointCloud`：全量提取所有非空体素（**绝对不参与任何面遮挡剔除**，内部实心方块 100% 完整保留，并提取方块实体 NBT）。
+- `from_point_cloud(cloud) -> VoxelStorage`：从点云无损重建 `VoxelStorage`，支持用户手动删除局部点后自动生成空腔和露出内表面，完整保留存活方块实体。
 - `to_mesh_data() / from_mesh_data()`：与标准纯点 `MeshData`（无多边形面）互转，无缝桥接 DCC 属性。
-- `state_palette` / `state_indices` 与 `biome_palette` / `biome_indices`：点云直接存储调色板与逐点 `i32` 索引，不再为每个点分配 `String`。
+- `state_palette` / `biome_palette` / `entity_palette` 调色板体系：点云全面采用调色板与逐点 `i32` 索引，不再为每个点物化 `String`，方块实体 NBT 按需稀疏挂载。
 
 ---
 

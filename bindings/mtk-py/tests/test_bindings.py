@@ -123,6 +123,47 @@ class TestLibMtkPy(unittest.TestCase):
         restored = libmtk_py.VoxelPointCloud.from_mesh_data(cloud.to_mesh_data())
         self.assertEqual(restored.get_state_palette(), cloud.get_state_palette())
         self.assertEqual(restored.get_biome_palette(), cloud.get_biome_palette())
+        self.assertFalse(cloud.has_entities())
+        self.assertEqual(cloud.get_entity_palette(), [])
+
+    def test_point_cloud_entity_palette_and_from_indexed_arrays(self):
+        import numpy as np
+
+        positions = np.array([0.5, 0.5, 0.5, 1.5, 0.5, 0.5], dtype=np.float32)
+        bx = np.array([0, 1], dtype=np.int32)
+        by = np.array([0, 0], dtype=np.int32)
+        bz = np.array([0, 0], dtype=np.int32)
+        st_idx = np.array([0, 1], dtype=np.int32)
+        st_pal = ["minecraft:stone", "minecraft:decorated_pot"]
+        ent_idx = np.array([-1, 0], dtype=np.int32)
+        ent_pal = ['{"id":"minecraft:decorated_pot","sherds":["angler",null,null,null]}']
+
+        cloud = libmtk_py.VoxelPointCloud.from_indexed_arrays(
+            positions,
+            bx,
+            by,
+            bz,
+            st_idx,
+            st_pal,
+            entity_indices=ent_idx,
+            entity_palette=ent_pal,
+        )
+
+        self.assertTrue(cloud.has_entities())
+        self.assertEqual(cloud.get_entity_palette(), ent_pal)
+        np.testing.assert_array_equal(
+            np.frombuffer(cloud.entity_indices_memoryview(), dtype=np.int32),
+            [-1, 0],
+        )
+
+        mesh = cloud.to_mesh_data()
+        restored = libmtk_py.VoxelPointCloud.from_mesh_data(mesh)
+        self.assertTrue(restored.has_entities())
+        self.assertEqual(restored.get_entity_palette(), ent_pal)
+        np.testing.assert_array_equal(
+            np.frombuffer(restored.entity_indices_memoryview(), dtype=np.int32),
+            [-1, 0],
+        )
 
 
 if __name__ == "__main__":

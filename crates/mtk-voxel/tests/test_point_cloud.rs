@@ -353,3 +353,74 @@ fn test_point_cloud_explicit_bounds_clipping() {
     assert_eq!(cloud.block_z[0], 2);
     assert_eq!(cloud.state_at(0).unwrap(), "minecraft:stone");
 }
+
+#[test]
+fn test_point_cloud_block_entity_palette_and_roundtrip() {
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+
+    world.set_block(0, 0, 0, "minecraft:stone", Some("minecraft:plains"));
+    world.set_block(
+        1,
+        1,
+        1,
+        "minecraft:decorated_pot[facing=north]",
+        Some("minecraft:desert"),
+    );
+    let pot = mtk_model::BlockEntityData::new_decorated_pot([
+        Some("minecraft:angler_pottery_sherd"),
+        Some("brick"),
+        Some("blade"),
+        Some("miner_pottery_pattern"),
+    ]);
+    world.set_block_entity(1, 1, 1, Some(pot.clone()));
+
+    world.set_block(2, 2, 2, "minecraft:banner", Some("minecraft:plains"));
+    let banner = mtk_model::BlockEntityData::new_banner(
+        "blue",
+        vec![("stripe_top", "white"), ("flower", "red")],
+    );
+    world.set_block_entity(2, 2, 2, Some(banner.clone()));
+
+    // Repeated banner to verify deduplication in entity_palette
+    world.set_block(3, 3, 3, "minecraft:banner", Some("minecraft:plains"));
+    world.set_block_entity(3, 3, 3, Some(banner.clone()));
+
+    let config = MesherConfig::default();
+    let cloud = world.to_point_cloud(&config);
+
+    assert_eq!(cloud.len(), 4);
+    assert!(cloud.has_entities());
+    // 2 unique block entities: pot and banner
+    assert_eq!(
+        cloud.entity_palette.len(),
+        2,
+        "Repeated banner must be deduplicated in entity_palette"
+    );
+    assert_eq!(cloud.entity_indices.len(), 4);
+
+    // Stone at (0,0,0) has no entity -> index -1
+    let stone_idx = (0..4).find(|&i| cloud.block_x[i] == 0).unwrap();
+    assert_eq!(cloud.entity_indices[stone_idx], -1);
+    assert_eq!(cloud.entity_at(stone_idx), None);
+
+    // Both banners have identical entity index >= 0
+    let b1_idx = (0..4).find(|&i| cloud.block_x[i] == 2).unwrap();
+    let b2_idx = (0..4).find(|&i| cloud.block_x[i] == 3).unwrap();
+    assert!(cloud.entity_indices[b1_idx] >= 0);
+    assert_eq!(cloud.entity_indices[b1_idx], cloud.entity_indices[b2_idx]);
+
+    // MeshData roundtrip
+    let mesh_data = cloud.to_mesh_data();
+    let restored_cloud =
+        VoxelPointCloud::from_mesh_data(&mesh_data).expect("Must parse from MeshData");
+    assert_eq!(restored_cloud.entity_palette, cloud.entity_palette);
+    assert_eq!(restored_cloud.entity_indices, cloud.entity_indices);
+
+    // Storage roundtrip
+    let restored_world = restored_cloud.reconstruct_storage();
+    assert_eq!(restored_world.get_block_entity(1, 1, 1), Some(&pot));
+    assert_eq!(restored_world.get_block_entity(2, 2, 2), Some(&banner));
+    assert_eq!(restored_world.get_block_entity(3, 3, 3), Some(&banner));
+    assert_eq!(restored_world.get_block_entity(0, 0, 0), None);
+}

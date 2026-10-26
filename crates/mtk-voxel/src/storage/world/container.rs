@@ -420,6 +420,29 @@ impl VoxelStorage {
         }
     }
 
+    /// Sets or removes the block entity at world coordinate `(x, y, z)`.
+    pub fn set_block_entity(
+        &mut self,
+        x: i32,
+        y: i32,
+        z: i32,
+        data: Option<mtk_model::BlockEntityData>,
+    ) {
+        let sec_coord = IVec3::new(x >> 4, y >> 4, z >> 4);
+        let lx = (x & 15) as usize;
+        let ly = (y & 15) as usize;
+        let lz = (z & 15) as usize;
+        let local_idx = crate::storage::block_index(lx, ly, lz) as u16;
+
+        if let Some(sec) = self.sections.get_mut(&sec_coord) {
+            sec.set_block_entity(local_idx, data);
+        } else if data.is_some() {
+            let mut sec = SectionStorage::new(sec_coord);
+            sec.set_block_entity(local_idx, data);
+            self.sections.insert(sec_coord, sec);
+        }
+    }
+
     /// Sets the blockstate at world coordinate `(x, y, z)` and marks dirty sections.
     pub fn set_block(&mut self, x: i32, y: i32, z: i32, state: &str, biome: Option<&str>) -> bool {
         let sec_coord = IVec3::new(x >> 4, y >> 4, z >> 4);
