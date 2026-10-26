@@ -74,6 +74,35 @@ fn resolve_model_face(
                 avg_col,
             )
         } else if let Some(ref atlas_uvs) = face.atlas_uvs {
+            let base_loc = if !face.texture.is_empty() {
+                mtk_resource::ResourceLocation::parse(&face.texture).ok()
+            } else {
+                None
+            };
+            let sp = if let Some(ref loc) = base_loc {
+                atlas.lookup(loc).or_else(|| {
+                    MaterialResolver::resolve(
+                        &loc.as_string(),
+                        config.custom_aliases.as_deref(),
+                        atlas,
+                    )
+                    .map(|(_, s)| s)
+                })
+            } else {
+                None
+            }
+            .or_else(|| atlas.lookup_str(&face.texture))
+            .or_else(|| {
+                MaterialResolver::resolve(&face.texture, config.custom_aliases.as_deref(), atlas)
+                    .map(|(_, s)| s)
+            })
+            .or_else(|| atlas.lookup_fallback());
+
+            let avg_col = sp
+                .and_then(|s| s.average_color.as_deref())
+                .map(mtk_material::hex_to_linear_rgba)
+                .unwrap_or([1.0, 1.0, 1.0, 1.0]);
+
             (
                 face.texture.clone(),
                 Some(*atlas_uvs),
@@ -81,7 +110,7 @@ fn resolve_model_face(
                 face.atlas_chunk_id.unwrap_or(0) as i32,
                 [1.0, 1.0, 0.0],
                 [16.0, 16.0, 0.0],
-                [1.0, 1.0, 1.0, 1.0],
+                avg_col,
             )
         } else {
             let base_loc = if !face.texture.is_empty() {
@@ -214,6 +243,11 @@ fn resolve_model_face(
                     Vec2::new(face.uvs[2].x * u_span, (1.0 - face.uvs[2].y) * v_span),
                     Vec2::new(face.uvs[3].x * u_span, (1.0 - face.uvs[3].y) * v_span),
                 ];
+                let avg_col = atlas
+                    .lookup_fallback()
+                    .and_then(|s| s.average_color.as_deref())
+                    .map(mtk_material::hex_to_linear_rgba)
+                    .unwrap_or([1.0, 1.0, 1.0, 1.0]);
                 (
                     face.texture.clone(),
                     Some(remapped),
@@ -221,7 +255,7 @@ fn resolve_model_face(
                     default_chunk as i32,
                     [1.0, 1.0, 0.0],
                     [16.0, 16.0, 0.0],
-                    [1.0, 1.0, 1.0, 1.0],
+                    avg_col,
                 )
             }
         }
@@ -445,6 +479,11 @@ pub fn resolve_palette_meshing_data_for_state<'a>(
                             avg_col,
                         )
                     } else {
+                        let avg_col = atlas
+                            .lookup_fallback()
+                            .and_then(|s| s.average_color.as_deref())
+                            .map(mtk_material::hex_to_linear_rgba)
+                            .unwrap_or([1.0, 1.0, 1.0, 1.0]);
                         (
                             format!("minecraft:block/{}", clean_sub),
                             None,
@@ -452,7 +491,7 @@ pub fn resolve_palette_meshing_data_for_state<'a>(
                             0,
                             [1.0, 1.0, 0.0],
                             [16.0, 16.0, 0.0],
-                            [1.0, 1.0, 1.0, 1.0],
+                            avg_col,
                         )
                     }
                 } else {

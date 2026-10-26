@@ -1483,3 +1483,110 @@ fn test_mesher_average_color_and_tint_injection() {
         "Grass block top face must be tinted green"
     );
 }
+
+#[test]
+fn test_mesher_baked_model_atlas_uvs_average_color() {
+    use mtk_core::Direction;
+    use mtk_material::biome::hex_to_linear_rgba;
+    use mtk_model::{BakedFace, BakedModel};
+    use mtk_texture::atlas::{AtlasAddressMap, AtlasSpriteLocation, SpriteKind};
+    use std::sync::Arc;
+
+    let mut address_map = AtlasAddressMap::new();
+
+    // Dirt with average_color "#866043"
+    let dirt_loc = mtk_resource::ResourceLocation::parse("minecraft:block/dirt").unwrap();
+    address_map.sprites.insert(
+        dirt_loc,
+        AtlasSpriteLocation {
+            category: "blocks".to_string(),
+            sprite_kind: SpriteKind::StaticAtlas,
+            chunk_id: 14,
+            texture_id: 3972,
+            frame_0_uv_bounds: [0.0, 0.0, 0.5, 0.5],
+            average_color: Some("#866043".to_string()),
+            ..Default::default()
+        },
+    );
+
+    let mut model = BakedModel {
+        block_state: "minecraft:dirt".to_string(),
+        ..Default::default()
+    };
+    let face = BakedFace {
+        direction: Direction::Up,
+        texture: "minecraft:block/dirt".to_string(),
+        uv_rot: 0.0,
+        uv_bounds: [0.0, 0.0, 1.0, 1.0],
+        tint_index: -1,
+        cullface: None,
+        vertices: [
+            glam::Vec3::new(0.0, 1.0, 0.0),
+            glam::Vec3::new(1.0, 1.0, 0.0),
+            glam::Vec3::new(1.0, 1.0, 1.0),
+            glam::Vec3::new(0.0, 1.0, 1.0),
+        ],
+        uvs: [
+            glam::Vec2::new(0.0, 0.0),
+            glam::Vec2::new(1.0, 0.0),
+            glam::Vec2::new(1.0, 1.0),
+            glam::Vec2::new(0.0, 1.0),
+        ],
+        normal: glam::Vec3::new(0.0, 1.0, 0.0),
+        atlas_uvs: Some([
+            glam::Vec2::new(0.0, 0.0),
+            glam::Vec2::new(0.1, 0.0),
+            glam::Vec2::new(0.1, 0.1),
+            glam::Vec2::new(0.0, 0.1),
+        ]),
+        atlas_chunk_id: Some(14),
+        atlas_texture_id: Some(3972),
+    };
+    model.culled_faces[Direction::Up.to_index()].push(face);
+    let model_arc = Arc::new(model);
+
+    let mut sec = mtk_voxel::storage::SectionStorage::new(glam::IVec3::new(0, 0, 0));
+    let pal_dirt = sec.palette.len() as u16;
+    sec.palette.push("minecraft:dirt".to_string());
+    sec.voxels[mtk_voxel::storage::block_index(1, 1, 1) as usize] = pal_dirt;
+    sec.non_air_count = 1;
+
+    let padded = sec.build_padded_array(|_, _, _| "minecraft:air");
+    let culler = FaceCuller::default();
+    let config = MesherConfig {
+        atlas_address_map: Some(std::sync::Arc::new(address_map)),
+        ..Default::default()
+    };
+
+    let mesh = SectionMesher::mesh_section(
+        &padded,
+        &culler,
+        |state| {
+            if state == "minecraft:dirt" {
+                ModelSource::from(Some(model_arc.clone()))
+            } else {
+                ModelSource::None
+            }
+        },
+        &config,
+    );
+
+    assert!(mesh.colors.is_some(), "mesh.colors must be present");
+    let colors = mesh.colors.as_ref().unwrap();
+    assert_eq!(colors.len(), 4, "Must have 4 vertex colors for 1 face");
+
+    let expected_dirt = hex_to_linear_rgba("#866043");
+    for i in 0..4 {
+        for c in 0..3 {
+            assert!(
+                (colors[i][c] - expected_dirt[c]).abs() < 1e-3,
+                "Dirt corner {} channel {} expected {}, got {}",
+                i,
+                c,
+                expected_dirt[c],
+                colors[i][c]
+            );
+        }
+        assert_eq!(colors[i][3], 1.0);
+    }
+}

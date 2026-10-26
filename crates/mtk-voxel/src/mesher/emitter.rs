@@ -50,12 +50,18 @@ pub fn emit_baked_face(
     }
 
     let face_color = if final_tint_data[2] > 0.0 {
-        [
-            shading.average_color[0] * final_tint_color[0],
-            shading.average_color[1] * final_tint_color[1],
-            shading.average_color[2] * final_tint_color[2],
-            1.0,
-        ]
+        let avg = shading.average_color;
+        let is_grayscale = (avg[0] - avg[1]).abs() < 0.03 && (avg[1] - avg[2]).abs() < 0.03;
+        if is_grayscale {
+            final_tint_color
+        } else {
+            [
+                avg[0] * final_tint_color[0],
+                avg[1] * final_tint_color[1],
+                avg[2] * final_tint_color[2],
+                1.0,
+            ]
+        }
     } else {
         shading.average_color
     };
@@ -220,12 +226,18 @@ pub fn emit_unit_cube_face(
     }
 
     let face_color = if final_tint_data[2] > 0.0 {
-        [
-            shading.average_color[0] * final_tint_color[0],
-            shading.average_color[1] * final_tint_color[1],
-            shading.average_color[2] * final_tint_color[2],
-            1.0,
-        ]
+        let avg = shading.average_color;
+        let is_grayscale = (avg[0] - avg[1]).abs() < 0.03 && (avg[1] - avg[2]).abs() < 0.03;
+        if is_grayscale {
+            final_tint_color
+        } else {
+            [
+                avg[0] * final_tint_color[0],
+                avg[1] * final_tint_color[1],
+                avg[2] * final_tint_color[2],
+                1.0,
+            ]
+        }
     } else {
         shading.average_color
     };
