@@ -11,14 +11,15 @@ flate2 = { workspace = true }
 glam = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
+serde_json = { workspace = true }
 rayon = { workspace = true }
 mtk-core = { workspace = true }
+mtk-model = { workspace = true }
 mtk-voxel = { workspace = true }
 
 [features]
 default = []
-serde = ["dep:serde", "dep:serde_json", "mtk-core/serde", "mtk-voxel/serde"]
+serde = ["dep:serde", "mtk-core/serde", "mtk-voxel/serde"]
 
 [dev-dependencies]
 mtk-testkit = { workspace = true }

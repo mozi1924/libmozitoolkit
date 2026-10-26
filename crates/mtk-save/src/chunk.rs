@@ -274,45 +274,24 @@ impl ChunkParser {
             }
         }
 
-        // RFC v3.2: Parse sparse block entities (Decorated Pots, Banners, etc.)
+        // Universal BlockEntity Decoding (Decorated Pots, Banners, Skulls, etc.)
         if let Some(be_list) = chunk.list("block_entities").and_then(|l| l.compounds()) {
             for be_comp in be_list {
-                let id_opt = be_comp.string("id");
-                let is_pot = matches!(
-                    id_opt.as_ref().map(|s| s.as_str()),
-                    Some("minecraft:decorated_pot" | "decorated_pot")
-                );
-                if !is_pot {
-                    continue;
-                }
+                if let Some(entity_data) = crate::block_entity::decode_block_entity(&be_comp) {
+                    let x = be_comp.int("x").unwrap_or(0);
+                    let y = be_comp.int("y").unwrap_or(0);
+                    let z = be_comp.int("z").unwrap_or(0);
+                    let sec_y = y.div_euclid(16);
 
-                let x = be_comp.int("x").unwrap_or(0);
-                let y = be_comp.int("y").unwrap_or(0);
-                let z = be_comp.int("z").unwrap_or(0);
-                let sec_y = y.div_euclid(16);
+                    if sec_y >= min_section_y && sec_y <= max_section_y {
+                        let local_x = (x.rem_euclid(16)) as usize;
+                        let local_y = (y.rem_euclid(16)) as usize;
+                        let local_z = (z.rem_euclid(16)) as usize;
+                        let local_idx = block_index(local_x, local_y, local_z) as u16;
 
-                if sec_y >= min_section_y && sec_y <= max_section_y {
-                    let local_x = (x.rem_euclid(16)) as usize;
-                    let local_y = (y.rem_euclid(16)) as usize;
-                    let local_z = (z.rem_euclid(16)) as usize;
-                    let local_idx = block_index(local_x, local_y, local_z) as u16;
-
-                    let mut sherds = [None, None, None, None];
-                    if let Some(sherd_list) = be_comp.list("sherds").and_then(|l| l.strings()) {
-                        for (i, s) in sherd_list.iter().enumerate() {
-                            if i >= 4 {
-                                break;
-                            }
-                            let s_ref = s.as_str();
-                            if s_ref != "minecraft:brick" && s_ref != "brick" && !s_ref.is_empty() {
-                                sherds[i] = Some(s_ref.to_string());
-                            }
+                        if let Some(sec) = sections.iter_mut().find(|s| s.coord.y == sec_y) {
+                            sec.block_entities.insert(local_idx, entity_data);
                         }
-                    }
-                    let entity_data = mtk_voxel::BlockEntityData::DecoratedPot { sherds };
-
-                    if let Some(sec) = sections.iter_mut().find(|s| s.coord.y == sec_y) {
-                        sec.block_entities.insert(local_idx, entity_data);
                     }
                 }
             }

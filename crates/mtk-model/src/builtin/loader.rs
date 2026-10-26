@@ -57,6 +57,15 @@ pub struct MiExModelLoader;
 impl MiExModelLoader {
     /// Loads a builtin model for a blockstate using the official upstream MiEx JSON definition.
     pub fn load_for_blockstate(blockstate: &BlockState) -> Option<BlockModelJson> {
+        Self::load_for_blockstate_with_entity(blockstate, None)
+    }
+
+    /// Loads a builtin model for a blockstate using the official upstream MiEx JSON definition,
+    /// enriched with optional dynamic entity properties (e.g. skull rotation or custom profile textures).
+    pub fn load_for_blockstate_with_entity(
+        blockstate: &BlockState,
+        entity: Option<&crate::entity::BlockEntityData>,
+    ) -> Option<BlockModelJson> {
         let name = blockstate.name.as_str();
         let short_name = name.strip_prefix("minecraft:").unwrap_or(name);
 
@@ -83,11 +92,15 @@ impl MiExModelLoader {
             return None;
         };
 
-        Self::eval_builtin_json(raw_json, blockstate)
+        Self::eval_builtin_json(raw_json, blockstate, entity)
     }
 
     /// Evaluates a MiEx builtin JSON AST into a concrete `BlockModelJson`.
-    fn eval_builtin_json(raw_json: &str, blockstate: &BlockState) -> Option<BlockModelJson> {
+    fn eval_builtin_json(
+        raw_json: &str,
+        blockstate: &BlockState,
+        entity: Option<&crate::entity::BlockEntityData>,
+    ) -> Option<BlockModelJson> {
         let root: Value = serde_json::from_str(raw_json).ok()?;
         let mut vars_str: HashMap<String, String> = HashMap::new();
         let mut vars_num: HashMap<String, f32> = HashMap::new();
@@ -102,6 +115,30 @@ impl MiExModelLoader {
                 "texture".to_string(),
                 TextureValue::Path(default_tex.to_string()),
             );
+        }
+
+        // Inject dynamic entity context variables before AST handler execution
+        if let Some(crate::entity::BlockEntityData::Skull {
+            kind,
+            rotation,
+            profile,
+        }) = entity
+        {
+            if let Some(rot) = rotation {
+                let rot_deg = (22.5 * (*rot as f32) + 180.0) % 360.0;
+                vars_num.insert("rotY".to_string(), rot_deg);
+            }
+            if let Some(prof) = profile {
+                let tex = prof.texture_identifier();
+                vars_str.insert("texture".to_string(), tex.clone());
+                textures.insert("texture".to_string(), TextureValue::Path(tex.clone()));
+                textures.insert("particle".to_string(), TextureValue::Path(tex));
+            } else {
+                let tex = kind.default_texture_path().to_string();
+                vars_str.insert("texture".to_string(), tex.clone());
+                textures.insert("texture".to_string(), TextureValue::Path(tex.clone()));
+                textures.insert("particle".to_string(), TextureValue::Path(tex));
+            }
         }
 
         let mut elements: Vec<ElementJson> = Vec::new();

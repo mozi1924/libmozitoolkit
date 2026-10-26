@@ -837,6 +837,7 @@ dependencies = [
  "flate2",
  "glam",
  "mtk-core",
+ "mtk-model",
  "mtk-testkit",
  "mtk-voxel",
  "rayon",

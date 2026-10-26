@@ -1,0 +1,347 @@
+//! Universal NBT and Component BlockEntity decoder for mtk-save.
+//!
+//! Converts raw MCA `block_entities` compounds into high-level typed `BlockEntityData`,
+//! supporting both pre-1.20.5 Tag structures and 1.20.5+ Data Component structures.
+
+use crate::nbt::tag::NbtCompound;
+use mtk_model::entity::banner::{dye_id_to_name, BannerPatternLayer};
+use mtk_model::entity::skull::{PlayerProfileData, SkullKind};
+use mtk_model::BlockEntityData;
+
+/// Decodes an NBT Compound from a chunk's `block_entities` list into a typed `BlockEntityData`.
+///
+/// Returns `None` for unsupported or non-visual block entities (e.g. standard storage chests, hoppers).
+pub fn decode_block_entity(comp: &NbtCompound) -> Option<BlockEntityData> {
+    let id_str = comp
+        .string("id")
+        .or_else(|| comp.string("Id"))?
+        .as_str()
+        .to_string();
+    let clean_id = id_str.strip_prefix("minecraft:").unwrap_or(&id_str);
+
+    match clean_id {
+        "decorated_pot" => decode_decorated_pot(comp),
+        "banner" => decode_banner(comp),
+        "skull" => decode_skull(comp),
+        _ => None,
+    }
+}
+
+/// Decodes Decorated Pot NBT data (pre-1.20.5 `sherds` list and 1.20.5+ `minecraft:pot_decorations` component).
+fn decode_decorated_pot(comp: &NbtCompound) -> Option<BlockEntityData> {
+    let mut sherds = [None, None, None, None];
+
+    // 1. Check pre-1.20.5 `sherds` list
+    if let Some(sherd_list) = comp
+        .list("sherds")
+        .or_else(|| comp.list("Sherds"))
+        .and_then(|l| l.strings())
+    {
+        for (i, s) in sherd_list.iter().enumerate().take(4) {
+            let s_ref = s.as_str();
+            if s_ref != "minecraft:brick" && s_ref != "brick" && !s_ref.is_empty() {
+                sherds[i] = Some(s_ref.to_string());
+            }
+        }
+    }
+    // 2. Check 1.20.5+ component `minecraft:pot_decorations`
+    else if let Some(components) = comp.compound("components") {
+        if let Some(decorations) = components.compound("minecraft:pot_decorations") {
+            let slots = ["back", "left", "right", "front"];
+            for (i, slot) in slots.iter().enumerate() {
+                if let Some(s) = decorations.string(slot) {
+                    let s_ref = s.as_str();
+                    if s_ref != "minecraft:brick" && s_ref != "brick" && !s_ref.is_empty() {
+                        sherds[i] = Some(s_ref.to_string());
+                    }
+                }
+            }
+        } else if let Some(dec_list) = components
+            .list("minecraft:pot_decorations")
+            .and_then(|l| l.strings())
+        {
+            for (i, s) in dec_list.iter().enumerate().take(4) {
+                let s_ref = s.as_str();
+                if s_ref != "minecraft:brick" && s_ref != "brick" && !s_ref.is_empty() {
+                    sherds[i] = Some(s_ref.to_string());
+                }
+            }
+        }
+    }
+
+    Some(mtk_model::BlockEntityData::DecoratedPot { sherds })
+}
+
+/// Decodes Banner NBT data (pre-1.20.5 `Patterns` list and 1.20.5+ `minecraft:banner_patterns` component).
+fn decode_banner(comp: &NbtCompound) -> Option<BlockEntityData> {
+    // 1. Determine base color
+    let base_color = if let Some(base_str) = comp
+        .string("BaseColor")
+        .or_else(|| comp.string("base_color"))
+    {
+        base_str.as_str().to_string()
+    } else if let Some(base_idx) = comp
+        .int("Base")
+        .or_else(|| comp.byte("Base").map(|b| b as i32))
+    {
+        dye_id_to_name(base_idx.clamp(0, 15) as u8).to_string()
+    } else {
+        "white".to_string()
+    };
+
+    let mut patterns = Vec::new();
+
+    // 2. Pre-1.20.5 `Patterns` list
+    if let Some(pattern_list) = comp
+        .list("Patterns")
+        .or_else(|| comp.list("patterns"))
+        .and_then(|l| l.compounds())
+    {
+        for p_comp in pattern_list {
+            let pat = p_comp
+                .string("Pattern")
+                .or_else(|| p_comp.string("pattern"))
+                .map(|s| s.as_str().to_string())
+                .unwrap_or_else(|| "base".to_string());
+
+            let col = if let Some(col_idx) = p_comp
+                .int("Color")
+                .or_else(|| p_comp.byte("Color").map(|b| b as i32))
+            {
+                dye_id_to_name(col_idx.clamp(0, 15) as u8).to_string()
+            } else if let Some(col_str) = p_comp.string("Color").or_else(|| p_comp.string("color"))
+            {
+                col_str.as_str().to_string()
+            } else {
+                "white".to_string()
+            };
+
+            patterns.push(BannerPatternLayer::new(pat, col));
+        }
+    }
+    // 3. 1.20.5+ component `minecraft:banner_patterns`
+    else if let Some(components) = comp.compound("components") {
+        if let Some(comp_patterns) = components
+            .list("minecraft:banner_patterns")
+            .and_then(|l| l.compounds())
+        {
+            for p_comp in comp_patterns {
+                let pat = p_comp
+                    .string("pattern")
+                    .or_else(|| p_comp.string("pattern_id"))
+                    .map(|s| s.as_str().to_string())
+                    .unwrap_or_else(|| "base".to_string());
+
+                let col = p_comp
+                    .string("color")
+                    .map(|s| s.as_str().to_string())
+                    .unwrap_or_else(|| "white".to_string());
+
+                patterns.push(BannerPatternLayer::new(pat, col));
+            }
+        }
+    }
+
+    Some(mtk_model::BlockEntityData::Banner {
+        base_color,
+        patterns,
+    })
+}
+
+/// Decodes Skull / Head NBT data (SkullType, Rot, SkullOwner, and 1.20.5+ `minecraft:profile` component).
+fn decode_skull(comp: &NbtCompound) -> Option<BlockEntityData> {
+    let type_id = comp
+        .byte("SkullType")
+        .or_else(|| comp.int("SkullType").map(|i| i as i8))
+        .unwrap_or(0);
+    let mut kind = SkullKind::from_type_id(type_id.clamp(0, 6) as u8);
+
+    let rotation = comp
+        .byte("Rot")
+        .or_else(|| comp.int("Rot").map(|i| i as i8))
+        .map(|r| (r as u8) & 0x0F);
+
+    let mut profile: Option<PlayerProfileData> = None;
+
+    // 1. Check pre-1.20.5 `SkullOwner`
+    if let Some(owner_comp) = comp.compound("SkullOwner") {
+        kind = SkullKind::Player;
+        let name = owner_comp.string("Name").map(|s| s.as_str().to_string());
+        let id = owner_comp.string("Id").map(|s| s.as_str().to_string());
+
+        let mut skin_b64: Option<String> = None;
+        if let Some(props) = owner_comp.compound("Properties") {
+            if let Some(tex_list) = props.list("textures").and_then(|l| l.compounds()) {
+                if let Some(first) = tex_list.first() {
+                    skin_b64 = first.string("Value").map(|s| s.as_str().to_string());
+                }
+            }
+        }
+        profile = Some(PlayerProfileData::new(name, id, None, skin_b64));
+    } else if let Some(owner_str) = comp.string("SkullOwner") {
+        kind = SkullKind::Player;
+        profile = Some(PlayerProfileData::new(
+            Some(owner_str.as_str().to_string()),
+            None,
+            None,
+            None,
+        ));
+    }
+    // 2. Check 1.20.5+ component `minecraft:profile`
+    else if let Some(components) = comp.compound("components") {
+        if let Some(prof_comp) = components.compound("minecraft:profile") {
+            kind = SkullKind::Player;
+            let name = prof_comp.string("name").map(|s| s.as_str().to_string());
+            let id = prof_comp.string("id").map(|s| s.as_str().to_string());
+
+            let mut skin_b64: Option<String> = None;
+            if let Some(props) = prof_comp.list("properties").and_then(|l| l.compounds()) {
+                for p in &props {
+                    if p.string("name")
+                        .map(|s| s.as_str() == "textures")
+                        .unwrap_or(false)
+                    {
+                        skin_b64 = p.string("value").map(|s| s.as_str().to_string());
+                        break;
+                    }
+                }
+            }
+            profile = Some(PlayerProfileData::new(name, id, None, skin_b64));
+        }
+    }
+
+    Some(mtk_model::BlockEntityData::Skull {
+        kind,
+        rotation,
+        profile,
+    })
+}
+
+/// Universal decoder for raw byte payloads (JSON visual NBT or binary NBT compound).
+pub fn decode_block_entity_payload(bytes: &[u8]) -> Option<BlockEntityData> {
+    if bytes.is_empty() {
+        return None;
+    }
+    // 1. JSON path
+    if bytes[0] == b'{' {
+        if let Ok(data) = serde_json::from_slice::<BlockEntityData>(bytes) {
+            return Some(data);
+        }
+    }
+    // 2. Binary NBT Compound path
+    let mut cursor = std::io::Cursor::new(bytes);
+    if let Ok(crate::nbt::Nbt::Some(base)) = crate::nbt::read(&mut cursor) {
+        return decode_block_entity(base.as_compound());
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::nbt::tag::{NbtList, NbtStr, NbtTag};
+
+    #[test]
+    fn test_decode_banner_legacy_and_components() {
+        // 1. Legacy Patterns test
+        let mut banner_comp = NbtCompound::new();
+        banner_comp.entries.push((
+            NbtStr::from_borrowed("id"),
+            NbtTag::String(NbtStr::from_borrowed("minecraft:banner")),
+        ));
+        banner_comp.entries.push((
+            NbtStr::from_borrowed("Base"),
+            NbtTag::Int(11), // 11: blue
+        ));
+
+        let mut p1 = NbtCompound::new();
+        p1.entries.push((
+            NbtStr::from_borrowed("Pattern"),
+            NbtTag::String(NbtStr::from_borrowed("ts")),
+        ));
+        p1.entries
+            .push((NbtStr::from_borrowed("Color"), NbtTag::Int(1))); // orange
+
+        banner_comp.entries.push((
+            NbtStr::from_borrowed("Patterns"),
+            NbtTag::List(NbtList::Compound(vec![p1])),
+        ));
+
+        let decoded = decode_block_entity(&banner_comp).expect("Must decode banner");
+        if let BlockEntityData::Banner {
+            base_color,
+            patterns,
+        } = decoded
+        {
+            assert_eq!(base_color, "blue");
+            assert_eq!(patterns.len(), 1);
+            assert_eq!(patterns[0].pattern, "ts");
+            assert_eq!(patterns[0].color, "orange");
+        } else {
+            panic!("Expected Banner variant");
+        }
+    }
+
+    #[test]
+    fn test_decode_player_head_with_profile() {
+        let mut skull_comp = NbtCompound::new();
+        skull_comp.entries.push((
+            NbtStr::from_borrowed("id"),
+            NbtTag::String(NbtStr::from_borrowed("minecraft:skull")),
+        ));
+        skull_comp
+            .entries
+            .push((NbtStr::from_borrowed("SkullType"), NbtTag::Byte(3)));
+        skull_comp
+            .entries
+            .push((NbtStr::from_borrowed("Rot"), NbtTag::Byte(8)));
+
+        let mut owner_comp = NbtCompound::new();
+        owner_comp.entries.push((
+            NbtStr::from_borrowed("Name"),
+            NbtTag::String(NbtStr::from_borrowed("Alex")),
+        ));
+
+        let mut props_comp = NbtCompound::new();
+        let mut tex_entry = NbtCompound::new();
+        // Base64 encoding of {"textures":{"SKIN":{"url":"http://textures.minecraft.net/texture/12345"}}}
+        let b64 = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMTIzNDUifX19";
+        tex_entry.entries.push((
+            NbtStr::from_borrowed("Value"),
+            NbtTag::String(NbtStr::from_borrowed(b64)),
+        ));
+        props_comp.entries.push((
+            NbtStr::from_borrowed("textures"),
+            NbtTag::List(NbtList::Compound(vec![tex_entry])),
+        ));
+
+        owner_comp.entries.push((
+            NbtStr::from_borrowed("Properties"),
+            NbtTag::Compound(props_comp),
+        ));
+        skull_comp.entries.push((
+            NbtStr::from_borrowed("SkullOwner"),
+            NbtTag::Compound(owner_comp),
+        ));
+
+        let decoded = decode_block_entity(&skull_comp).expect("Must decode skull");
+        if let BlockEntityData::Skull {
+            kind,
+            rotation,
+            profile,
+        } = decoded
+        {
+            assert_eq!(kind, SkullKind::Player);
+            assert_eq!(rotation, Some(8));
+            let prof = profile.expect("Profile must be present");
+            assert_eq!(prof.name.as_deref(), Some("Alex"));
+            assert_eq!(
+                prof.skin_url.as_deref(),
+                Some("http://textures.minecraft.net/texture/12345")
+            );
+            assert_eq!(prof.skin_hash(), Some("12345"));
+        } else {
+            panic!("Expected Skull variant");
+        }
+    }
+}

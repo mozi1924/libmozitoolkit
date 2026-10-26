@@ -171,25 +171,8 @@ impl SectionMesher {
                         continue;
                     }
 
-                    let baked = match be {
-                        mtk_model::BlockEntityData::DecoratedPot { sherds } => {
-                            let facing = if state_str.contains("facing=south") {
-                                mtk_core::direction::Direction::South
-                            } else if state_str.contains("facing=east") {
-                                mtk_core::direction::Direction::East
-                            } else if state_str.contains("facing=west") {
-                                mtk_core::direction::Direction::West
-                            } else {
-                                mtk_core::direction::Direction::North
-                            };
-                            Some(
-                                mtk_model::builtin::vanilla::create_decorated_pot_baked_model(
-                                    facing, sherds,
-                                ),
-                            )
-                        }
-                        _ => None,
-                    };
+                    let baked =
+                        mtk_model::builtin::BuiltinModelRegistry::bake_block_entity(state_str, be);
 
                     if let Some(baked_model) = baked {
                         let source =

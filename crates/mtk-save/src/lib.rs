@@ -10,6 +10,7 @@
 //! - [`ChunkParser`]: 1.18+ chunk section bit-unpacker for `block_states` and biomes.
 //! - [`SaveLoader`]: High-level bounding box slicer and directory discovery engine.
 
+pub mod block_entity;
 pub mod chunk;
 pub mod error;
 pub mod level;
@@ -17,6 +18,7 @@ pub mod loader;
 pub mod nbt;
 pub mod region;
 
+pub use block_entity::{decode_block_entity, decode_block_entity_payload};
 pub use chunk::ChunkParser;
 pub use error::SaveError;
 pub use level::LevelData;

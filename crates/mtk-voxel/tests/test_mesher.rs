@@ -1360,6 +1360,63 @@ fn test_decorated_pot_block_entity_meshing() {
 }
 
 #[test]
+fn test_generic_block_entity_meshing_skull_and_pot() {
+    let mut sec = mtk_voxel::storage::SectionStorage::new(IVec3::new(0, 0, 0));
+
+    // 1. Decorated Pot at (2, 2, 2)
+    let pot_idx = mtk_voxel::storage::block_index(2, 2, 2) as u16;
+    let pot_pal = sec.palette.len() as u16;
+    sec.palette
+        .push("minecraft:decorated_pot[facing=north]".to_string());
+    sec.voxels[pot_idx as usize] = pot_pal;
+
+    let pot_entity = mtk_voxel::BlockEntityData::new_decorated_pot([
+        Some("minecraft:angler_pottery_sherd"),
+        None,
+        Some("miner"),
+        Some("blade"),
+    ]);
+    sec.set_block_entity(pot_idx, Some(pot_entity));
+
+    // 2. Player Skull at (5, 5, 5)
+    let skull_idx = mtk_voxel::storage::block_index(5, 5, 5) as u16;
+    let skull_pal = sec.palette.len() as u16;
+    sec.palette
+        .push("minecraft:player_head[rotation=4]".to_string());
+    sec.voxels[skull_idx as usize] = skull_pal;
+
+    let skull_entity = mtk_model::BlockEntityData::new_skull(
+        mtk_model::entity::skull::SkullKind::Player,
+        Some(4),
+        Some(mtk_model::entity::skull::PlayerProfileData::new(
+            Some("Steve".to_string()),
+            None,
+            Some("http://textures.minecraft.net/texture/cust123".to_string()),
+            None,
+        )),
+    );
+    sec.set_block_entity(skull_idx, Some(skull_entity));
+
+    sec.non_air_count = 2;
+
+    let padded = sec.build_padded_array(|_, _, _| "minecraft:air");
+    assert_eq!(padded.block_entities.len(), 2);
+
+    let culler = FaceCuller::default();
+    let config = MesherConfig::default();
+
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
+
+    // Ensure both block entities emitted mesh faces
+    assert!(
+        mesh.face_count() >= 22,
+        "Section must contain faces from both pot and skull (got {})",
+        mesh.face_count()
+    );
+    assert_eq!(mesh.face_materials.len(), mesh.face_count());
+}
+
+#[test]
 fn test_mesher_average_color_and_tint_injection() {
     use mtk_material::biome::hex_to_linear_rgba;
     use mtk_texture::atlas::{AtlasAddressMap, AtlasSpriteLocation, SpriteKind};

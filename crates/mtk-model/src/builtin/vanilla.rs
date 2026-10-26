@@ -580,3 +580,27 @@ pub fn get_builtin_model_for_state_and_entity(
     }
     None
 }
+
+/// Pre-baked direct model synthesizer for entity blocks (e.g. Decorated Pot).
+pub fn get_builtin_baked_model_for_state_and_entity(
+    blockstate: &BlockState,
+    entity: Option<&crate::entity::BlockEntityData>,
+) -> Option<BakedModel> {
+    let clean = blockstate
+        .name
+        .strip_prefix("minecraft:")
+        .unwrap_or(&blockstate.name);
+
+    if clean == "decorated_pot" {
+        if let Some(crate::entity::BlockEntityData::DecoratedPot { sherds }) = entity {
+            let facing = blockstate
+                .properties
+                .get("facing")
+                .and_then(|f| mtk_core::direction::Direction::parse_loose(f))
+                .unwrap_or(mtk_core::direction::Direction::North);
+
+            return Some(create_decorated_pot_baked_model(facing, sherds));
+        }
+    }
+    None
+}

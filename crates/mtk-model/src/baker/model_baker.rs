@@ -83,22 +83,10 @@ impl ModelBaker {
         let blockstate = BlockState::parse(state_str)?;
         let canonical_str = blockstate.to_canonical_string();
 
-        let clean_name = blockstate
-            .name
-            .strip_prefix("minecraft:")
-            .unwrap_or(&blockstate.name);
-        if clean_name == "decorated_pot" {
-            if let Some(crate::entity::BlockEntityData::DecoratedPot { sherds }) = entity {
-                let facing = blockstate
-                    .properties
-                    .get("facing")
-                    .and_then(|f| mtk_core::direction::Direction::parse_loose(f))
-                    .unwrap_or(mtk_core::direction::Direction::North);
-
-                return Ok(crate::builtin::vanilla::create_decorated_pot_baked_model(
-                    facing, sherds,
-                ));
-            }
+        if let Some(baked) =
+            BuiltinModelRegistry::get_builtin_baked_model_with_entity(&blockstate, entity)
+        {
+            return Ok(baked);
         }
         let cache_key = match entity {
             Some(e) => format!("{}:{:?}", canonical_str, e),

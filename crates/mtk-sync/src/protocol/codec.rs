@@ -993,55 +993,7 @@ pub fn decode_packet(buf: &[u8]) -> Result<Packet, ProtocolError> {
     }
 }
 
+#[inline]
 fn decode_entity_payload(bytes: &[u8]) -> Option<mtk_model::BlockEntityData> {
-    if bytes.is_empty() {
-        return None;
-    }
-    // 1. JSON path
-    if bytes[0] == b'{' {
-        if let Ok(val) = serde_json::from_slice::<serde_json::Value>(bytes) {
-            let id = val.get("id").and_then(|v| v.as_str()).unwrap_or_default();
-            if id == "minecraft:decorated_pot" || id == "decorated_pot" {
-                let mut sherds: [Option<String>; 4] = [None, None, None, None];
-                if let Some(s_arr) = val.get("sherds").and_then(|v| v.as_array()) {
-                    for (i, s_val) in s_arr.iter().take(4).enumerate() {
-                        if let Some(s) = s_val.as_str() {
-                            if !s.is_empty() && s != "minecraft:brick" && s != "brick" {
-                                sherds[i] = Some(s.to_string());
-                            }
-                        }
-                    }
-                }
-                return Some(mtk_model::BlockEntityData::DecoratedPot { sherds });
-            }
-        }
-        if let Ok(data) = serde_json::from_slice::<mtk_model::BlockEntityData>(bytes) {
-            return Some(data);
-        }
-    }
-    // 2. Binary NBT Compound path
-    let mut cursor = std::io::Cursor::new(bytes);
-    if let Ok(mtk_save::nbt::Nbt::Some(base)) = mtk_save::nbt::read(&mut cursor) {
-        let comp = base.as_compound();
-        let id = comp
-            .string("id")
-            .map(|s| s.to_string_lossy())
-            .unwrap_or_default();
-        if id == "minecraft:decorated_pot" || id == "decorated_pot" {
-            let mut sherds = [None, None, None, None];
-            if let Some(sherd_list) = comp.list("sherds").and_then(|l| l.strings()) {
-                for (i, s) in sherd_list.iter().enumerate() {
-                    if i >= 4 {
-                        break;
-                    }
-                    let s_str = s.to_string_lossy();
-                    if s_str != "minecraft:brick" && s_str != "brick" && !s_str.is_empty() {
-                        sherds[i] = Some(s_str.into_owned());
-                    }
-                }
-            }
-            return Some(mtk_model::BlockEntityData::DecoratedPot { sherds });
-        }
-    }
-    None
+    mtk_save::block_entity::decode_block_entity_payload(bytes)
 }
