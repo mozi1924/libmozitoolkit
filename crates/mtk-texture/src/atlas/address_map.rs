@@ -61,6 +61,9 @@ pub struct AtlasSpriteLocation {
     /// Whether this slot contains a non-default Overlay companion map.
     #[serde(default)]
     pub has_overlay: bool,
+    /// Average solid color of the texture as a hex string `#RRGGBB` (excluding alpha).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub average_color: Option<String>,
 }
 
 impl Default for AtlasSpriteLocation {
@@ -83,6 +86,7 @@ impl Default for AtlasSpriteLocation {
             has_normal: false,
             has_specular: false,
             has_overlay: false,
+            average_color: None,
         }
     }
 }

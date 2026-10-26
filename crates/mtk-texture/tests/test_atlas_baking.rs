@@ -99,11 +99,13 @@ fn test_atlas_builder_with_pbr_and_animation() {
     assert!(!stone_loc.has_specular);
     assert!(!stone_loc.has_overlay);
     assert_eq!(stone_loc.frame_size, [16, 16]);
+    assert_eq!(stone_loc.average_color.as_deref(), Some("#787878"));
 
     // Static Frame 0 lookup for diamond_ore (chunk 0)
     let diamond_static = baked.address_map.lookup_static(&diamond_id).unwrap();
     assert!(!diamond_static.is_animated);
     assert_eq!(diamond_static.chunk_id, 0);
+    assert_eq!(diamond_static.average_color.as_deref(), Some("#00C8FF"));
 
     // Dedicated animated strip lookup for diamond_ore (chunk 1)
     let diamond_anim = baked.address_map.lookup_animated(&diamond_id).unwrap();
@@ -116,6 +118,7 @@ fn test_atlas_builder_with_pbr_and_animation() {
     assert!(diamond_anim.animation.is_some());
     assert_eq!(diamond_anim.frame_size, [16, 16]);
     assert!(diamond_anim.frame_uv_step[1] > 0.0);
+    assert_eq!(diamond_anim.average_color.as_deref(), Some("#00C8FF"));
 }
 
 #[test]

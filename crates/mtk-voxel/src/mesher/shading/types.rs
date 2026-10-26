@@ -13,6 +13,7 @@ pub struct PreResolvedFace {
     pub tint_color: [f32; 4],
     pub anim_timing: [f32; 3],
     pub anim_frame_size: [f32; 3],
+    pub average_color: [f32; 4],
 }
 
 /// Pre-resolved model face bundling the original BakedFace geometry and pre-resolved shading.
@@ -153,4 +154,5 @@ pub struct ResolvedFaceShading {
     pub tint_color: [f32; 4],
     pub anim_timing: [f32; 3],
     pub anim_frame_size: [f32; 3],
+    pub average_color: [f32; 4],
 }

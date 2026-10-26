@@ -256,6 +256,15 @@ where
                     -1
                 });
 
+            let fluid_color = if fluid_type == FluidType::Water {
+                tint_color.unwrap_or([0.24, 0.44, 0.99, 1.0])
+            } else {
+                [0.95, 0.45, 0.05, 1.0]
+            };
+            mesh.colors
+                .get_or_insert_with(Vec::new)
+                .extend_from_slice(&[fluid_color; 4]);
+
             if let Some(ref mut col) = collector {
                 col.ao_values.extend_from_slice(&[1.0, 1.0, 1.0, 1.0]);
                 let (f_tint_data, f_tint_color) = if fluid_type == FluidType::Water {

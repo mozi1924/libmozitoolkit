@@ -97,6 +97,8 @@ pub struct AtlasSpriteLocation {
     pub has_normal: bool,
     pub has_specular: bool,
     pub has_overlay: bool,
+    /// 材质纯色/平均颜色十六进制字符串 "#RRGGBB"（不含 Alpha）
+    pub average_color: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

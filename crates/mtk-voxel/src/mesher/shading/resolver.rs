@@ -85,6 +85,11 @@ where
                         config.biome_resolver.as_deref(),
                     );
                     let (timing, fsize) = extract_anim_metrics(Some(atlas_loc));
+                    let avg_col = atlas_loc
+                        .average_color
+                        .as_deref()
+                        .map(mtk_material::hex_to_linear_rgba)
+                        .unwrap_or(pre_face.average_color);
                     return ResolvedFaceShading {
                         texture_key: ctm_key,
                         override_uvs: Some(remapped),
@@ -94,6 +99,7 @@ where
                         tint_color: tc,
                         anim_timing: timing,
                         anim_frame_size: fsize,
+                        average_color: avg_col,
                     };
                 }
             } else {
@@ -113,6 +119,7 @@ where
                     tint_color: tc,
                     anim_timing: pre_face.anim_timing,
                     anim_frame_size: pre_face.anim_frame_size,
+                    average_color: pre_face.average_color,
                 };
             }
         }
@@ -127,6 +134,7 @@ where
         tint_color: pre_face.tint_color,
         anim_timing: pre_face.anim_timing,
         anim_frame_size: pre_face.anim_frame_size,
+        average_color: pre_face.average_color,
     }
 }
 
@@ -189,6 +197,11 @@ where
                         config.biome_resolver.as_deref(),
                     );
                     let (timing, fsize) = extract_anim_metrics(Some(atlas_loc));
+                    let avg_col = atlas_loc
+                        .average_color
+                        .as_deref()
+                        .map(mtk_material::hex_to_linear_rgba)
+                        .unwrap_or(pre_face.average_color);
                     return ResolvedFaceShading {
                         texture_key: ctm_key,
                         override_uvs: Some(remapped),
@@ -198,6 +211,7 @@ where
                         tint_color: tc,
                         anim_timing: timing,
                         anim_frame_size: fsize,
+                        average_color: avg_col,
                     };
                 }
             } else {
@@ -213,6 +227,7 @@ where
                     tint_color: tc,
                     anim_timing: pre_face.anim_timing,
                     anim_frame_size: pre_face.anim_frame_size,
+                    average_color: pre_face.average_color,
                 };
             }
         }
@@ -227,6 +242,7 @@ where
         tint_color: pre_face.tint_color,
         anim_timing: pre_face.anim_timing,
         anim_frame_size: pre_face.anim_frame_size,
+        average_color: pre_face.average_color,
     }
 }
 

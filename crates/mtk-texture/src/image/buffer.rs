@@ -288,6 +288,50 @@ impl RgbaBuffer {
         }
         f32_buf
     }
+
+    /// Calculates the average RGB solid color across the entire image buffer,
+    /// weighted by pixel alpha to avoid darkening transparent borders/cutouts.
+    /// Returns a standard uppercase hex string, e.g. `"#80A755"`, without an alpha channel.
+    /// If the image contains zero non-transparent pixels, fallback to `"#FFFFFF"`.
+    pub fn average_rgb_hex(&self) -> String {
+        let (r, g, b) = self.average_rgb();
+        format!("#{:02X}{:02X}{:02X}", r, g, b)
+    }
+
+    /// Calculates the average RGB solid color components [0..255] weighted by alpha.
+    pub fn average_rgb(&self) -> (u8, u8, u8) {
+        if self.pixels.is_empty() {
+            return (255, 255, 255);
+        }
+
+        let mut sum_r = 0.0f64;
+        let mut sum_g = 0.0f64;
+        let mut sum_b = 0.0f64;
+        let mut total_weight = 0.0f64;
+
+        for chunk in self.pixels.as_chunks::<4>().0 {
+            let r = chunk[0] as f64;
+            let g = chunk[1] as f64;
+            let b = chunk[2] as f64;
+            let a = chunk[3] as f64 / 255.0;
+
+            if a > 0.0 {
+                sum_r += r * a;
+                sum_g += g * a;
+                sum_b += b * a;
+                total_weight += a;
+            }
+        }
+
+        if total_weight > 0.0 {
+            let avg_r = (sum_r / total_weight).round().clamp(0.0, 255.0) as u8;
+            let avg_g = (sum_g / total_weight).round().clamp(0.0, 255.0) as u8;
+            let avg_b = (sum_b / total_weight).round().clamp(0.0, 255.0) as u8;
+            (avg_r, avg_g, avg_b)
+        } else {
+            (255, 255, 255)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -337,5 +381,30 @@ mod tests {
         assert!((f32_flipped[9] - 0.0).abs() < 1e-4);
         assert!((f32_flipped[10] - 0.0).abs() < 1e-4);
         assert!((f32_flipped[11] - 1.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn test_rgba_buffer_average_rgb_hex() {
+        // 1. Pure solid red
+        let red_buf = RgbaBuffer::solid(2, 2, 255, 0, 0, 255);
+        assert_eq!(red_buf.average_rgb_hex(), "#FF0000");
+
+        // 2. Half red, half transparent (transparent pixels [0,0,0,0] must NOT darken result)
+        let mut cutout_buf = RgbaBuffer::new(2, 2);
+        cutout_buf.set_pixel(0, 0, [0, 255, 0, 255]); // Green
+        cutout_buf.set_pixel(1, 0, [0, 255, 0, 255]); // Green
+        cutout_buf.set_pixel(0, 1, [0, 0, 0, 0]); // Transparent
+        cutout_buf.set_pixel(1, 1, [0, 0, 0, 0]); // Transparent
+        assert_eq!(cutout_buf.average_rgb_hex(), "#00FF00");
+
+        // 3. Fully transparent buffer fallbacks to #FFFFFF
+        let blank_buf = RgbaBuffer::new(2, 2);
+        assert_eq!(blank_buf.average_rgb_hex(), "#FFFFFF");
+
+        // 4. Mix 50% red + 50% blue
+        let mut mixed_buf = RgbaBuffer::new(2, 1);
+        mixed_buf.set_pixel(0, 0, [200, 0, 0, 255]);
+        mixed_buf.set_pixel(1, 0, [0, 0, 100, 255]);
+        assert_eq!(mixed_buf.average_rgb_hex(), "#640032");
     }
 }

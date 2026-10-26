@@ -870,6 +870,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
                 has_normal: false,
                 has_specular: false,
                 has_overlay: false,
+                average_color: None,
             },
         );
         // Insert vertical strip sprite into animated cache
@@ -893,6 +894,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
                 has_normal: false,
                 has_specular: false,
                 has_overlay: false,
+                average_color: None,
             },
         );
     }
@@ -919,6 +921,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
             has_normal: false,
             has_specular: false,
             has_overlay: false,
+            average_color: None,
         },
     );
 
@@ -1354,4 +1357,129 @@ fn test_decorated_pot_block_entity_meshing() {
         assert!(pos[1] >= 2.0 && pos[1] <= 3.3); // Rim goes slightly above Y=3.0 (up to 20/16 = 1.25)
         assert!(pos[2] >= 2.0 && pos[2] <= 3.0);
     }
+}
+
+#[test]
+fn test_mesher_average_color_and_tint_injection() {
+    use mtk_material::biome::hex_to_linear_rgba;
+    use mtk_texture::atlas::{AtlasAddressMap, AtlasSpriteLocation, SpriteKind};
+
+    let mut address_map = AtlasAddressMap::new();
+
+    // 1. Stone with average_color "#787878"
+    let stone_loc = mtk_resource::ResourceLocation::parse("minecraft:block/stone").unwrap();
+    address_map.sprites.insert(
+        stone_loc,
+        AtlasSpriteLocation {
+            category: "blocks".to_string(),
+            sprite_kind: SpriteKind::StaticAtlas,
+            chunk_id: 0,
+            texture_id: 1,
+            frame_0_uv_bounds: [0.0, 0.0, 0.5, 0.5],
+            average_color: Some("#787878".to_string()),
+            ..Default::default()
+        },
+    );
+
+    // 2. Cobblestone without average_color (legacy cache fallback to white)
+    let cobble_loc = mtk_resource::ResourceLocation::parse("minecraft:block/cobblestone").unwrap();
+    address_map.sprites.insert(
+        cobble_loc,
+        AtlasSpriteLocation {
+            category: "blocks".to_string(),
+            sprite_kind: SpriteKind::StaticAtlas,
+            chunk_id: 0,
+            texture_id: 2,
+            frame_0_uv_bounds: [0.5, 0.0, 1.0, 0.5],
+            average_color: None,
+            ..Default::default()
+        },
+    );
+
+    // 3. Grass block top with average_color "#808080" (tinted)
+    let grass_top_loc =
+        mtk_resource::ResourceLocation::parse("minecraft:block/grass_block_top").unwrap();
+    address_map.sprites.insert(
+        grass_top_loc,
+        AtlasSpriteLocation {
+            category: "blocks".to_string(),
+            sprite_kind: SpriteKind::StaticAtlas,
+            chunk_id: 0,
+            texture_id: 3,
+            frame_0_uv_bounds: [0.0, 0.5, 0.5, 1.0],
+            average_color: Some("#808080".to_string()),
+            ..Default::default()
+        },
+    );
+
+    let mut sec = mtk_voxel::storage::SectionStorage::new(glam::IVec3::new(0, 0, 0));
+    // Put stone at (1, 1, 1)
+    let pal_stone = sec.palette.len() as u16;
+    sec.palette.push("minecraft:stone".to_string());
+    sec.voxels[mtk_voxel::storage::block_index(1, 1, 1) as usize] = pal_stone;
+
+    // Put cobblestone at (3, 1, 1)
+    let pal_cobble = sec.palette.len() as u16;
+    sec.palette.push("minecraft:cobblestone".to_string());
+    sec.voxels[mtk_voxel::storage::block_index(3, 1, 1) as usize] = pal_cobble;
+
+    // Put grass_block at (5, 1, 1)
+    let pal_grass = sec.palette.len() as u16;
+    sec.palette.push("minecraft:grass_block".to_string());
+    sec.voxels[mtk_voxel::storage::block_index(5, 1, 1) as usize] = pal_grass;
+
+    sec.non_air_count = 3;
+
+    let padded = sec.build_padded_array(|_, _, _| "minecraft:air");
+    let culler = FaceCuller::default();
+    let config = MesherConfig {
+        atlas_address_map: Some(std::sync::Arc::new(address_map)),
+        ..Default::default()
+    };
+
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
+
+    assert!(mesh.colors.is_some(), "mesh.colors must be populated");
+    let colors = mesh.colors.as_ref().unwrap();
+    // 3 cubes * 6 faces * 4 corners = 72 colors
+    assert_eq!(colors.len(), 72);
+
+    // Verify stone faces have linear "#787878"
+    let expected_stone = hex_to_linear_rgba("#787878");
+    for i in 0..24 {
+        for c in 0..3 {
+            assert!(
+                (colors[i][c] - expected_stone[c]).abs() < 1e-3,
+                "Stone corner {} channel {} expected {}, got {}",
+                i,
+                c,
+                expected_stone[c],
+                colors[i][c]
+            );
+        }
+        assert_eq!(colors[i][3], 1.0);
+    }
+
+    // Verify cobblestone faces without average_color fallback to pure white [1, 1, 1, 1]
+    for i in 24..48 {
+        assert_eq!(
+            colors[i],
+            [1.0, 1.0, 1.0, 1.0],
+            "Legacy chunk without average_color must fallback to pure white"
+        );
+    }
+
+    // Verify grass block has tinted top face (greenish, where G > R and G > B)
+    let mut found_tinted_green = false;
+    for i in 48..72 {
+        let col = colors[i];
+        if col[1] > col[0] && col[1] > col[2] {
+            found_tinted_green = true;
+            break;
+        }
+    }
+    assert!(
+        found_tinted_green,
+        "Grass block top face must be tinted green"
+    );
 }

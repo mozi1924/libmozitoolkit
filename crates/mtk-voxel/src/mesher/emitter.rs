@@ -49,6 +49,20 @@ pub fn emit_baked_face(
         collector.ao_values.push(ao_brightness[i]);
     }
 
+    let face_color = if final_tint_data[2] > 0.0 {
+        [
+            shading.average_color[0] * final_tint_color[0],
+            shading.average_color[1] * final_tint_color[1],
+            shading.average_color[2] * final_tint_color[2],
+            1.0,
+        ]
+    } else {
+        shading.average_color
+    };
+    mesh.colors
+        .get_or_insert_with(Vec::new)
+        .extend_from_slice(&[face_color; 4]);
+
     mesh.quad_indices
         .get_or_insert_with(Vec::new)
         .extend_from_slice(&[base_idx, base_idx + 1, base_idx + 2, base_idx + 3]);
@@ -204,6 +218,20 @@ pub fn emit_unit_cube_face(
     for i in 0..4 {
         collector.ao_values.push(ao_brightness[i]);
     }
+
+    let face_color = if final_tint_data[2] > 0.0 {
+        [
+            shading.average_color[0] * final_tint_color[0],
+            shading.average_color[1] * final_tint_color[1],
+            shading.average_color[2] * final_tint_color[2],
+            1.0,
+        ]
+    } else {
+        shading.average_color
+    };
+    mesh.colors
+        .get_or_insert_with(Vec::new)
+        .extend_from_slice(&[face_color; 4]);
 
     mesh.quad_indices
         .get_or_insert_with(Vec::new)

@@ -74,6 +74,7 @@ tiles=0-3
                 has_normal: false,
                 has_specular: false,
                 has_overlay: false,
+                average_color: None,
             },
         );
     }

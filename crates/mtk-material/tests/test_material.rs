@@ -87,6 +87,7 @@ fn test_resolver_and_atlas_projection() {
             has_normal: false,
             has_specular: false,
             has_overlay: false,
+            average_color: None,
         },
     );
 
@@ -133,6 +134,7 @@ fn test_parallel_batch_mesh_remap() {
             has_normal: false,
             has_specular: false,
             has_overlay: false,
+            average_color: None,
         },
     );
 
