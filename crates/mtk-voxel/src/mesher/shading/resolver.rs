@@ -1,5 +1,6 @@
 use glam::{IVec3, Vec2};
 use mtk_core::direction::Direction;
+use std::borrow::Cow;
 
 use crate::biome::SmoothedBiomeColumn;
 use crate::mesher::tint::compute_face_tint;
@@ -9,15 +10,15 @@ use super::anim::{extract_anim_metrics, lookup_animated_from_cache};
 use super::types::{PreResolvedFace, PreResolvedModelFace, ResolvedFaceShading};
 
 /// Dynamically resolves CTM overrides for a BakedModel face, falling back to pre-resolved shading.
-pub fn resolve_model_face_shading<'a, F>(
-    mf: &PreResolvedModelFace,
+pub fn resolve_model_face_shading<'a, 'b, F>(
+    mf: &'a PreResolvedModelFace,
     state_str: &str,
     block_pos: IVec3,
     config: &MesherConfig,
     get_neighbor_state: F,
-) -> ResolvedFaceShading
+) -> ResolvedFaceShading<'a>
 where
-    F: Fn(IVec3) -> Option<&'a str>,
+    F: Fn(IVec3) -> Option<&'b str>,
 {
     let face = &mf.face;
     let pre_face = &mf.pre;
@@ -91,7 +92,7 @@ where
                         .map(mtk_material::hex_to_linear_rgba)
                         .unwrap_or(pre_face.average_color);
                     return ResolvedFaceShading {
-                        texture_key: ctm_key,
+                        texture_key: Cow::Owned(ctm_key),
                         override_uvs: Some(remapped),
                         mat_slot: atlas_loc.chunk_id,
                         chunk_id: atlas_loc.chunk_id as i32,
@@ -111,7 +112,7 @@ where
                     config.biome_resolver.as_deref(),
                 );
                 return ResolvedFaceShading {
-                    texture_key: ctm_key,
+                    texture_key: Cow::Owned(ctm_key),
                     override_uvs: None,
                     mat_slot: pre_face.mat_slot,
                     chunk_id: 0,
@@ -126,7 +127,7 @@ where
     }
 
     ResolvedFaceShading {
-        texture_key: pre_face.source_texture_key.clone(),
+        texture_key: Cow::Borrowed(pre_face.source_texture_key.as_str()),
         override_uvs: pre_face.override_uvs,
         mat_slot: pre_face.mat_slot,
         chunk_id: pre_face.chunk_id,
@@ -139,23 +140,24 @@ where
 }
 
 /// Dynamically resolves CTM overrides for a unit cube face, falling back to pre-resolved shading.
-pub fn resolve_unit_cube_face_shading<'a, F>(
-    pre_face: &PreResolvedFace,
+pub fn resolve_unit_cube_face_shading<'a, 'b, F>(
+    pre_face: &'a PreResolvedFace,
     dir: Direction,
     state_str: &str,
     block_pos: IVec3,
     config: &MesherConfig,
     get_neighbor_state: F,
-) -> ResolvedFaceShading
+) -> ResolvedFaceShading<'a>
 where
-    F: Fn(IVec3) -> Option<&'a str>,
+    F: Fn(IVec3) -> Option<&'b str>,
 {
     if let Some(solver) = &config.ctm_solver {
-        let clean_block = mtk_resource::extract_block_name(state_str)
-            .strip_prefix("minecraft:")
-            .unwrap_or(mtk_resource::extract_block_name(state_str));
-        let base_loc =
-            mtk_resource::ResourceLocation::new("minecraft", format!("block/{}", clean_block));
+        let block_name = mtk_resource::extract_block_name(state_str);
+        let clean_block = block_name.strip_prefix("minecraft:").unwrap_or(block_name);
+        let mut path = String::with_capacity(6 + clean_block.len());
+        path.push_str("block/");
+        path.push_str(clean_block);
+        let base_loc = mtk_resource::ResourceLocation::new("minecraft", path);
         if let Some(resolved_loc) = solver.resolve_face(
             state_str,
             dir,
@@ -203,7 +205,7 @@ where
                         .map(mtk_material::hex_to_linear_rgba)
                         .unwrap_or(pre_face.average_color);
                     return ResolvedFaceShading {
-                        texture_key: ctm_key,
+                        texture_key: Cow::Owned(ctm_key),
                         override_uvs: Some(remapped),
                         mat_slot: atlas_loc.chunk_id,
                         chunk_id: atlas_loc.chunk_id as i32,
@@ -219,7 +221,7 @@ where
                 let (td, tc) =
                     compute_face_tint(&ctm_key, state_str, -1, config.biome_resolver.as_deref());
                 return ResolvedFaceShading {
-                    texture_key: ctm_key,
+                    texture_key: Cow::Owned(ctm_key),
                     override_uvs: None,
                     mat_slot: pre_face.mat_slot,
                     chunk_id: 0,
@@ -234,7 +236,7 @@ where
     }
 
     ResolvedFaceShading {
-        texture_key: pre_face.source_texture_key.clone(),
+        texture_key: Cow::Borrowed(pre_face.source_texture_key.as_str()),
         override_uvs: pre_face.override_uvs,
         mat_slot: pre_face.mat_slot,
         chunk_id: pre_face.chunk_id,

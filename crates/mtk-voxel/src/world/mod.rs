@@ -13,16 +13,16 @@ use std::sync::Arc;
 
 use glam::IVec3;
 use mtk_core::mesh::MeshData;
-use mtk_core::progress::{ProgressCallback, ProgressReport};
 use mtk_cull::FaceCuller;
 use mtk_model::baker::baked_model::BakedModelDatabase;
 
-use crate::mesher::{DeltaMesher, SectionMesher};
 use crate::source::VoxelSource;
 use crate::storage::VoxelStorage;
 use crate::types::{MesherConfig, VoxelError};
 
+pub mod assembly;
 pub mod debug;
+pub mod rebuild;
 pub mod sync;
 
 /// Unified 3D Voxel World scene managing storage, multi-source ingestion,
@@ -40,13 +40,13 @@ pub struct VoxelWorld {
     /// Custom thread count for Rayon parallel meshing (None for global pool).
     pub num_threads: Option<usize>,
     /// Cache of section meshes: `(sx, sy, sz) -> MeshData`.
-    section_mesh_cache: HashMap<IVec3, MeshData>,
+    pub(crate) section_mesh_cache: HashMap<IVec3, MeshData>,
     /// Assembled unified world mesh buffer.
-    world_mesh: Option<MeshData>,
+    pub(crate) world_mesh: Option<MeshData>,
     /// Execution profile of the most recent rebuild operation.
     pub last_profile: Option<mtk_core::ExecutionProfile>,
     /// Unique Atlas Chunk IDs actually present on the active world mesh geometry.
-    used_chunk_ids: Vec<u32>,
+    pub(crate) used_chunk_ids: Vec<u32>,
 }
 
 impl VoxelWorld {
@@ -286,287 +286,6 @@ impl VoxelWorld {
         }
     }
 
-    /// Builds the predicate used by incremental assembly to select the only vertices that can
-    /// be shared by two Section meshes: positions lying on a 16-block Section boundary plane.
-    ///
-    /// `SectionMesher` already welds every Section internally, so incremental rebuilds only need
-    /// to stitch the interfaces. Hashing just those vertices keeps delta remeshing fast while
-    /// restoring the manifold seams that the full rebuild already produces.
-    fn section_seam_predicate(&self, tolerance: f32) -> impl Fn([i32; 3]) -> bool + '_ {
-        const SECTION_STRIDE: f32 = mtk_core::constants::voxel::SECTION_SIZE as f32;
-        let inv = 1.0 / tolerance;
-        let stride = (SECTION_STRIDE * inv).round() as i64;
-        // `transform_position` is `R(pos) + offset`; because `R` only permutes axes, Section
-        // boundary planes (world coordinate multiples of 16) land on `offset` modulo 16.
-        let offset = self.config.transform_position(glam::Vec3::ZERO);
-        let phases = [
-            (offset.x * inv).round() as i64,
-            (offset.y * inv).round() as i64,
-            (offset.z * inv).round() as i64,
-        ];
-        move |key: [i32; 3]| {
-            if stride < 4 {
-                return true;
-            }
-            key.iter().zip(phases.iter()).any(|(&k, &phase)| {
-                let delta = (k as i64 - phase).rem_euclid(stride);
-                delta <= 1 || stride - delta <= 1
-            })
-        }
-    }
-
-    /// Re-assembles and welds the unified world mesh from the current section cache without cloning.
-    /// Incremental mode (`full_weld = false`) keeps the fast path by welding only Section seam
-    /// vertices, since each Section mesh is already internally welded by `SectionMesher`. Global
-    /// rebuilds (`rebuild_all`) perform a full spatial weld. Stage timings are recorded when a
-    /// profiler is supplied.
-    fn assemble_world_mesh(
-        &mut self,
-        full_weld: bool,
-        mut profiler: Option<&mut mtk_core::ExecutionProfiler>,
-    ) {
-        let meshes: Vec<&MeshData> = match profiler.as_deref_mut() {
-            Some(p) => p.measure_with_count(
-                "collect_section_mesh_refs",
-                self.section_mesh_cache.len(),
-                || self.section_mesh_cache.values().collect(),
-            ),
-            None => self.section_mesh_cache.values().collect(),
-        };
-
-        let weld = self.config.weld_vertices;
-        let merge = || {
-            if !weld {
-                MeshData::merge_all_refs(&meshes)
-            } else if full_weld {
-                MeshData::merge_welded_sections(&meshes, 1e-4)
-            } else {
-                let seam = self.section_seam_predicate(1e-4);
-                MeshData::merge_welded_sections_filtered(&meshes, 1e-4, seam)
-            }
-        };
-        let mut merged = match profiler.as_deref_mut() {
-            Some(p) => p.measure("merge_welded_seams", merge),
-            None => merge(),
-        };
-        prune_static_animation_attributes(&mut merged);
-
-        let compact = |this: &mut Self, merged: MeshData| {
-            this.used_chunk_ids = merged
-                .used_materials()
-                .into_iter()
-                .map(|id| id as u32)
-                .collect();
-            this.world_mesh = Some(merged);
-        };
-        match profiler {
-            Some(p) => p.measure("compact_material_slots", || compact(self, merged)),
-            None => compact(self, merged),
-        }
-    }
-
-    /// Resolves the model source (variant group or single model) for a blockstate.
-    #[inline]
-    pub fn model_source_for_state<'a>(
-        db: Option<&'a BakedModelDatabase>,
-        state: &str,
-    ) -> crate::mesher::ModelSource<'a> {
-        if let Some(db) = db {
-            if let Some(group) = db.get_variant_group(state) {
-                return crate::mesher::ModelSource::Variant(group);
-            }
-            if let Some(model) = db.get(state) {
-                return crate::mesher::ModelSource::Single(model);
-            }
-        }
-        crate::mesher::ModelSource::None
-    }
-
-    /// Re-meshes all non-empty sections in parallel and updates the section cache.
-    pub fn rebuild_all(&mut self) -> Result<&MeshData, VoxelError> {
-        self.rebuild_all_with_progress(None)
-    }
-
-    /// Re-meshes all non-empty sections in parallel with progress reporting and updates the section cache.
-    pub fn rebuild_all_with_progress(
-        &mut self,
-        progress: Option<ProgressCallback>,
-    ) -> Result<&MeshData, VoxelError> {
-        let mut profiler = mtk_core::ExecutionProfiler::start();
-
-        profiler.measure("sync_selection_bounds", || {
-            self.sync_selection_bounds();
-        });
-
-        let non_empty = self.storage.get_all_non_empty_sections();
-        if non_empty.is_empty() {
-            self.section_mesh_cache.clear();
-            self.world_mesh = Some(MeshData::new());
-            self.used_chunk_ids.clear();
-            if let Some(cb) = progress {
-                cb(ProgressReport::new(
-                    "meshing_sections",
-                    0,
-                    0,
-                    "No sections to mesh",
-                ));
-            }
-            self.last_profile = Some(profiler.finish());
-            return Ok(self.world_mesh.as_ref().unwrap());
-        }
-
-        #[cfg(feature = "parallel")]
-        let padded_sections: Vec<_> = profiler
-            .measure_with_count("padded_array_extraction", non_empty.len(), || {
-                use rayon::prelude::*;
-                mtk_core::constants::concurrency::execute_parallel(self.num_threads, || {
-                    non_empty
-                        .par_iter()
-                        .map(|&coord| self.storage.get_section_padded_array(coord))
-                        .collect()
-                })
-            })
-            .map_err(VoxelError::ThreadPoolError)?;
-
-        #[cfg(not(feature = "parallel"))]
-        let padded_sections: Vec<_> =
-            profiler.measure_with_count("padded_array_extraction", non_empty.len(), || {
-                non_empty
-                    .iter()
-                    .map(|&coord| self.storage.get_section_padded_array(coord))
-                    .collect()
-            });
-
-        let db_opt = self.model_db.as_deref();
-        let model_lookup = |state: &str| Self::model_source_for_state(db_opt, state);
-
-        let results =
-            profiler.measure_with_count("parallel_section_meshing", non_empty.len(), || {
-                SectionMesher::mesh_sections_parallel_with_source_and_progress(
-                    &padded_sections,
-                    &self.culler,
-                    model_lookup,
-                    &self.config,
-                    self.num_threads,
-                    progress,
-                )
-            })?;
-
-        profiler.measure("section_cache_insertion", || {
-            self.section_mesh_cache.clear();
-            for (coord, mesh) in results {
-                if !mesh.is_empty() {
-                    self.section_mesh_cache.insert(coord, mesh);
-                }
-            }
-        });
-
-        if let Some(cb) = progress {
-            let total = non_empty.len();
-            cb(ProgressReport::new(
-                "assembling_world_mesh",
-                total,
-                total,
-                format!("Assembled world mesh from {} chunks", total),
-            ));
-        }
-
-        self.assemble_world_mesh(true, Some(&mut profiler));
-        self.storage.clear_dirty_sections();
-
-        self.last_profile = Some(profiler.finish());
-        Ok(self.world_mesh.as_ref().unwrap())
-    }
-
-    /// Incrementally rebuilds only the modified/dirty sections directly in-place into the
-    /// section cache without allocating or cloning redundant return buffers.
-    ///
-    /// Updates the unified assembled world mesh and returns the count of rebuilt sections.
-    pub fn rebuild_dirty_in_place(&mut self) -> Result<usize, VoxelError> {
-        if self.storage.dirty_sections.is_empty() {
-            return Ok(0);
-        }
-
-        let mut profiler = mtk_core::ExecutionProfiler::start();
-
-        profiler.measure("sync_selection_bounds", || {
-            self.sync_selection_bounds();
-        });
-
-        let db_opt = self.model_db.as_deref();
-        let model_lookup = |state: &str| Self::model_source_for_state(db_opt, state);
-
-        let dirty_count = self.storage.dirty_sections.len();
-        let rebuilt = profiler.measure_with_count("rebuild_dirty_sections", dirty_count, || {
-            DeltaMesher::rebuild_dirty_sections_with_source(
-                &mut self.storage,
-                &self.culler,
-                model_lookup,
-                &self.config,
-            )
-        });
-
-        let rebuilt_count = rebuilt.len();
-        profiler.measure("section_cache_insertion", || {
-            for (coord, mesh) in rebuilt {
-                if mesh.is_empty() {
-                    self.section_mesh_cache.remove(&coord);
-                } else {
-                    self.section_mesh_cache.insert(coord, mesh);
-                }
-            }
-        });
-
-        self.assemble_world_mesh(false, Some(&mut profiler));
-
-        self.last_profile = Some(profiler.finish());
-
-        Ok(rebuilt_count)
-    }
-
-    /// Incrementally rebuilds only the modified/dirty sections and updates the section cache.
-    /// Returns the list of updated `(section_coord, MeshData)`.
-    pub fn rebuild_dirty(&mut self) -> Result<Vec<(IVec3, MeshData)>, VoxelError> {
-        if self.storage.dirty_sections.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let mut profiler = mtk_core::ExecutionProfiler::start();
-
-        profiler.measure("sync_selection_bounds", || {
-            self.sync_selection_bounds();
-        });
-
-        let db_opt = self.model_db.as_deref();
-        let model_lookup = |state: &str| Self::model_source_for_state(db_opt, state);
-
-        let dirty_count = self.storage.dirty_sections.len();
-        let rebuilt = profiler.measure_with_count("rebuild_dirty_sections", dirty_count, || {
-            DeltaMesher::rebuild_dirty_sections_with_source(
-                &mut self.storage,
-                &self.culler,
-                model_lookup,
-                &self.config,
-            )
-        });
-
-        profiler.measure("section_cache_insertion", || {
-            for (coord, mesh) in &rebuilt {
-                if mesh.is_empty() {
-                    self.section_mesh_cache.remove(coord);
-                } else {
-                    self.section_mesh_cache.insert(*coord, mesh.clone());
-                }
-            }
-        });
-
-        self.assemble_world_mesh(false, Some(&mut profiler));
-
-        self.last_profile = Some(profiler.finish());
-
-        Ok(rebuilt)
-    }
-
     /// Returns a reference to the assembled unified world mesh, if available.
     pub fn get_world_mesh(&self) -> Option<&MeshData> {
         self.world_mesh.as_ref()
@@ -645,77 +364,5 @@ impl VoxelWorld {
 impl Default for VoxelWorld {
     fn default() -> Self {
         Self::new(None, None, None)
-    }
-}
-
-/// Removes face-level animation attributes when the merged world contains no
-/// animated faces. Section meshes intentionally carry a homogeneous attribute
-/// set so merging never drops per-face data; this is the only safe level for
-/// optional attribute pruning.
-fn prune_static_animation_attributes(mesh: &mut MeshData) {
-    let static_only = mesh
-        .get_custom_attribute(mtk_core::attributes::constants::ATTR_ANIM_TIMING)
-        .and_then(|attr| match &attr.data {
-            mtk_core::attributes::AttributeData::Float3(values) => {
-                Some(values.iter().all(|timing| timing[0] <= 1.0))
-            }
-            _ => None,
-        })
-        .unwrap_or(false);
-    if static_only {
-        mesh.remove_custom_attribute(mtk_core::attributes::constants::ATTR_ANIM_TIMING);
-        mesh.remove_custom_attribute(mtk_core::attributes::constants::ATTR_ANIM_FRAME_SIZE);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::mesher::collector::FaceAttributesCollector;
-    use mtk_core::attributes::constants::{ATTR_ANIM_FRAME_SIZE, ATTR_ANIM_TIMING};
-
-    fn mesh_with_timing(timing: [f32; 3]) -> MeshData {
-        let mut collector = FaceAttributesCollector::with_capacity(1);
-        collector.push_face(
-            "minecraft:block/stone",
-            0,
-            [1.0, 1.0, 0.0, 0.0],
-            0.0,
-            [1.0, 0.0, 0.0, 0.0],
-            [1.0, 1.0, 1.0, 1.0],
-            glam::IVec3::ZERO,
-            timing,
-            [16.0, 16.0, 0.0],
-        );
-        let mut mesh = MeshData::new();
-        collector.attach_to_mesh(&mut mesh);
-        mesh
-    }
-
-    #[test]
-    fn mixed_static_and_animated_sections_merge_and_prune() {
-        let static_mesh = mesh_with_timing([1.0, 1.0, 0.0]);
-        let animated_mesh = mesh_with_timing([4.0, 2.0, 1.0]);
-        let mut merged = MeshData::merge_all_refs(&[&static_mesh, &animated_mesh]);
-        assert_eq!(
-            merged
-                .get_custom_attribute(ATTR_ANIM_TIMING)
-                .expect("merged animation attribute")
-                .len(),
-            2
-        );
-        prune_static_animation_attributes(&mut merged);
-        assert!(merged.get_custom_attribute(ATTR_ANIM_TIMING).is_some());
-        assert!(merged.get_custom_attribute(ATTR_ANIM_FRAME_SIZE).is_some());
-    }
-
-    #[test]
-    fn static_world_prunes_animation_attributes() {
-        let a = mesh_with_timing([1.0, 1.0, 0.0]);
-        let b = mesh_with_timing([1.0, 1.0, 0.0]);
-        let mut merged = MeshData::merge_all_refs(&[&a, &b]);
-        prune_static_animation_attributes(&mut merged);
-        assert!(merged.get_custom_attribute(ATTR_ANIM_TIMING).is_none());
-        assert!(merged.get_custom_attribute(ATTR_ANIM_FRAME_SIZE).is_none());
     }
 }

@@ -10,8 +10,6 @@ pub mod topology;
 
 pub use topology::analyze_mesh_hard_edges;
 
-use std::collections::HashMap;
-
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyMemoryView};
 
@@ -329,19 +327,32 @@ impl PyMeshData {
         py: Python<'py>,
     ) -> PyResult<(Vec<String>, Bound<'py, PyMemoryView>)> {
         let mut palette: Vec<String> = Vec::new();
-        let mut lookup: HashMap<&str, u32> = HashMap::new();
+        let mut lookup =
+            rustc_hash::FxHashMap::<&str, u32>::with_capacity_and_hasher(128, Default::default());
         let mut indices: Vec<u32> = Vec::new();
 
         if let Some(attr) = self.inner.get_custom_attribute("mtk_source_texture_key") {
             if let mtk_core::attributes::AttributeData::String(ref values) = attr.data {
                 indices.reserve(values.len());
+                let mut last_key: &str = "";
+                let mut last_idx: u32 = 0;
+                let mut has_last = false;
+
                 for value in values {
+                    let key = value.as_str();
+                    if has_last && (std::ptr::eq(key, last_key) || key == last_key) {
+                        indices.push(last_idx);
+                        continue;
+                    }
                     let next = palette.len() as u32;
-                    let idx = *lookup.entry(value.as_str()).or_insert_with(|| {
+                    let idx = *lookup.entry(key).or_insert_with(|| {
                         palette.push(value.clone());
                         next
                     });
                     indices.push(idx);
+                    last_key = key;
+                    last_idx = idx;
+                    has_last = true;
                 }
             }
         }

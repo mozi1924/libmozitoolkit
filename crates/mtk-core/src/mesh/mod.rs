@@ -84,6 +84,34 @@ impl MeshData {
         }
     }
 
+    /// Creates a new `MeshData` with pre-allocated capacity for quad-based voxel geometry,
+    /// explicitly pre-allocating `quad_indices` and optional `colors` buffers.
+    pub fn with_quad_capacity(
+        num_vertices: usize,
+        num_indices: usize,
+        num_faces: usize,
+        with_colors: bool,
+    ) -> Self {
+        let quad_count = num_faces * 4;
+        Self {
+            positions: Vec::with_capacity(num_vertices),
+            normals: Vec::with_capacity(num_vertices),
+            indices: Vec::with_capacity(num_indices),
+            uvs: Vec::with_capacity(num_vertices),
+            uv_layout: UvLayout::None,
+            secondary_uvs: None,
+            colors: if with_colors {
+                Some(Vec::with_capacity(quad_count.max(num_vertices)))
+            } else {
+                None
+            },
+            face_materials: Vec::with_capacity(num_faces),
+            face_tint_indices: Vec::with_capacity(num_faces),
+            quad_indices: Some(Vec::with_capacity(quad_count)),
+            custom_attributes: HashMap::new(),
+        }
+    }
+
     /// Builds a `MeshData` from a shared-vertex polygon mesh with per-loop UVs.
     ///
     /// All-quad and all-triangle inputs retain their exact topology. Mixed or n-gon

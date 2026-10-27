@@ -15,71 +15,82 @@ impl VoxelPointCloud {
     /// Converts this `VoxelPointCloud` into a pure-point `MeshData` with standard
     /// attributes attached on the `Point` domain (without edges or polygons).
     pub fn to_mesh_data(&self) -> MeshData {
-        let count = self.len();
-        let mut mesh = MeshData::with_capacity(count, 0, 0);
+        self.clone().into_mesh_data()
+    }
 
-        for i in 0..count {
-            let p_off = i * 3;
-            mesh.positions.push([
-                self.positions[p_off],
-                self.positions[p_off + 1],
-                self.positions[p_off + 2],
-            ]);
-        }
+    /// Converts this owned `VoxelPointCloud` into a pure-point `MeshData`, moving
+    /// internal attribute buffers directly without cloning.
+    pub fn into_mesh_data(self) -> MeshData {
+        let count = self.len();
+        let (chunks, _) = self.positions.as_chunks::<3>();
+        let positions = chunks.to_vec();
+        let mut mesh = MeshData {
+            positions,
+            normals: Vec::new(),
+            indices: Vec::new(),
+            uvs: Vec::new(),
+            uv_layout: mtk_core::mesh::UvLayout::None,
+            secondary_uvs: None,
+            colors: None,
+            face_materials: Vec::new(),
+            face_tint_indices: Vec::new(),
+            quad_indices: None,
+            custom_attributes: std::collections::HashMap::new(),
+        };
 
         mesh.add_custom_attribute(MeshAttribute::new(
             ATTR_BLOCK_X,
             AttributeDomain::Point,
-            AttributeData::Int32(self.block_x.clone()),
+            AttributeData::Int32(self.block_x),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
             ATTR_BLOCK_Y,
             AttributeDomain::Point,
-            AttributeData::Int32(self.block_y.clone()),
+            AttributeData::Int32(self.block_y),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
             ATTR_BLOCK_Z,
             AttributeDomain::Point,
-            AttributeData::Int32(self.block_z.clone()),
+            AttributeData::Int32(self.block_z),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
             ATTR_STATE_IDX,
             AttributeDomain::Point,
-            AttributeData::Int32(self.state_indices.clone()),
+            AttributeData::Int32(self.state_indices),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
             ATTR_PALETTE,
             AttributeDomain::Mesh,
-            AttributeData::String(self.state_palette.clone()),
+            AttributeData::String(self.state_palette),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
             ATTR_BIOME_IDX,
             AttributeDomain::Point,
-            AttributeData::Int32(self.biome_indices.clone()),
+            AttributeData::Int32(self.biome_indices),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
             ATTR_BIOME_PALETTE,
             AttributeDomain::Mesh,
-            AttributeData::String(self.biome_palette.clone()),
+            AttributeData::String(self.biome_palette),
         ));
 
         if !self.entity_palette.is_empty() && self.entity_indices.len() == count {
             mesh.add_custom_attribute(MeshAttribute::new(
                 ATTR_ENTITY_IDX,
                 AttributeDomain::Point,
-                AttributeData::Int32(self.entity_indices.clone()),
+                AttributeData::Int32(self.entity_indices),
             ));
             mesh.add_custom_attribute(MeshAttribute::new(
                 ATTR_ENTITY_PALETTE,
                 AttributeDomain::Mesh,
-                AttributeData::String(self.entity_palette.clone()),
+                AttributeData::String(self.entity_palette),
             ));
         }
 
         mesh.add_custom_attribute(MeshAttribute::new(
             ATTR_LIGHT,
             AttributeDomain::Point,
-            AttributeData::UInt8(self.light_levels.clone()),
+            AttributeData::UInt8(self.light_levels),
         ));
 
         if let Some(b) = self.bounds {

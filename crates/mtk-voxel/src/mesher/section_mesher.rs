@@ -109,7 +109,7 @@ impl SectionMesher {
             return MeshData::new();
         }
 
-        let mut mesh = MeshData::with_capacity(1024, 1536, 512);
+        let mut mesh = MeshData::with_quad_capacity(2048, 3072, 512, true);
         let mut collector = FaceAttributesCollector::with_capacity(512);
 
         let palette_entries: Vec<Arc<ResolvedPaletteEntry>> = padded

@@ -813,6 +813,7 @@ dependencies = [
  "mtk-voxel",
  "pyo3",
  "rayon",
+ "rustc-hash",
  "serde_json",
  "xxhash-rust",
 ]

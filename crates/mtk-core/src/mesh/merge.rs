@@ -16,16 +16,19 @@ fn seed_custom_attributes(
     target: &mut HashMap<String, MeshAttribute>,
     meshes: &[&MeshData],
     total_faces: usize,
+    total_verts: usize,
+    total_corners: usize,
 ) {
     for &m in meshes {
         for (name, attr) in &m.custom_attributes {
             if target.contains_key(name) {
                 continue;
             }
-            let capacity = if attr.domain == AttributeDomain::Face {
-                total_faces
-            } else {
-                attr.len()
+            let capacity = match attr.domain {
+                AttributeDomain::Face => total_faces,
+                AttributeDomain::Point => total_verts,
+                AttributeDomain::Corner => total_corners,
+                _ => attr.len(),
             };
             target.insert(
                 name.clone(),
@@ -106,6 +109,8 @@ impl MeshData {
         let mut total_indices = 0;
         let mut total_quads = 0;
         let mut total_faces = 0;
+        let mut total_colors = 0;
+        let mut total_sec_uvs = 0;
         let mut has_sec_uvs = false;
         let mut has_colors = false;
         let mut has_custom_attrs = false;
@@ -119,16 +124,20 @@ impl MeshData {
                 total_quads += q.len();
             }
             total_faces += m.face_materials.len();
-            if m.secondary_uvs.is_some() {
+            if let Some(ref s) = m.secondary_uvs {
+                total_sec_uvs += s.len();
                 has_sec_uvs = true;
             }
-            if m.colors.is_some() {
+            if let Some(ref c) = m.colors {
+                total_colors += c.len();
                 has_colors = true;
             }
             if !m.custom_attributes.is_empty() {
                 has_custom_attrs = true;
             }
         }
+
+        let total_corners = total_quads.max(total_uvs).max(total_faces * 4);
 
         let uv_layout = meshes
             .iter()
@@ -141,12 +150,12 @@ impl MeshData {
             uvs: Vec::with_capacity(total_uvs),
             uv_layout,
             secondary_uvs: if has_sec_uvs {
-                Some(Vec::with_capacity(total_verts))
+                Some(Vec::with_capacity(total_sec_uvs.max(total_uvs)))
             } else {
                 None
             },
             colors: if has_colors {
-                Some(Vec::with_capacity(total_verts))
+                Some(Vec::with_capacity(total_colors.max(total_corners)))
             } else {
                 None
             },
@@ -162,7 +171,13 @@ impl MeshData {
         };
 
         if has_custom_attrs {
-            seed_custom_attributes(&mut merged.custom_attributes, meshes, total_faces);
+            seed_custom_attributes(
+                &mut merged.custom_attributes,
+                meshes,
+                total_faces,
+                total_verts,
+                total_corners,
+            );
         }
 
         for &m in meshes {
@@ -274,6 +289,8 @@ impl MeshData {
         let mut total_indices = 0;
         let mut total_quads = 0;
         let mut total_faces = 0;
+        let mut total_colors = 0;
+        let mut total_sec_uvs = 0;
         let mut has_sec_uvs = false;
         let mut has_colors = false;
         let mut has_custom_attrs = false;
@@ -287,16 +304,20 @@ impl MeshData {
                 total_quads += q.len();
             }
             total_faces += m.face_materials.len();
-            if m.secondary_uvs.is_some() {
+            if let Some(ref s) = m.secondary_uvs {
+                total_sec_uvs += s.len();
                 has_sec_uvs = true;
             }
-            if m.colors.is_some() {
+            if let Some(ref c) = m.colors {
+                total_colors += c.len();
                 has_colors = true;
             }
             if !m.custom_attributes.is_empty() {
                 has_custom_attrs = true;
             }
         }
+
+        let total_corners = total_quads.max(total_uvs).max(total_faces * 4);
 
         let uv_layout = meshes
             .iter()
@@ -309,12 +330,12 @@ impl MeshData {
             uvs: Vec::with_capacity(total_uvs),
             uv_layout,
             secondary_uvs: if has_sec_uvs {
-                Some(Vec::with_capacity(total_verts))
+                Some(Vec::with_capacity(total_sec_uvs.max(total_uvs)))
             } else {
                 None
             },
             colors: if has_colors {
-                Some(Vec::with_capacity(total_verts))
+                Some(Vec::with_capacity(total_colors.max(total_corners)))
             } else {
                 None
             },
@@ -330,7 +351,13 @@ impl MeshData {
         };
 
         if has_custom_attrs {
-            seed_custom_attributes(&mut merged.custom_attributes, meshes, total_faces);
+            seed_custom_attributes(
+                &mut merged.custom_attributes,
+                meshes,
+                total_faces,
+                total_verts,
+                total_corners,
+            );
         }
 
         let inv_dist = 1.0 / tolerance;

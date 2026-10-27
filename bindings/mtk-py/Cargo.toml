@@ -25,6 +25,7 @@ mtk-save = { workspace = true }
 mtk-package = { workspace = true }
 glam = { workspace = true }
 serde_json = { workspace = true }
+rustc-hash = { workspace = true }
 xxhash-rust = { workspace = true, features = ["xxh64"] }
 pyo3 = { workspace = true, features = ["abi3-py311"] }
 rayon = { workspace = true, optional = true }

@@ -1,5 +1,6 @@
 use glam::Vec2;
 use mtk_model::baker::baked_model::{BakedFace, BakedModel, BakedVariantGroup};
+use std::borrow::Cow;
 use std::sync::Arc;
 
 /// Pre-resolved shading information for a static face.
@@ -145,8 +146,8 @@ pub enum PaletteMeshingData {
 
 /// Unified fully-resolved shading and material data for an emitted face.
 #[derive(Debug, Clone)]
-pub struct ResolvedFaceShading {
-    pub texture_key: String,
+pub struct ResolvedFaceShading<'a> {
+    pub texture_key: Cow<'a, str>,
     pub override_uvs: Option<[Vec2; 4]>,
     pub mat_slot: u16,
     pub chunk_id: i32,
