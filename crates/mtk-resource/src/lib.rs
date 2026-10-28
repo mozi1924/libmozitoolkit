@@ -10,6 +10,7 @@ pub mod error;
 pub mod identifier;
 pub mod meta;
 pub mod pack;
+pub mod skin;
 
 pub use atlas::{AtlasCategory, AtlasDefinition, AtlasFilterPattern, AtlasSource, UnstitchRegion};
 pub use ctm::{

@@ -36,6 +36,8 @@ pub enum ClientMessage {
         packet: Packet,
         bytes: usize,
     },
+    /// A background player skin texture has finished downloading.
+    SkinDownloaded(String),
     Disconnected,
 }
 

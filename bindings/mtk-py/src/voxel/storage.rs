@@ -112,6 +112,29 @@ impl PyVoxelStorage {
             .and_then(|be| serde_json::to_string(be).ok())
     }
 
+    /// Sets or removes the block entity at world coordinate `(x, y, z)` via JSON string.
+    pub fn set_block_entity_json(
+        &mut self,
+        x: i32,
+        y: i32,
+        z: i32,
+        json_str: Option<&str>,
+    ) -> PyResult<()> {
+        let entity = if let Some(s) = json_str {
+            let be: mtk_model::BlockEntityData = serde_json::from_str(s).map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!(
+                    "Invalid BlockEntityData JSON: {}",
+                    e
+                ))
+            })?;
+            Some(be)
+        } else {
+            None
+        };
+        self.inner.set_block_entity(x, y, z, entity);
+        Ok(())
+    }
+
     /// Sets the blockstate at world coordinate `(x, y, z)` and marks dirty sections.
     #[pyo3(signature = (x, y, z, state, biome=None))]
     pub fn set_block(&mut self, x: i32, y: i32, z: i32, state: &str, biome: Option<&str>) -> bool {

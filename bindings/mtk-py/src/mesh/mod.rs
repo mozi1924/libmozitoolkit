@@ -25,6 +25,7 @@ pub use crate::attributes::PyAttributeDomain;
 pub struct PyMeshData {
     pub inner: MeshData,
     pub profile: Option<mtk_core::profile::ExecutionProfile>,
+    pub dynamic_skin_atlas: Option<Vec<u8>>,
 }
 
 impl From<MeshData> for PyMeshData {
@@ -32,6 +33,7 @@ impl From<MeshData> for PyMeshData {
         Self {
             inner,
             profile: None,
+            dynamic_skin_atlas: None,
         }
     }
 }
@@ -42,6 +44,7 @@ impl PyMeshData {
         Self {
             inner,
             profile: None,
+            dynamic_skin_atlas: None,
         }
     }
 
@@ -60,6 +63,12 @@ impl PyMeshData {
         self.profile = Some(profile);
         self
     }
+
+    /// Constructs a `PyMeshData` with a dynamic skin atlas buffer.
+    pub fn with_dynamic_skin_atlas(mut self, dynamic_skin_atlas: Option<Vec<u8>>) -> Self {
+        self.dynamic_skin_atlas = dynamic_skin_atlas;
+        self
+    }
 }
 
 #[pymethods]
@@ -69,6 +78,7 @@ impl PyMeshData {
         Self {
             inner: MeshData::new(),
             profile: None,
+            dynamic_skin_atlas: None,
         }
     }
 
@@ -78,6 +88,7 @@ impl PyMeshData {
         Self {
             inner: MeshData::with_capacity(num_vertices, num_indices, num_faces),
             profile: None,
+            dynamic_skin_atlas: None,
         }
     }
 
@@ -85,6 +96,23 @@ impl PyMeshData {
     #[getter]
     pub fn profile(&self) -> Option<crate::profile::PyExecutionProfile> {
         self.profile.clone().map(Into::into)
+    }
+
+    /// Returns the dynamic skin atlas texture RGBA bytes (1024x1024x4) if present.
+    #[getter]
+    pub fn dynamic_skin_atlas<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> Option<Bound<'py, pyo3::types::PyBytes>> {
+        self.dynamic_skin_atlas
+            .as_ref()
+            .map(|bytes| pyo3::types::PyBytes::new(py, bytes))
+    }
+
+    /// Sets or clears the dynamic skin atlas texture RGBA bytes.
+    #[setter]
+    pub fn set_dynamic_skin_atlas(&mut self, atlas: Option<Vec<u8>>) {
+        self.dynamic_skin_atlas = atlas;
     }
 
     /// Number of vertices in the mesh buffer.

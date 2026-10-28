@@ -101,6 +101,15 @@ impl PlayerProfileData {
         data
     }
 
+    /// Derives the canonical cache key for this profile.
+    pub fn skin_key(&self) -> String {
+        derive_skin_key(
+            self.skin_url.as_deref(),
+            self.id.as_deref(),
+            self.name.as_deref(),
+        )
+    }
+
     /// Returns the unique skin hash (e.g. from `http://textures.minecraft.net/texture/<hash>`).
     pub fn skin_hash(&self) -> Option<&str> {
         self.skin_url.as_deref().and_then(extract_skin_hash)
@@ -108,14 +117,53 @@ impl PlayerProfileData {
 
     /// Returns the resolved texture resource identifier or fallback.
     pub fn texture_identifier(&self) -> String {
-        if let Some(hash) = self.skin_hash() {
-            format!("minecraft:skin/{}", hash)
-        } else if let Some(ref name) = self.name {
-            format!("minecraft:player/{}", name)
+        let key = self.skin_key();
+        if key != "default_steve" {
+            format!("minecraft:skin/{}", key)
         } else {
             "minecraft:entity/player/wide/steve".to_string()
         }
     }
+}
+
+/// Derives a stable, filesystem-safe canonical cache key for a skin reference.
+pub fn derive_skin_key(skin_url: Option<&str>, uuid: Option<&str>, name: Option<&str>) -> String {
+    if let Some(url) = skin_url {
+        let clean = url.trim_end_matches('/');
+        if let Some(last_seg) = clean.rsplit('/').next() {
+            // Standard Mojang 64-hex SHA256 texture hash
+            if last_seg.len() == 64 && last_seg.chars().all(|c| c.is_ascii_hexdigit()) {
+                return last_seg.to_ascii_lowercase();
+            }
+        }
+        // Custom CDN or URL with query parameters
+        let h = xxhash_rust::xxh64::xxh64(clean.as_bytes(), 0);
+        return format!("cdn_{:016x}", h);
+    }
+
+    if let Some(u) = uuid {
+        let s = u
+            .strip_prefix("uuid_")
+            .or_else(|| u.strip_prefix("uuid:"))
+            .unwrap_or(u);
+        let clean_u = s.replace('-', "").to_ascii_lowercase();
+        if !clean_u.is_empty() {
+            return format!("uuid_{}", clean_u);
+        }
+    }
+
+    if let Some(n) = name {
+        let s = n
+            .strip_prefix("player_")
+            .or_else(|| n.strip_prefix("player:"))
+            .unwrap_or(n);
+        let clean_n = s.trim().to_ascii_lowercase();
+        if !clean_n.is_empty() {
+            return format!("player_{}", clean_n);
+        }
+    }
+
+    "default_steve".to_string()
 }
 
 /// Extracts the final URL segment hash from a skin URL.

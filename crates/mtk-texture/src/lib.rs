@@ -11,8 +11,9 @@ pub mod stitcher;
 
 pub use atlas::{
     AtlasAddressMap, AtlasBuilder, AtlasBuilderConfig, AtlasChunkMeta, AtlasSpriteLocation,
-    BakedAtlas, BakedAtlasChunk, IorEncoding, NormalConvention, PbrLayout, PbrMeta,
-    PbrSourceFormat, RoughnessSpace, SpriteKind,
+    BakedAtlas, BakedAtlasChunk, DynamicAtlasChunk, DynamicSlotInfo, IorEncoding, NormalConvention,
+    PbrLayout, PbrMeta, PbrSourceFormat, RoughnessSpace, SpriteKind,
+    DEFAULT_DYNAMIC_SKINS_CHUNK_ID,
 };
 pub use error::TextureError;
 pub use image::{

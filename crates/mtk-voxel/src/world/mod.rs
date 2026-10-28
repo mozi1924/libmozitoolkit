@@ -25,6 +25,16 @@ pub mod debug;
 pub mod rebuild;
 pub mod sync;
 
+/// Wrapper for skin resolution callbacks that satisfies Debug and Clone.
+#[derive(Clone)]
+pub struct SkinResolvedCallback(pub Arc<dyn Fn(String) + Send + Sync>);
+
+impl std::fmt::Debug for SkinResolvedCallback {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SkinResolvedCallback(...)")
+    }
+}
+
 /// Unified 3D Voxel World scene managing storage, multi-source ingestion,
 /// Section mesh caching, incremental remeshing, and unified geometry assembly.
 #[derive(Debug, Clone)]
@@ -47,6 +57,12 @@ pub struct VoxelWorld {
     pub last_profile: Option<mtk_core::ExecutionProfile>,
     /// Unique Atlas Chunk IDs actually present on the active world mesh geometry.
     pub(crate) used_chunk_ids: Vec<u32>,
+    /// Dedicated dynamic skin atlas chunk for player skulls and custom heads.
+    pub dynamic_skins: mtk_texture::atlas::DynamicAtlasChunk,
+    /// Multi-tier skin resolver for player heads.
+    pub skin_resolver: mtk_resource::skin::SkinResolver,
+    /// Callback triggered when a background skin download finishes successfully.
+    pub on_skin_resolved: Option<SkinResolvedCallback>,
 }
 
 impl VoxelWorld {
@@ -66,6 +82,9 @@ impl VoxelWorld {
             world_mesh: None,
             used_chunk_ids: Vec::new(),
             last_profile: None,
+            dynamic_skins: mtk_texture::atlas::DynamicAtlasChunk::default(),
+            skin_resolver: mtk_resource::skin::SkinResolver::default(),
+            on_skin_resolved: None,
         }
     }
 
@@ -97,6 +116,9 @@ impl VoxelWorld {
             world_mesh: None,
             used_chunk_ids: Vec::new(),
             last_profile: None,
+            dynamic_skins: mtk_texture::atlas::DynamicAtlasChunk::default(),
+            skin_resolver: mtk_resource::skin::SkinResolver::default(),
+            on_skin_resolved: None,
         }
     }
 
@@ -358,6 +380,265 @@ impl VoxelWorld {
         self.section_mesh_cache.clear();
         self.world_mesh = None;
         self.used_chunk_ids.clear();
+    }
+
+    /// Gets the block entity at world coordinate (x, y, z), if any.
+    pub fn get_block_entity(&self, x: i32, y: i32, z: i32) -> Option<&mtk_model::BlockEntityData> {
+        self.storage.get_block_entity(x, y, z)
+    }
+
+    /// Sets or removes the block entity at world coordinate (x, y, z).
+    pub fn set_block_entity(
+        &mut self,
+        x: i32,
+        y: i32,
+        z: i32,
+        data: Option<mtk_model::BlockEntityData>,
+    ) {
+        self.storage.set_block_entity(x, y, z, data);
+    }
+
+    /// Returns the RGBA pixel bytes (1024x1024x4) of the dynamic skin atlas if any skins are allocated.
+    pub fn dynamic_skin_atlas_rgba(&self) -> Option<&[u8]> {
+        if self.dynamic_skins.allocated_count() > 0 {
+            Some(self.dynamic_skins.rgba_buffer.as_slice())
+        } else {
+            None
+        }
+    }
+
+    /// Sets the on-disk cache directory for downloaded player skins.
+    pub fn set_skin_cache_dir(&mut self, cache_dir: Option<std::path::PathBuf>) {
+        self.skin_resolver = mtk_resource::skin::SkinResolver::new(cache_dir);
+    }
+
+    /// Explicitly registers a skin PNG into the dynamic atlas and updates the active address map.
+    pub fn register_skin(
+        &mut self,
+        key: &str,
+        png: &[u8],
+    ) -> Result<(), mtk_texture::error::TextureError> {
+        self.skin_resolver.register_memory_skin(key, png.to_vec());
+        self.dynamic_skins.add_skin_png(key, png)?;
+        let mut new_map = if let Some(ref current_map) = self.config.atlas_address_map {
+            (**current_map).clone()
+        } else {
+            mtk_texture::atlas::AtlasAddressMap::new()
+        };
+        self.dynamic_skins.register_to_address_map(&mut new_map);
+        self.config.atlas_address_map = Some(Arc::new(new_map));
+        Ok(())
+    }
+
+    /// Sets the callback triggered when a background skin download finishes.
+    pub fn set_skin_resolved_callback<F>(&mut self, callback: F)
+    where
+        F: Fn(String) + Send + Sync + 'static,
+    {
+        self.on_skin_resolved = Some(SkinResolvedCallback(Arc::new(callback)));
+    }
+
+    /// Pre-scans all block entities in the world and ensures dynamic entities (player skulls)
+    /// have their skin textures resolved non-blockingly from memory or disk cache.
+    /// Uncached skins trigger background fetching without stalling the mesher thread.
+    pub fn ensure_dynamic_entities_resolved(&mut self) -> bool {
+        let coords: Vec<IVec3> = self.storage.sections.keys().copied().collect();
+        self.ensure_dynamic_entities_resolved_for_sections(&coords)
+    }
+
+    /// Scans block entities in the given sections and ensures dynamic entities (player skulls)
+    /// have their skin textures resolved non-blockingly from memory or disk cache.
+    pub fn ensure_dynamic_entities_resolved_for_sections(&mut self, coords: &[IVec3]) -> bool {
+        let mut newly_added = false;
+        let mut dirty_coords = Vec::new();
+
+        for sec_coord in coords {
+            if let Some(sec) = self.storage.sections.get(sec_coord) {
+                for be in sec.block_entities.values() {
+                    if let mtk_model::BlockEntityData::Skull { kind, profile, .. } = be {
+                        if *kind == mtk_model::entity::skull::SkullKind::Player {
+                            let (skin_url, uuid, name) = if let Some(prof) = profile {
+                                (
+                                    prof.skin_url.as_deref(),
+                                    prof.id.as_deref(),
+                                    prof.name.as_deref(),
+                                )
+                            } else {
+                                (None, None, None)
+                            };
+
+                            let key = mtk_resource::skin::derive_skin_key(skin_url, uuid, name);
+                            let hash_opt =
+                                self.skin_resolver.resolve_skin_hash(skin_url, uuid, name);
+                            let primary = hash_opt.as_deref().unwrap_or(&key);
+
+                            if !self.dynamic_skins.contains_key(primary)
+                                && !self.dynamic_skins.contains_key(&key)
+                            {
+                                if let Some(png) =
+                                    self.skin_resolver.try_resolve_cached(skin_url, uuid, name)
+                                {
+                                    let mut aliases = vec![key.clone()];
+                                    if let Some(n) = name {
+                                        let clean_n = mtk_resource::skin::clean_player_name(n);
+                                        if !clean_n.is_empty() {
+                                            aliases.push(format!("player_{}", clean_n));
+                                            aliases.push(clean_n);
+                                        }
+                                    }
+                                    if let Some(u) = uuid {
+                                        let clean_u = mtk_resource::skin::clean_uuid(u);
+                                        if !clean_u.is_empty() {
+                                            aliases.push(format!("uuid_{}", clean_u));
+                                            aliases.push(clean_u);
+                                        }
+                                    }
+                                    let alias_refs: Vec<&str> =
+                                        aliases.iter().map(|s| s.as_str()).collect();
+                                    if self
+                                        .dynamic_skins
+                                        .add_skin_png_with_aliases(primary, &alias_refs, &png)
+                                        .is_ok()
+                                    {
+                                        newly_added = true;
+                                        dirty_coords.push(*sec_coord);
+                                    }
+
+                                    // Background online validation to sync latest skin if remote changed
+                                    let cb_opt = self.on_skin_resolved.clone();
+                                    self.skin_resolver.check_and_queue_online_validation(
+                                        uuid.map(|s| s.to_string()),
+                                        name.map(|s| s.to_string()),
+                                        move |k, _new_png| {
+                                            if let Some(ref cb) = cb_opt {
+                                                (cb.0)(k);
+                                            }
+                                        },
+                                    );
+                                } else {
+                                    let cb_opt = self.on_skin_resolved.clone();
+                                    self.skin_resolver.queue_fetch_background(
+                                        skin_url.map(|s| s.to_string()),
+                                        uuid.map(|s| s.to_string()),
+                                        name.map(|s| s.to_string()),
+                                        move |k, maybe_png| {
+                                            if maybe_png.is_some() {
+                                                if let Some(ref cb) = cb_opt {
+                                                    (cb.0)(k);
+                                                }
+                                            }
+                                        },
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for coord in dirty_coords {
+            self.storage.dirty_sections.insert(coord);
+        }
+
+        if newly_added {
+            let mut new_map = if let Some(ref current_map) = self.config.atlas_address_map {
+                (**current_map).clone()
+            } else {
+                mtk_texture::atlas::AtlasAddressMap::new()
+            };
+            self.dynamic_skins.register_to_address_map(&mut new_map);
+            self.config.atlas_address_map = Some(Arc::new(new_map));
+        }
+
+        newly_added
+    }
+
+    /// Synchronous variant: waits for network if uncached (used primarily in tests, offline CLI, and save imports).
+    pub fn ensure_dynamic_entities_resolved_sync(&mut self) -> bool {
+        let coords: Vec<IVec3> = self.storage.sections.keys().copied().collect();
+        self.ensure_dynamic_entities_resolved_sync_for_sections(&coords)
+    }
+
+    /// Synchronous variant for specific sections: waits for network if uncached.
+    pub fn ensure_dynamic_entities_resolved_sync_for_sections(&mut self, coords: &[IVec3]) -> bool {
+        let mut newly_added = false;
+        let mut dirty_coords = Vec::new();
+
+        for sec_coord in coords {
+            if let Some(sec) = self.storage.sections.get(sec_coord) {
+                for be in sec.block_entities.values() {
+                    if let mtk_model::BlockEntityData::Skull { kind, profile, .. } = be {
+                        if *kind == mtk_model::entity::skull::SkullKind::Player {
+                            let (skin_url, uuid, name) = if let Some(prof) = profile {
+                                (
+                                    prof.skin_url.as_deref(),
+                                    prof.id.as_deref(),
+                                    prof.name.as_deref(),
+                                )
+                            } else {
+                                (None, None, None)
+                            };
+
+                            let key = mtk_resource::skin::derive_skin_key(skin_url, uuid, name);
+                            let hash_opt =
+                                self.skin_resolver.resolve_skin_hash(skin_url, uuid, name);
+                            let primary = hash_opt.as_deref().unwrap_or(&key);
+
+                            if !self.dynamic_skins.contains_key(primary)
+                                && !self.dynamic_skins.contains_key(&key)
+                            {
+                                if let Some(png) =
+                                    self.skin_resolver.resolve_skin_png(skin_url, uuid, name)
+                                {
+                                    let mut aliases = vec![key.clone()];
+                                    if let Some(n) = name {
+                                        let clean_n = mtk_resource::skin::clean_player_name(n);
+                                        if !clean_n.is_empty() {
+                                            aliases.push(format!("player_{}", clean_n));
+                                            aliases.push(clean_n);
+                                        }
+                                    }
+                                    if let Some(u) = uuid {
+                                        let clean_u = mtk_resource::skin::clean_uuid(u);
+                                        if !clean_u.is_empty() {
+                                            aliases.push(format!("uuid_{}", clean_u));
+                                            aliases.push(clean_u);
+                                        }
+                                    }
+                                    let alias_refs: Vec<&str> =
+                                        aliases.iter().map(|s| s.as_str()).collect();
+                                    if self
+                                        .dynamic_skins
+                                        .add_skin_png_with_aliases(primary, &alias_refs, &png)
+                                        .is_ok()
+                                    {
+                                        newly_added = true;
+                                        dirty_coords.push(*sec_coord);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for coord in dirty_coords {
+            self.storage.dirty_sections.insert(coord);
+        }
+
+        if newly_added {
+            let mut new_map = if let Some(ref current_map) = self.config.atlas_address_map {
+                (**current_map).clone()
+            } else {
+                mtk_texture::atlas::AtlasAddressMap::new()
+            };
+            self.dynamic_skins.register_to_address_map(&mut new_map);
+            self.config.atlas_address_map = Some(Arc::new(new_map));
+        }
+
+        newly_added
     }
 }
 

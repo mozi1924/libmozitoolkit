@@ -5,7 +5,7 @@
         "skeleton_wall_skull", "wither_skeleton_wall_skull", "zombie_wall_head", 
         "player_wall_head", "creeper_wall_head", "dragon_wall_head", "piglin_wall_head"
     ],
-    "defaultTexture": "minecraft:entity/player/player",
+    "defaultTexture": "minecraft:entity/player/wide/steve",
     "handler": {
         "variables": [
             "isWall = thisBlock.name.contains('_wall_')",
@@ -16,7 +16,7 @@
             "rotY = thisBlock.state.facing == 'west' ? 90.0 : rotY",
             "rotY = thisBlock.state.rotation != null ? (22.5 * thisBlock.state.rotation + 180.0) : rotY",
             "rotY = rotY >= 360.0 ? (rotY - 360.0) : rotY",
-            "texture = thisBlock.state.texture != null ? thisBlock.state.texture : 'minecraft:entity/player/player'",
+            "texture = thisBlock.state.texture != null ? thisBlock.state.texture : 'minecraft:entity/player/wide/steve'",
             "texture = thisBlock.name.contains('skeleton') ? 'minecraft:entity/skeleton/skeleton' : texture",
             "texture = thisBlock.name.contains('wither_skeleton') ? 'minecraft:entity/skeleton/wither_skeleton' : texture",
             "texture = thisBlock.name.contains('zombie') ? 'minecraft:entity/zombie/zombie' : texture",

@@ -4,6 +4,7 @@ use super::config::PyMesherConfig;
 use super::map_voxel_err;
 use super::storage::PyVoxelStorage;
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 
 /// Python wrapper for `VoxelWorld` 3D scene engine.
 #[pyclass(name = "VoxelWorld")]
@@ -125,9 +126,11 @@ impl PyVoxelWorld {
         }
         .map_err(map_voxel_err)?;
         let profile = self.inner.last_profile.clone();
+        let dynamic_skin_atlas = self.inner.dynamic_skin_atlas_rgba().map(|b| b.to_vec());
         Ok(crate::mesh::PyMeshData {
             inner: mesh,
             profile,
+            dynamic_skin_atlas,
         })
     }
 
@@ -146,11 +149,11 @@ impl PyVoxelWorld {
             .detach(|| self.inner.rebuild_dirty())
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         let dict = pyo3::types::PyDict::new(py);
+        let dyn_atlas = self.inner.dynamic_skin_atlas_rgba().map(|b| b.to_vec());
         for (coord, mesh) in rebuilt {
-            dict.set_item(
-                (coord.x, coord.y, coord.z),
-                crate::mesh::PyMeshData::from_mesh(mesh),
-            )?;
+            let mut py_mesh = crate::mesh::PyMeshData::from_mesh(mesh);
+            py_mesh.dynamic_skin_atlas = dyn_atlas.clone();
+            dict.set_item((coord.x, coord.y, coord.z), py_mesh)?;
         }
         Ok(dict)
     }
@@ -159,9 +162,11 @@ impl PyVoxelWorld {
     pub fn get_world_mesh(&self) -> crate::mesh::PyMeshData {
         let mesh = self.inner.get_world_mesh().cloned().unwrap_or_default();
         let profile = self.inner.last_profile.clone();
+        let dynamic_skin_atlas = self.inner.dynamic_skin_atlas_rgba().map(|b| b.to_vec());
         crate::mesh::PyMeshData {
             inner: mesh,
             profile,
+            dynamic_skin_atlas,
         }
     }
 
@@ -198,6 +203,36 @@ impl PyVoxelWorld {
     #[pyo3(signature = (x, y, z, state, biome=None))]
     pub fn set_block(&mut self, x: i32, y: i32, z: i32, state: &str, biome: Option<&str>) -> bool {
         self.inner.set_block(x, y, z, state, biome)
+    }
+
+    /// Gets the JSON representation of the block entity at world coordinate (x, y, z), if any.
+    pub fn get_block_entity_json(&self, x: i32, y: i32, z: i32) -> Option<String> {
+        self.inner
+            .get_block_entity(x, y, z)
+            .and_then(|be| serde_json::to_string(be).ok())
+    }
+
+    /// Sets or removes the block entity at world coordinate (x, y, z) via JSON string.
+    pub fn set_block_entity_json(
+        &mut self,
+        x: i32,
+        y: i32,
+        z: i32,
+        json_str: Option<&str>,
+    ) -> PyResult<()> {
+        let entity = if let Some(s) = json_str {
+            let be: mtk_model::BlockEntityData = serde_json::from_str(s).map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!(
+                    "Invalid BlockEntityData JSON: {}",
+                    e
+                ))
+            })?;
+            Some(be)
+        } else {
+            None
+        };
+        self.inner.set_block_entity(x, y, z, entity);
+        Ok(())
     }
 
     /// Updates mesher configuration.
@@ -249,6 +284,31 @@ impl PyVoxelWorld {
             self.inner.set_model_db(Some(mdb.inner.clone()));
         }
         self.inner.clear_cache();
+    }
+
+    /// Returns the dynamic skin atlas texture RGBA bytes (1024x1024x4), or None if no skins.
+    pub fn get_dynamic_skin_atlas<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyBytes>> {
+        self.inner
+            .dynamic_skin_atlas_rgba()
+            .map(|bytes| PyBytes::new(py, bytes))
+    }
+
+    /// Sets the on-disk cache directory for downloaded player skins.
+    pub fn set_skin_cache_dir(&mut self, cache_dir: Option<String>) {
+        self.inner
+            .set_skin_cache_dir(cache_dir.map(std::path::PathBuf::from));
+    }
+
+    /// Registers a custom skin PNG into the dynamic atlas and updates the active address map.
+    pub fn register_skin(&mut self, key: &str, png_bytes: &[u8]) -> PyResult<()> {
+        self.inner.register_skin(key, png_bytes).map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Failed to register skin: {}", e))
+        })
+    }
+
+    /// Resolves dynamic entities synchronously (primarily for unit tests and offline workflows).
+    pub fn ensure_dynamic_entities_resolved_sync(&mut self) -> bool {
+        self.inner.ensure_dynamic_entities_resolved_sync()
     }
 
     /// Clears world storage and meshes.

@@ -291,6 +291,18 @@ fn dispatch_single_client_message(
             let _ = event_sender.send(SyncEvent::StatusChange("DISCONNECTED".to_string()));
             false
         }
+        ClientMessage::SkinDownloaded(_key) => {
+            let mut w = lock_world_write(world);
+            if w.ensure_dynamic_entities_resolved() {
+                let mut state = lock_state(state_lock);
+                state.pending_dirty_rebuild = true;
+                if state.dirty_since.is_none() {
+                    state.dirty_since = Some(Instant::now());
+                }
+                state.last_delta_at = Some(Instant::now());
+            }
+            true
+        }
         ClientMessage::PacketReceived { packet, bytes } => {
             let mut state = lock_state(state_lock);
             let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

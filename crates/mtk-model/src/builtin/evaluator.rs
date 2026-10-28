@@ -269,7 +269,7 @@ pub fn eval_miex_string(
 
     // Textures.getTextureForPlayerProfile(...)
     if trimmed.starts_with("Textures.getTextureForPlayerProfile(") {
-        if let Some(tex) = vars.get("texture") {
+        if let Some(tex) = vars.get("entity_texture").or_else(|| vars.get("texture")) {
             return tex.clone();
         }
         return "minecraft:entity/player/wide/steve".to_string();

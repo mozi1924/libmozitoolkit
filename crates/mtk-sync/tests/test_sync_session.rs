@@ -425,3 +425,23 @@ fn test_baseline_and_delta_entity_integration() {
         assert_eq!(sec.get_block_entity(0), None);
     }
 }
+
+#[test]
+fn test_wss_url_tls_support() {
+    // Attempting to connect to a non-existent port with wss:// must proceed to network I/O
+    // (i.e. Io Error like ConnectionRefused) rather than failing immediately with
+    // `Url("wss scheme is not supported without a TLS feature enabled")`.
+    let err = tungstenite::connect("wss://127.0.0.1:59997").unwrap_err();
+    match err {
+        tungstenite::Error::Io(_) => {
+            // Expected: TLS stack initialized and attempted TCP connect!
+        }
+        other => {
+            let msg = other.to_string();
+            assert!(
+                !msg.contains("not supported without a TLS feature enabled"),
+                "Tungstenite should support wss with rustls feature, got: {msg}"
+            );
+        }
+    }
+}

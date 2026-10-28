@@ -14,13 +14,17 @@ glam = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+xxhash-rust = { workspace = true }
+sha2 = { workspace = true }
 zip = { workspace = true, optional = true }
 rayon = { workspace = true, optional = true }
+ureq = { workspace = true, optional = true }
 
 [features]
-default = ["parallel", "zip"]
+default = ["parallel", "zip", "net"]
 zip = ["dep:zip"]
 parallel = ["dep:rayon"]
+net = ["dep:ureq"]
 
 [lints]
 workspace = true

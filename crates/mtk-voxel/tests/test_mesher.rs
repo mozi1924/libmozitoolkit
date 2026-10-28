@@ -1417,6 +1417,81 @@ fn test_generic_block_entity_meshing_skull_and_pot() {
 }
 
 #[test]
+fn test_player_skull_dynamic_atlas_meshing_and_uv_remapping() {
+    let mut world = mtk_voxel::world::VoxelWorld::new(None, None, None);
+
+    let hash = "3c3fa837d5e9ae5d06150a699495387d068fb9e682572b191e6868959f51bc52";
+    let img = image::RgbaImage::from_pixel(64, 64, image::Rgba([128, 64, 32, 255]));
+    let mut png_buf = std::io::Cursor::new(Vec::new());
+    img.write_to(&mut png_buf, image::ImageFormat::Png)
+        .expect("PNG encoding should succeed");
+    let png_bytes = png_buf.into_inner();
+
+    world.skin_resolver.register_memory_skin(hash, png_bytes);
+
+    let skull_entity = mtk_model::BlockEntityData::new_skull(
+        mtk_model::entity::skull::SkullKind::Player,
+        Some(0),
+        Some(mtk_model::entity::skull::PlayerProfileData::new(
+            Some("Steve".to_string()),
+            Some("00000000-0000-0000-0000-000000000000".to_string()),
+            Some(format!("http://textures.minecraft.net/texture/{}", hash)),
+            None,
+        )),
+    );
+
+    world.set_block(2, 2, 2, "minecraft:player_head[rotation=0]", None);
+    let sec_coord = IVec3::new(0, 0, 0);
+    let sec = world.storage.sections.get_mut(&sec_coord).unwrap();
+    let local_idx = mtk_voxel::storage::block_index(2, 2, 2) as u16;
+    sec.set_block_entity(local_idx, Some(skull_entity));
+
+    let mesh = world.rebuild_all().expect("Rebuild should succeed").clone();
+    assert!(mesh.face_count() > 0);
+
+    // Verify dynamic skin atlas allocated slot and blitted pixels
+    assert_eq!(world.dynamic_skins.allocated_count(), 1);
+    let atlas_rgba = world
+        .dynamic_skin_atlas_rgba()
+        .expect("Atlas RGBA must exist");
+    assert_eq!(atlas_rgba.len(), 1024 * 1024 * 4);
+
+    // Verify skull face material slot is 0xFFF0
+    assert!(
+        mesh.face_materials
+            .contains(&mtk_texture::atlas::DEFAULT_DYNAMIC_SKINS_CHUNK_ID),
+        "Mesh must contain dynamic skin material slot 0xFFF0"
+    );
+
+    // Verify skull UVs are remapped into slot 0 bounds [0.0..0.0625, 0.9375..1.0]
+    let dynamic_slot = mtk_texture::atlas::DEFAULT_DYNAMIC_SKINS_CHUNK_ID;
+    let mut dynamic_face_found = false;
+    for (f_idx, &mat) in mesh.face_materials.iter().enumerate() {
+        if mat == dynamic_slot {
+            dynamic_face_found = true;
+            for tri in 0..2 {
+                let v_start = (f_idx * 2 + tri) * 3;
+                for i in 0..3 {
+                    let idx = mesh.indices[v_start + i] as usize;
+                    let uv = mesh.uvs[idx];
+                    assert!(
+                        uv[0] >= -1e-4 && uv[0] <= 0.0625 + 1e-4,
+                        "U must be within slot 0 bounds (got {})",
+                        uv[0]
+                    );
+                    assert!(
+                        uv[1] >= 0.9375 - 1e-4 && uv[1] <= 1.0 + 1e-4,
+                        "V must be within slot 0 bounds (got {})",
+                        uv[1]
+                    );
+                }
+            }
+        }
+    }
+    assert!(dynamic_face_found, "Must have checked dynamic face UVs");
+}
+
+#[test]
 fn test_mesher_average_color_and_tint_injection() {
     use mtk_material::biome::hex_to_linear_rgba;
     use mtk_texture::atlas::{AtlasAddressMap, AtlasSpriteLocation, SpriteKind};

@@ -209,6 +209,18 @@ impl LiveSyncSession {
         w.last_profile.clone()
     }
 
+    /// Returns the RGBA pixel bytes (1024x1024x4) of the dynamic skin atlas, if active.
+    pub fn dynamic_skin_atlas_rgba(&self) -> Option<Vec<u8>> {
+        let w = self.world.read().unwrap_or_else(|e| e.into_inner());
+        w.dynamic_skin_atlas_rgba().map(|s| s.to_vec())
+    }
+
+    /// Sets the on-disk cache directory for downloaded player skins.
+    pub fn set_skin_cache_dir(&self, cache_dir: Option<std::path::PathBuf>) {
+        let mut w = self.world.write().unwrap_or_else(|e| e.into_inner());
+        w.set_skin_cache_dir(cache_dir);
+    }
+
     /// Sends a RESYNC_REQUEST packet to request recovery / re-sync.
     pub fn request_resync(&self) -> Result<(), String> {
         let (epoch, seq) = {
@@ -300,6 +312,13 @@ impl LiveSyncSession {
         self.is_connected.store(false, Ordering::SeqCst);
 
         let (msg_sender, msg_receiver) = crossbeam_channel::unbounded::<ClientMessage>();
+        let msg_sender_skin = msg_sender.clone();
+        {
+            let mut w = self.world.write().unwrap_or_else(|e| e.into_inner());
+            w.set_skin_resolved_callback(move |key| {
+                let _ = msg_sender_skin.send(ClientMessage::SkinDownloaded(key));
+            });
+        }
         let client = SyncClient::connect(
             url.to_string(),
             msg_sender,

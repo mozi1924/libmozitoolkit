@@ -189,7 +189,17 @@ fn resolve_model_face(
                     fsize,
                     avg_col,
                 )
-            } else if let Some(fallback_loc) = atlas.lookup_fallback() {
+            } else if let Some(fallback_loc) = if face.texture.starts_with("minecraft:skin/")
+                || face.texture.starts_with("skin/")
+                || face.texture.starts_with("minecraft:player/")
+                || face.texture.starts_with("player/")
+            {
+                atlas
+                    .lookup_str("minecraft:entity/player/wide/steve")
+                    .or_else(|| atlas.lookup_fallback())
+            } else {
+                atlas.lookup_fallback()
+            } {
                 let (timing, fsize) = extract_anim_metrics(Some(fallback_loc));
                 let avg_col = fallback_loc
                     .average_color

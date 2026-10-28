@@ -148,7 +148,24 @@ fn decode_banner(comp: &NbtCompound) -> Option<BlockEntityData> {
     })
 }
 
-/// Decodes Skull / Head NBT data (SkullType, Rot, SkullOwner, and 1.20.5+ `minecraft:profile` component).
+/// Decodes a string or int_array UUID from an NBT compound (MC 1.16+ uses 4-int array).
+fn decode_nbt_uuid(comp: &NbtCompound, key: &str) -> Option<String> {
+    if let Some(s) = comp.string(key) {
+        return Some(s.as_str().to_string());
+    }
+    if let Some(arr) = comp.int_array(key) {
+        if arr.len() == 4 {
+            let u = ((arr[0] as u32 as u128) << 96)
+                | ((arr[1] as u32 as u128) << 64)
+                | ((arr[2] as u32 as u128) << 32)
+                | (arr[3] as u32 as u128);
+            return Some(format!("{:032x}", u));
+        }
+    }
+    None
+}
+
+/// Decodes Skull / Head NBT data (SkullType, Rot, SkullOwner, and 1.20.5+ `profile` / `minecraft:profile` component).
 fn decode_skull(comp: &NbtCompound) -> Option<BlockEntityData> {
     let type_id = comp
         .byte("SkullType")
@@ -161,53 +178,9 @@ fn decode_skull(comp: &NbtCompound) -> Option<BlockEntityData> {
         .or_else(|| comp.int("Rot").map(|i| i as i8))
         .map(|r| (r as u8) & 0x0F);
 
-    let mut profile: Option<PlayerProfileData> = None;
-
-    // 1. Check pre-1.20.5 `SkullOwner`
-    if let Some(owner_comp) = comp.compound("SkullOwner") {
+    let profile = decode_profile(comp);
+    if profile.is_some() {
         kind = SkullKind::Player;
-        let name = owner_comp.string("Name").map(|s| s.as_str().to_string());
-        let id = owner_comp.string("Id").map(|s| s.as_str().to_string());
-
-        let mut skin_b64: Option<String> = None;
-        if let Some(props) = owner_comp.compound("Properties") {
-            if let Some(tex_list) = props.list("textures").and_then(|l| l.compounds()) {
-                if let Some(first) = tex_list.first() {
-                    skin_b64 = first.string("Value").map(|s| s.as_str().to_string());
-                }
-            }
-        }
-        profile = Some(PlayerProfileData::new(name, id, None, skin_b64));
-    } else if let Some(owner_str) = comp.string("SkullOwner") {
-        kind = SkullKind::Player;
-        profile = Some(PlayerProfileData::new(
-            Some(owner_str.as_str().to_string()),
-            None,
-            None,
-            None,
-        ));
-    }
-    // 2. Check 1.20.5+ component `minecraft:profile`
-    else if let Some(components) = comp.compound("components") {
-        if let Some(prof_comp) = components.compound("minecraft:profile") {
-            kind = SkullKind::Player;
-            let name = prof_comp.string("name").map(|s| s.as_str().to_string());
-            let id = prof_comp.string("id").map(|s| s.as_str().to_string());
-
-            let mut skin_b64: Option<String> = None;
-            if let Some(props) = prof_comp.list("properties").and_then(|l| l.compounds()) {
-                for p in &props {
-                    if p.string("name")
-                        .map(|s| s.as_str() == "textures")
-                        .unwrap_or(false)
-                    {
-                        skin_b64 = p.string("value").map(|s| s.as_str().to_string());
-                        break;
-                    }
-                }
-            }
-            profile = Some(PlayerProfileData::new(name, id, None, skin_b64));
-        }
     }
 
     Some(mtk_model::BlockEntityData::Skull {
@@ -215,6 +188,106 @@ fn decode_skull(comp: &NbtCompound) -> Option<BlockEntityData> {
         rotation,
         profile,
     })
+}
+
+/// Decodes player profile data from either 1.20.5+ `profile`, pre-1.20.5 `SkullOwner`,
+/// or component-based `minecraft:profile`.
+fn decode_profile(comp: &NbtCompound) -> Option<PlayerProfileData> {
+    // 1. Direct profile compound (1.20.5+ block entity), SkullOwner (pre-1.20.5),
+    // or component `minecraft:profile`
+    let prof_comp = comp
+        .compound("profile")
+        .or_else(|| comp.compound("SkullOwner"))
+        .or_else(|| {
+            comp.compound("components").and_then(|c| {
+                c.compound("minecraft:profile")
+                    .or_else(|| c.compound("profile"))
+            })
+        });
+
+    if let Some(p) = prof_comp {
+        let name = p
+            .string("name")
+            .or_else(|| p.string("Name"))
+            .map(|s| s.as_str().to_string());
+        let id = decode_nbt_uuid(p, "id").or_else(|| decode_nbt_uuid(p, "Id"));
+
+        let mut skin_b64: Option<String> = None;
+        // In 1.20.5+, properties is a list of compounds [{name: "textures", value: "..."}]
+        if let Some(props) = p
+            .list("properties")
+            .or_else(|| p.list("Properties"))
+            .and_then(|l| l.compounds())
+        {
+            for prop in &props {
+                if prop
+                    .string("name")
+                    .or_else(|| prop.string("Name"))
+                    .map(|s| s.as_str().eq_ignore_ascii_case("textures"))
+                    .unwrap_or(false)
+                {
+                    skin_b64 = prop
+                        .string("value")
+                        .or_else(|| prop.string("Value"))
+                        .map(|s| s.as_str().to_string());
+                    break;
+                }
+            }
+        }
+        // In pre-1.20.5, Properties is a compound containing textures list: Properties: { textures: [{ Value: "..." }] }
+        if skin_b64.is_none() {
+            if let Some(props_comp) = p
+                .compound("Properties")
+                .or_else(|| p.compound("properties"))
+            {
+                if let Some(tex_list) = props_comp
+                    .list("textures")
+                    .or_else(|| props_comp.list("Textures"))
+                    .and_then(|l| l.compounds())
+                {
+                    if let Some(first) = tex_list.first() {
+                        skin_b64 = first
+                            .string("Value")
+                            .or_else(|| first.string("value"))
+                            .map(|s| s.as_str().to_string());
+                    }
+                }
+            }
+        }
+
+        return Some(PlayerProfileData::new(name, id, None, skin_b64));
+    }
+
+    // 2. Direct string owner / profile
+    if let Some(s) = comp.string("profile").or_else(|| comp.string("SkullOwner")) {
+        return Some(PlayerProfileData::new(
+            Some(s.as_str().to_string()),
+            None,
+            None,
+            None,
+        ));
+    }
+
+    // 3. Direct int array UUID owner / profile
+    let arr = comp
+        .int_array("profile")
+        .or_else(|| comp.int_array("SkullOwner"));
+    if let Some(arr) = arr {
+        if arr.len() == 4 {
+            let u = ((arr[0] as u32 as u128) << 96)
+                | ((arr[1] as u32 as u128) << 64)
+                | ((arr[2] as u32 as u128) << 32)
+                | (arr[3] as u32 as u128);
+            return Some(PlayerProfileData::new(
+                None,
+                Some(format!("{:032x}", u)),
+                None,
+                None,
+            ));
+        }
+    }
+
+    None
 }
 
 /// Universal decoder for raw byte payloads (JSON visual NBT or binary NBT compound).
@@ -340,6 +413,62 @@ mod tests {
                 Some("http://textures.minecraft.net/texture/12345")
             );
             assert_eq!(prof.skin_hash(), Some("12345"));
+        } else {
+            panic!("Expected Skull variant");
+        }
+    }
+
+    #[test]
+    fn test_decode_player_head_with_modern_profile_component() {
+        let mut skull_comp = NbtCompound::new();
+        skull_comp.entries.push((
+            NbtStr::from_borrowed("id"),
+            NbtTag::String(NbtStr::from_borrowed("minecraft:skull")),
+        ));
+
+        let mut prof_comp = NbtCompound::new();
+        prof_comp.entries.push((
+            NbtStr::from_borrowed("name"),
+            NbtTag::String(NbtStr::from_borrowed("jaxlocke")),
+        ));
+        let mut id_bytes = Vec::new();
+        for val in [1132644265i32, 301416900, -2114120302, -1759600980] {
+            id_bytes.extend_from_slice(&val.to_be_bytes());
+        }
+        prof_comp
+            .entries
+            .push((NbtStr::from_borrowed("id"), NbtTag::IntArray(&id_bytes)));
+
+        let mut tex_entry = NbtCompound::new();
+        let b64 = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYmFlNDY0YTBlZTMwNTRmMTI3Mzg0NWI0NDNlYTkyODdlOWExYjg2NWNlZTU1N2U3ZWMwYmJiMjhhY2U2ODZkIn19fQ==";
+        tex_entry.entries.push((
+            NbtStr::from_borrowed("name"),
+            NbtTag::String(NbtStr::from_borrowed("textures")),
+        ));
+        tex_entry.entries.push((
+            NbtStr::from_borrowed("value"),
+            NbtTag::String(NbtStr::from_borrowed(b64)),
+        ));
+
+        prof_comp.entries.push((
+            NbtStr::from_borrowed("properties"),
+            NbtTag::List(NbtList::Compound(vec![tex_entry])),
+        ));
+
+        skull_comp.entries.push((
+            NbtStr::from_borrowed("profile"),
+            NbtTag::Compound(prof_comp),
+        ));
+
+        let decoded = decode_block_entity(&skull_comp).expect("Must decode modern 1.20.5+ skull");
+        if let BlockEntityData::Skull { kind, profile, .. } = decoded {
+            assert_eq!(kind, SkullKind::Player);
+            let prof = profile.expect("Profile must be present");
+            assert_eq!(prof.name.as_deref(), Some("jaxlocke"));
+            assert_eq!(
+                prof.skin_hash(),
+                Some("bae464a0ee3054f1273845b443ea9287e9a1b865cee557e7ec0bbb28ace686d")
+            );
         } else {
             panic!("Expected Skull variant");
         }

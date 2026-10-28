@@ -128,17 +128,15 @@ impl MiExModelLoader {
                 let rot_deg = (22.5 * (*rot as f32) + 180.0) % 360.0;
                 vars_num.insert("rotY".to_string(), rot_deg);
             }
-            if let Some(prof) = profile {
-                let tex = prof.texture_identifier();
-                vars_str.insert("texture".to_string(), tex.clone());
-                textures.insert("texture".to_string(), TextureValue::Path(tex.clone()));
-                textures.insert("particle".to_string(), TextureValue::Path(tex));
+            let tex = if let Some(prof) = profile {
+                prof.texture_identifier()
             } else {
-                let tex = kind.default_texture_path().to_string();
-                vars_str.insert("texture".to_string(), tex.clone());
-                textures.insert("texture".to_string(), TextureValue::Path(tex.clone()));
-                textures.insert("particle".to_string(), TextureValue::Path(tex));
-            }
+                kind.default_texture_path().to_string()
+            };
+            vars_str.insert("entity_texture".to_string(), tex.clone());
+            vars_str.insert("texture".to_string(), tex.clone());
+            textures.insert("texture".to_string(), TextureValue::Path(tex.clone()));
+            textures.insert("particle".to_string(), TextureValue::Path(tex));
         }
 
         let mut elements: Vec<ElementJson> = Vec::new();
@@ -153,6 +151,17 @@ impl MiExModelLoader {
                 &mut elements,
                 None,
             );
+        }
+
+        // Post-handler enforcement: prevent AST templates from clobbering dynamic skull textures
+        if let Some(crate::entity::BlockEntityData::Skull { kind, profile, .. }) = entity {
+            let tex = if let Some(prof) = profile {
+                prof.texture_identifier()
+            } else {
+                kind.default_texture_path().to_string()
+            };
+            textures.insert("texture".to_string(), TextureValue::Path(tex.clone()));
+            textures.insert("particle".to_string(), TextureValue::Path(tex));
         }
 
         Some(BlockModelJson {

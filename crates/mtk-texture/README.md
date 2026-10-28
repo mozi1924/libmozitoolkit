@@ -140,6 +140,17 @@ pub struct AtlasBuilderConfig {
     pub mip_level: u32,
     pub padding: u32,
 }
+```
+
+---
+
+### 2.4 动态皮肤图集 (`atlas/dynamic.rs`)
+针对玩家头颅 (Player Skull) 与各类自定义第三方皮肤站动态装配打造的固定规格动态图集块：
+- **规格**：固定 1024×1024 尺寸，16×16 = 256 个 64×64 槽位；
+- **保留图集块 ID**：`DEFAULT_DYNAMIC_SKINS_CHUNK_ID = 0xFFF0` (65520)；
+- **去重与映射**：支持以皮肤键天然去重、直接通过 `register_to_address_map` 将槽位与别名无缝注入 `AtlasAddressMap`。
+    pub padding: u32,
+}
 
 // v6: 移除模型缓存中的 emissive_level；v5: 模型数据库使用 Postcard + Zstd（更小）；v4: PBR 伴生图在预编译期解码为 MtkPackedV1。
 // normal_gl = OpenGL 法线 RGB + 高度 A；orm = AO/roughness/metallic/emission；

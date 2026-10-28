@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyBytes, PyDict, PyList};
 
 use glam::IVec3;
 use mtk_sync::protocol::*;
@@ -65,10 +65,25 @@ impl PyLiveSyncSession {
     pub fn get_world_mesh(&self) -> PyMeshData {
         let mesh = self.inner.get_world_mesh();
         let profile = self.inner.last_profile();
+        let dynamic_skin_atlas = self.inner.dynamic_skin_atlas_rgba();
         PyMeshData {
             inner: mesh,
             profile,
+            dynamic_skin_atlas,
         }
+    }
+
+    /// Returns the dynamic skin atlas texture RGBA bytes (1024x1024x4), or None if no skins.
+    pub fn get_dynamic_skin_atlas<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyBytes>> {
+        self.inner
+            .dynamic_skin_atlas_rgba()
+            .map(|bytes| PyBytes::new(py, &bytes))
+    }
+
+    /// Sets the on-disk cache directory for downloaded player skins.
+    pub fn set_skin_cache_dir(&mut self, cache_dir: Option<String>) {
+        self.inner
+            .set_skin_cache_dir(cache_dir.map(std::path::PathBuf::from));
     }
 
     /// Starts the background sync client thread connecting to Minecraft at `url`,
@@ -256,13 +271,12 @@ impl PyLiveSyncSession {
                     profile,
                 } => {
                     dict.set_item("type", "WORLD_MESH_READY")?;
-                    dict.set_item(
-                        "mesh",
-                        PyMeshData {
-                            inner: mesh,
-                            profile,
-                        },
-                    )?;
+                    let py_mesh = PyMeshData {
+                        inner: mesh,
+                        profile,
+                        dynamic_skin_atlas: self.inner.dynamic_skin_atlas_rgba(),
+                    };
+                    dict.set_item("mesh", py_mesh)?;
                     dict.set_item("generation", generation)?;
                 }
                 SyncEvent::StreamProgress {

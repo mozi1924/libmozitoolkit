@@ -47,6 +47,10 @@ impl VoxelWorld {
             self.sync_selection_bounds();
         });
 
+        profiler.measure("ensure_dynamic_entities_resolved", || {
+            self.ensure_dynamic_entities_resolved();
+        });
+
         let non_empty = self.storage.get_all_non_empty_sections();
         if non_empty.is_empty() {
             self.section_mesh_cache.clear();
@@ -142,6 +146,11 @@ impl VoxelWorld {
             self.sync_selection_bounds();
         });
 
+        profiler.measure("ensure_dynamic_entities_resolved", || {
+            let dirty: Vec<glam::IVec3> = self.storage.dirty_sections.iter().copied().collect();
+            self.ensure_dynamic_entities_resolved_for_sections(&dirty);
+        });
+
         let db_opt = self.model_db.as_deref();
         let model_lookup = |state: &str| Self::model_source_for_state(db_opt, state);
 
@@ -184,6 +193,11 @@ impl VoxelWorld {
 
         profiler.measure("sync_selection_bounds", || {
             self.sync_selection_bounds();
+        });
+
+        profiler.measure("ensure_dynamic_entities_resolved", || {
+            let dirty: Vec<glam::IVec3> = self.storage.dirty_sections.iter().copied().collect();
+            self.ensure_dynamic_entities_resolved_for_sections(&dirty);
         });
 
         let db_opt = self.model_db.as_deref();
