@@ -23,9 +23,10 @@ pub struct SkinResolver {
     pub index: Arc<RwLock<SkinIndex>>,
     memory_cache: Arc<RwLock<HashMap<String, Vec<u8>>>>,
     in_flight: Arc<RwLock<HashSet<String>>>,
-    failed_keys: Arc<RwLock<HashSet<String>>>,
+    failed_keys: Arc<RwLock<HashMap<String, u64>>>,
     timeout_secs: u64,
     validation_interval_secs: u64,
+    negative_cache_ttl_secs: u64,
 }
 
 impl Default for SkinResolver {
@@ -49,9 +50,10 @@ impl SkinResolver {
             index: Arc::new(RwLock::new(index)),
             memory_cache: Arc::new(RwLock::new(HashMap::new())),
             in_flight: Arc::new(RwLock::new(HashSet::new())),
-            failed_keys: Arc::new(RwLock::new(HashSet::new())),
+            failed_keys: Arc::new(RwLock::new(HashMap::new())),
             timeout_secs: 5,
             validation_interval_secs: 3600, // 1 hour validation TTL
+            negative_cache_ttl_secs: 300,   // 5 minutes negative cache cooldown
         }
     }
 
@@ -65,6 +67,31 @@ impl SkinResolver {
     pub fn with_validation_interval(mut self, secs: u64) -> Self {
         self.validation_interval_secs = secs;
         self
+    }
+
+    /// Sets the negative cache failure cooldown TTL in seconds.
+    pub fn with_negative_cache_ttl(mut self, secs: u64) -> Self {
+        self.negative_cache_ttl_secs = secs;
+        self
+    }
+
+    fn is_negative_cached(&self, key: &str, hash_opt: Option<&str>) -> bool {
+        if let Ok(failures) = self.failed_keys.read() {
+            let now = current_unix_timestamp();
+            if let Some(&fail_time) = failures.get(key) {
+                if now.saturating_sub(fail_time) < self.negative_cache_ttl_secs {
+                    return true;
+                }
+            }
+            if let Some(h) = hash_opt {
+                if let Some(&fail_time) = failures.get(h) {
+                    if now.saturating_sub(fail_time) < self.negative_cache_ttl_secs {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }
 
     /// Injects a decoded or mock skin PNG directly into the in-memory cache.
@@ -114,15 +141,8 @@ impl SkinResolver {
         }
 
         // 2. Check negative cache
-        if let Ok(failures) = self.failed_keys.read() {
-            if failures.contains(&key) {
-                return None;
-            }
-            if let Some(ref h) = hash_opt {
-                if failures.contains(h) {
-                    return None;
-                }
-            }
+        if self.is_negative_cached(&key, hash_opt.as_deref()) {
+            return None;
         }
 
         // 3. Check disk cache
@@ -213,7 +233,7 @@ impl SkinResolver {
 
         // 3. Mark failure in negative cache to avoid spamming network
         if let Ok(mut failures) = self.failed_keys.write() {
-            failures.insert(key);
+            failures.insert(key, current_unix_timestamp());
         }
 
         None
@@ -238,11 +258,9 @@ impl SkinResolver {
                 return;
             }
         }
-        if let Ok(failures) = self.failed_keys.read() {
-            if failures.contains(&key) {
-                on_complete(key, None);
-                return;
-            }
+        if self.is_negative_cached(&key, None) {
+            on_complete(key, None);
+            return;
         }
 
         // Dedup multiple requests in-flight

@@ -81,10 +81,23 @@ mod tests {
 
     #[test]
     fn test_negative_cache_and_resolution() {
-        let resolver = SkinResolver::new(None);
+        let resolver = SkinResolver::new(None).with_negative_cache_ttl(1);
         let invalid_url = "http://127.0.0.1:59996/invalid_skin.png";
         let png = resolver.resolve_skin_png(Some(invalid_url), None, None);
         assert!(png.is_none());
+
+        // Negative cache hit within TTL
+        assert!(resolver
+            .try_resolve_cached(Some(invalid_url), None, None)
+            .is_none());
+
+        // Sleep to exceed 1s negative cache TTL
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+
+        // After TTL expired, negative cache allows retry
+        assert!(resolver
+            .try_resolve_cached(Some(invalid_url), None, None)
+            .is_none());
     }
 
     #[test]

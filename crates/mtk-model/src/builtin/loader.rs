@@ -127,16 +127,27 @@ impl MiExModelLoader {
             if let Some(rot) = rotation {
                 let rot_deg = (22.5 * (*rot as f32) + 180.0) % 360.0;
                 vars_num.insert("rotY".to_string(), rot_deg);
-            }
-            let tex = if let Some(prof) = profile {
-                prof.texture_identifier()
+                vars_str.insert("rotY".to_string(), rot_deg.to_string());
             } else {
-                kind.default_texture_path().to_string()
-            };
-            vars_str.insert("entity_texture".to_string(), tex.clone());
-            vars_str.insert("texture".to_string(), tex.clone());
-            textures.insert("texture".to_string(), TextureValue::Path(tex.clone()));
-            textures.insert("particle".to_string(), TextureValue::Path(tex));
+                vars_num.entry("rotY".to_string()).or_insert(0.0);
+                vars_str
+                    .entry("rotY".to_string())
+                    .or_insert("0.0".to_string());
+            }
+
+            if let Some(prof) = profile {
+                let tex = prof.texture_identifier();
+                vars_str.insert("entity_texture".to_string(), tex.clone());
+                vars_str.insert("texture".to_string(), tex.clone());
+                textures.insert("texture".to_string(), TextureValue::Path(tex.clone()));
+                textures.insert("particle".to_string(), TextureValue::Path(tex));
+            } else {
+                let effective_kind =
+                    crate::entity::skull::SkullKind::from_block_name(&blockstate.name)
+                        .unwrap_or(*kind);
+                let tex = effective_kind.default_texture_path().to_string();
+                vars_str.insert("entity_texture".to_string(), tex);
+            }
         }
 
         let mut elements: Vec<ElementJson> = Vec::new();
@@ -153,13 +164,13 @@ impl MiExModelLoader {
             );
         }
 
-        // Post-handler enforcement: prevent AST templates from clobbering dynamic skull textures
-        if let Some(crate::entity::BlockEntityData::Skull { kind, profile, .. }) = entity {
-            let tex = if let Some(prof) = profile {
-                prof.texture_identifier()
-            } else {
-                kind.default_texture_path().to_string()
-            };
+        // Post-handler enforcement: ensure dynamic player skull textures override AST templates
+        if let Some(crate::entity::BlockEntityData::Skull {
+            profile: Some(prof),
+            ..
+        }) = entity
+        {
+            let tex = prof.texture_identifier();
             textures.insert("texture".to_string(), TextureValue::Path(tex.clone()));
             textures.insert("particle".to_string(), TextureValue::Path(tex));
         }

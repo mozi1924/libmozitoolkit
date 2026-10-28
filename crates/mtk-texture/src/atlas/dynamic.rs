@@ -87,8 +87,12 @@ impl DynamicAtlasChunk {
             self.next_slot += 1;
             s
         } else {
-            // Reached maximum capacity (256 slots); wrap around to avoid crash
-            (self.next_slot as usize % DYNAMIC_TOTAL_SLOTS) as u16
+            // Reached maximum capacity (256 slots); wrap around in round-robin sequence
+            let s = (self.next_slot as usize % DYNAMIC_TOTAL_SLOTS) as u16;
+            self.next_slot = self.next_slot.wrapping_add(1);
+            // Purge stale reverse entries previously mapping to this slot
+            self.slot_map.retain(|_, &mut v| v != s);
+            s
         };
 
         self.slot_map.insert(skin_key.to_string(), slot_idx);
@@ -334,5 +338,23 @@ mod tests {
             .expect("Sprite must be registered");
         assert_eq!(loc.chunk_id, 0xFFF0);
         assert_eq!(loc.uv_bounds, [0.0, 0.9375, 0.0625, 1.0]);
+    }
+
+    #[test]
+    fn test_dynamic_atlas_overflow_round_robin() {
+        let mut atlas = DynamicAtlasChunk::new(0xFFF0);
+        for i in 0..256 {
+            let slot = atlas.allocate_slot(&format!("skin_{}", i));
+            assert_eq!(slot, i as u16);
+        }
+        // Slot 256 wraps around to 0
+        let slot_256 = atlas.allocate_slot("skin_256");
+        assert_eq!(slot_256, 0);
+        // Slot 257 wraps around to 1
+        let slot_257 = atlas.allocate_slot("skin_257");
+        assert_eq!(slot_257, 1);
+        // Stale skin_0 should have been purged, skin_256 now owns slot 0
+        assert_eq!(atlas.get_slot("skin_256"), Some(0));
+        assert_eq!(atlas.get_slot("skin_0"), None);
     }
 }

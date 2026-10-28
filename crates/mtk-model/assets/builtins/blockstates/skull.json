@@ -9,7 +9,6 @@
     "handler": {
         "variables": [
             "isWall = thisBlock.name.contains('_wall_')",
-            "rotY = 0",
             "rotY = thisBlock.state.facing == 'north' ? 180.0 : rotY",
             "rotY = thisBlock.state.facing == 'east' ? 270.0 : rotY",
             "rotY = thisBlock.state.facing == 'south' ? 0.0 : rotY",

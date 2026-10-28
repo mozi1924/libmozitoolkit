@@ -1492,6 +1492,62 @@ fn test_player_skull_dynamic_atlas_meshing_and_uv_remapping() {
 }
 
 #[test]
+fn test_non_player_skull_textures_not_clobbered() {
+    let mut baker = mtk_model::baker::ModelBaker::new();
+
+    // 1. Zombie head without block entity profile (typical modern 1.13+ save where NBT lacks SkullType)
+    let dummy_be = mtk_model::BlockEntityData::new_skull(
+        mtk_model::entity::skull::SkullKind::Skeleton, // Default fallback from NBT without SkullType
+        None,
+        None,
+    );
+    let zombie_model = baker
+        .bake_blockstate_with_entity("minecraft:zombie_head", Some(&dummy_be), None, |_| None)
+        .expect("Zombie head baking must succeed");
+
+    let tex_names: Vec<String> = zombie_model
+        .unculled_faces
+        .iter()
+        .map(|f| f.texture.clone())
+        .collect();
+    assert!(
+        tex_names.iter().any(|t| t.contains("zombie")),
+        "Zombie head faces must use zombie texture, got: {:?}",
+        tex_names
+    );
+    assert!(
+        !tex_names.iter().any(|t| t.contains("skeleton/skeleton")),
+        "Zombie head faces must NOT be clobbered by skeleton texture"
+    );
+
+    // 2. Creeper head without profile
+    let creeper_model = baker
+        .bake_blockstate_with_entity("minecraft:creeper_head", Some(&dummy_be), None, |_| None)
+        .expect("Creeper head baking must succeed");
+    let creeper_tex: Vec<String> = creeper_model
+        .unculled_faces
+        .iter()
+        .map(|f| f.texture.clone())
+        .collect();
+    assert!(
+        creeper_tex.iter().any(|t| t.contains("creeper")),
+        "Creeper head faces must use creeper texture, got: {:?}",
+        creeper_tex
+    );
+
+    // 3. Pre-1.20.5 ground skull rotation from block entity (Rot = 4 => 270 deg)
+    let rot_be = mtk_model::BlockEntityData::new_skull(
+        mtk_model::entity::skull::SkullKind::Skeleton,
+        Some(4),
+        None,
+    );
+    let rot_model = baker
+        .bake_blockstate_with_entity("minecraft:skeleton_skull", Some(&rot_be), None, |_| None)
+        .expect("Skeleton skull baking must succeed");
+    assert!(!rot_model.unculled_faces.is_empty());
+}
+
+#[test]
 fn test_mesher_average_color_and_tint_injection() {
     use mtk_material::biome::hex_to_linear_rgba;
     use mtk_texture::atlas::{AtlasAddressMap, AtlasSpriteLocation, SpriteKind};

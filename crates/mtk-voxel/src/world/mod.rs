@@ -467,6 +467,10 @@ impl VoxelWorld {
                                 (None, None, None)
                             };
 
+                            if skin_url.is_none() && uuid.is_none() && name.is_none() {
+                                continue;
+                            }
+
                             let key = mtk_resource::skin::derive_skin_key(skin_url, uuid, name);
                             let hash_opt =
                                 self.skin_resolver.resolve_skin_hash(skin_url, uuid, name);
@@ -579,6 +583,10 @@ impl VoxelWorld {
                             } else {
                                 (None, None, None)
                             };
+
+                            if skin_url.is_none() && uuid.is_none() && name.is_none() {
+                                continue;
+                            }
 
                             let key = mtk_resource::skin::derive_skin_key(skin_url, uuid, name);
                             let hash_opt =
