@@ -5,9 +5,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
-use super::index::{
-    clean_player_name, clean_uuid, compute_sha256_hex, current_unix_timestamp, SkinIndex,
-};
+#[cfg(all(feature = "net", not(target_arch = "wasm32")))]
+use super::index::{clean_player_name, clean_uuid};
+use super::index::{compute_sha256_hex, current_unix_timestamp, SkinIndex};
 use super::mod_api::derive_skin_key;
 
 /// Checks PNG magic signature (89 50 4E 47 0D 0A 1A 0A).
@@ -201,7 +201,7 @@ impl SkinResolver {
         }
 
         // 2. Network resolution
-        #[cfg(feature = "net")]
+        #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
         {
             if let Some((remote_url, bytes)) = self.fetch_network_with_url(skin_url, uuid, name) {
                 // Clear from failed_keys on success
@@ -292,7 +292,7 @@ impl SkinResolver {
     ) where
         F: FnOnce(String, Vec<u8>) + Send + 'static,
     {
-        #[cfg(feature = "net")]
+        #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
         {
             if uuid.is_none() && name.is_none() {
                 return;
@@ -340,9 +340,13 @@ impl SkinResolver {
                 }
             });
         }
+        #[cfg(any(not(feature = "net"), target_arch = "wasm32"))]
+        {
+            let _ = (uuid, name, on_updated);
+        }
     }
 
-    #[cfg(feature = "net")]
+    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     fn perform_online_validation<F>(
         &self,
         uuid: Option<&str>,
@@ -392,7 +396,7 @@ impl SkinResolver {
         }
     }
 
-    #[cfg(feature = "net")]
+    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     fn http_agent(&self) -> ureq::Agent {
         ureq::AgentBuilder::new()
             .timeout(std::time::Duration::from_secs(self.timeout_secs))
@@ -400,7 +404,7 @@ impl SkinResolver {
             .build()
     }
 
-    #[cfg(feature = "net")]
+    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     fn fetch_network_with_url(
         &self,
         skin_url: Option<&str>,
@@ -456,7 +460,7 @@ impl SkinResolver {
         None
     }
 
-    #[cfg(feature = "net")]
+    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     fn http_get_png(&self, url: &str) -> Option<Vec<u8>> {
         let resp = self
             .http_agent()
@@ -483,7 +487,7 @@ impl SkinResolver {
         }
     }
 
-    #[cfg(feature = "net")]
+    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     fn query_mojang_session(&self, agent: &ureq::Agent, url: &str) -> Option<String> {
         let resp = agent
             .get(url)
@@ -508,7 +512,7 @@ impl SkinResolver {
         None
     }
 
-    #[cfg(feature = "net")]
+    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     fn query_mojang_uuid(&self, agent: &ureq::Agent, url: &str) -> Option<String> {
         let resp = agent
             .get(url)

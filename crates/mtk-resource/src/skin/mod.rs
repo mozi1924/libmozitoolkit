@@ -175,7 +175,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "net")]
+    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     fn test_resolve_real_mojang_skin_texture() {
         let resolver = SkinResolver::new(None);
         let real_url = "http://textures.minecraft.net/texture/3c3fa837d5e9ae5d06150a699495387d068fb9e682572b191e6868959f51bc52";
