@@ -146,7 +146,10 @@ impl MiExModelLoader {
                     crate::entity::skull::SkullKind::from_block_name(&blockstate.name)
                         .unwrap_or(*kind);
                 let tex = effective_kind.default_texture_path().to_string();
-                vars_str.insert("entity_texture".to_string(), tex);
+                vars_str.insert("entity_texture".to_string(), tex.clone());
+                vars_str.insert("texture".to_string(), tex.clone());
+                textures.insert("texture".to_string(), TextureValue::Path(tex.clone()));
+                textures.insert("particle".to_string(), TextureValue::Path(tex));
             }
         }
 
@@ -164,13 +167,16 @@ impl MiExModelLoader {
             );
         }
 
-        // Post-handler enforcement: ensure dynamic player skull textures override AST templates
-        if let Some(crate::entity::BlockEntityData::Skull {
-            profile: Some(prof),
-            ..
-        }) = entity
-        {
-            let tex = prof.texture_identifier();
+        // Post-handler enforcement: ensure skull textures override AST templates
+        if let Some(crate::entity::BlockEntityData::Skull { kind, profile, .. }) = entity {
+            let tex = if let Some(prof) = profile {
+                prof.texture_identifier()
+            } else {
+                let effective_kind =
+                    crate::entity::skull::SkullKind::from_block_name(&blockstate.name)
+                        .unwrap_or(*kind);
+                effective_kind.default_texture_path().to_string()
+            };
             textures.insert("texture".to_string(), TextureValue::Path(tex.clone()));
             textures.insert("particle".to_string(), TextureValue::Path(tex));
         }
@@ -673,6 +679,60 @@ mod tests {
             elems_attached.len(),
             2,
             "Attached hanging sign must have board and center chain"
+        );
+    }
+
+    #[test]
+    fn test_unprofiled_skull_direct_atlas_textures() {
+        use crate::entity::skull::SkullKind;
+        use crate::entity::BlockEntityData;
+
+        // 1. Zombie head without profile -> direct internal zombie texture
+        let bs_zombie = BlockState::parse("minecraft:zombie_head[rotation=0]").unwrap();
+        let entity_zombie = BlockEntityData::Skull {
+            kind: SkullKind::Zombie,
+            rotation: Some(0),
+            profile: None,
+        };
+        let model_zombie =
+            MiExModelLoader::load_for_blockstate_with_entity(&bs_zombie, Some(&entity_zombie))
+                .expect("Zombie head should load");
+        let tex_zombie = model_zombie.textures.unwrap();
+        assert_eq!(
+            tex_zombie.get("texture").unwrap().as_str(),
+            "minecraft:entity/zombie/zombie"
+        );
+
+        // 2. Creeper wall head without profile -> direct internal creeper texture
+        let bs_creeper = BlockState::parse("minecraft:creeper_wall_head[facing=north]").unwrap();
+        let entity_creeper = BlockEntityData::Skull {
+            kind: SkullKind::Creeper,
+            rotation: None,
+            profile: None,
+        };
+        let model_creeper =
+            MiExModelLoader::load_for_blockstate_with_entity(&bs_creeper, Some(&entity_creeper))
+                .expect("Creeper head should load");
+        let tex_creeper = model_creeper.textures.unwrap();
+        assert_eq!(
+            tex_creeper.get("texture").unwrap().as_str(),
+            "minecraft:entity/creeper/creeper"
+        );
+
+        // 3. Player head without profile -> direct internal default steve texture
+        let bs_player = BlockState::parse("minecraft:player_head[rotation=4]").unwrap();
+        let entity_player = BlockEntityData::Skull {
+            kind: SkullKind::Player,
+            rotation: Some(4),
+            profile: None,
+        };
+        let model_player =
+            MiExModelLoader::load_for_blockstate_with_entity(&bs_player, Some(&entity_player))
+                .expect("Player head without profile should load");
+        let tex_player = model_player.textures.unwrap();
+        assert_eq!(
+            tex_player.get("texture").unwrap().as_str(),
+            "minecraft:entity/player/wide/steve"
         );
     }
 }

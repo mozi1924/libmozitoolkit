@@ -290,6 +290,24 @@ impl ChunkParser {
                         let local_idx = block_index(local_x, local_y, local_z) as u16;
 
                         if let Some(sec) = sections.iter_mut().find(|s| s.coord.y == sec_y) {
+                            let mut entity_data = entity_data;
+                            if let mtk_model::BlockEntityData::Skull {
+                                ref mut kind,
+                                ref profile,
+                                ..
+                            } = entity_data
+                            {
+                                if profile.is_none() {
+                                    let state_str = sec.get_local_state(local_x, local_y, local_z);
+                                    if let Some(resolved_kind) =
+                                        mtk_model::entity::skull::SkullKind::from_block_name(
+                                            state_str,
+                                        )
+                                    {
+                                        *kind = resolved_kind;
+                                    }
+                                }
+                            }
                             sec.block_entities.insert(local_idx, entity_data);
                         }
                     }

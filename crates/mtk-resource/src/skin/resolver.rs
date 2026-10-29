@@ -6,6 +6,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
+use super::circuit::SkinCircuitBreaker;
+#[cfg(all(feature = "net", not(target_arch = "wasm32")))]
 use super::index::{clean_player_name, clean_uuid, is_mirror_fallback_hash, is_mojang_online_uuid};
 use super::index::{compute_sha256_hex, current_unix_timestamp, SkinIndex};
 #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
@@ -23,6 +25,8 @@ pub fn is_valid_png_header(bytes: &[u8]) -> bool {
 pub struct SkinResolver {
     cache_dir: Option<PathBuf>,
     pub index: Arc<RwLock<SkinIndex>>,
+    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
+    pub circuit: SkinCircuitBreaker,
     memory_cache: Arc<RwLock<HashMap<String, Vec<u8>>>>,
     in_flight: Arc<RwLock<HashSet<String>>>,
     failed_keys: Arc<RwLock<HashMap<String, u64>>>,
@@ -35,12 +39,14 @@ pub struct SkinResolver {
 
 impl std::fmt::Debug for SkinResolver {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SkinResolver")
-            .field("cache_dir", &self.cache_dir)
+        let mut d = f.debug_struct("SkinResolver");
+        d.field("cache_dir", &self.cache_dir)
             .field("timeout_secs", &self.timeout_secs)
             .field("validation_interval_secs", &self.validation_interval_secs)
-            .field("negative_cache_ttl_secs", &self.negative_cache_ttl_secs)
-            .finish()
+            .field("negative_cache_ttl_secs", &self.negative_cache_ttl_secs);
+        #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
+        d.field("circuit", &self.circuit);
+        d.finish()
     }
 }
 
@@ -73,6 +79,8 @@ impl SkinResolver {
         Self {
             cache_dir,
             index: Arc::new(RwLock::new(index)),
+            #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
+            circuit: SkinCircuitBreaker::default(),
             memory_cache: Arc::new(RwLock::new(HashMap::new())),
             in_flight: Arc::new(RwLock::new(HashSet::new())),
             failed_keys: Arc::new(RwLock::new(HashMap::new())),
@@ -81,6 +89,26 @@ impl SkinResolver {
             negative_cache_ttl_secs: 300,   // 5 minutes negative cache cooldown
             #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
             agent: Arc::new(Self::build_agent(timeout_secs)),
+        }
+    }
+
+    /// Configures the circuit breaker threshold and cooldown period in seconds.
+    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
+    pub fn with_circuit_breaker(mut self, threshold: u32, cooldown_secs: u64) -> Self {
+        self.circuit = SkinCircuitBreaker::new(threshold, cooldown_secs);
+        self
+    }
+
+    /// Returns true if the circuit breaker is currently tripped (fast-fail mode).
+    #[inline]
+    pub fn is_circuit_tripped(&self) -> bool {
+        #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
+        {
+            self.circuit.is_tripped()
+        }
+        #[cfg(any(not(feature = "net"), target_arch = "wasm32"))]
+        {
+            false
         }
     }
 
@@ -434,6 +462,11 @@ impl SkinResolver {
         uuid: Option<&str>,
         name: Option<&str>,
     ) -> Option<(Option<String>, Vec<u8>)> {
+        // Fast-fail if the circuit breaker is tripped (e.g. offline or DNS down)
+        if self.circuit.is_tripped() {
+            return None;
+        }
+
         // 1. Direct URL download
         if let Some(url) = skin_url {
             let bytes = self.http_get_png(url)?;
@@ -457,23 +490,23 @@ impl SkinResolver {
         // If UUID is an offline/synthetic UUID (e.g. v3) and name is present, query name first!
         if is_v4_uuid {
             if let Some(ref u) = clean_u {
-                if let Some((url, bytes)) = query_mirror_skin(&self.agent, u) {
+                if let Some((url, bytes)) = query_mirror_skin(&self.agent, &self.circuit, u) {
                     return Some((Some(url), bytes));
                 }
             }
             if let Some(ref n) = clean_n {
-                if let Some((url, bytes)) = query_mirror_skin(&self.agent, n) {
+                if let Some((url, bytes)) = query_mirror_skin(&self.agent, &self.circuit, n) {
                     return Some((Some(url), bytes));
                 }
             }
         } else {
             if let Some(ref n) = clean_n {
-                if let Some((url, bytes)) = query_mirror_skin(&self.agent, n) {
+                if let Some((url, bytes)) = query_mirror_skin(&self.agent, &self.circuit, n) {
                     return Some((Some(url), bytes));
                 }
             }
             if let Some(ref u) = clean_u {
-                if let Some((url, bytes)) = query_mirror_skin(&self.agent, u) {
+                if let Some((url, bytes)) = query_mirror_skin(&self.agent, &self.circuit, u) {
                     return Some((Some(url), bytes));
                 }
             }
@@ -539,12 +572,29 @@ impl SkinResolver {
 
     #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     fn http_get_png(&self, url: &str) -> Option<Vec<u8>> {
-        let resp = self
+        if self.circuit.is_tripped() {
+            return None;
+        }
+        let res = self
             .agent
             .get(url)
             .set("User-Agent", "MoziToolKit/2.0")
-            .call()
-            .ok()?;
+            .call();
+
+        let resp = match res {
+            Ok(r) => {
+                self.circuit.record_success();
+                r
+            }
+            Err(ureq::Error::Status(_status, _r)) => {
+                self.circuit.record_success();
+                return None;
+            }
+            Err(ureq::Error::Transport(_e)) => {
+                self.circuit.record_transport_failure();
+                return None;
+            }
+        };
 
         if resp.status() != 200 {
             return None;
@@ -555,12 +605,29 @@ impl SkinResolver {
 
     #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     fn query_mojang_session(&self, url: &str) -> Option<String> {
-        let resp = self
+        if self.circuit.is_tripped() {
+            return None;
+        }
+        let res = self
             .agent
             .get(url)
             .set("User-Agent", "MoziToolKit/2.0")
-            .call()
-            .ok()?;
+            .call();
+
+        let resp = match res {
+            Ok(r) => {
+                self.circuit.record_success();
+                r
+            }
+            Err(ureq::Error::Status(_status, _r)) => {
+                self.circuit.record_success();
+                return None;
+            }
+            Err(ureq::Error::Transport(_e)) => {
+                self.circuit.record_transport_failure();
+                return None;
+            }
+        };
 
         use std::io::Read;
         let mut bytes = Vec::new();
@@ -581,12 +648,29 @@ impl SkinResolver {
 
     #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     fn query_mojang_uuid(&self, url: &str) -> Option<String> {
-        let resp = self
+        if self.circuit.is_tripped() {
+            return None;
+        }
+        let res = self
             .agent
             .get(url)
             .set("User-Agent", "MoziToolKit/2.0")
-            .call()
-            .ok()?;
+            .call();
+
+        let resp = match res {
+            Ok(r) => {
+                self.circuit.record_success();
+                r
+            }
+            Err(ureq::Error::Status(_status, _r)) => {
+                self.circuit.record_success();
+                return None;
+            }
+            Err(ureq::Error::Transport(_e)) => {
+                self.circuit.record_transport_failure();
+                return None;
+            }
+        };
 
         use std::io::Read;
         let mut bytes = Vec::new();

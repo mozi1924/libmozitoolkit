@@ -4,12 +4,14 @@
 //! negative caching for 404/invalid URLs, non-blocking disk/memory checks,
 //! background HTTP fetching, and 0-second indexed local cache hits.
 
+pub mod circuit;
 pub mod index;
 #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
 pub mod mirror;
 pub mod mod_api;
 pub mod resolver;
 
+pub use circuit::SkinCircuitBreaker;
 pub use index::{
     clean_player_name, clean_uuid, compute_sha256_hex, current_unix_timestamp,
     is_mirror_fallback_hash, is_mojang_online_uuid, SkinIndex, SkinRecord, CRAFTHEAD_ALEX_HASH,
@@ -295,5 +297,38 @@ mod tests {
             .is_none());
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_skin_circuit_breaker_trip_and_fast_fail() {
+        let circuit = SkinCircuitBreaker::new(2, 60);
+        assert!(!circuit.is_tripped());
+        assert_eq!(circuit.failure_count(), 0);
+
+        // First failure: below threshold
+        circuit.record_transport_failure();
+        assert!(!circuit.is_tripped());
+        assert_eq!(circuit.failure_count(), 1);
+
+        // Second failure: reaches threshold of 2 -> trips!
+        circuit.record_transport_failure();
+        assert!(circuit.is_tripped());
+
+        // SkinResolver with tripped circuit fast-fails without hitting network
+        let resolver = SkinResolver::new(None);
+        resolver.circuit.trip();
+        assert!(resolver.is_circuit_tripped());
+
+        // Fast-fail: resolves instantly to None
+        let res = resolver.resolve_skin_png(
+            Some("http://textures.minecraft.net/texture/non_existent_12345"),
+            None,
+            None,
+        );
+        assert!(res.is_none());
+
+        // Reset clears circuit
+        resolver.circuit.reset();
+        assert!(!resolver.is_circuit_tripped());
     }
 }

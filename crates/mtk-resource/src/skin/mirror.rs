@@ -5,6 +5,7 @@
 //! This module strictly inspects response headers (`x-crafthead-profile-cache-hit`, `x-crafthead-texture-id`,
 //! `etag`) and content hashes to ensure fallback skins are rejected and not poisoned into cache.
 
+use super::circuit::SkinCircuitBreaker;
 use super::index::{compute_sha256_hex, is_mirror_fallback_hash};
 use super::resolver::is_valid_png_header;
 use std::io::Read;
@@ -28,13 +29,29 @@ pub fn read_png_body(resp: ureq::Response) -> Option<Vec<u8>> {
 ///
 /// Returns `Some((canonical_mojang_texture_url, png_bytes))` if the skin was found.
 /// Returns `None` if the profile is invalid or if Crafthead returned a fallback default skin.
-pub fn query_crafthead(agent: &ureq::Agent, identifier: &str) -> Option<(String, Vec<u8>)> {
+pub fn query_crafthead(
+    agent: &ureq::Agent,
+    circuit: &SkinCircuitBreaker,
+    identifier: &str,
+) -> Option<(String, Vec<u8>)> {
+    if circuit.is_tripped() {
+        return None;
+    }
     let url = format!("https://crafthead.net/skin/{}", identifier);
-    let resp = agent
-        .get(&url)
-        .set("User-Agent", "MoziToolKit/2.0")
-        .call()
-        .ok()?;
+    let resp = match agent.get(&url).set("User-Agent", "MoziToolKit/2.0").call() {
+        Ok(r) => {
+            circuit.record_success();
+            r
+        }
+        Err(ureq::Error::Status(_status, _r)) => {
+            circuit.record_success();
+            return None;
+        }
+        Err(ureq::Error::Transport(_e)) => {
+            circuit.record_transport_failure();
+            return None;
+        }
+    };
 
     if resp.status() != 200 {
         return None;
@@ -73,13 +90,29 @@ pub fn query_crafthead(agent: &ureq::Agent, identifier: &str) -> Option<(String,
 ///
 /// Returns `Some((canonical_mojang_texture_url, png_bytes))` if the skin was found.
 /// Returns `None` if the profile was not found or fell back to a default skin.
-pub fn query_minotar(agent: &ureq::Agent, identifier: &str) -> Option<(String, Vec<u8>)> {
+pub fn query_minotar(
+    agent: &ureq::Agent,
+    circuit: &SkinCircuitBreaker,
+    identifier: &str,
+) -> Option<(String, Vec<u8>)> {
+    if circuit.is_tripped() {
+        return None;
+    }
     let url = format!("https://minotar.net/skin/{}", identifier);
-    let resp = agent
-        .get(&url)
-        .set("User-Agent", "MoziToolKit/2.0")
-        .call()
-        .ok()?;
+    let resp = match agent.get(&url).set("User-Agent", "MoziToolKit/2.0").call() {
+        Ok(r) => {
+            circuit.record_success();
+            r
+        }
+        Err(ureq::Error::Status(_status, _r)) => {
+            circuit.record_success();
+            return None;
+        }
+        Err(ureq::Error::Transport(_e)) => {
+            circuit.record_transport_failure();
+            return None;
+        }
+    };
 
     if resp.status() != 200 {
         return None;
@@ -111,11 +144,15 @@ pub fn query_minotar(agent: &ureq::Agent, identifier: &str) -> Option<(String, V
 }
 
 /// Queries third-party mirrors in priority order (Crafthead -> Minotar).
-pub fn query_mirror_skin(agent: &ureq::Agent, identifier: &str) -> Option<(String, Vec<u8>)> {
-    if let Some(res) = query_crafthead(agent, identifier) {
+pub fn query_mirror_skin(
+    agent: &ureq::Agent,
+    circuit: &SkinCircuitBreaker,
+    identifier: &str,
+) -> Option<(String, Vec<u8>)> {
+    if let Some(res) = query_crafthead(agent, circuit, identifier) {
         return Some(res);
     }
-    if let Some(res) = query_minotar(agent, identifier) {
+    if let Some(res) = query_minotar(agent, circuit, identifier) {
         return Some(res);
     }
     None
