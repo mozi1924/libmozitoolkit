@@ -3,7 +3,7 @@
 //! Provides fixed-grid slot allocation (e.g. 1024x1024 atlas accommodating 256 unique 64x64 skins),
 //! fast sub-image blitting, automatic UV bounds computation, and integration with `AtlasAddressMap`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::atlas::address_map::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation, SpriteKind};
 use crate::error::TextureError;
@@ -17,6 +17,11 @@ pub const DYNAMIC_TOTAL_SLOTS: usize = 256;
 
 /// Default reserved chunk ID for the dynamic skin atlas (distinct from static block chunk IDs 0..N).
 pub const DEFAULT_DYNAMIC_SKINS_CHUNK_ID: u16 = 0xFFF0;
+
+/// Maximum number of dynamic chunks supported (0xFFF0..=0xFFFF, 16 chunks = 4,096 unique 64x64 skins).
+pub const MAX_DYNAMIC_CHUNKS: usize = 16;
+pub const DYNAMIC_CHUNK_START: u16 = 0xFFF0;
+pub const DYNAMIC_CHUNK_END: u16 = 0xFFFF;
 
 /// Information about an allocated slot inside a dynamic atlas chunk.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -269,11 +274,13 @@ impl DynamicAtlasChunk {
 
     /// Produces AtlasChunkMeta representation for Blender DCC material binding.
     pub fn to_chunk_meta(&self) -> AtlasChunkMeta {
+        let category_chunk_index =
+            (self.chunk_id.saturating_sub(DEFAULT_DYNAMIC_SKINS_CHUNK_ID) + 1) as usize;
         AtlasChunkMeta {
             chunk_id: self.chunk_id,
             category: "skins".to_string(),
             is_animated: false,
-            category_chunk_index: 1,
+            category_chunk_index,
             width: self.width,
             height: self.height,
             has_normal: false,
@@ -284,6 +291,240 @@ impl DynamicAtlasChunk {
             has_tint: false,
             pbr: None,
         }
+    }
+}
+
+/// Multi-chunk manager for runtime dynamic skin atlases.
+///
+/// Automatically allocates new chunks (0xFFF0, 0xFFF1, ...) as slots are exhausted (256 slots per chunk),
+/// deduplicates skin keys, tracks aliases and dirty states, and registers all active chunks to `AtlasAddressMap`.
+#[derive(Debug, Clone)]
+pub struct DynamicAtlasManager {
+    base_chunk_id: u16,
+    chunks: Vec<DynamicAtlasChunk>,
+    key_to_location: HashMap<String, (u16, u16)>,
+    dirty_chunks: HashSet<u16>,
+}
+
+impl Default for DynamicAtlasManager {
+    fn default() -> Self {
+        Self::new(DEFAULT_DYNAMIC_SKINS_CHUNK_ID)
+    }
+}
+
+impl DynamicAtlasManager {
+    /// Creates a new `DynamicAtlasManager` starting at `base_chunk_id`.
+    pub fn new(base_chunk_id: u16) -> Self {
+        Self {
+            base_chunk_id,
+            chunks: vec![DynamicAtlasChunk::new(base_chunk_id)],
+            key_to_location: HashMap::new(),
+            dirty_chunks: HashSet::new(),
+        }
+    }
+
+    /// Total number of unique skin slots allocated across all chunks.
+    pub fn allocated_count(&self) -> usize {
+        self.chunks.iter().map(|c| c.allocated_count()).sum()
+    }
+
+    /// Number of chunks currently instantiated.
+    pub fn chunk_count(&self) -> usize {
+        self.chunks.len()
+    }
+
+    /// Checks if a skin key has already been registered.
+    pub fn contains_key(&self, skin_key: &str) -> bool {
+        self.key_to_location.contains_key(skin_key)
+    }
+
+    /// Returns the (chunk_id, slot_idx) for a skin key, if allocated.
+    pub fn get_location(&self, skin_key: &str) -> Option<(u16, u16)> {
+        self.key_to_location.get(skin_key).copied()
+    }
+
+    /// Allocates or retrieves an existing slot for a skin key.
+    ///
+    /// Automatically expands to a new chunk when the current chunk reaches 256 slots.
+    /// Returns `(chunk_id, slot_idx)`.
+    pub fn allocate_slot(&mut self, skin_key: &str) -> (u16, u16) {
+        if let Some(&loc) = self.key_to_location.get(skin_key) {
+            return loc;
+        }
+
+        let active_idx = self.chunks.len().saturating_sub(1);
+        let active_full = self.chunks[active_idx].allocated_count() >= DYNAMIC_TOTAL_SLOTS;
+
+        let target_idx = if active_full {
+            if self.chunks.len() < MAX_DYNAMIC_CHUNKS {
+                let next_chunk_id = self.base_chunk_id + self.chunks.len() as u16;
+                self.chunks.push(DynamicAtlasChunk::new(next_chunk_id));
+                self.chunks.len() - 1
+            } else {
+                active_idx
+            }
+        } else {
+            active_idx
+        };
+
+        let chunk = &mut self.chunks[target_idx];
+        let slot_idx = chunk.allocate_slot(skin_key);
+        let chunk_id = chunk.chunk_id;
+
+        self.key_to_location
+            .insert(skin_key.to_string(), (chunk_id, slot_idx));
+        self.dirty_chunks.insert(chunk_id);
+        (chunk_id, slot_idx)
+    }
+
+    /// Blits a raw RGBA skin buffer into the allocated slot of a specific chunk.
+    pub fn blit_skin_rgba(
+        &mut self,
+        chunk_id: u16,
+        slot_idx: u16,
+        skin_rgba: &[u8],
+        skin_width: u32,
+        skin_height: u32,
+    ) -> Result<DynamicSlotInfo, TextureError> {
+        let chunk = self
+            .chunks
+            .iter_mut()
+            .find(|c| c.chunk_id == chunk_id)
+            .ok_or_else(|| TextureError::Baking(format!("Dynamic chunk {} not found", chunk_id)))?;
+        let info = chunk.blit_skin_rgba(slot_idx, skin_rgba, skin_width, skin_height)?;
+        self.dirty_chunks.insert(chunk_id);
+        Ok(info)
+    }
+
+    /// Decodes and blits a PNG skin into the specified chunk and slot.
+    pub fn blit_skin_png_bytes(
+        &mut self,
+        chunk_id: u16,
+        slot_idx: u16,
+        png_bytes: &[u8],
+    ) -> Result<DynamicSlotInfo, TextureError> {
+        let dyn_img = image::load_from_memory(png_bytes).map_err(TextureError::Image)?;
+        let rgba = dyn_img.to_rgba8();
+        self.blit_skin_rgba(
+            chunk_id,
+            slot_idx,
+            rgba.as_raw(),
+            rgba.width(),
+            rgba.height(),
+        )
+    }
+
+    /// Allocates and blits a skin PNG in one call.
+    pub fn add_skin_png(
+        &mut self,
+        skin_key: &str,
+        png_bytes: &[u8],
+    ) -> Result<(u16, DynamicSlotInfo), TextureError> {
+        let (chunk_id, slot_idx) = self.allocate_slot(skin_key);
+        let info = self.blit_skin_png_bytes(chunk_id, slot_idx, png_bytes)?;
+        Ok((chunk_id, info))
+    }
+
+    /// Associates an alias key with an already allocated skin key.
+    pub fn add_alias(&mut self, alias_key: &str, target_key: &str) {
+        if let Some(&(chunk_id, slot_idx)) = self.key_to_location.get(target_key) {
+            self.key_to_location
+                .insert(alias_key.to_string(), (chunk_id, slot_idx));
+            if let Some(chunk) = self.chunks.iter_mut().find(|c| c.chunk_id == chunk_id) {
+                chunk.add_alias(alias_key, target_key);
+            }
+        }
+    }
+
+    /// Allocates, maps aliases, and blits a skin PNG.
+    pub fn add_skin_png_with_aliases(
+        &mut self,
+        primary_key: &str,
+        aliases: &[&str],
+        png_bytes: &[u8],
+    ) -> Result<(u16, DynamicSlotInfo), TextureError> {
+        let (chunk_id, slot_idx) = self.allocate_slot(primary_key);
+        for &alias in aliases {
+            if !alias.is_empty() {
+                self.key_to_location
+                    .insert(alias.to_string(), (chunk_id, slot_idx));
+            }
+        }
+        if let Some(chunk) = self.chunks.iter_mut().find(|c| c.chunk_id == chunk_id) {
+            for &alias in aliases {
+                if !alias.is_empty() {
+                    chunk.slot_map.insert(alias.to_string(), slot_idx);
+                }
+            }
+        }
+        let info = self.blit_skin_png_bytes(chunk_id, slot_idx, png_bytes)?;
+        Ok((chunk_id, info))
+    }
+
+    /// Registers all chunks and sprites into the given `AtlasAddressMap`.
+    pub fn register_to_address_map(&self, address_map: &mut AtlasAddressMap) {
+        for chunk in &self.chunks {
+            chunk.register_to_address_map(address_map);
+        }
+    }
+
+    /// Returns the RGBA bytes of the primary chunk (0xFFF0) if any skins allocated.
+    pub fn primary_rgba_buffer(&self) -> Option<&[u8]> {
+        if self.allocated_count() > 0 {
+            self.chunks.first().map(|c| c.rgba_buffer.as_slice())
+        } else {
+            None
+        }
+    }
+
+    /// Returns RGBA bytes of a specific dynamic chunk ID if present.
+    pub fn chunk_rgba_buffer(&self, chunk_id: u16) -> Option<&[u8]> {
+        self.chunks
+            .iter()
+            .find(|c| c.chunk_id == chunk_id)
+            .map(|c| c.rgba_buffer.as_slice())
+    }
+
+    /// Returns all allocated chunk IDs and their RGBA byte buffers.
+    pub fn all_chunk_buffers(&self) -> Vec<(u16, &[u8])> {
+        self.chunks
+            .iter()
+            .filter(|c| c.allocated_count() > 0)
+            .map(|c| (c.chunk_id, c.rgba_buffer.as_slice()))
+            .collect()
+    }
+
+    /// Returns owned copy of all allocated chunk buffers as a HashMap.
+    pub fn all_chunk_buffers_owned(&self) -> HashMap<u16, Vec<u8>> {
+        self.chunks
+            .iter()
+            .filter(|c| c.allocated_count() > 0)
+            .map(|c| (c.chunk_id, c.rgba_buffer.clone()))
+            .collect()
+    }
+
+    /// Returns dirty chunk IDs and their RGBA byte buffers.
+    pub fn dirty_chunk_buffers(&self) -> Vec<(u16, &[u8])> {
+        self.chunks
+            .iter()
+            .filter(|c| self.dirty_chunks.contains(&c.chunk_id))
+            .map(|c| (c.chunk_id, c.rgba_buffer.as_slice()))
+            .collect()
+    }
+
+    /// Returns reference to the set of dirty chunk IDs.
+    pub fn dirty_chunk_ids(&self) -> &HashSet<u16> {
+        &self.dirty_chunks
+    }
+
+    /// Clears the dirty chunk tracking set.
+    pub fn clear_dirty(&mut self) {
+        self.dirty_chunks.clear();
+    }
+
+    /// Returns immutable slice of all active dynamic chunks.
+    pub fn chunks(&self) -> &[DynamicAtlasChunk] {
+        &self.chunks
     }
 }
 
@@ -356,5 +597,72 @@ mod tests {
         // Stale skin_0 should have been purged, skin_256 now owns slot 0
         assert_eq!(atlas.get_slot("skin_256"), Some(0));
         assert_eq!(atlas.get_slot("skin_0"), None);
+    }
+
+    #[test]
+    fn test_dynamic_atlas_manager_multi_chunk_expansion() {
+        let mut mgr = DynamicAtlasManager::new(DEFAULT_DYNAMIC_SKINS_CHUNK_ID);
+        assert_eq!(mgr.chunk_count(), 1);
+
+        // Fill up chunk 0 (0xFFF0) with 256 skins
+        for i in 0..256 {
+            let (cid, slot) = mgr.allocate_slot(&format!("player_{}", i));
+            assert_eq!(cid, 0xFFF0);
+            assert_eq!(slot, i as u16);
+        }
+        assert_eq!(mgr.allocated_count(), 256);
+        assert_eq!(mgr.chunk_count(), 1);
+
+        // 257th skin must automatically trigger allocation of chunk 1 (0xFFF1)
+        let (cid_256, slot_256) = mgr.allocate_slot("player_256");
+        assert_eq!(cid_256, 0xFFF1);
+        assert_eq!(slot_256, 0);
+        assert_eq!(mgr.chunk_count(), 2);
+        assert_eq!(mgr.allocated_count(), 257);
+
+        // Deduplication works across chunks
+        let (re_cid, re_slot) = mgr.allocate_slot("player_0");
+        assert_eq!(re_cid, 0xFFF0);
+        assert_eq!(re_slot, 0);
+
+        let (re_cid_256, re_slot_256) = mgr.allocate_slot("player_256");
+        assert_eq!(re_cid_256, 0xFFF1);
+        assert_eq!(re_slot_256, 0);
+
+        // Address map registration registers both chunks and correct sprite locations
+        let mut addr_map = AtlasAddressMap::new();
+        mgr.register_to_address_map(&mut addr_map);
+
+        assert_eq!(addr_map.chunks.len(), 2);
+        assert_eq!(addr_map.chunks[0].chunk_id, 0xFFF0);
+        assert_eq!(addr_map.chunks[0].category_chunk_index, 1);
+        assert_eq!(addr_map.chunks[1].chunk_id, 0xFFF1);
+        assert_eq!(addr_map.chunks[1].category_chunk_index, 2);
+
+        let loc0 = addr_map
+            .lookup_str("minecraft:skin/player_0")
+            .expect("player_0 must be in address map");
+        assert_eq!(loc0.chunk_id, 0xFFF0);
+
+        let loc256 = addr_map
+            .lookup_str("minecraft:skin/player_256")
+            .expect("player_256 must be in address map");
+        assert_eq!(loc256.chunk_id, 0xFFF1);
+    }
+
+    #[test]
+    fn test_dynamic_atlas_manager_dirty_tracking() {
+        let mut mgr = DynamicAtlasManager::new(DEFAULT_DYNAMIC_SKINS_CHUNK_ID);
+        assert_eq!(mgr.dirty_chunk_ids().len(), 0);
+
+        let dummy_skin = vec![128u8; 64 * 64 * 4];
+        let (cid, slot) = mgr.allocate_slot("steve");
+        let _ = mgr.blit_skin_rgba(cid, slot, &dummy_skin, 64, 64).unwrap();
+
+        assert!(mgr.dirty_chunk_ids().contains(&0xFFF0));
+        assert_eq!(mgr.dirty_chunk_buffers().len(), 1);
+
+        mgr.clear_dirty();
+        assert_eq!(mgr.dirty_chunk_ids().len(), 0);
     }
 }

@@ -57,8 +57,8 @@ pub struct VoxelWorld {
     pub last_profile: Option<mtk_core::ExecutionProfile>,
     /// Unique Atlas Chunk IDs actually present on the active world mesh geometry.
     pub(crate) used_chunk_ids: Vec<u32>,
-    /// Dedicated dynamic skin atlas chunk for player skulls and custom heads.
-    pub dynamic_skins: mtk_texture::atlas::DynamicAtlasChunk,
+    /// Dedicated multi-chunk dynamic skin atlas manager for player skulls and custom heads.
+    pub dynamic_skins: mtk_texture::atlas::DynamicAtlasManager,
     /// Multi-tier skin resolver for player heads.
     pub skin_resolver: mtk_resource::skin::SkinResolver,
     /// Callback triggered when a background skin download finishes successfully.
@@ -82,7 +82,7 @@ impl VoxelWorld {
             world_mesh: None,
             used_chunk_ids: Vec::new(),
             last_profile: None,
-            dynamic_skins: mtk_texture::atlas::DynamicAtlasChunk::default(),
+            dynamic_skins: mtk_texture::atlas::DynamicAtlasManager::default(),
             skin_resolver: mtk_resource::skin::SkinResolver::default(),
             on_skin_resolved: None,
         }
@@ -116,7 +116,7 @@ impl VoxelWorld {
             world_mesh: None,
             used_chunk_ids: Vec::new(),
             last_profile: None,
-            dynamic_skins: mtk_texture::atlas::DynamicAtlasChunk::default(),
+            dynamic_skins: mtk_texture::atlas::DynamicAtlasManager::default(),
             skin_resolver: mtk_resource::skin::SkinResolver::default(),
             on_skin_resolved: None,
         }
@@ -398,13 +398,19 @@ impl VoxelWorld {
         self.storage.set_block_entity(x, y, z, data);
     }
 
-    /// Returns the RGBA pixel bytes (1024x1024x4) of the dynamic skin atlas if any skins are allocated.
+    /// Returns the RGBA pixel bytes (1024x1024x4) of the primary dynamic skin atlas (0xFFF0) if any skins are allocated.
     pub fn dynamic_skin_atlas_rgba(&self) -> Option<&[u8]> {
-        if self.dynamic_skins.allocated_count() > 0 {
-            Some(self.dynamic_skins.rgba_buffer.as_slice())
-        } else {
-            None
-        }
+        self.dynamic_skins.primary_rgba_buffer()
+    }
+
+    /// Returns all active dynamic skin atlas chunk buffers as (chunk_id, &[u8]).
+    pub fn dynamic_skin_atlases(&self) -> Vec<(u16, &[u8])> {
+        self.dynamic_skins.all_chunk_buffers()
+    }
+
+    /// Returns all active dynamic skin atlas chunk buffers owned as (chunk_id, Vec<u8>).
+    pub fn dynamic_skin_atlases_owned(&self) -> HashMap<u16, Vec<u8>> {
+        self.dynamic_skins.all_chunk_buffers_owned()
     }
 
     /// Sets the on-disk cache directory for downloaded player skins.

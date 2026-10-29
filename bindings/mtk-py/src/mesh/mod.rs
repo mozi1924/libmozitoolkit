@@ -26,6 +26,7 @@ pub struct PyMeshData {
     pub inner: MeshData,
     pub profile: Option<mtk_core::profile::ExecutionProfile>,
     pub dynamic_skin_atlas: Option<Vec<u8>>,
+    pub dynamic_skin_atlases: Option<std::collections::HashMap<u16, Vec<u8>>>,
 }
 
 impl From<MeshData> for PyMeshData {
@@ -34,6 +35,7 @@ impl From<MeshData> for PyMeshData {
             inner,
             profile: None,
             dynamic_skin_atlas: None,
+            dynamic_skin_atlases: None,
         }
     }
 }
@@ -45,6 +47,7 @@ impl PyMeshData {
             inner,
             profile: None,
             dynamic_skin_atlas: None,
+            dynamic_skin_atlases: None,
         }
     }
 
@@ -69,6 +72,15 @@ impl PyMeshData {
         self.dynamic_skin_atlas = dynamic_skin_atlas;
         self
     }
+
+    /// Constructs a `PyMeshData` with a multi-chunk dynamic skin atlas map.
+    pub fn with_dynamic_skin_atlases(
+        mut self,
+        dynamic_skin_atlases: Option<std::collections::HashMap<u16, Vec<u8>>>,
+    ) -> Self {
+        self.dynamic_skin_atlases = dynamic_skin_atlases;
+        self
+    }
 }
 
 #[pymethods]
@@ -79,6 +91,7 @@ impl PyMeshData {
             inner: MeshData::new(),
             profile: None,
             dynamic_skin_atlas: None,
+            dynamic_skin_atlases: None,
         }
     }
 
@@ -89,6 +102,7 @@ impl PyMeshData {
             inner: MeshData::with_capacity(num_vertices, num_indices, num_faces),
             profile: None,
             dynamic_skin_atlas: None,
+            dynamic_skin_atlases: None,
         }
     }
 
@@ -104,15 +118,50 @@ impl PyMeshData {
         &self,
         py: Python<'py>,
     ) -> Option<Bound<'py, pyo3::types::PyBytes>> {
-        self.dynamic_skin_atlas
-            .as_ref()
-            .map(|bytes| pyo3::types::PyBytes::new(py, bytes))
+        if let Some(ref bytes) = self.dynamic_skin_atlas {
+            Some(pyo3::types::PyBytes::new(py, bytes))
+        } else if let Some(ref map) = self.dynamic_skin_atlases {
+            map.get(&0xFFF0)
+                .map(|bytes| pyo3::types::PyBytes::new(py, bytes))
+        } else {
+            None
+        }
     }
 
     /// Sets or clears the dynamic skin atlas texture RGBA bytes.
     #[setter]
     pub fn set_dynamic_skin_atlas(&mut self, atlas: Option<Vec<u8>>) {
         self.dynamic_skin_atlas = atlas;
+    }
+
+    /// Returns a dict mapping Chunk ID (e.g. 0xFFF0, 0xFFF1) to dynamic skin atlas RGBA bytes if present.
+    #[getter]
+    pub fn dynamic_skin_atlases<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> Option<Bound<'py, pyo3::types::PyDict>> {
+        if let Some(ref map) = self.dynamic_skin_atlases {
+            let dict = pyo3::types::PyDict::new(py);
+            for (&chunk_id, bytes) in map {
+                let _ = dict.set_item(chunk_id, pyo3::types::PyBytes::new(py, bytes));
+            }
+            Some(dict)
+        } else if let Some(ref single) = self.dynamic_skin_atlas {
+            let dict = pyo3::types::PyDict::new(py);
+            let _ = dict.set_item(0xFFF0u16, pyo3::types::PyBytes::new(py, single));
+            Some(dict)
+        } else {
+            None
+        }
+    }
+
+    /// Sets or clears the multi-chunk dynamic skin atlases dictionary.
+    #[setter]
+    pub fn set_dynamic_skin_atlases(
+        &mut self,
+        atlases: Option<std::collections::HashMap<u16, Vec<u8>>>,
+    ) {
+        self.dynamic_skin_atlases = atlases;
     }
 
     /// Number of vertices in the mesh buffer.

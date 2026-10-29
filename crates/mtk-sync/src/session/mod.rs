@@ -209,10 +209,16 @@ impl LiveSyncSession {
         w.last_profile.clone()
     }
 
-    /// Returns the RGBA pixel bytes (1024x1024x4) of the dynamic skin atlas, if active.
+    /// Returns the RGBA pixel bytes (1024x1024x4) of the primary dynamic skin atlas (0xFFF0), if active.
     pub fn dynamic_skin_atlas_rgba(&self) -> Option<Vec<u8>> {
         let w = self.world.read().unwrap_or_else(|e| e.into_inner());
         w.dynamic_skin_atlas_rgba().map(|s| s.to_vec())
+    }
+
+    /// Returns all active dynamic skin atlas chunk buffers owned as (chunk_id -> Vec<u8>).
+    pub fn dynamic_skin_atlases(&self) -> std::collections::HashMap<u16, Vec<u8>> {
+        let w = self.world.read().unwrap_or_else(|e| e.into_inner());
+        w.dynamic_skin_atlases_owned()
     }
 
     /// Sets the on-disk cache directory for downloaded player skins.
