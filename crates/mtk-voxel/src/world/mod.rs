@@ -561,13 +561,42 @@ impl VoxelWorld {
     /// Synchronous variant: waits for network if uncached (used primarily in tests, offline CLI, and save imports).
     pub fn ensure_dynamic_entities_resolved_sync(&mut self) -> bool {
         let coords: Vec<IVec3> = self.storage.sections.keys().copied().collect();
-        self.ensure_dynamic_entities_resolved_sync_for_sections(&coords)
+        self.ensure_dynamic_entities_resolved_sync_for_sections_with_progress(&coords, None)
+    }
+
+    /// Synchronous variant with progress reporting.
+    pub fn ensure_dynamic_entities_resolved_sync_with_progress(
+        &mut self,
+        progress: Option<mtk_core::ProgressCallback>,
+    ) -> bool {
+        let coords: Vec<IVec3> = self.storage.sections.keys().copied().collect();
+        self.ensure_dynamic_entities_resolved_sync_for_sections_with_progress(&coords, progress)
     }
 
     /// Synchronous variant for specific sections: waits for network if uncached.
     pub fn ensure_dynamic_entities_resolved_sync_for_sections(&mut self, coords: &[IVec3]) -> bool {
+        self.ensure_dynamic_entities_resolved_sync_for_sections_with_progress(coords, None)
+    }
+
+    /// Synchronous variant for specific sections with batch parallel resolving and progress reporting.
+    pub fn ensure_dynamic_entities_resolved_sync_for_sections_with_progress(
+        &mut self,
+        coords: &[IVec3],
+        progress: Option<mtk_core::ProgressCallback>,
+    ) -> bool {
         let mut newly_added = false;
         let mut dirty_coords = Vec::new();
+
+        struct UnresolvedSkull {
+            primary: String,
+            aliases: Vec<String>,
+            skin_url: Option<String>,
+            uuid: Option<String>,
+            name: Option<String>,
+            sec_coords: Vec<IVec3>,
+        }
+
+        let mut uncached_map: HashMap<String, UnresolvedSkull> = HashMap::new();
 
         for sec_coord in coords {
             if let Some(sec) = self.storage.sections.get(sec_coord) {
@@ -591,13 +620,13 @@ impl VoxelWorld {
                             let key = mtk_resource::skin::derive_skin_key(skin_url, uuid, name);
                             let hash_opt =
                                 self.skin_resolver.resolve_skin_hash(skin_url, uuid, name);
-                            let primary = hash_opt.as_deref().unwrap_or(&key);
+                            let primary = hash_opt.unwrap_or_else(|| key.clone());
 
-                            if !self.dynamic_skins.contains_key(primary)
+                            if !self.dynamic_skins.contains_key(&primary)
                                 && !self.dynamic_skins.contains_key(&key)
                             {
                                 if let Some(png) =
-                                    self.skin_resolver.resolve_skin_png(skin_url, uuid, name)
+                                    self.skin_resolver.try_resolve_cached(skin_url, uuid, name)
                                 {
                                     let mut aliases = vec![key.clone()];
                                     if let Some(n) = name {
@@ -618,15 +647,99 @@ impl VoxelWorld {
                                         aliases.iter().map(|s| s.as_str()).collect();
                                     if self
                                         .dynamic_skins
-                                        .add_skin_png_with_aliases(primary, &alias_refs, &png)
+                                        .add_skin_png_with_aliases(&primary, &alias_refs, &png)
                                         .is_ok()
                                     {
                                         newly_added = true;
                                         dirty_coords.push(*sec_coord);
                                     }
+                                } else {
+                                    let entry =
+                                        uncached_map.entry(primary.clone()).or_insert_with(|| {
+                                            let mut aliases = vec![key.clone()];
+                                            if let Some(n) = name {
+                                                let clean_n =
+                                                    mtk_resource::skin::clean_player_name(n);
+                                                if !clean_n.is_empty() {
+                                                    aliases.push(format!("player_{}", clean_n));
+                                                    aliases.push(clean_n);
+                                                }
+                                            }
+                                            if let Some(u) = uuid {
+                                                let clean_u = mtk_resource::skin::clean_uuid(u);
+                                                if !clean_u.is_empty() {
+                                                    aliases.push(format!("uuid_{}", clean_u));
+                                                    aliases.push(clean_u);
+                                                }
+                                            }
+                                            UnresolvedSkull {
+                                                primary,
+                                                aliases,
+                                                skin_url: skin_url.map(|s| s.to_string()),
+                                                uuid: uuid.map(|s| s.to_string()),
+                                                name: name.map(|s| s.to_string()),
+                                                sec_coords: Vec::new(),
+                                            }
+                                        });
+                                    entry.sec_coords.push(*sec_coord);
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        if !uncached_map.is_empty() {
+            let total = uncached_map.len();
+            let throttler =
+                mtk_core::ProgressThrottler::new("resolving_player_skins", total, progress)
+                    .with_prefix("Resolving player head skins");
+
+            let items: Vec<UnresolvedSkull> = uncached_map.into_values().collect();
+            let resolver = self.skin_resolver.clone();
+
+            #[cfg(feature = "parallel")]
+            let fetched: Vec<(UnresolvedSkull, Option<Vec<u8>>)> = {
+                use rayon::prelude::*;
+                items
+                    .into_par_iter()
+                    .map(|item| {
+                        let res = resolver.resolve_skin_png(
+                            item.skin_url.as_deref(),
+                            item.uuid.as_deref(),
+                            item.name.as_deref(),
+                        );
+                        throttler.inc();
+                        (item, res)
+                    })
+                    .collect()
+            };
+
+            #[cfg(not(feature = "parallel"))]
+            let fetched: Vec<(UnresolvedSkull, Option<Vec<u8>>)> = items
+                .into_iter()
+                .map(|item| {
+                    let res = resolver.resolve_skin_png(
+                        item.skin_url.as_deref(),
+                        item.uuid.as_deref(),
+                        item.name.as_deref(),
+                    );
+                    throttler.inc();
+                    (item, res)
+                })
+                .collect();
+
+            for (item, maybe_png) in fetched {
+                if let Some(png) = maybe_png {
+                    let alias_refs: Vec<&str> = item.aliases.iter().map(|s| s.as_str()).collect();
+                    if self
+                        .dynamic_skins
+                        .add_skin_png_with_aliases(&item.primary, &alias_refs, &png)
+                        .is_ok()
+                    {
+                        newly_added = true;
+                        dirty_coords.extend(item.sec_coords);
                     }
                 }
             }

@@ -207,7 +207,7 @@ pub fn load_and_mesh_minecraft_save(
 
     let (mesh, world_profile, dynamic_skin_atlas) = py
         .detach(|| {
-            world.ensure_dynamic_entities_resolved_sync();
+            world.ensure_dynamic_entities_resolved_sync_with_progress(progress_ref);
             let m = world.rebuild_all_with_progress(progress_ref)?.clone();
             let p = world.last_profile.clone();
             let dyn_atlas = world.dynamic_skin_atlas_rgba().map(|b| b.to_vec());

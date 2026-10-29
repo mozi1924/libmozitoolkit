@@ -5,12 +5,15 @@
 //! background HTTP fetching, and 0-second indexed local cache hits.
 
 pub mod index;
+#[cfg(all(feature = "net", not(target_arch = "wasm32")))]
+pub mod mirror;
 pub mod mod_api;
 pub mod resolver;
 
 pub use index::{
-    clean_player_name, clean_uuid, compute_sha256_hex, current_unix_timestamp, SkinIndex,
-    SkinRecord,
+    clean_player_name, clean_uuid, compute_sha256_hex, current_unix_timestamp,
+    is_mirror_fallback_hash, is_mojang_online_uuid, SkinIndex, SkinRecord, CRAFTHEAD_ALEX_HASH,
+    CRAFTHEAD_STEVE_HASH, MINOTAR_FALLBACK_HASH,
 };
 pub use mod_api::{
     default_player_skin_texture, derive_skin_key, VANILLA_ALEX_TEXTURE, VANILLA_STEVE_TEXTURE,
@@ -184,5 +187,113 @@ mod tests {
             assert!(is_valid_png_header(&bytes));
             assert_eq!(bytes.len(), 3648);
         }
+    }
+
+    #[test]
+    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
+    fn test_resolve_skin_by_player_name_or_uuid_via_mirror() {
+        let resolver = SkinResolver::new(None);
+        // Test Notch skin resolution via mirror/Mojang
+        let png = resolver.resolve_skin_png(None, None, Some("Notch"));
+        if let Some(bytes) = png {
+            assert!(is_valid_png_header(&bytes));
+        }
+    }
+
+    #[test]
+    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
+    fn test_offline_uuid_prioritizes_name_and_rejects_alex_fallback() {
+        let resolver = SkinResolver::new(None);
+        // "0b9c337af39a34ec91a0929852e7d393" is an offline/synthetic UUID (version 3)
+        // With name "scvb1", it should resolve the authentic skin hash instead of Alex.
+        if let Some(bytes) = resolver.resolve_skin_png(
+            None,
+            Some("0b9c337af39a34ec91a0929852e7d393"),
+            Some("scvb1"),
+        ) {
+            assert!(is_valid_png_header(&bytes));
+            let hash = compute_sha256_hex(&bytes);
+            assert_ne!(
+                hash, CRAFTHEAD_ALEX_HASH,
+                "Must not fall back to Alex default skin!"
+            );
+            assert_ne!(
+                hash, CRAFTHEAD_STEVE_HASH,
+                "Must not fall back to Steve default skin!"
+            );
+            assert_eq!(
+                hash,
+                "225b43a4c1c0fe547178b145a301d61ddcd1515bdee5191f29b56e879b124fd4"
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
+    fn test_offline_uuid_without_name_rejects_mirror_fallback() {
+        let resolver = SkinResolver::new(None);
+        // Without name, offline UUID has no online profile. Mirror returns 200 with Alex fallback,
+        // which our strict header & hash validation must reject as None.
+        let png = resolver.resolve_skin_png(None, Some("0b9c337af39a34ec91a0929852e7d393"), None);
+        assert!(png.is_none(), "Mirror fallback skin must be rejected!");
+    }
+
+    #[test]
+    fn test_purge_poisoned_fallback_cache() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("mtk_test_skin_purge_{}", current_unix_timestamp()));
+        let _ = fs::create_dir_all(&temp_dir);
+
+        let alex_hash = CRAFTHEAD_ALEX_HASH;
+        let fake_alex_png = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0xAA, 0xBB];
+        let alex_path = temp_dir.join(format!("{}.png", alex_hash));
+        fs::write(&alex_path, &fake_alex_png).unwrap();
+
+        // Write poisoned index.json
+        let poisoned_json = format!(
+            r#"{{
+              "version": 1,
+              "skins": {{
+                "{}": {{
+                  "hash": "{}",
+                  "skin_url": "https://crafthead.net/skin/0b9c337af39a34ec91a0929852e7d393",
+                  "player_name": "scvb1",
+                  "uuid": "0b9c337af39a34ec91a0929852e7d393",
+                  "last_checked": 1000
+                }}
+              }},
+              "players": {{
+                "scvb1": "{}"
+              }},
+              "uuids": {{
+                "0b9c337af39a34ec91a0929852e7d393": "{}"
+              }}
+            }}"#,
+            alex_hash, alex_hash, alex_hash, alex_hash
+        );
+        fs::write(temp_dir.join("index.json"), poisoned_json).unwrap();
+
+        // Resolver initialization triggers load_and_migrate
+        let resolver = SkinResolver::new(Some(temp_dir.clone()));
+
+        // 1. Poisoned entry must be removed from in-memory index
+        let idx = resolver.index.read().unwrap();
+        assert!(!idx.skins.contains_key(alex_hash));
+        assert_eq!(idx.players.get("scvb1"), None);
+        assert_eq!(idx.uuids.get("0b9c337af39a34ec91a0929852e7d393"), None);
+
+        // 2. Poisoned PNG file must be deleted from disk
+        assert!(!alex_path.exists());
+
+        // 3. try_resolve_cached must return None
+        assert!(resolver
+            .try_resolve_cached(
+                None,
+                Some("0b9c337af39a34ec91a0929852e7d393"),
+                Some("scvb1"),
+            )
+            .is_none());
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

@@ -186,6 +186,14 @@ pub struct CtmSolver {
 - **在线皮肤验证与静默增量同步**：
   - 在保持首帧 0 秒呈现本地缓存的同时，根据可配置 TTL（默认 1 小时）在后台守护线程异步校验 Mojang / CDN 最新皮肤指纹；
   - 当检测到玩家在线更新了皮肤时，自动拉取新哈希图像、更新 `index.json` 并派发热更新事件驱动网格重建。
+- **第三方 CDN 镜像站优先与防假降级校验 (Mirror-First & Anti-Fake-Fallback)**：
+  - 针对纯玩家名或 UUID 查找，优先通过高可用 Cloudflare 边缘缓存镜像（Crafthead / Minotar）单次 HTTP 请求直取 64x64 PNG，有效规避 Mojang 官方 Session Server 的严格速率限制（429）与三跳瀑布流；
+  - **严格响应头门禁与假数据防御**：镜像站针对未知或离线 UUID 常返回 HTTP 200 及默认 Alex/Steve 回退皮肤。模块内严格校验响应标头（Crafthead 的 `x-crafthead-profile-cache-hit != "invalid-profile"` 与 64 位 `x-crafthead-texture-id`、Minotar 的 64 位 `etag`）并执行内容哈希双重比对，坚决拒收镜像伪降级假数据；
+  - **离线 UUID 智能感知与用户名优先**：针对 Minecraft 离线/合成 UUID（RFC 4122 Version 3），自动感知其不在 Mojang 官方认证库，若附带玩家名则优先以玩家名向镜像站与官方库发起查询，杜绝无效 HTTP 往返；
+  - **历史污染自愈清洗 (Cache Poison Eviction)**：`load_and_migrate` 初始化时自动识别并物理清洗历史错误缓存的镜像兜底 Alex/Steve 文件与映射记录，保障皮肤索引与本地呈现的绝对真实性；
+  - 镜像未命中时优雅回退至 Mojang 官方 API；
+- **长连接与会话池单例复用 (Keep-Alive Connection Pool)**：
+  - 核心 `Arc<ureq::Agent>` 贯穿生命周期单例复用，保留 TCP Keep-Alive 与 TLS 会话缓存，彻底消除每次请求重复握手开销；
 - **零 C 依赖安全拉取与代理感知**：
   - 基于 `ureq` + `rustls` 跨平台拉取；
   - 自动识别读取系统环境代理变量（`HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`）；

@@ -84,6 +84,29 @@ pub fn compute_sha256_hex(bytes: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+/// Known SHA-256 content hashes of default fallback skins returned by mirror services
+/// when a player or UUID is not found.
+pub const CRAFTHEAD_ALEX_HASH: &str =
+    "c5b845b5a11c0bbd4c3ed65107cf3ed363fe85b17358abfa2b19a9e1350d8a86";
+pub const CRAFTHEAD_STEVE_HASH: &str =
+    "e9aba3cc087f29abca87f8ca4d85783f72e86b55a57efec7f100ea4998d1309a";
+pub const MINOTAR_FALLBACK_HASH: &str =
+    "d67aeb25ab7ae83f56d7e8cda1308c21cf30a9390b3d1178c2217cf688bcdfa3";
+
+/// Returns true if the given hash is a known mirror fallback skin.
+pub fn is_mirror_fallback_hash(hash: &str) -> bool {
+    matches!(
+        hash,
+        CRAFTHEAD_ALEX_HASH | CRAFTHEAD_STEVE_HASH | MINOTAR_FALLBACK_HASH
+    )
+}
+
+/// Returns true if a 32-hex UUID is formatted as a Mojang online Version 4 UUID.
+/// (13th hex character is '4').
+pub fn is_mojang_online_uuid(clean_uuid: &str) -> bool {
+    clean_uuid.len() == 32 && clean_uuid.as_bytes().get(12) == Some(&b'4')
+}
+
 /// Returns current Unix epoch timestamp in seconds.
 pub fn current_unix_timestamp() -> u64 {
     std::time::SystemTime::now()
@@ -104,7 +127,10 @@ impl SkinIndex {
             let clean = url.trim_end_matches('/');
             if let Some(last_seg) = clean.rsplit('/').next() {
                 if last_seg.len() == 64 && last_seg.chars().all(|c| c.is_ascii_hexdigit()) {
-                    return Some(last_seg.to_ascii_lowercase());
+                    let h = last_seg.to_ascii_lowercase();
+                    if !is_mirror_fallback_hash(&h) {
+                        return Some(h);
+                    }
                 }
             }
             let cdn_key = format!(
@@ -119,14 +145,18 @@ impl SkinIndex {
         if let Some(u) = uuid {
             let clean_u = clean_uuid(u);
             if let Some(h) = self.uuids.get(&clean_u) {
-                return Some(h.clone());
+                if !is_mirror_fallback_hash(h) {
+                    return Some(h.clone());
+                }
             }
         }
 
         if let Some(n) = name {
             let clean_n = clean_player_name(n);
             if let Some(h) = self.players.get(&clean_n) {
-                return Some(h.clone());
+                if !is_mirror_fallback_hash(h) {
+                    return Some(h.clone());
+                }
             }
         }
 
@@ -186,6 +216,35 @@ impl SkinIndex {
         };
 
         let mut modified = false;
+
+        // Purge any poison caused by previous mirror fallback downloads
+        let mut poisoned_hashes = Vec::new();
+        for h in index.skins.keys() {
+            if is_mirror_fallback_hash(h) {
+                poisoned_hashes.push(h.clone());
+            }
+        }
+        for ph in &poisoned_hashes {
+            index.skins.remove(ph);
+            index.players.retain(|_, v| v != ph);
+            index.uuids.retain(|_, v| v != ph);
+            let p = dir.join(format!("{}.png", ph));
+            let _ = fs::remove_file(p);
+            modified = true;
+        }
+
+        let before_p_len = index.players.len();
+        index.players.retain(|_, v| !is_mirror_fallback_hash(v));
+        if index.players.len() != before_p_len {
+            modified = true;
+        }
+
+        let before_u_len = index.uuids.len();
+        index.uuids.retain(|_, v| !is_mirror_fallback_hash(v));
+        if index.uuids.len() != before_u_len {
+            modified = true;
+        }
+
         let now = current_unix_timestamp();
 
         if let Ok(entries) = fs::read_dir(dir) {
@@ -197,6 +256,11 @@ impl SkinIndex {
                     // 1. Standard 64-hex hash file
                     if file_name.len() == 64 && file_name.chars().all(|c| c.is_ascii_hexdigit()) {
                         let hash = file_name.to_ascii_lowercase();
+                        if is_mirror_fallback_hash(&hash) {
+                            let _ = fs::remove_file(&path);
+                            modified = true;
+                            continue;
+                        }
                         if !index.skins.contains_key(&hash) {
                             index.skins.insert(
                                 hash.clone(),
@@ -217,6 +281,11 @@ impl SkinIndex {
                         if let Ok(bytes) = fs::read(&path) {
                             if bytes.len() >= 8 && &bytes[0..8] == b"\x89PNG\r\n\x1a\n" {
                                 let hash = compute_sha256_hex(&bytes);
+                                if is_mirror_fallback_hash(&hash) {
+                                    let _ = fs::remove_file(&path);
+                                    modified = true;
+                                    continue;
+                                }
                                 let target_path = dir.join(format!("{}.png", hash));
                                 let _ = fs::write(&target_path, &bytes);
                                 let _ = fs::remove_file(&path);
@@ -231,6 +300,11 @@ impl SkinIndex {
                         if let Ok(bytes) = fs::read(&path) {
                             if bytes.len() >= 8 && &bytes[0..8] == b"\x89PNG\r\n\x1a\n" {
                                 let hash = compute_sha256_hex(&bytes);
+                                if is_mirror_fallback_hash(&hash) {
+                                    let _ = fs::remove_file(&path);
+                                    modified = true;
+                                    continue;
+                                }
                                 let target_path = dir.join(format!("{}.png", hash));
                                 let _ = fs::write(&target_path, &bytes);
                                 let _ = fs::remove_file(&path);

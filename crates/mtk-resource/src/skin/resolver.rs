@@ -6,8 +6,10 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
-use super::index::{clean_player_name, clean_uuid};
+use super::index::{clean_player_name, clean_uuid, is_mirror_fallback_hash, is_mojang_online_uuid};
 use super::index::{compute_sha256_hex, current_unix_timestamp, SkinIndex};
+#[cfg(all(feature = "net", not(target_arch = "wasm32")))]
+use super::mirror::{query_mirror_skin, read_png_body};
 use super::mod_api::derive_skin_key;
 
 /// Checks PNG magic signature (89 50 4E 47 0D 0A 1A 0A).
@@ -17,7 +19,7 @@ pub fn is_valid_png_header(bytes: &[u8]) -> bool {
 }
 
 /// Multi-tier resolver for player and custom head skin textures.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SkinResolver {
     cache_dir: Option<PathBuf>,
     pub index: Arc<RwLock<SkinIndex>>,
@@ -27,6 +29,19 @@ pub struct SkinResolver {
     timeout_secs: u64,
     validation_interval_secs: u64,
     negative_cache_ttl_secs: u64,
+    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
+    agent: Arc<ureq::Agent>,
+}
+
+impl std::fmt::Debug for SkinResolver {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SkinResolver")
+            .field("cache_dir", &self.cache_dir)
+            .field("timeout_secs", &self.timeout_secs)
+            .field("validation_interval_secs", &self.validation_interval_secs)
+            .field("negative_cache_ttl_secs", &self.negative_cache_ttl_secs)
+            .finish()
+    }
 }
 
 impl Default for SkinResolver {
@@ -36,6 +51,14 @@ impl Default for SkinResolver {
 }
 
 impl SkinResolver {
+    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
+    fn build_agent(timeout_secs: u64) -> ureq::Agent {
+        ureq::AgentBuilder::new()
+            .timeout(std::time::Duration::from_secs(timeout_secs))
+            .try_proxy_from_env(true)
+            .build()
+    }
+
     /// Creates a new resolver with an optional on-disk cache directory.
     pub fn new(cache_dir: Option<PathBuf>) -> Self {
         let index = if let Some(ref dir) = cache_dir {
@@ -45,21 +68,29 @@ impl SkinResolver {
             SkinIndex::default()
         };
 
+        let timeout_secs = 5;
+
         Self {
             cache_dir,
             index: Arc::new(RwLock::new(index)),
             memory_cache: Arc::new(RwLock::new(HashMap::new())),
             in_flight: Arc::new(RwLock::new(HashSet::new())),
             failed_keys: Arc::new(RwLock::new(HashMap::new())),
-            timeout_secs: 5,
+            timeout_secs,
             validation_interval_secs: 3600, // 1 hour validation TTL
             negative_cache_ttl_secs: 300,   // 5 minutes negative cache cooldown
+            #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
+            agent: Arc::new(Self::build_agent(timeout_secs)),
         }
     }
 
     /// Sets the HTTP request timeout in seconds.
     pub fn with_timeout(mut self, timeout_secs: u64) -> Self {
         self.timeout_secs = timeout_secs;
+        #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
+        {
+            self.agent = Arc::new(Self::build_agent(timeout_secs));
+        }
         self
     }
 
@@ -397,14 +428,6 @@ impl SkinResolver {
     }
 
     #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
-    fn http_agent(&self) -> ureq::Agent {
-        ureq::AgentBuilder::new()
-            .timeout(std::time::Duration::from_secs(self.timeout_secs))
-            .try_proxy_from_env(true)
-            .build()
-    }
-
-    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     fn fetch_network_with_url(
         &self,
         skin_url: Option<&str>,
@@ -414,44 +437,98 @@ impl SkinResolver {
         // 1. Direct URL download
         if let Some(url) = skin_url {
             let bytes = self.http_get_png(url)?;
+            let hash = compute_sha256_hex(&bytes);
+            if is_mirror_fallback_hash(&hash) {
+                return None;
+            }
             return Some((Some(url.to_string()), bytes));
         }
 
-        let agent = self.http_agent();
+        let clean_u = uuid.map(clean_uuid).filter(|u| u.len() == 32);
+        let clean_n = name.map(clean_player_name).filter(|n| !n.is_empty());
 
-        // 2. UUID -> Mojang session server
-        if let Some(u) = uuid {
-            let clean_u = clean_uuid(u);
-            if clean_u.len() == 32 {
+        let is_v4_uuid = clean_u
+            .as_ref()
+            .map(|u| is_mojang_online_uuid(u))
+            .unwrap_or(false);
+
+        // 2. High-speed Mirror First (avoids Mojang rate limits and 3-hop cascade)
+        // If UUID is an online v4 UUID, query UUID first, then name.
+        // If UUID is an offline/synthetic UUID (e.g. v3) and name is present, query name first!
+        if is_v4_uuid {
+            if let Some(ref u) = clean_u {
+                if let Some((url, bytes)) = query_mirror_skin(&self.agent, u) {
+                    return Some((Some(url), bytes));
+                }
+            }
+            if let Some(ref n) = clean_n {
+                if let Some((url, bytes)) = query_mirror_skin(&self.agent, n) {
+                    return Some((Some(url), bytes));
+                }
+            }
+        } else {
+            if let Some(ref n) = clean_n {
+                if let Some((url, bytes)) = query_mirror_skin(&self.agent, n) {
+                    return Some((Some(url), bytes));
+                }
+            }
+            if let Some(ref u) = clean_u {
+                if let Some((url, bytes)) = query_mirror_skin(&self.agent, u) {
+                    return Some((Some(url), bytes));
+                }
+            }
+        }
+
+        // 3. Fallback: Mojang Session Server & Profile API
+        if is_v4_uuid {
+            if let Some(ref u) = clean_u {
                 let session_url = format!(
                     "https://sessionserver.mojang.com/session/minecraft/profile/{}",
-                    clean_u
+                    u
                 );
-                if let Some(url) = self.query_mojang_session(&agent, &session_url) {
+                if let Some(url) = self.query_mojang_session(&session_url) {
                     if let Some(bytes) = self.http_get_png(&url) {
                         return Some((Some(url), bytes));
                     }
                 }
             }
-        }
-
-        // 3. Name -> Mojang profile API -> session server
-        if let Some(n) = name {
-            let clean_n = clean_player_name(n);
-            if !clean_n.is_empty() {
-                let profile_url = format!(
-                    "https://api.mojang.com/users/profiles/minecraft/{}",
-                    clean_n
-                );
-                if let Some(resolved_uuid) = self.query_mojang_uuid(&agent, &profile_url) {
+            if let Some(ref n) = clean_n {
+                let profile_url = format!("https://api.mojang.com/users/profiles/minecraft/{}", n);
+                if let Some(resolved_uuid) = self.query_mojang_uuid(&profile_url) {
                     let session_url = format!(
                         "https://sessionserver.mojang.com/session/minecraft/profile/{}",
                         resolved_uuid
                     );
-                    if let Some(url) = self.query_mojang_session(&agent, &session_url) {
+                    if let Some(url) = self.query_mojang_session(&session_url) {
                         if let Some(bytes) = self.http_get_png(&url) {
                             return Some((Some(url), bytes));
                         }
+                    }
+                }
+            }
+        } else {
+            if let Some(ref n) = clean_n {
+                let profile_url = format!("https://api.mojang.com/users/profiles/minecraft/{}", n);
+                if let Some(resolved_uuid) = self.query_mojang_uuid(&profile_url) {
+                    let session_url = format!(
+                        "https://sessionserver.mojang.com/session/minecraft/profile/{}",
+                        resolved_uuid
+                    );
+                    if let Some(url) = self.query_mojang_session(&session_url) {
+                        if let Some(bytes) = self.http_get_png(&url) {
+                            return Some((Some(url), bytes));
+                        }
+                    }
+                }
+            }
+            if let Some(ref u) = clean_u {
+                let session_url = format!(
+                    "https://sessionserver.mojang.com/session/minecraft/profile/{}",
+                    u
+                );
+                if let Some(url) = self.query_mojang_session(&session_url) {
+                    if let Some(bytes) = self.http_get_png(&url) {
+                        return Some((Some(url), bytes));
                     }
                 }
             }
@@ -463,7 +540,7 @@ impl SkinResolver {
     #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     fn http_get_png(&self, url: &str) -> Option<Vec<u8>> {
         let resp = self
-            .http_agent()
+            .agent
             .get(url)
             .set("User-Agent", "MoziToolKit/2.0")
             .call()
@@ -473,23 +550,13 @@ impl SkinResolver {
             return None;
         }
 
-        let mut bytes = Vec::new();
-        use std::io::Read;
-        resp.into_reader()
-            .take(1024 * 1024)
-            .read_to_end(&mut bytes)
-            .ok()?;
-
-        if is_valid_png_header(&bytes) {
-            Some(bytes)
-        } else {
-            None
-        }
+        read_png_body(resp)
     }
 
     #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
-    fn query_mojang_session(&self, agent: &ureq::Agent, url: &str) -> Option<String> {
-        let resp = agent
+    fn query_mojang_session(&self, url: &str) -> Option<String> {
+        let resp = self
+            .agent
             .get(url)
             .set("User-Agent", "MoziToolKit/2.0")
             .call()
@@ -513,8 +580,9 @@ impl SkinResolver {
     }
 
     #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
-    fn query_mojang_uuid(&self, agent: &ureq::Agent, url: &str) -> Option<String> {
-        let resp = agent
+    fn query_mojang_uuid(&self, url: &str) -> Option<String> {
+        let resp = self
+            .agent
             .get(url)
             .set("User-Agent", "MoziToolKit/2.0")
             .call()
