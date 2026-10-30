@@ -6,18 +6,18 @@
 > `FullSnapshot`、`SectionManifest` 等 Packet 变体），这些类型在代码中已不存在。
 > 现行实现为 **v3**（`MT` magic / `PROTOCOL_VERSION = 0x03`），唯一的协议事实源是
 > [`src/protocol/packet.rs`](src/protocol/packet.rs) 与 [`src/protocol/constants.rs`](src/protocol/constants.rs)；
-> 对外契约以 `MoziToolKit/docs/live_sync/live_sync_protocol.md`（RFC v3.1）为准。
+> 对外契约以 [`RFC v3.1 协议规范`](https://github.com/mozi1924/MoziToolKit/blob/main/docs/live_sync/live_sync_protocol.md) 为准。
 > 本文件待随 v2.1 一并重写。
 
 [![Crate](https://img.shields.io/badge/crate-mtk--sync-blue.svg)](Cargo.toml)
 [![Rust](https://img.shields.io/badge/Rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
-**`mtk-sync`** 是 `libmozitoolkit` (`libmtk`) 套件中的实时网络协同与二进制增量流客户端 Crate。遵循 **无宿主依赖 (Host-Agnostic)** 原则，专为建立 Minecraft（伴随模组/插件如 Yefira）与 3D DCC 宿主（如 Blender MoziToolKit 插件、WebGPU 视口或独立渲染器）之间的高性能双向二进制实时通信通道而设计。
+**`mtk-sync`** 是 `libmozitoolkit` (`libmtk`) 套件中的实时网络协同与二进制增量流客户端 Crate。遵循 **无宿主依赖 (Host-Agnostic)** 原则，专为建立 Minecraft（伴随模组如 [Yefira](https://github.com/mozi1924/yefira)）与 3D DCC 宿主（如 Blender [MoziToolKit](https://github.com/mozi1924/MoziToolKit) 插件、WebGPU 视口或独立渲染器）之间的高性能双向二进制实时通信通道而设计。
 
 > **权威协议规范**：本文档描述 Crate 的 API 与历史设计。Live Sync 的帧格式、资源硬限、
 > `state_hash`、状态机、错误恢复与三端实现对齐矩阵，请以
-> **[RFC v3.1: MTK 2.0 Live Sync 协议与架构设计规范](../../../MoziToolKit/docs/live_sync/live_sync_protocol.md)** 为准。
+> **[RFC v3.1: MTK 2.0 Live Sync 协议与架构设计规范](https://github.com/mozi1924/MoziToolKit/blob/main/docs/live_sync/live_sync_protocol.md)** 为准。
 > 下文第 3 章中出现的旧版 `Packet` 枚举（`SelectionInfo` / `FullSnapshot` / `SectionSnapshot` 等）
 > 已被 `protocol::packet::Packet` 的 v3.1 定义取代，仅作演进记录保留。
 
